@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kycortex-agents"
+version = "0.1.0"
+description = "Multi-agent orchestration framework for AI software house"
+authors = [{name = "Alexandre Andrade", email = "alexandre@kycortex.com"}]
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/alexandrade1978/kycortex-agents"
+"Source Code" = "https://github.com/alexandrade1978/kycortex-agents"
+Documentation = "https://kycortex.com"

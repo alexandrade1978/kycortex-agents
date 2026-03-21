@@ -32,15 +32,18 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - [docs/release-checklist.md](/home/user/bootcamp/projects/kycortex-agents/docs/release-checklist.md)
 - [kycortex_agents/types.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/types.py)
 - [kycortex_agents/exceptions.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/exceptions.py)
+- [kycortex_agents/__init__.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/__init__.py)
 - [kycortex_agents/config.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/config.py)
 - [kycortex_agents/agents/registry.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/agents/registry.py)
 - [kycortex_agents/memory/project_state.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/memory/project_state.py)
+- [kycortex_agents/memory/__init__.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/memory/__init__.py)
 - [kycortex_agents/providers/base.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/base.py)
 - [kycortex_agents/providers/openai_provider.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/openai_provider.py)
 - [kycortex_agents/providers/factory.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/factory.py)
 - [tests/test_orchestrator.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_orchestrator.py)
 - [tests/test_base_agent.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_base_agent.py)
 - [tests/test_config.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_config.py)
+- [tests/test_public_api.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_public_api.py)
 - [tests/test_project_state.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_project_state.py)
 - [tests/test_registry.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_registry.py)
 - [tests/test_providers.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_providers.py)
@@ -60,3 +63,4 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - Configuration now normalizes provider settings, validates static runtime values, and enforces provider credentials when a provider instance is created.
 - The orchestrator now resolves agents through an explicit registry, removing the hardcoded agent map and improving extension points.
 - Project state persistence now saves atomically, creates missing state directories, and raises explicit persistence errors for missing or invalid state files.
+- The package now exposes a clearer public API, including version, agent classes, and memory exports, and that surface is covered by import smoke tests.

@@ -1,5 +1,6 @@
 import pytest
 
+from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
@@ -46,8 +47,7 @@ def test_run_task_exposes_semantic_context(tmp_path):
     )
 
     agent = RecordingAgent("IMPLEMENTED CODE")
-    orchestrator = Orchestrator(config)
-    orchestrator.agents = {"code_engineer": agent}
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"code_engineer": agent}))
 
     result = orchestrator.run_task(project.tasks[1], project)
 
@@ -72,8 +72,7 @@ def test_run_task_marks_failure_and_reraises(tmp_path):
         )
     )
 
-    orchestrator = Orchestrator(config)
-    orchestrator.agents = {"architect": FailingAgent()}
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": FailingAgent()}))
 
     with pytest.raises(RuntimeError, match="boom"):
         orchestrator.run_task(project.tasks[0], project)

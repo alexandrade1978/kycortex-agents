@@ -2,38 +2,23 @@ import logging
 from dataclasses import asdict
 from typing import Dict, Any, Optional
 
+from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.agents.architect import ArchitectAgent
-from kycortex_agents.agents.code_engineer import CodeEngineerAgent
-from kycortex_agents.agents.code_reviewer import CodeReviewerAgent
-from kycortex_agents.agents.qa_tester import QATesterAgent
-from kycortex_agents.agents.docs_writer import DocsWriterAgent
-from kycortex_agents.agents.legal_advisor import LegalAdvisorAgent
 from kycortex_agents.types import AgentInput, TaskStatus
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
 class Orchestrator:
-    def __init__(self, config: Optional[KYCortexConfig] = None):
+    def __init__(self, config: Optional[KYCortexConfig] = None, registry: Optional[AgentRegistry] = None):
         self.config = config or KYCortexConfig()
-        self.agents = {
-            "architect": ArchitectAgent(self.config),
-            "code_engineer": CodeEngineerAgent(self.config),
-            "code_reviewer": CodeReviewerAgent(self.config),
-            "qa_tester": QATesterAgent(self.config),
-            "docs_writer": DocsWriterAgent(self.config),
-            "legal_advisor": LegalAdvisorAgent(self.config)
-        }
+        self.registry = registry or build_default_registry(self.config)
         self.logger = logging.getLogger("Orchestrator")
 
     def run_task(self, task: Task, project: ProjectState) -> str:
         self.logger.info(f"Executing task {task.id}: {task.title}")
-        agent_key = self._normalize_agent_key(task.assigned_to)
-        if agent_key not in self.agents:
-            raise ValueError(f"Unknown agent: {task.assigned_to}")
-        agent = self.agents[agent_key]
+        agent = self.registry.get(task.assigned_to)
         agent_input = self._build_agent_input(task, project)
         project.start_task(task.id)
         try:
@@ -82,11 +67,8 @@ class Orchestrator:
             context=self._build_context(task, project),
         )
 
-    def _normalize_agent_key(self, agent_name: str) -> str:
-        return agent_name.lower().replace(" ", "_")
-
     def _semantic_output_key(self, task: Task) -> Optional[str]:
-        role_key = self._normalize_agent_key(task.assigned_to)
+        role_key = AgentRegistry.normalize_key(task.assigned_to)
         semantic_map = {
             "architect": "architecture",
             "code_engineer": "code",

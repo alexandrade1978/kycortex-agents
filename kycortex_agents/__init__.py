@@ -1,3 +1,4 @@
+from kycortex_agents.agents import AgentRegistry, BaseAgent, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ConfigValidationError, KYCortexError, ProviderConfigurationError
 from kycortex_agents.providers import BaseLLMProvider, OpenAIProvider, create_provider
@@ -20,9 +21,12 @@ __all__ = [
 	"AgentInput",
 	"AgentOutput",
 	"AgentExecutionError",
+	"AgentRegistry",
+	"BaseAgent",
 	"BaseLLMProvider",
 	"ArtifactRecord",
 	"ArtifactType",
+	"build_default_registry",
 	"ConfigValidationError",
 	"create_provider",
 	"DecisionRecord",

@@ -10,8 +10,19 @@ authors = [{name = "Alexandre Andrade", email = "alexandre@kycortex.com"}]
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
+keywords = ["agents", "llm", "orchestration", "multi-agent", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
 dependencies = [
-    "openai>=1.0.0",
+    "openai>=1.0.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -21,3 +32,10 @@ test = ["pytest>=7.0.0"]
 Homepage = "https://github.com/alexandrade1978/kycortex-agents"
 "Source Code" = "https://github.com/alexandrade1978/kycortex-agents"
 Documentation = "https://kycortex.com"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.setuptools.package-data]
+kycortex_agents = ["py.typed"]

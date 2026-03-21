@@ -30,6 +30,7 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 **Current deliverables**
 - [docs/product-baseline.md](/home/user/bootcamp/projects/kycortex-agents/docs/product-baseline.md)
 - [docs/release-checklist.md](/home/user/bootcamp/projects/kycortex-agents/docs/release-checklist.md)
+- [pyproject.toml](/home/user/bootcamp/projects/kycortex-agents/pyproject.toml)
 - [kycortex_agents/types.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/types.py)
 - [kycortex_agents/exceptions.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/exceptions.py)
 - [kycortex_agents/__init__.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/__init__.py)
@@ -43,6 +44,7 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - [tests/test_orchestrator.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_orchestrator.py)
 - [tests/test_base_agent.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_base_agent.py)
 - [tests/test_config.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_config.py)
+- [tests/test_package_metadata.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_package_metadata.py)
 - [tests/test_public_api.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_public_api.py)
 - [tests/test_project_state.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_project_state.py)
 - [tests/test_registry.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_registry.py)
@@ -65,3 +67,4 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - Project state persistence now saves atomically, creates missing state directories, and raises explicit persistence errors for missing or invalid state files.
 - The package now exposes a clearer public API, including version, agent classes, and memory exports, and that surface is covered by import smoke tests.
 - Project snapshots now expose structured task outputs with summaries, artifact typing, and output metadata instead of carrying only raw task strings.
+- Package metadata now declares classifiers, typed-package support, pytest configuration, and dependency bounds, and this configuration is covered by pyproject metadata tests.

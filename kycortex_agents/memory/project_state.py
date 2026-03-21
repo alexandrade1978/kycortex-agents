@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 
 from kycortex_agents.exceptions import StatePersistenceError
 from kycortex_agents.types import (
+    AgentOutput,
     ArtifactRecord,
+    ArtifactType,
     DecisionRecord,
     FailureRecord,
     ProjectSnapshot,
@@ -121,12 +123,16 @@ class ProjectState:
         for task in self.tasks:
             task_status = self._normalize_task_status(task.status)
             failure = None
+            output = None
             if task_status == TaskStatus.FAILED and task.output:
                 failure = FailureRecord(message=task.output)
+            if task.output:
+                output = self._build_agent_output(task)
             results[task.id] = TaskResult(
                 task_id=task.id,
                 status=task_status,
                 agent_name=task.assigned_to,
+                output=output,
                 failure=failure,
                 completed_at=task.completed_at,
             )
@@ -169,6 +175,52 @@ class ProjectState:
             return TaskStatus(status)
         except ValueError:
             return TaskStatus.PENDING
+
+    def _build_agent_output(self, task: Task) -> AgentOutput:
+        raw_content = task.output or ""
+        summary = self._summarize_output(raw_content)
+        artifact = ArtifactRecord(
+            name=f"{task.id}_output",
+            artifact_type=self._artifact_type_for_task(task),
+            content=raw_content,
+            metadata={
+                "task_id": task.id,
+                "task_title": task.title,
+                "assigned_to": task.assigned_to,
+            },
+        )
+        return AgentOutput(
+            summary=summary,
+            raw_content=raw_content,
+            artifacts=[artifact],
+            metadata={
+                "task_id": task.id,
+                "task_title": task.title,
+                "assigned_to": task.assigned_to,
+                "status": task.status,
+            },
+        )
+
+    def _summarize_output(self, raw_content: str) -> str:
+        stripped = raw_content.strip()
+        if not stripped:
+            return ""
+        first_line = stripped.splitlines()[0].strip()
+        return first_line[:120]
+
+    def _artifact_type_for_task(self, task: Task) -> ArtifactType:
+        role_key = task.assigned_to.strip().lower().replace(" ", "_")
+        if role_key == "architect":
+            return ArtifactType.DOCUMENT
+        if role_key == "code_engineer":
+            return ArtifactType.CODE
+        if role_key == "qa_tester":
+            return ArtifactType.TEST
+        if role_key == "docs_writer":
+            return ArtifactType.DOCUMENT
+        if role_key == "legal_advisor":
+            return ArtifactType.DOCUMENT
+        return ArtifactType.TEXT
 
     def summary(self) -> str:
         done = sum(1 for t in self.tasks if t.status == TaskStatus.DONE.value)

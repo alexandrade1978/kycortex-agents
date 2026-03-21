@@ -64,3 +64,4 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - The orchestrator now resolves agents through an explicit registry, removing the hardcoded agent map and improving extension points.
 - Project state persistence now saves atomically, creates missing state directories, and raises explicit persistence errors for missing or invalid state files.
 - The package now exposes a clearer public API, including version, agent classes, and memory exports, and that surface is covered by import smoke tests.
+- Project snapshots now expose structured task outputs with summaries, artifact typing, and output metadata instead of carrying only raw task strings.

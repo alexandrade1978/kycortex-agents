@@ -3,18 +3,22 @@ from kycortex_agents import (
     AgentRegistry,
     AnthropicProvider,
     ArchitectAgent,
+    BaseStateStore,
     BaseAgent,
     CodeEngineerAgent,
     CodeReviewerAgent,
     DocsWriterAgent,
     KYCortexConfig,
+    JsonStateStore,
     LegalAdvisorAgent,
     OllamaProvider,
     Orchestrator,
     ProjectState,
     QATesterAgent,
+    SqliteStateStore,
     Task,
     __version__,
+    resolve_state_store,
 )
 from kycortex_agents.memory import ProjectState as MemoryProjectState
 from kycortex_agents.memory import Task as MemoryTask
@@ -30,7 +34,11 @@ def test_public_api_exports_core_symbols():
     assert AgentRegistry is not None
     assert AnthropicProvider is not None
     assert BaseAgent is not None
+    assert BaseStateStore is not None
+    assert JsonStateStore is not None
     assert OllamaProvider is not None
+    assert resolve_state_store is not None
+    assert SqliteStateStore is not None
 
 
 def test_public_api_exports_core_agent_types():

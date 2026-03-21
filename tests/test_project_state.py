@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 
@@ -56,6 +57,41 @@ def test_save_writes_valid_json(tmp_path):
 
     data = json.loads(state_path.read_text(encoding="utf-8"))
     assert data["project_name"] == "Demo"
+
+
+def test_save_and_load_project_state_with_sqlite(tmp_path):
+    state_path = tmp_path / "state" / "project_state.sqlite"
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        state_file=str(state_path),
+    )
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    project.save()
+
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.project_name == "Demo"
+    assert loaded.tasks[0].id == "arch"
+
+
+def test_load_rejects_invalid_sqlite(tmp_path):
+    state_path = tmp_path / "broken.sqlite"
+    connection = sqlite3.connect(state_path)
+    with connection:
+        connection.execute("CREATE TABLE wrong_table (id INTEGER PRIMARY KEY)")
+    connection.close()
+
+    with pytest.raises(StatePersistenceError, match="invalid SQLite"):
+        ProjectState.load(str(state_path))
 
 
 def test_snapshot_includes_structured_task_output():

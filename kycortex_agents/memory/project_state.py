@@ -1,12 +1,11 @@
 import os
-import json
-import tempfile
 from collections import deque
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
 from datetime import UTC, datetime
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
+from kycortex_agents.memory.state_store import resolve_state_store
 from kycortex_agents.types import (
     AgentOutput,
     ArtifactRecord,
@@ -127,32 +126,12 @@ class ProjectState:
         self.artifacts.append(record.path or record.name)
 
     def save(self):
-        state_path = self.state_file
-        state_dir = os.path.dirname(state_path)
-        if state_dir:
-            os.makedirs(state_dir, exist_ok=True)
-
-        fd, temp_path = tempfile.mkstemp(prefix="project_state_", suffix=".json", dir=state_dir or None)
-        try:
-            with os.fdopen(fd, "w") as file_handle:
-                json.dump(asdict(self), file_handle, indent=2, default=str)
-            os.replace(temp_path, state_path)
-        except OSError as exc:
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
-            raise StatePersistenceError(f"Failed to save project state to {state_path}") from exc
+        state_store = resolve_state_store(self.state_file)
+        state_store.save(self.state_file, asdict(self))
 
     @classmethod
     def load(cls, path: str) -> "ProjectState":
-        try:
-            with open(path) as file_handle:
-                data = json.load(file_handle)
-        except FileNotFoundError as exc:
-            raise StatePersistenceError(f"Project state file not found: {path}") from exc
-        except json.JSONDecodeError as exc:
-            raise StatePersistenceError(f"Project state file is invalid JSON: {path}") from exc
+        data = resolve_state_store(path).load(path)
         tasks = [Task(**t) for t in data.pop("tasks", [])]
         try:
             obj = cls(**{k: v for k, v in data.items() if k != "tasks"})

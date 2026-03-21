@@ -34,12 +34,14 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - [kycortex_agents/exceptions.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/exceptions.py)
 - [kycortex_agents/config.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/config.py)
 - [kycortex_agents/agents/registry.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/agents/registry.py)
+- [kycortex_agents/memory/project_state.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/memory/project_state.py)
 - [kycortex_agents/providers/base.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/base.py)
 - [kycortex_agents/providers/openai_provider.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/openai_provider.py)
 - [kycortex_agents/providers/factory.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/factory.py)
 - [tests/test_orchestrator.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_orchestrator.py)
 - [tests/test_base_agent.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_base_agent.py)
 - [tests/test_config.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_config.py)
+- [tests/test_project_state.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_project_state.py)
 - [tests/test_registry.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_registry.py)
 - [tests/test_providers.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_providers.py)
 
@@ -57,3 +59,4 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - The provider layer now exists behind a factory and OpenAI implementation, and the full suite passes with provider-level coverage.
 - Configuration now normalizes provider settings, validates static runtime values, and enforces provider credentials when a provider instance is created.
 - The orchestrator now resolves agents through an explicit registry, removing the hardcoded agent map and improving extension points.
+- Project state persistence now saves atomically, creates missing state directories, and raises explicit persistence errors for missing or invalid state files.

@@ -1,8 +1,11 @@
+import os
 import json
+import tempfile
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
 from datetime import UTC, datetime
 
+from kycortex_agents.exceptions import StatePersistenceError
 from kycortex_agents.types import (
     ArtifactRecord,
     DecisionRecord,
@@ -76,15 +79,37 @@ class ProjectState:
         self.artifacts.append(record.path or record.name)
 
     def save(self):
-        with open(self.state_file, "w") as f:
-            json.dump(asdict(self), f, indent=2, default=str)
+        state_path = self.state_file
+        state_dir = os.path.dirname(state_path)
+        if state_dir:
+            os.makedirs(state_dir, exist_ok=True)
+
+        fd, temp_path = tempfile.mkstemp(prefix="project_state_", suffix=".json", dir=state_dir or None)
+        try:
+            with os.fdopen(fd, "w") as file_handle:
+                json.dump(asdict(self), file_handle, indent=2, default=str)
+            os.replace(temp_path, state_path)
+        except OSError as exc:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+            raise StatePersistenceError(f"Failed to save project state to {state_path}") from exc
 
     @classmethod
     def load(cls, path: str) -> "ProjectState":
-        with open(path) as f:
-            data = json.load(f)
+        try:
+            with open(path) as file_handle:
+                data = json.load(file_handle)
+        except FileNotFoundError as exc:
+            raise StatePersistenceError(f"Project state file not found: {path}") from exc
+        except json.JSONDecodeError as exc:
+            raise StatePersistenceError(f"Project state file is invalid JSON: {path}") from exc
         tasks = [Task(**t) for t in data.pop("tasks", [])]
-        obj = cls(**{k: v for k, v in data.items() if k != "tasks"})
+        try:
+            obj = cls(**{k: v for k, v in data.items() if k != "tasks"})
+        except TypeError as exc:
+            raise StatePersistenceError(f"Project state data is invalid: {path}") from exc
         obj.tasks = tasks
         return obj
 

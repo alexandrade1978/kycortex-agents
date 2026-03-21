@@ -12,3 +12,7 @@ class ProviderConfigurationError(KYCortexError):
 
 class ConfigValidationError(KYCortexError):
     """Raised when runtime configuration is invalid."""
+
+
+class StatePersistenceError(KYCortexError):
+    """Raised when project state cannot be saved or loaded safely."""

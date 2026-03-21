@@ -250,3 +250,27 @@ def test_execute_workflow_fails_when_retry_budget_is_exhausted(tmp_path):
     assert project.tasks[0].status == TaskStatus.FAILED.value
     assert project.tasks[0].attempts == 2
     assert project.tasks[0].output == "boom-2"
+
+
+def test_execute_workflow_resumes_interrupted_running_tasks(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    state_path = tmp_path / "state.json"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.RUNNING.value,
+            attempts=1,
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ARCHITECTURE DOC")}))
+
+    orchestrator.execute_workflow(project)
+
+    assert project.tasks[0].status == TaskStatus.DONE.value
+    assert project.tasks[0].attempts == 2
+    assert project.tasks[0].output == "ARCHITECTURE DOC"

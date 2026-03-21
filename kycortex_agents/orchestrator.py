@@ -121,6 +121,10 @@ class Orchestrator:
 
     def execute_workflow(self, project: ProjectState):
         self.logger.info(f"Starting workflow for project: {project.project_name}")
+        resumed_task_ids = project.resume_interrupted_tasks()
+        if resumed_task_ids:
+            self.logger.info("Resuming interrupted tasks: %s", ", ".join(resumed_task_ids))
+            project.save()
         if project.phase == "init":
             project.phase = "execution"
         while True:

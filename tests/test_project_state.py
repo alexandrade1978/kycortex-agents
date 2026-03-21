@@ -134,3 +134,34 @@ def test_fail_task_requeues_when_retry_budget_exists():
     assert task.attempts == 1
     assert task.last_error == "temporary failure"
     assert project.should_retry_task("code") is True
+
+
+def test_resume_interrupted_tasks_resets_running_tasks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.RUNNING.value,
+            attempts=1,
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="IMPLEMENTED CODE",
+        )
+    )
+
+    resumed = project.resume_interrupted_tasks()
+
+    assert resumed == ["arch"]
+    assert project.tasks[0].status == TaskStatus.PENDING.value
+    assert project.tasks[0].last_error == "Task resumed after interrupted execution"
+    assert project.tasks[1].status == TaskStatus.DONE.value

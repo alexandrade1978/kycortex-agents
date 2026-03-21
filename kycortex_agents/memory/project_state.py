@@ -92,6 +92,16 @@ class ProjectState:
                 t.last_error = None
                 t.completed_at = datetime.now(UTC).isoformat()
 
+    def resume_interrupted_tasks(self) -> List[str]:
+        resumed_task_ids: List[str] = []
+        for task in self.tasks:
+            if task.status == TaskStatus.RUNNING.value:
+                task.status = TaskStatus.PENDING.value
+                task.last_error = "Task resumed after interrupted execution"
+                task.completed_at = None
+                resumed_task_ids.append(task.id)
+        return resumed_task_ids
+
     def should_retry_task(self, task_id: str) -> bool:
         task = self.get_task(task_id)
         if task is None:

@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, TaskStatus
+from kycortex_agents.types import AgentInput, AgentOutput, TaskStatus
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
@@ -27,9 +27,14 @@ class Orchestrator:
             project.fail_task(task.id, str(exc))
             self.logger.exception("Task %s failed.", task.id)
             raise
-        project.complete_task(task.id, output)
+        normalized_output = self._normalize_agent_result(output)
+        for decision in normalized_output.decisions:
+            project.add_decision_record(decision)
+        for artifact in normalized_output.artifacts:
+            project.add_artifact_record(artifact)
+        project.complete_task(task.id, normalized_output.raw_content)
         self.logger.info(f"Task {task.id} completed.")
-        return output
+        return normalized_output.raw_content
 
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
         snapshot = project.snapshot()
@@ -67,10 +72,23 @@ class Orchestrator:
             context=self._build_context(task, project),
         )
 
-    def _execute_agent(self, agent: Any, agent_input: AgentInput) -> str:
+    def _execute_agent(self, agent: Any, agent_input: AgentInput) -> Any:
+        if hasattr(agent, "execute"):
+            return agent.execute(agent_input)
         if hasattr(agent, "run_with_input"):
             return agent.run_with_input(agent_input)
         return agent.run(agent_input.task_description, agent_input.context)
+
+    def _normalize_agent_result(self, result: Any) -> AgentOutput:
+        if isinstance(result, AgentOutput):
+            return result
+        return AgentOutput(summary=self._summarize_output(result), raw_content=result)
+
+    def _summarize_output(self, raw_content: str) -> str:
+        stripped = raw_content.strip()
+        if not stripped:
+            return ""
+        return stripped.splitlines()[0].strip()[:120]
 
     def _semantic_output_key(self, task: Task) -> Optional[str]:
         role_key = AgentRegistry.normalize_key(task.assigned_to)

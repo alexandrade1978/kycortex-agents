@@ -4,16 +4,26 @@ from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.providers.base import BaseLLMProvider
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, AgentOutput
 
 
 class DummyAgent(BaseAgent):
     def __init__(self, provider):
         super().__init__("Dummy", "Testing", KYCortexConfig(output_dir="./output_test"))
         self._provider = provider
+        self.events = []
 
     def run(self, task_description: str, context: dict) -> str:
         return self.chat("system", task_description)
+
+    def before_execute(self, agent_input: AgentInput) -> None:
+        self.events.append(("before", agent_input.task_id))
+
+    def after_execute(self, agent_input: AgentInput, output: AgentOutput) -> AgentOutput:
+        output = super().after_execute(agent_input, output)
+        output.metadata["hook"] = "after"
+        self.events.append(("after", agent_input.task_id))
+        return output
 
 class DummyProvider(BaseLLMProvider):
     def __init__(self, response=None, error=None):
@@ -68,3 +78,58 @@ def test_run_with_input_delegates_to_legacy_run_signature():
 
     assert result == "ok"
     assert provider.calls == [("system", "message")]
+
+
+def test_execute_returns_standardized_agent_output():
+    provider = DummyProvider(response="first line\nsecond line")
+    agent = DummyAgent(provider)
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+
+    result = agent.execute(agent_input)
+
+    assert result.summary == "first line"
+    assert result.raw_content == "first line\nsecond line"
+    assert result.metadata["agent_name"] == "Dummy"
+    assert result.metadata["hook"] == "after"
+    assert agent.events == [("before", "task-1"), ("after", "task-1")]
+
+
+def test_execute_rejects_missing_task_description():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+
+    with pytest.raises(AgentExecutionError, match="task_description must not be empty"):
+        agent.execute(agent_input)
+
+
+def test_execute_wraps_unexpected_runtime_errors():
+    class ExplodingAgent(DummyAgent):
+        def run(self, task_description: str, context: dict) -> str:
+            raise RuntimeError("boom")
+
+    agent = ExplodingAgent(DummyProvider(response="ok"))
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+
+    with pytest.raises(AgentExecutionError, match="Dummy failed during agent execution"):
+        agent.execute(agent_input)

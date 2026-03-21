@@ -4,7 +4,7 @@ from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
-from kycortex_agents.types import TaskStatus
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
 
 
 class RecordingAgent:
@@ -27,6 +27,28 @@ class RecordingAgent:
 class FailingAgent:
     def run(self, task_description: str, context: dict) -> str:
         raise RuntimeError("boom")
+
+
+class StructuredAgent:
+    def execute(self, agent_input) -> AgentOutput:
+        return AgentOutput(
+            summary="Decision summary",
+            raw_content="STRUCTURED OUTPUT",
+            artifacts=[
+                ArtifactRecord(
+                    name="architecture_doc",
+                    artifact_type=ArtifactType.DOCUMENT,
+                    path="artifacts/architecture.md",
+                )
+            ],
+            decisions=[
+                DecisionRecord(
+                    topic="stack",
+                    decision="Use typed runtime",
+                    rationale="Enables contract validation",
+                )
+            ],
+        )
 
 
 def test_run_task_exposes_semantic_context(tmp_path):
@@ -86,3 +108,25 @@ def test_run_task_marks_failure_and_reraises(tmp_path):
 
     assert project.tasks[0].status == TaskStatus.FAILED.value
     assert project.tasks[0].output == "boom"
+
+
+def test_run_task_persists_structured_agent_outputs(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": StructuredAgent()}))
+
+    result = orchestrator.run_task(project.tasks[0], project)
+
+    assert result == "STRUCTURED OUTPUT"
+    assert project.tasks[0].status == TaskStatus.DONE.value
+    assert project.decisions[0]["topic"] == "stack"
+    assert project.artifacts == ["artifacts/architecture.md"]

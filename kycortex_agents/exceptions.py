@@ -8,3 +8,7 @@ class AgentExecutionError(KYCortexError):
 
 class ProviderConfigurationError(KYCortexError):
     """Raised when the configured LLM provider is not supported."""
+
+
+class ConfigValidationError(KYCortexError):
+    """Raised when runtime configuration is invalid."""

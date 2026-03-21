@@ -24,7 +24,7 @@ def build_client(response=None, error=None):
 
 
 def test_create_provider_returns_openai_provider(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai")
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token")
 
     provider = create_provider(config)
 
@@ -35,6 +35,13 @@ def test_create_provider_rejects_unknown_provider(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="unknown")
 
     with pytest.raises(ProviderConfigurationError, match="Unsupported LLM provider"):
+        create_provider(config)
+
+
+def test_create_provider_requires_runtime_credentials(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="")
+
+    with pytest.raises(ProviderConfigurationError, match="Missing API key"):
         create_provider(config)
 
 

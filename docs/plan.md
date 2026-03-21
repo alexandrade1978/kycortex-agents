@@ -32,11 +32,13 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - [docs/release-checklist.md](/home/user/bootcamp/projects/kycortex-agents/docs/release-checklist.md)
 - [kycortex_agents/types.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/types.py)
 - [kycortex_agents/exceptions.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/exceptions.py)
+- [kycortex_agents/config.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/config.py)
 - [kycortex_agents/providers/base.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/base.py)
 - [kycortex_agents/providers/openai_provider.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/openai_provider.py)
 - [kycortex_agents/providers/factory.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/providers/factory.py)
 - [tests/test_orchestrator.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_orchestrator.py)
 - [tests/test_base_agent.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_base_agent.py)
+- [tests/test_config.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_config.py)
 - [tests/test_providers.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_providers.py)
 
 **Synchronization**
@@ -51,3 +53,4 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - The orchestrator now builds semantic context from project snapshots, marks task failures explicitly, and is covered by the first automated tests.
 - The base agent now raises explicit runtime errors for provider failures and invalid responses, and that behavior is covered by unit tests.
 - The provider layer now exists behind a factory and OpenAI implementation, and the full suite passes with provider-level coverage.
+- Configuration now normalizes provider settings, validates static runtime values, and enforces provider credentials when a provider instance is created.

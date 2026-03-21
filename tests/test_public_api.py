@@ -1,6 +1,7 @@
 import kycortex_agents
 from kycortex_agents import (
     AgentRegistry,
+    AnthropicProvider,
     ArchitectAgent,
     BaseAgent,
     CodeEngineerAgent,
@@ -26,6 +27,7 @@ def test_public_api_exports_core_symbols():
     assert ProjectState is MemoryProjectState
     assert Task is MemoryTask
     assert AgentRegistry is not None
+    assert AnthropicProvider is not None
     assert BaseAgent is not None
 
 

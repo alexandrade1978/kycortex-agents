@@ -16,6 +16,18 @@ def test_config_normalizes_provider_and_reads_env(tmp_path, monkeypatch):
     assert config.api_key == "env-token"
 
 
+def test_config_reads_anthropic_env_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-token")
+
+    config = KYCortexConfig(
+        llm_provider="anthropic",
+        output_dir=str(tmp_path / "output"),
+    )
+
+    assert config.llm_provider == "anthropic"
+    assert config.api_key == "anthropic-token"
+
+
 def test_config_rejects_invalid_temperature(tmp_path):
     with pytest.raises(ConfigValidationError, match="temperature must be between 0 and 2"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), temperature=2.5)

@@ -4,6 +4,7 @@ import pytest
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderConfigurationError
+from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.factory import create_provider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
 
@@ -23,12 +24,29 @@ def build_client(response=None, error=None):
     return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
 
+def build_anthropic_client(response=None, error=None):
+    def create(**kwargs):
+        if error is not None:
+            raise error
+        return response
+
+    return SimpleNamespace(messages=SimpleNamespace(create=create))
+
+
 def test_create_provider_returns_openai_provider(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token")
 
     provider = create_provider(config)
 
     assert isinstance(provider, OpenAIProvider)
+
+
+def test_create_provider_returns_anthropic_provider(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token")
+
+    provider = create_provider(config)
+
+    assert isinstance(provider, AnthropicProvider)
 
 
 def test_create_provider_rejects_unknown_provider(tmp_path):
@@ -57,6 +75,24 @@ def test_openai_provider_returns_content(tmp_path):
 def test_openai_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(error=RuntimeError("down")))
+
+    with pytest.raises(AgentExecutionError, match="failed to call the model API"):
+        provider.generate("system", "message")
+
+
+def test_anthropic_provider_returns_content(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    response = SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")])
+    provider = AnthropicProvider(config, client=build_anthropic_client(response=response))
+
+    result = provider.generate("system", "message")
+
+    assert result == "ok"
+
+
+def test_anthropic_provider_wraps_api_error(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(config, client=build_anthropic_client(error=RuntimeError("down")))
 
     with pytest.raises(AgentExecutionError, match="failed to call the model API"):
         provider.generate("system", "message")

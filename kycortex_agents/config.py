@@ -7,6 +7,7 @@ from kycortex_agents.exceptions import ConfigValidationError
 
 PROVIDER_ENV_VARS = {
     "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
 }
 
 @dataclass

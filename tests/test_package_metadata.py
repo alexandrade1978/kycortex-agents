@@ -10,6 +10,7 @@ def test_pyproject_contains_expected_package_metadata():
     assert project["name"] == "kycortex-agents"
     assert project["version"] == "0.1.0"
     assert "Typing :: Typed" in project["classifiers"]
+    assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
     assert "openai>=1.0.0,<2.0.0" in project["dependencies"]
 
 

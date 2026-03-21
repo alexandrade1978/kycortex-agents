@@ -12,6 +12,11 @@ class RecordingAgent:
         self.response = response
         self.last_description = None
         self.last_context = None
+        self.last_input = None
+
+    def run_with_input(self, agent_input) -> str:
+        self.last_input = agent_input
+        return self.run(agent_input.task_description, agent_input.context)
 
     def run(self, task_description: str, context: dict) -> str:
         self.last_description = task_description
@@ -54,6 +59,8 @@ def test_run_task_exposes_semantic_context(tmp_path):
     assert result == "IMPLEMENTED CODE"
     assert project.tasks[1].status == TaskStatus.DONE.value
     assert agent.last_description == "Implement the application"
+    assert agent.last_input.task_id == "code"
+    assert agent.last_input.project_name == "Demo"
     assert agent.last_context["architecture"] == "ARCHITECTURE DOC"
     assert agent.last_context["completed_tasks"]["arch"] == "ARCHITECTURE DOC"
     assert agent.last_context["task"]["id"] == "code"

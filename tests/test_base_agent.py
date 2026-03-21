@@ -4,6 +4,7 @@ from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.providers.base import BaseLLMProvider
+from kycortex_agents.types import AgentInput
 
 
 class DummyAgent(BaseAgent):
@@ -49,3 +50,21 @@ def test_chat_raises_on_empty_response():
 
     with pytest.raises(AgentExecutionError, match="Dummy: provider returned an empty response"):
         agent.chat("system", "message")
+
+
+def test_run_with_input_delegates_to_legacy_run_signature():
+    provider = DummyProvider(response="ok")
+    agent = DummyAgent(provider)
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={"architecture": "doc"},
+    )
+
+    result = agent.run_with_input(agent_input)
+
+    assert result == "ok"
+    assert provider.calls == [("system", "message")]

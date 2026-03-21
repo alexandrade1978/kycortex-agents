@@ -3,10 +3,10 @@
 Canonical workspace copy of the project plan. Keep this file synchronized with the repository memory plan after each completed phase or major milestone.
 
 **Status**
-- Current state: Phase 1 in progress.
-- Completed phases: Phase 0.
-- Next milestone: integrate the typed domain model into the runtime and orchestrator.
-- Progress: 1/14 phases complete.
+- Current state: Phase 1 complete, Phase 2 ready to start.
+- Completed phases: Phase 0, Phase 1.
+- Next milestone: expand the provider layer beyond the initial OpenAI implementation.
+- Progress: 2/14 phases complete.
 - Update rule: after each completed phase or major milestone, update this file and the repository memory plan together.
 
 The goal is to turn the current prototype into a production-grade multi-agent framework by first stabilizing the execution core, then introducing typed inter-agent contracts and provider abstraction, then expanding into workflow orchestration, persistence, observability, packaging, and release operations. The recommended path is to avoid shipping roadmap items as isolated fixes and instead evolve the package into a layered library with explicit schemas, a registry, a workflow engine, and a verified public API.
@@ -55,7 +55,7 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - Visible repository mirror: [docs/plan.md](/home/user/bootcamp/projects/kycortex-agents/docs/plan.md)
 
 **Last completed milestone**
-- Phase 0 completed by documenting scope, platform baseline, provider baseline, migration constraints, and release checklist artifacts.
+- Phase 1 completed by replacing implicit task/runtime contracts with typed inputs, typed outputs, typed snapshots, explicit agent lookup, and a stable public API surface.
 
 **Current phase notes**
 - Phase 1 started with the initial typed domain model and first public API exports.
@@ -68,3 +68,4 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - The package now exposes a clearer public API, including version, agent classes, and memory exports, and that surface is covered by import smoke tests.
 - Project snapshots now expose structured task outputs with summaries, artifact typing, and output metadata instead of carrying only raw task strings.
 - Package metadata now declares classifiers, typed-package support, pytest configuration, and dependency bounds, and this configuration is covered by pyproject metadata tests.
+- The runtime now invokes agents through a typed AgentInput entrypoint while preserving compatibility with legacy run(description, context) implementations.

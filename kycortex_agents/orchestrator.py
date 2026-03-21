@@ -22,7 +22,7 @@ class Orchestrator:
         agent_input = self._build_agent_input(task, project)
         project.start_task(task.id)
         try:
-            output = agent.run(agent_input.task_description, agent_input.context)
+            output = self._execute_agent(agent, agent_input)
         except Exception as exc:
             project.fail_task(task.id, str(exc))
             self.logger.exception("Task %s failed.", task.id)
@@ -66,6 +66,11 @@ class Orchestrator:
             project_goal=project.goal,
             context=self._build_context(task, project),
         )
+
+    def _execute_agent(self, agent: Any, agent_input: AgentInput) -> str:
+        if hasattr(agent, "run_with_input"):
+            return agent.run_with_input(agent_input)
+        return agent.run(agent_input.task_description, agent_input.context)
 
     def _semantic_output_key(self, task: Task) -> Optional[str]:
         role_key = AgentRegistry.normalize_key(task.assigned_to)

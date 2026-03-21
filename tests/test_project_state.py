@@ -79,3 +79,34 @@ def test_snapshot_includes_structured_task_output():
     assert result.output.raw_content == "print('hello')\nprint('world')"
     assert result.output.artifacts[0].artifact_type == ArtifactType.CODE
     assert result.output.metadata["task_id"] == "code"
+
+
+def test_runnable_tasks_respect_dependencies():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    runnable_ids = [task.id for task in project.runnable_tasks()]
+    blocked_ids = [task.id for task in project.blocked_tasks()]
+
+    assert runnable_ids == ["arch"]
+    assert blocked_ids == ["code"]
+
+    project.complete_task("arch", "ARCHITECTURE DOC")
+
+    assert [task.id for task in project.runnable_tasks()] == ["code"]

@@ -24,6 +24,7 @@ class Task:
     title: str
     description: str
     assigned_to: str
+    dependencies: List[str] = field(default_factory=list)
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -41,6 +42,23 @@ class ProjectState:
 
     def add_task(self, task: Task):
         self.tasks.append(task)
+
+    def get_task(self, task_id: str) -> Optional[Task]:
+        for task in self.tasks:
+            if task.id == task_id:
+                return task
+        return None
+
+    def is_task_ready(self, task: Task) -> bool:
+        if task.status != TaskStatus.PENDING.value:
+            return False
+        for dependency_id in task.dependencies:
+            dependency = self.get_task(dependency_id)
+            if dependency is None:
+                return False
+            if dependency.status != TaskStatus.DONE.value:
+                return False
+        return True
 
     def start_task(self, task_id: str):
         for task in self.tasks:
@@ -117,6 +135,16 @@ class ProjectState:
 
     def pending_tasks(self) -> List[Task]:
         return [t for t in self.tasks if t.status == TaskStatus.PENDING.value]
+
+    def runnable_tasks(self) -> List[Task]:
+        return [task for task in self.tasks if self.is_task_ready(task)]
+
+    def blocked_tasks(self) -> List[Task]:
+        return [
+            task
+            for task in self.tasks
+            if task.status == TaskStatus.PENDING.value and not self.is_task_ready(task)
+        ]
 
     def task_results(self) -> Dict[str, TaskResult]:
         results: Dict[str, TaskResult] = {}

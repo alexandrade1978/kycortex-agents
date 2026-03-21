@@ -2,6 +2,7 @@ import pytest
 
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
@@ -130,3 +131,60 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert project.tasks[0].status == TaskStatus.DONE.value
     assert project.decisions[0]["topic"] == "stack"
     assert project.artifacts == ["artifacts/architecture.md"]
+
+
+def test_execute_workflow_respects_task_dependencies(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "architect": RecordingAgent("ARCHITECTURE DOC"),
+                "code_engineer": RecordingAgent("IMPLEMENTED CODE"),
+            }
+        ),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    assert [task.status for task in project.tasks] == [TaskStatus.DONE.value, TaskStatus.DONE.value]
+    assert project.tasks[1].output == "IMPLEMENTED CODE"
+    assert project.phase == "completed"
+
+
+def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["missing-arch"],
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"code_engineer": RecordingAgent("IMPLEMENTED CODE")}))
+
+    with pytest.raises(AgentExecutionError, match="Workflow is blocked"):
+        orchestrator.execute_workflow(project)

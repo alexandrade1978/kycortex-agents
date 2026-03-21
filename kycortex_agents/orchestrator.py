@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import AgentInput, AgentOutput, TaskStatus
 
@@ -126,7 +127,13 @@ class Orchestrator:
                 project.save()
                 self.logger.info("All tasks completed.")
                 break
-            for task in pending:
+            runnable = project.runnable_tasks()
+            if not runnable:
+                blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
+                raise AgentExecutionError(
+                    f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
+                )
+            for task in runnable:
                 self.run_task(task, project)
                 project.save()
         self.logger.info(f"Project {project.project_name} finished.")

@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import UTC, datetime
 
 from kycortex_agents.types import (
     ArtifactRecord,
@@ -21,7 +21,7 @@ class Task:
     assigned_to: str
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     completed_at: Optional[str] = None
 
 @dataclass
@@ -48,7 +48,7 @@ class ProjectState:
             if task.id == task_id:
                 task.status = TaskStatus.FAILED.value
                 task.output = error_message
-                task.completed_at = datetime.utcnow().isoformat()
+                task.completed_at = datetime.now(UTC).isoformat()
                 return
 
     def complete_task(self, task_id: str, output: str):
@@ -56,10 +56,10 @@ class ProjectState:
             if t.id == task_id:
                 t.status = TaskStatus.DONE.value
                 t.output = output
-                t.completed_at = datetime.utcnow().isoformat()
+                t.completed_at = datetime.now(UTC).isoformat()
 
     def add_decision(self, topic: str, decision: str, rationale: str):
-        self.decisions.append({"topic": topic, "decision": decision, "rationale": rationale, "at": datetime.utcnow().isoformat()})
+        self.decisions.append({"topic": topic, "decision": decision, "rationale": rationale, "at": datetime.now(UTC).isoformat()})
 
     def add_decision_record(self, record: DecisionRecord):
         self.decisions.append(
@@ -119,7 +119,7 @@ class ProjectState:
                     topic=decision.get("topic", ""),
                     decision=decision.get("decision", ""),
                     rationale=decision.get("rationale", ""),
-                    created_at=decision.get("at", datetime.utcnow().isoformat()),
+                    created_at=decision.get("at", datetime.now(UTC).isoformat()),
                     metadata=decision.get("metadata", {}),
                 )
                 for decision in self.decisions

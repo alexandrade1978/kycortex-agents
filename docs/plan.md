@@ -31,7 +31,9 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 - [docs/product-baseline.md](/home/user/bootcamp/projects/kycortex-agents/docs/product-baseline.md)
 - [docs/release-checklist.md](/home/user/bootcamp/projects/kycortex-agents/docs/release-checklist.md)
 - [kycortex_agents/types.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/types.py)
+- [kycortex_agents/exceptions.py](/home/user/bootcamp/projects/kycortex-agents/kycortex_agents/exceptions.py)
 - [tests/test_orchestrator.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_orchestrator.py)
+- [tests/test_base_agent.py](/home/user/bootcamp/projects/kycortex-agents/tests/test_base_agent.py)
 
 **Synchronization**
 - Memory source: `/memories/repo/plan.md`
@@ -43,3 +45,4 @@ The goal is to turn the current prototype into a production-grade multi-agent fr
 **Current phase notes**
 - Phase 1 started with the initial typed domain model and first public API exports.
 - The orchestrator now builds semantic context from project snapshots, marks task failures explicitly, and is covered by the first automated tests.
+- The base agent now raises explicit runtime errors for provider failures and invalid responses, and that behavior is covered by unit tests.

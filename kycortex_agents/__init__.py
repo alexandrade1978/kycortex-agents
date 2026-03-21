@@ -1,4 +1,5 @@
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.exceptions import AgentExecutionError, KYCortexError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.types import (
@@ -17,11 +18,13 @@ from kycortex_agents.types import (
 __all__ = [
 	"AgentInput",
 	"AgentOutput",
+	"AgentExecutionError",
 	"ArtifactRecord",
 	"ArtifactType",
 	"DecisionRecord",
 	"FailureRecord",
 	"KYCortexConfig",
+	"KYCortexError",
 	"Orchestrator",
 	"ProjectSnapshot",
 	"ProjectState",

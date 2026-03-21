@@ -4,3 +4,7 @@ class KYCortexError(Exception):
 
 class AgentExecutionError(KYCortexError):
     """Raised when an agent cannot produce a valid response."""
+
+
+class ProviderConfigurationError(KYCortexError):
+    """Raised when the configured LLM provider is not supported."""

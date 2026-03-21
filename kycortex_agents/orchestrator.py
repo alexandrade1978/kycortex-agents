@@ -26,7 +26,10 @@ class Orchestrator:
             output = self._execute_agent(agent, agent_input)
         except Exception as exc:
             project.fail_task(task.id, str(exc))
-            self.logger.exception("Task %s failed.", task.id)
+            if project.should_retry_task(task.id):
+                self.logger.warning("Task %s failed on attempt %s and will be retried.", task.id, task.attempts)
+            else:
+                self.logger.exception("Task %s failed.", task.id)
             raise
         normalized_output = self._normalize_agent_result(output)
         for decision in normalized_output.decisions:
@@ -134,6 +137,12 @@ class Orchestrator:
                     f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
                 )
             for task in runnable:
-                self.run_task(task, project)
+                try:
+                    self.run_task(task, project)
+                except Exception:
+                    project.save()
+                    if project.should_retry_task(task.id):
+                        continue
+                    raise
                 project.save()
         self.logger.info(f"Project {project.project_name} finished.")

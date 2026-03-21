@@ -30,6 +30,19 @@ class FailingAgent:
         raise RuntimeError("boom")
 
 
+class FlakyAgent:
+    def __init__(self, failures_before_success: int, success_response: str):
+        self.failures_before_success = failures_before_success
+        self.success_response = success_response
+        self.calls = 0
+
+    def run(self, task_description: str, context: dict) -> str:
+        self.calls += 1
+        if self.calls <= self.failures_before_success:
+            raise RuntimeError(f"boom-{self.calls}")
+        return self.success_response
+
+
 class StructuredAgent:
     def execute(self, agent_input) -> AgentOutput:
         return AgentOutput(
@@ -188,3 +201,52 @@ def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path)
 
     with pytest.raises(AgentExecutionError, match="Workflow is blocked"):
         orchestrator.execute_workflow(project)
+
+
+def test_execute_workflow_retries_task_until_success(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            retry_limit=1,
+        )
+    )
+
+    agent = FlakyAgent(failures_before_success=1, success_response="IMPLEMENTED CODE")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"code_engineer": agent}))
+
+    orchestrator.execute_workflow(project)
+
+    assert agent.calls == 2
+    assert project.tasks[0].status == TaskStatus.DONE.value
+    assert project.tasks[0].output == "IMPLEMENTED CODE"
+    assert project.tasks[0].attempts == 2
+
+
+def test_execute_workflow_fails_when_retry_budget_is_exhausted(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            retry_limit=1,
+        )
+    )
+
+    agent = FlakyAgent(failures_before_success=2, success_response="IMPLEMENTED CODE")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"code_engineer": agent}))
+
+    with pytest.raises(RuntimeError, match="boom-2"):
+        orchestrator.execute_workflow(project)
+
+    assert agent.calls == 2
+    assert project.tasks[0].status == TaskStatus.FAILED.value
+    assert project.tasks[0].attempts == 2
+    assert project.tasks[0].output == "boom-2"

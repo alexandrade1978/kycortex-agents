@@ -25,6 +25,9 @@ class Task:
     description: str
     assigned_to: str
     dependencies: List[str] = field(default_factory=list)
+    retry_limit: int = 0
+    attempts: int = 0
+    last_error: Optional[str] = None
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -64,11 +67,18 @@ class ProjectState:
         for task in self.tasks:
             if task.id == task_id:
                 task.status = TaskStatus.RUNNING.value
+                task.attempts += 1
+                task.last_error = None
                 return
 
     def fail_task(self, task_id: str, error_message: str):
         for task in self.tasks:
             if task.id == task_id:
+                task.last_error = error_message
+                if task.attempts <= task.retry_limit:
+                    task.status = TaskStatus.PENDING.value
+                    task.completed_at = None
+                    return
                 task.status = TaskStatus.FAILED.value
                 task.output = error_message
                 task.completed_at = datetime.now(UTC).isoformat()
@@ -79,7 +89,14 @@ class ProjectState:
             if t.id == task_id:
                 t.status = TaskStatus.DONE.value
                 t.output = output
+                t.last_error = None
                 t.completed_at = datetime.now(UTC).isoformat()
+
+    def should_retry_task(self, task_id: str) -> bool:
+        task = self.get_task(task_id)
+        if task is None:
+            return False
+        return task.status == TaskStatus.PENDING.value and task.attempts > 0 and task.attempts <= task.retry_limit
 
     def add_decision(self, topic: str, decision: str, rationale: str):
         self.decisions.append({"topic": topic, "decision": decision, "rationale": rationale, "at": datetime.now(UTC).isoformat()})

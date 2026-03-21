@@ -110,3 +110,27 @@ def test_runnable_tasks_respect_dependencies():
     project.complete_task("arch", "ARCHITECTURE DOC")
 
     assert [task.id for task in project.runnable_tasks()] == ["code"]
+
+
+def test_fail_task_requeues_when_retry_budget_exists():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            retry_limit=1,
+        )
+    )
+
+    project.start_task("code")
+    project.fail_task("code", "temporary failure")
+
+    task = project.get_task("code")
+
+    assert task is not None
+    assert task.status == TaskStatus.PENDING.value
+    assert task.attempts == 1
+    assert task.last_error == "temporary failure"
+    assert project.should_retry_task("code") is True

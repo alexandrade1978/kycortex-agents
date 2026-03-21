@@ -9,6 +9,8 @@ from kycortex_agents.types import AgentInput, AgentOutput
 
 
 class BaseAgent(ABC):
+    required_context_keys: tuple[str, ...] = ()
+
     def __init__(self, name: str, role: str, config: KYCortexConfig):
         self.name = name
         self.role = role
@@ -53,6 +55,12 @@ class BaseAgent(ABC):
             raise AgentExecutionError(f"{self.name}: project_name must not be empty")
         if not isinstance(agent_input.context, dict):
             raise AgentExecutionError(f"{self.name}: context must be a dictionary")
+        for key in self.required_context_keys:
+            value = agent_input.context.get(key)
+            if value is None:
+                raise AgentExecutionError(f"{self.name}: required context key '{key}' is missing")
+            if isinstance(value, str) and not value.strip():
+                raise AgentExecutionError(f"{self.name}: required context key '{key}' must not be empty")
 
     def before_execute(self, agent_input: AgentInput) -> None:
         return None
@@ -92,6 +100,14 @@ class BaseAgent(ABC):
     def _summarize_output(self, raw_content: str) -> str:
         first_line = raw_content.strip().splitlines()[0].strip()
         return first_line[:120]
+
+    def require_context_value(self, agent_input: AgentInput, key: str) -> Any:
+        value = agent_input.context.get(key)
+        if value is None:
+            raise AgentExecutionError(f"{self.name}: required context key '{key}' is missing")
+        if isinstance(value, str) and not value.strip():
+            raise AgentExecutionError(f"{self.name}: required context key '{key}' must not be empty")
+        return value
 
     @abstractmethod
     def run(self, task_description: str, context: dict) -> str:

@@ -1,5 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.types import AgentInput
 
 SYSTEM_PROMPT = """You are a Technical Documentation Writer at KYCortex AI Software House.
 You write clear, complete documentation: README files, API docs, architecture docs,
@@ -10,6 +11,19 @@ Use Markdown. Be concise but thorough."""
 class DocsWriterAgent(BaseAgent):
     def __init__(self, config: KYCortexConfig):
         super().__init__("DocsWriter", "Technical Documentation", config)
+
+    def run_with_input(self, agent_input: AgentInput) -> str:
+        architecture = agent_input.context.get("architecture", "")
+        code_summary = agent_input.context.get("code_summary", agent_input.context.get("code", ""))
+        user_msg = f"""Project: {agent_input.project_name}
+Goal: {agent_input.project_goal}
+Architecture: {architecture}
+Code summary: {code_summary}
+
+Task: {agent_input.task_description}
+
+Write complete documentation in Markdown."""
+        return self.chat(SYSTEM_PROMPT, user_msg)
 
     def run(self, task_description: str, context: dict) -> str:
         project_name = context.get("project_name", "KYCortex")

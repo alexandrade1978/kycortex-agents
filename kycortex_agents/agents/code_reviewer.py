@@ -1,5 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.types import AgentInput
 
 SYSTEM_PROMPT = """You are a Senior Code Reviewer at KYCortex AI Software House.
 Review Python code for: correctness, security vulnerabilities, performance issues,
@@ -8,8 +9,24 @@ Output a structured review with: PASS/FAIL verdict, list of issues (critical/min
 and corrected code if needed."""
 
 class CodeReviewerAgent(BaseAgent):
+    required_context_keys = ("code",)
+
     def __init__(self, config: KYCortexConfig):
         super().__init__("CodeReviewer", "Code Quality & Security Review", config)
+
+    def run_with_input(self, agent_input: AgentInput) -> str:
+        code = self.require_context_value(agent_input, "code")
+        user_msg = f"""Project: {agent_input.project_name}
+Review this code:
+
+```python
+{code}
+```
+
+Task context: {agent_input.task_description}
+
+Provide structured review with verdict and issues."""
+        return self.chat(SYSTEM_PROMPT, user_msg)
 
     def run(self, task_description: str, context: dict) -> str:
         code = context.get("code", "")

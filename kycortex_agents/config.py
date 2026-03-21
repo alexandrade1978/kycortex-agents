@@ -8,6 +8,11 @@ from kycortex_agents.exceptions import ConfigValidationError
 PROVIDER_ENV_VARS = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
+    "ollama": None,
+}
+
+DEFAULT_PROVIDER_BASE_URLS = {
+    "ollama": "http://localhost:11434",
 }
 
 @dataclass
@@ -16,8 +21,10 @@ class KYCortexConfig:
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o"
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
     temperature: float = 0.2
     max_tokens: int = 4096
+    timeout_seconds: float = 60.0
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
@@ -26,6 +33,8 @@ class KYCortexConfig:
         self.llm_provider = self.llm_provider.strip().lower()
         if self.api_key is None:
             self.api_key = self._resolve_api_key()
+        if self.base_url is None:
+            self.base_url = DEFAULT_PROVIDER_BASE_URLS.get(self.llm_provider)
         self._validate_static_config()
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -48,11 +57,21 @@ class KYCortexConfig:
             raise ConfigValidationError("temperature must be between 0 and 2")
         if self.max_tokens <= 0:
             raise ConfigValidationError("max_tokens must be greater than zero")
+        if self.timeout_seconds <= 0:
+            raise ConfigValidationError("timeout_seconds must be greater than zero")
+        if self.base_url is not None and not self.base_url.strip():
+            raise ConfigValidationError("base_url must not be empty when provided")
 
     def validate_runtime(self):
-        env_var = PROVIDER_ENV_VARS.get(self.llm_provider)
-        if env_var is None:
+        if self.llm_provider not in PROVIDER_ENV_VARS:
             raise ConfigValidationError(f"Unsupported provider in configuration: {self.llm_provider}")
+        env_var = PROVIDER_ENV_VARS[self.llm_provider]
+        if env_var is None:
+            if not self.base_url:
+                raise ConfigValidationError(
+                    f"Missing base URL for provider '{self.llm_provider}'. Pass base_url explicitly or rely on a provider default."
+                )
+            return
         if not self.api_key:
             raise ConfigValidationError(
                 f"Missing API key for provider '{self.llm_provider}'. Set {env_var} or pass api_key explicitly."

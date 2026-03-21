@@ -6,6 +6,7 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderConfigurationError
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.factory import create_provider
+from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
 
 
@@ -33,6 +34,29 @@ def build_anthropic_client(response=None, error=None):
     return SimpleNamespace(messages=SimpleNamespace(create=create))
 
 
+class FakeHTTPResponse:
+    def __init__(self, payload: str):
+        self._payload = payload
+
+    def read(self):
+        return self._payload.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def build_ollama_opener(payload=None, error=None):
+    def open_request(request, timeout=None):
+        if error is not None:
+            raise error
+        return FakeHTTPResponse(payload)
+
+    return open_request
+
+
 def test_create_provider_returns_openai_provider(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token")
 
@@ -47,6 +71,14 @@ def test_create_provider_returns_anthropic_provider(tmp_path):
     provider = create_provider(config)
 
     assert isinstance(provider, AnthropicProvider)
+
+
+def test_create_provider_returns_ollama_provider(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
+
+    provider = create_provider(config)
+
+    assert isinstance(provider, OllamaProvider)
 
 
 def test_create_provider_rejects_unknown_provider(tmp_path):
@@ -93,6 +125,29 @@ def test_anthropic_provider_returns_content(tmp_path):
 def test_anthropic_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
     provider = AnthropicProvider(config, client=build_anthropic_client(error=RuntimeError("down")))
+
+    with pytest.raises(AgentExecutionError, match="failed to call the model API"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_returns_content(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload='{"response": "ok"}'),
+    )
+
+    result = provider.generate("system", "message")
+
+    assert result == "ok"
+
+
+def test_ollama_provider_wraps_api_error(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(error=OSError("down")),
+    )
 
     with pytest.raises(AgentExecutionError, match="failed to call the model API"):
         provider.generate("system", "message")

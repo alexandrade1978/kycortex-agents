@@ -28,6 +28,20 @@ def test_config_reads_anthropic_env_key(tmp_path, monkeypatch):
     assert config.api_key == "anthropic-token"
 
 
+def test_config_sets_default_ollama_base_url(tmp_path):
+    config = KYCortexConfig(
+        llm_provider="ollama",
+        output_dir=str(tmp_path / "output"),
+    )
+
+    assert config.base_url == "http://localhost:11434"
+
+
+def test_config_rejects_invalid_timeout(tmp_path):
+    with pytest.raises(ConfigValidationError, match="timeout_seconds must be greater than zero"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=0)
+
+
 def test_config_rejects_invalid_temperature(tmp_path):
     with pytest.raises(ConfigValidationError, match="temperature must be between 0 and 2"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), temperature=2.5)
@@ -51,3 +65,9 @@ def test_validate_runtime_rejects_unsupported_provider(tmp_path):
 
     with pytest.raises(ConfigValidationError, match="Unsupported provider in configuration"):
         config.validate_runtime()
+
+
+def test_validate_runtime_accepts_ollama_without_api_key(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
+
+    config.validate_runtime()

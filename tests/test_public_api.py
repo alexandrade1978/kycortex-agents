@@ -9,6 +9,7 @@ from kycortex_agents import (
     DocsWriterAgent,
     KYCortexConfig,
     LegalAdvisorAgent,
+    OllamaProvider,
     Orchestrator,
     ProjectState,
     QATesterAgent,
@@ -29,6 +30,7 @@ def test_public_api_exports_core_symbols():
     assert AgentRegistry is not None
     assert AnthropicProvider is not None
     assert BaseAgent is not None
+    assert OllamaProvider is not None
 
 
 def test_public_api_exports_core_agent_types():

@@ -9,7 +9,7 @@ from kycortex_agents.agents import (
 )
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ConfigValidationError, KYCortexError, ProviderConfigurationError
-from kycortex_agents.providers import AnthropicProvider, BaseLLMProvider, OpenAIProvider, create_provider
+from kycortex_agents.providers import AnthropicProvider, BaseLLMProvider, OllamaProvider, OpenAIProvider, create_provider
 from kycortex_agents.memory import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.types import (
@@ -50,6 +50,7 @@ __all__ = [
 	"KYCortexError",
 	"LegalAdvisorAgent",
 	"OpenAIProvider",
+	"OllamaProvider",
 	"Orchestrator",
 	"ProjectSnapshot",
 	"ProjectState",

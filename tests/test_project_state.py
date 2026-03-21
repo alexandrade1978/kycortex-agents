@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from kycortex_agents.exceptions import StatePersistenceError
+from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import ArtifactType, TaskStatus
 
@@ -165,3 +165,57 @@ def test_resume_interrupted_tasks_resets_running_tasks():
     assert project.tasks[0].status == TaskStatus.PENDING.value
     assert project.tasks[0].last_error == "Task resumed after interrupted execution"
     assert project.tasks[1].status == TaskStatus.DONE.value
+
+
+def test_execution_plan_rejects_cycles():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            dependencies=["code"],
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    with pytest.raises(WorkflowDefinitionError, match="cyclic"):
+        project.execution_plan()
+
+
+def test_skip_dependent_tasks_marks_pending_descendants_as_skipped():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+    project.add_task(
+        Task(
+            id="test",
+            title="Tests",
+            description="Test",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    skipped = project.skip_dependent_tasks("arch", "Skipped because arch failed")
+
+    assert skipped == ["code", "test"]
+    assert project.get_task("code").status == TaskStatus.SKIPPED.value
+    assert project.get_task("test").status == TaskStatus.SKIPPED.value

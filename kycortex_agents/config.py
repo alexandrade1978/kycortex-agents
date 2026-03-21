@@ -25,6 +25,7 @@ class KYCortexConfig:
     temperature: float = 0.2
     max_tokens: int = 4096
     timeout_seconds: float = 60.0
+    workflow_failure_policy: str = "fail_fast"
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
@@ -61,6 +62,8 @@ class KYCortexConfig:
             raise ConfigValidationError("timeout_seconds must be greater than zero")
         if self.base_url is not None and not self.base_url.strip():
             raise ConfigValidationError("base_url must not be empty when provided")
+        if self.workflow_failure_policy not in {"fail_fast", "continue"}:
+            raise ConfigValidationError("workflow_failure_policy must be 'fail_fast' or 'continue'")
 
     def validate_runtime(self):
         if self.llm_provider not in PROVIDER_ENV_VARS:

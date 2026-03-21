@@ -1,11 +1,12 @@
 import os
 import json
 import tempfile
+from collections import deque
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
 from datetime import UTC, datetime
 
-from kycortex_agents.exceptions import StatePersistenceError
+from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.types import (
     AgentOutput,
     ArtifactRecord,
@@ -163,15 +164,76 @@ class ProjectState:
     def pending_tasks(self) -> List[Task]:
         return [t for t in self.tasks if t.status == TaskStatus.PENDING.value]
 
+    def execution_plan(self) -> List[Task]:
+        task_by_id = {task.id: task for task in self.tasks}
+        indegree: Dict[str, int] = {task.id: 0 for task in self.tasks}
+        adjacency: Dict[str, List[str]] = {task.id: [] for task in self.tasks}
+
+        for task in self.tasks:
+            for dependency_id in task.dependencies:
+                dependency = task_by_id.get(dependency_id)
+                if dependency is None:
+                    raise WorkflowDefinitionError(
+                        f"Task '{task.id}' depends on unknown task '{dependency_id}'"
+                    )
+                adjacency[dependency_id].append(task.id)
+                indegree[task.id] += 1
+
+        queue = deque(task.id for task in self.tasks if indegree[task.id] == 0)
+        ordered_ids: List[str] = []
+
+        while queue:
+            task_id = queue.popleft()
+            ordered_ids.append(task_id)
+            for dependent_id in adjacency[task_id]:
+                indegree[dependent_id] -= 1
+                if indegree[dependent_id] == 0:
+                    queue.append(dependent_id)
+
+        if len(ordered_ids) != len(self.tasks):
+            raise WorkflowDefinitionError("Workflow contains cyclic task dependencies")
+
+        return [task_by_id[task_id] for task_id in ordered_ids]
+
     def runnable_tasks(self) -> List[Task]:
-        return [task for task in self.tasks if self.is_task_ready(task)]
+        return [task for task in self.execution_plan() if self.is_task_ready(task)]
 
     def blocked_tasks(self) -> List[Task]:
         return [
             task
-            for task in self.tasks
+            for task in self.execution_plan()
             if task.status == TaskStatus.PENDING.value and not self.is_task_ready(task)
         ]
+
+    def skip_task(self, task_id: str, reason: str):
+        task = self.get_task(task_id)
+        if task is None:
+            return
+        task.status = TaskStatus.SKIPPED.value
+        task.last_error = reason
+        task.output = reason
+        task.completed_at = datetime.now(UTC).isoformat()
+
+    def skip_dependent_tasks(self, dependency_id: str, reason: str) -> List[str]:
+        skipped: List[str] = []
+        dependents_map: Dict[str, List[Task]] = {}
+        for task in self.tasks:
+            for task_dependency_id in task.dependencies:
+                dependents_map.setdefault(task_dependency_id, []).append(task)
+
+        queue = deque([dependency_id])
+        visited: set[str] = set()
+        while queue:
+            current_id = queue.popleft()
+            for dependent in dependents_map.get(current_id, []):
+                if dependent.id in visited:
+                    continue
+                if dependent.status == TaskStatus.PENDING.value:
+                    self.skip_task(dependent.id, reason)
+                    skipped.append(dependent.id)
+                visited.add(dependent.id)
+                queue.append(dependent.id)
+        return skipped
 
     def task_results(self) -> Dict[str, TaskResult]:
         results: Dict[str, TaskResult] = {}
@@ -219,7 +281,7 @@ class ProjectState:
             return WorkflowStatus.INIT
         if TaskStatus.FAILED.value in statuses:
             return WorkflowStatus.FAILED
-        if all(status == TaskStatus.DONE.value for status in statuses):
+        if statuses.issubset({TaskStatus.DONE.value, TaskStatus.SKIPPED.value}):
             return WorkflowStatus.COMPLETED
         if TaskStatus.RUNNING.value in statuses:
             return WorkflowStatus.RUNNING

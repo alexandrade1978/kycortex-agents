@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import AgentInput, AgentOutput, TaskStatus
 
@@ -121,6 +121,7 @@ class Orchestrator:
 
     def execute_workflow(self, project: ProjectState):
         self.logger.info(f"Starting workflow for project: {project.project_name}")
+        project.execution_plan()
         resumed_task_ids = project.resume_interrupted_tasks()
         if resumed_task_ids:
             self.logger.info("Resuming interrupted tasks: %s", ", ".join(resumed_task_ids))
@@ -134,9 +135,14 @@ class Orchestrator:
                 project.save()
                 self.logger.info("All tasks completed.")
                 break
-            runnable = project.runnable_tasks()
+            try:
+                runnable = project.runnable_tasks()
+            except WorkflowDefinitionError:
+                project.phase = "failed"
+                raise
             if not runnable:
                 blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
+                project.phase = "failed"
                 raise AgentExecutionError(
                     f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
                 )
@@ -147,6 +153,19 @@ class Orchestrator:
                     project.save()
                     if project.should_retry_task(task.id):
                         continue
+                    if self.config.workflow_failure_policy == "continue":
+                        skipped = project.skip_dependent_tasks(
+                            task.id,
+                            f"Skipped because dependency '{task.id}' failed",
+                        )
+                        if skipped:
+                            self.logger.warning(
+                                "Skipping dependent tasks after %s failed: %s",
+                                task.id,
+                                ", ".join(skipped),
+                            )
+                        continue
+                    project.phase = "failed"
                     raise
                 project.save()
         self.logger.info(f"Project {project.project_name} finished.")

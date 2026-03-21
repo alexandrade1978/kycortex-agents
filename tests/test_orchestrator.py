@@ -2,7 +2,7 @@ import pytest
 
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
@@ -199,7 +199,7 @@ def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path)
 
     orchestrator = Orchestrator(config, registry=AgentRegistry({"code_engineer": RecordingAgent("IMPLEMENTED CODE")}))
 
-    with pytest.raises(AgentExecutionError, match="Workflow is blocked"):
+    with pytest.raises(WorkflowDefinitionError, match="depends on unknown task"):
         orchestrator.execute_workflow(project)
 
 
@@ -274,3 +274,82 @@ def test_execute_workflow_resumes_interrupted_running_tasks(tmp_path):
     assert project.tasks[0].status == TaskStatus.DONE.value
     assert project.tasks[0].attempts == 2
     assert project.tasks[0].output == "ARCHITECTURE DOC"
+
+
+def test_execute_workflow_rejects_dependency_cycles(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            dependencies=["code"],
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"architect": RecordingAgent("ARCHITECTURE DOC"), "code_engineer": RecordingAgent("IMPLEMENTED CODE")}),
+    )
+
+    with pytest.raises(WorkflowDefinitionError, match="cyclic"):
+        orchestrator.execute_workflow(project)
+
+
+def test_execute_workflow_can_continue_after_terminal_failure(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_failure_policy="continue")
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the application",
+            assigned_to="code_reviewer",
+            dependencies=["arch"],
+        )
+    )
+
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "architect": FailingAgent(),
+                "code_engineer": RecordingAgent("IMPLEMENTED CODE"),
+                "code_reviewer": RecordingAgent("REVIEWED"),
+            }
+        ),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    assert project.get_task("arch").status == TaskStatus.FAILED.value
+    assert project.get_task("code").status == TaskStatus.DONE.value
+    assert project.get_task("review").status == TaskStatus.SKIPPED.value
+    assert project.phase == "completed"

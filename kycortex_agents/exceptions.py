@@ -16,3 +16,7 @@ class ConfigValidationError(KYCortexError):
 
 class StatePersistenceError(KYCortexError):
     """Raised when project state cannot be saved or loaded safely."""
+
+
+class WorkflowDefinitionError(KYCortexError):
+    """Raised when the workflow graph is invalid or cannot be scheduled."""

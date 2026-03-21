@@ -1,6 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, ArtifactType
 
 SYSTEM_PROMPT = """You are a Legal & Compliance Advisor at KYCortex AI Software House.
 You specialise in open-source software licensing, intellectual property, and GDPR.
@@ -9,6 +9,9 @@ check third-party dependency licenses, and draft Privacy Policy / ToS templates.
 Always note: this is informational only and not legal advice."""
 
 class LegalAdvisorAgent(BaseAgent):
+    output_artifact_type = ArtifactType.DOCUMENT
+    output_artifact_name = "legal_analysis"
+
     def __init__(self, config: KYCortexConfig):
         super().__init__("LegalAdvisor", "Legal & Compliance", config)
 

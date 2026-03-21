@@ -5,11 +5,13 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.providers.factory import create_provider
-from kycortex_agents.types import AgentInput, AgentOutput
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType
 
 
 class BaseAgent(ABC):
     required_context_keys: tuple[str, ...] = ()
+    output_artifact_type: ArtifactType = ArtifactType.TEXT
+    output_artifact_name: str = "output"
 
     def __init__(self, name: str, role: str, config: KYCortexConfig):
         self.name = name
@@ -66,10 +68,26 @@ class BaseAgent(ABC):
         return None
 
     def after_execute(self, agent_input: AgentInput, output: AgentOutput) -> AgentOutput:
+        self.validate_output(output)
         output.metadata.setdefault("agent_name", self.name)
         output.metadata.setdefault("agent_role", self.role)
         output.metadata.setdefault("task_id", agent_input.task_id)
+        output.metadata.setdefault("project_name", agent_input.project_name)
+        if not output.artifacts:
+            output.artifacts.append(self._build_default_artifact(agent_input, output))
         return output
+
+    def validate_output(self, output: AgentOutput) -> None:
+        if not output.raw_content.strip():
+            raise AgentExecutionError(f"{self.name}: agent output raw_content must not be empty")
+        if not output.summary.strip():
+            raise AgentExecutionError(f"{self.name}: agent output summary must not be empty")
+        if not isinstance(output.artifacts, list):
+            raise AgentExecutionError(f"{self.name}: agent output artifacts must be a list")
+        if not isinstance(output.decisions, list):
+            raise AgentExecutionError(f"{self.name}: agent output decisions must be a list")
+        if not isinstance(output.metadata, dict):
+            raise AgentExecutionError(f"{self.name}: agent output metadata must be a dictionary")
 
     def on_execution_error(self, agent_input: AgentInput, exc: Exception) -> None:
         if isinstance(exc, AgentExecutionError):
@@ -78,8 +96,6 @@ class BaseAgent(ABC):
 
     def _normalize_output(self, result: Any, agent_input: AgentInput) -> AgentOutput:
         if isinstance(result, AgentOutput):
-            if not result.raw_content.strip():
-                raise AgentExecutionError(f"{self.name}: agent output raw_content must not be empty")
             if not result.summary.strip():
                 result.summary = self._summarize_output(result.raw_content)
             return result
@@ -100,6 +116,18 @@ class BaseAgent(ABC):
     def _summarize_output(self, raw_content: str) -> str:
         first_line = raw_content.strip().splitlines()[0].strip()
         return first_line[:120]
+
+    def _build_default_artifact(self, agent_input: AgentInput, output: AgentOutput) -> ArtifactRecord:
+        return ArtifactRecord(
+            name=f"{agent_input.task_id}_{self.output_artifact_name}",
+            artifact_type=self.output_artifact_type,
+            content=output.raw_content,
+            metadata={
+                "agent_name": self.name,
+                "task_id": agent_input.task_id,
+                "project_name": agent_input.project_name,
+            },
+        )
 
     def require_context_value(self, agent_input: AgentInput, key: str) -> Any:
         value = agent_input.context.get(key)

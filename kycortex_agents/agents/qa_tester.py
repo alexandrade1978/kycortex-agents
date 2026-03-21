@@ -1,6 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, ArtifactType
 
 SYSTEM_PROMPT = """You are a QA Engineer at KYCortex AI Software House.
 You write comprehensive pytest test suites.
@@ -9,6 +9,8 @@ Use fixtures, parametrize where appropriate. Aim for 80%+ coverage."""
 
 class QATesterAgent(BaseAgent):
     required_context_keys = ("code",)
+    output_artifact_type = ArtifactType.TEST
+    output_artifact_name = "tests"
 
     def __init__(self, config: KYCortexConfig):
         super().__init__("QATester", "Quality Assurance & Testing", config)

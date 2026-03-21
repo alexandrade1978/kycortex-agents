@@ -8,7 +8,7 @@ from kycortex_agents.agents.legal_advisor import LegalAdvisorAgent
 from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, ArtifactType
 
 
 class ChatCaptureMixin:
@@ -154,3 +154,34 @@ def test_legal_advisor_formats_dependencies_from_typed_context(tmp_path):
     assert result == "ok"
     assert "- openai" in agent.last_user_message
     assert "- anthropic" in agent.last_user_message
+
+
+@pytest.mark.parametrize(
+    ("agent_class", "context", "expected_type", "expected_name"),
+    [
+        (CaptureArchitectAgent, {}, ArtifactType.DOCUMENT, "arch_architecture"),
+        (CaptureCodeEngineerAgent, {"architecture": "Layered design"}, ArtifactType.CODE, "code_implementation"),
+        (CaptureCodeReviewerAgent, {"code": "print('hello')"}, ArtifactType.DOCUMENT, "review_review"),
+        (CaptureQATesterAgent, {"code": "def add(a, b): return a + b"}, ArtifactType.TEST, "test_tests"),
+        (CaptureDocsWriterAgent, {}, ArtifactType.DOCUMENT, "docs_documentation"),
+        (CaptureLegalAdvisorAgent, {}, ArtifactType.DOCUMENT, "legal_legal_analysis"),
+    ],
+)
+def test_execute_adds_role_specific_default_artifact(tmp_path, agent_class, context, expected_type, expected_name):
+    agent = agent_class(build_config(tmp_path))
+    agent_input = AgentInput(
+        task_id=expected_name.split("_", 1)[0],
+        task_title="Task",
+        task_description="Perform task",
+        project_name="Demo",
+        project_goal="Build demo",
+        context=context,
+    )
+
+    result = agent.execute(agent_input)
+
+    assert result.raw_content == "ok"
+    assert result.metadata["project_name"] == "Demo"
+    assert len(result.artifacts) == 1
+    assert result.artifacts[0].artifact_type == expected_type
+    assert result.artifacts[0].name == expected_name

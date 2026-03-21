@@ -1,6 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, ArtifactType
 
 SYSTEM_PROMPT = """You are a Senior Python Engineer at KYCortex AI Software House.
 You write clean, well-documented, production-quality Python code.
@@ -10,6 +10,8 @@ Do NOT include placeholder comments like # TODO without implementation."""
 
 class CodeEngineerAgent(BaseAgent):
     required_context_keys = ("architecture",)
+    output_artifact_type = ArtifactType.CODE
+    output_artifact_name = "implementation"
 
     def __init__(self, config: KYCortexConfig):
         super().__init__("CodeEngineer", "Python Software Development", config)

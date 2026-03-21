@@ -1,6 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, ArtifactType
 
 SYSTEM_PROMPT = """You are a Technical Documentation Writer at KYCortex AI Software House.
 You write clear, complete documentation: README files, API docs, architecture docs,
@@ -9,6 +9,9 @@ Always include: installation, usage examples, configuration reference, contribut
 Use Markdown. Be concise but thorough."""
 
 class DocsWriterAgent(BaseAgent):
+    output_artifact_type = ArtifactType.DOCUMENT
+    output_artifact_name = "documentation"
+
     def __init__(self, config: KYCortexConfig):
         super().__init__("DocsWriter", "Technical Documentation", config)
 

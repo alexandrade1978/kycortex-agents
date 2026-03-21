@@ -1,6 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, ArtifactType
 
 SYSTEM_PROMPT = """You are a Senior Code Reviewer at KYCortex AI Software House.
 Review Python code for: correctness, security vulnerabilities, performance issues,
@@ -10,6 +10,8 @@ and corrected code if needed."""
 
 class CodeReviewerAgent(BaseAgent):
     required_context_keys = ("code",)
+    output_artifact_type = ArtifactType.DOCUMENT
+    output_artifact_name = "review"
 
     def __init__(self, config: KYCortexConfig):
         super().__init__("CodeReviewer", "Code Quality & Security Review", config)

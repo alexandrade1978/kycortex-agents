@@ -1,6 +1,6 @@
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.types import AgentInput
+from kycortex_agents.types import AgentInput, ArtifactType
 
 SYSTEM_PROMPT = """You are a Senior Software Architect at KYCortex AI Software House.
 Your job is to design modular, scalable Python project architectures.
@@ -9,6 +9,9 @@ interfaces, data flows, technology choices and rationale.
 Always think about extensibility, testability and open-source best practices."""
 
 class ArchitectAgent(BaseAgent):
+    output_artifact_type = ArtifactType.DOCUMENT
+    output_artifact_name = "architecture"
+
     def __init__(self, config: KYCortexConfig):
         super().__init__("Architect", "Software Architecture Design", config)
 

@@ -11,6 +11,7 @@ class AnthropicProvider(BaseLLMProvider):
     def __init__(self, config: KYCortexConfig, client: Optional[Any] = None):
         self.config = config
         self._client = client
+        self._last_call_metadata: Optional[dict[str, Any]] = None
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -43,5 +44,33 @@ class AnthropicProvider(BaseLLMProvider):
                 messages=[{"role": "user", "content": user_message}],
             )
         except Exception as exc:
+            self._last_call_metadata = None
             raise AgentExecutionError("Anthropic provider failed to call the model API") from exc
+        self._last_call_metadata = self._extract_metadata(response)
         return self._extract_content(response)
+
+    def _extract_metadata(self, response: Any) -> Optional[dict[str, Any]]:
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return None
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+        cache_creation_input_tokens = getattr(usage, "cache_creation_input_tokens", None)
+        cache_read_input_tokens = getattr(usage, "cache_read_input_tokens", None)
+        total_tokens = None
+        if input_tokens is not None or output_tokens is not None:
+            total_tokens = (input_tokens or 0) + (output_tokens or 0)
+        return {
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "cache_creation_input_tokens": cache_creation_input_tokens,
+                "cache_read_input_tokens": cache_read_input_tokens,
+            }
+        }
+
+    def get_last_call_metadata(self) -> Optional[dict[str, Any]]:
+        if self._last_call_metadata is None:
+            return None
+        return dict(self._last_call_metadata)

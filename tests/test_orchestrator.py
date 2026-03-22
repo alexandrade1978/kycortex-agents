@@ -179,6 +179,9 @@ def test_run_task_persists_provider_call_metadata_from_base_agent(tmp_path):
                 def generate(self, system_prompt: str, user_message: str) -> str:
                     return "ARCHITECTURE DOC"
 
+                def get_last_call_metadata(self):
+                    return {"usage": {"input_tokens": 21, "output_tokens": 13, "total_tokens": 34}}
+
             class InlineAgent(BaseAgent):
                 def __init__(self, cfg):
                     super().__init__("Inline", "Testing", cfg)
@@ -204,6 +207,7 @@ def test_run_task_persists_provider_call_metadata_from_base_agent(tmp_path):
     assert project.tasks[0].last_provider_call["provider"] == "openai"
     assert project.tasks[0].last_provider_call["model"] == "gpt-4o"
     assert project.tasks[0].last_provider_call["success"] is True
+    assert project.tasks[0].last_provider_call["usage"]["total_tokens"] == 34
 
 
 def test_execute_workflow_respects_task_dependencies(tmp_path):

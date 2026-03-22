@@ -11,6 +11,7 @@ class OpenAIProvider(BaseLLMProvider):
     def __init__(self, config: KYCortexConfig, client: Optional[Any] = None):
         self.config = config
         self._client = client
+        self._last_call_metadata: Optional[dict[str, Any]] = None
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -44,5 +45,24 @@ class OpenAIProvider(BaseLLMProvider):
                 messages=self._build_messages(system_prompt, user_message),
             )
         except Exception as exc:
+            self._last_call_metadata = None
             raise AgentExecutionError("OpenAI provider failed to call the model API") from exc
+        self._last_call_metadata = self._extract_metadata(response)
         return self._extract_content(response)
+
+    def _extract_metadata(self, response: Any) -> Optional[dict[str, Any]]:
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return None
+        return {
+            "usage": {
+                "input_tokens": getattr(usage, "prompt_tokens", None),
+                "output_tokens": getattr(usage, "completion_tokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None),
+            }
+        }
+
+    def get_last_call_metadata(self) -> Optional[dict[str, Any]]:
+        if self._last_call_metadata is None:
+            return None
+        return dict(self._last_call_metadata)

@@ -18,6 +18,7 @@ class OllamaProvider(BaseLLMProvider):
     ):
         self.config = config
         self._request_opener = request_opener or urlopen
+        self._last_call_metadata: Optional[dict[str, Any]] = None
 
     def _endpoint(self) -> str:
         base_url = (self.config.base_url or "").rstrip("/")
@@ -52,5 +53,32 @@ class OllamaProvider(BaseLLMProvider):
             with self._request_opener(request, timeout=self.config.timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            self._last_call_metadata = None
             raise AgentExecutionError("Ollama provider failed to call the model API") from exc
+        self._last_call_metadata = self._extract_metadata(payload)
         return self._extract_content(payload)
+
+    def _extract_metadata(self, payload: dict[str, Any]) -> dict[str, Any]:
+        prompt_eval_count = payload.get("prompt_eval_count")
+        eval_count = payload.get("eval_count")
+        total_tokens = None
+        if prompt_eval_count is not None or eval_count is not None:
+            total_tokens = (prompt_eval_count or 0) + (eval_count or 0)
+        total_duration_ns = payload.get("total_duration")
+        load_duration_ns = payload.get("load_duration")
+        return {
+            "usage": {
+                "input_tokens": prompt_eval_count,
+                "output_tokens": eval_count,
+                "total_tokens": total_tokens,
+            },
+            "timing": {
+                "total_duration_ms": round(total_duration_ns / 1_000_000, 3) if isinstance(total_duration_ns, (int, float)) else None,
+                "load_duration_ms": round(load_duration_ns / 1_000_000, 3) if isinstance(load_duration_ns, (int, float)) else None,
+            },
+        }
+
+    def get_last_call_metadata(self) -> Optional[dict[str, Any]]:
+        if self._last_call_metadata is None:
+            return None
+        return dict(self._last_call_metadata)

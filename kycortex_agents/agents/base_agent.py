@@ -49,6 +49,9 @@ class BaseAgent(ABC):
             "duration_ms": round((perf_counter() - started_at) * 1000, 3),
             "error_type": None,
         }
+        provider_metadata = provider.get_last_call_metadata()
+        if provider_metadata is not None:
+            self._last_provider_call_metadata.update(provider_metadata)
         return response
 
     def run_with_input(self, agent_input: AgentInput) -> str:

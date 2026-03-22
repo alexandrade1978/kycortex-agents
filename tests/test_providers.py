@@ -16,6 +16,17 @@ def build_response(content):
     )
 
 
+def build_response_with_usage(content, prompt_tokens=10, completion_tokens=5, total_tokens=15):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        usage=SimpleNamespace(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+        ),
+    )
+
+
 def build_client(response=None, error=None):
     def create(**kwargs):
         if error is not None:
@@ -104,6 +115,17 @@ def test_openai_provider_returns_content(tmp_path):
     assert result == "ok"
 
 
+def test_openai_provider_captures_usage_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = OpenAIProvider(config, client=build_client(response=build_response_with_usage("ok")))
+
+    provider.generate("system", "message")
+
+    assert provider.get_last_call_metadata() == {
+        "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    }
+
+
 def test_openai_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(error=RuntimeError("down")))
@@ -120,6 +142,32 @@ def test_anthropic_provider_returns_content(tmp_path):
     result = provider.generate("system", "message")
 
     assert result == "ok"
+
+
+def test_anthropic_provider_captures_usage_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="ok")],
+        usage=SimpleNamespace(
+            input_tokens=12,
+            output_tokens=8,
+            cache_creation_input_tokens=3,
+            cache_read_input_tokens=2,
+        ),
+    )
+    provider = AnthropicProvider(config, client=build_anthropic_client(response=response))
+
+    provider.generate("system", "message")
+
+    assert provider.get_last_call_metadata() == {
+        "usage": {
+            "input_tokens": 12,
+            "output_tokens": 8,
+            "total_tokens": 20,
+            "cache_creation_input_tokens": 3,
+            "cache_read_input_tokens": 2,
+        }
+    }
 
 
 def test_anthropic_provider_wraps_api_error(tmp_path):
@@ -140,6 +188,23 @@ def test_ollama_provider_returns_content(tmp_path):
     result = provider.generate("system", "message")
 
     assert result == "ok"
+
+
+def test_ollama_provider_captures_usage_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(
+            payload='{"response": "ok", "prompt_eval_count": 14, "eval_count": 9, "total_duration": 125000000, "load_duration": 25000000}'
+        ),
+    )
+
+    provider.generate("system", "message")
+
+    assert provider.get_last_call_metadata() == {
+        "usage": {"input_tokens": 14, "output_tokens": 9, "total_tokens": 23},
+        "timing": {"total_duration_ms": 125.0, "load_duration_ms": 25.0},
+    }
 
 
 def test_ollama_provider_wraps_api_error(tmp_path):

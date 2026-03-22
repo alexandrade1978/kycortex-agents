@@ -26,9 +26,10 @@ class DummyAgent(BaseAgent):
         return output
 
 class DummyProvider(BaseLLMProvider):
-    def __init__(self, response=None, error=None):
+    def __init__(self, response=None, error=None, metadata=None):
         self.response = response
         self.error = error
+        self.metadata = metadata
         self.calls = []
 
     def generate(self, system_prompt: str, user_message: str) -> str:
@@ -36,6 +37,9 @@ class DummyProvider(BaseLLMProvider):
         if self.error is not None:
             raise self.error
         return self.response
+
+    def get_last_call_metadata(self):
+        return self.metadata
 
 
 def test_chat_returns_response_content():
@@ -81,7 +85,10 @@ def test_run_with_input_delegates_to_legacy_run_signature():
 
 
 def test_execute_returns_standardized_agent_output():
-    provider = DummyProvider(response="first line\nsecond line")
+    provider = DummyProvider(
+        response="first line\nsecond line",
+        metadata={"usage": {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}},
+    )
     agent = DummyAgent(provider)
     agent_input = AgentInput(
         task_id="task-1",
@@ -101,6 +108,7 @@ def test_execute_returns_standardized_agent_output():
     assert result.metadata["provider_call"]["model"] == "gpt-4o"
     assert result.metadata["provider_call"]["success"] is True
     assert result.metadata["provider_call"]["duration_ms"] >= 0
+    assert result.metadata["provider_call"]["usage"]["total_tokens"] == 18
     assert result.metadata["hook"] == "after"
     assert agent.events == [("before", "task-1"), ("after", "task-1")]
 

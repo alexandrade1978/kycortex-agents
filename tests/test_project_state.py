@@ -5,6 +5,7 @@ import pytest
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.memory.state_store import resolve_state_store
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
 
 
@@ -84,6 +85,65 @@ def test_save_and_load_project_state_with_sqlite(tmp_path):
     assert loaded.project_name == "Demo"
     assert loaded.tasks[0].id == "arch"
     assert loaded.updated_at is not None
+
+
+@pytest.mark.parametrize("state_filename", ["legacy.json", "legacy.sqlite"])
+def test_load_accepts_legacy_payloads_missing_newer_fields(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Keep compatibility",
+        "tasks": [
+            {
+                "id": "arch",
+                "title": "Architecture",
+                "description": "Design",
+                "assigned_to": "architect",
+                "status": TaskStatus.DONE.value,
+                "output": "ARCHITECTURE DOC",
+            },
+            {
+                "id": "review",
+                "title": "Review",
+                "description": "Review",
+                "assigned_to": "code_reviewer",
+                "dependencies": ["arch"],
+            },
+        ],
+        "decisions": [],
+        "artifacts": ["legacy-report.md"],
+        "phase": "completed",
+        "state_file": str(state_path),
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+    arch_task = loaded.get_task("arch")
+    review_task = loaded.get_task("review")
+    snapshot = loaded.snapshot()
+
+    assert loaded.project_name == "Legacy"
+    assert loaded.goal == "Keep compatibility"
+    assert loaded.execution_events == []
+    assert loaded.workflow_started_at is None
+    assert loaded.workflow_finished_at is None
+    assert loaded.workflow_last_resumed_at is None
+    assert arch_task is not None
+    assert arch_task.last_provider_call is None
+    assert arch_task.output_payload is None
+    assert arch_task.history == []
+    assert arch_task.started_at is None
+    assert arch_task.last_attempt_started_at is None
+    assert arch_task.last_resumed_at is None
+    assert arch_task.completed_at is None
+    assert review_task is not None
+    assert review_task.status == TaskStatus.PENDING.value
+    assert review_task.attempts == 0
+    assert snapshot.task_results["arch"].output is not None
+    assert snapshot.task_results["arch"].output.summary == "ARCHITECTURE DOC"
+    assert snapshot.artifacts[0].name == "legacy-report.md"
+    assert snapshot.artifacts[0].artifact_type == ArtifactType.OTHER
 
 
 def test_load_rejects_invalid_sqlite(tmp_path):

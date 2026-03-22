@@ -12,6 +12,8 @@ from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 
+__all__ = ["AgentRegistry", "build_default_registry"]
+
 
 class AgentRegistry:
     def __init__(self, agents: Optional[Dict[str, BaseAgent]] = None):

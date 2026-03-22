@@ -2,6 +2,9 @@ import kycortex_agents
 from kycortex_agents import config as config_module
 from kycortex_agents import exceptions as exceptions_module
 from kycortex_agents import types as types_module
+from kycortex_agents.agents import registry as registry_module
+from kycortex_agents.memory import state_store as state_store_module
+from kycortex_agents.providers import factory as provider_factory_module
 from kycortex_agents import (
     AgentRegistry,
     AnthropicProvider,
@@ -99,4 +102,15 @@ def test_public_contract_modules_define_explicit_exports():
         "TaskStatus",
         "WorkflowStatus",
         "utc_now_iso",
+    ]
+
+
+def test_public_extension_modules_define_explicit_exports():
+    assert registry_module.__all__ == ["AgentRegistry", "build_default_registry"]
+    assert provider_factory_module.__all__ == ["create_provider"]
+    assert state_store_module.__all__ == [
+        "BaseStateStore",
+        "JsonStateStore",
+        "SqliteStateStore",
+        "resolve_state_store",
     ]

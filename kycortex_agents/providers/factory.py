@@ -9,6 +9,8 @@ from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
 
+__all__ = ["create_provider"]
+
 
 def create_provider(config: KYCortexConfig) -> BaseLLMProvider:
     provider_name = config.llm_provider.lower().strip()

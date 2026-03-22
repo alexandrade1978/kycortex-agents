@@ -36,7 +36,7 @@ class Orchestrator:
             project.add_decision_record(decision)
         for artifact in normalized_output.artifacts:
             project.add_artifact_record(artifact)
-        project.complete_task(task.id, normalized_output.raw_content)
+        project.complete_task(task.id, normalized_output)
         self.logger.info(f"Task {task.id} completed.")
         return normalized_output.raw_content
 

@@ -5,7 +5,7 @@ import pytest
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import ArtifactRecord, ArtifactType, TaskStatus
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
 
 
 def test_save_and_load_project_state(tmp_path):
@@ -117,6 +117,54 @@ def test_snapshot_includes_structured_task_output():
     assert result.output.metadata["task_id"] == "code"
 
 
+def test_complete_task_persists_structured_agent_output_payload():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    project.complete_task(
+        "arch",
+        AgentOutput(
+            summary="Architecture summary",
+            raw_content="ARCHITECTURE DOC",
+            artifacts=[
+                ArtifactRecord(
+                    name="architecture_doc",
+                    artifact_type=ArtifactType.DOCUMENT,
+                    path="artifacts/architecture.md",
+                    content="# Architecture",
+                )
+            ],
+            decisions=[
+                DecisionRecord(
+                    topic="stack",
+                    decision="Use FastAPI",
+                    rationale="Fits the API use case",
+                )
+            ],
+            metadata={"agent_name": "Architect"},
+        ),
+    )
+
+    task = project.get_task("arch")
+    snapshot = project.snapshot()
+    result = snapshot.task_results["arch"]
+
+    assert task.output == "ARCHITECTURE DOC"
+    assert task.output_payload is not None
+    assert task.output_payload["summary"] == "Architecture summary"
+    assert result.output is not None
+    assert result.output.artifacts[0].path == "artifacts/architecture.md"
+    assert result.output.decisions[0].decision == "Use FastAPI"
+    assert result.output.metadata["agent_name"] == "Architect"
+
+
 def test_save_and_load_preserves_rich_artifact_records_json(tmp_path):
     state_path = tmp_path / "project_state.json"
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
@@ -139,6 +187,37 @@ def test_save_and_load_preserves_rich_artifact_records_json(tmp_path):
     assert snapshot.artifacts[0].path == "artifacts/architecture.md"
     assert snapshot.artifacts[0].content == "# Architecture"
     assert snapshot.artifacts[0].metadata["source"] == "architect"
+
+
+def test_save_and_load_preserves_structured_task_output_payload_json(tmp_path):
+    state_path = tmp_path / "project_state.json"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+        )
+    )
+    project.complete_task(
+        "arch",
+        AgentOutput(
+            summary="Architecture summary",
+            raw_content="ARCHITECTURE DOC",
+            artifacts=[ArtifactRecord(name="architecture_doc", artifact_type=ArtifactType.DOCUMENT)],
+            metadata={"agent_name": "Architect"},
+        ),
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+    snapshot = loaded.snapshot()
+
+    assert loaded.get_task("arch").output_payload is not None
+    assert loaded.get_task("arch").output_payload["summary"] == "Architecture summary"
+    assert snapshot.task_results["arch"].output.summary == "Architecture summary"
+    assert snapshot.task_results["arch"].output.metadata["agent_name"] == "Architect"
 
 
 def test_save_and_load_preserves_rich_artifact_records_sqlite(tmp_path):

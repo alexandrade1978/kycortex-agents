@@ -30,6 +30,7 @@ class Task:
     last_error: Optional[str] = None
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
+    output_payload: Optional[Dict[str, Any]] = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     completed_at: Optional[str] = None
 
@@ -81,14 +82,20 @@ class ProjectState:
                     return
                 task.status = TaskStatus.FAILED.value
                 task.output = error_message
+                task.output_payload = None
                 task.completed_at = datetime.now(UTC).isoformat()
                 return
 
-    def complete_task(self, task_id: str, output: str):
+    def complete_task(self, task_id: str, output: str | AgentOutput):
         for t in self.tasks:
             if t.id == task_id:
                 t.status = TaskStatus.DONE.value
-                t.output = output
+                if isinstance(output, AgentOutput):
+                    t.output = output.raw_content
+                    t.output_payload = asdict(output)
+                else:
+                    t.output = output
+                    t.output_payload = None
                 t.last_error = None
                 t.completed_at = datetime.now(UTC).isoformat()
 
@@ -222,7 +229,7 @@ class ProjectState:
             output = None
             if task_status == TaskStatus.FAILED and task.output:
                 failure = FailureRecord(message=task.output)
-            if task.output:
+            if task.output or task.output_payload:
                 output = self._build_agent_output(task)
             results[task.id] = TaskResult(
                 task_id=task.id,
@@ -273,6 +280,8 @@ class ProjectState:
             return TaskStatus.PENDING
 
     def _build_agent_output(self, task: Task) -> AgentOutput:
+        if task.output_payload:
+            return self._deserialize_agent_output(task.output_payload)
         raw_content = task.output or ""
         summary = self._summarize_output(raw_content)
         artifact = ArtifactRecord(
@@ -295,6 +304,26 @@ class ProjectState:
                 "assigned_to": task.assigned_to,
                 "status": task.status,
             },
+        )
+
+    def _deserialize_agent_output(self, payload: Dict[str, Any]) -> AgentOutput:
+        artifacts = [self._deserialize_artifact_record(item) for item in payload.get("artifacts", [])]
+        decisions = [
+            DecisionRecord(
+                topic=item.get("topic", ""),
+                decision=item.get("decision", ""),
+                rationale=item.get("rationale", ""),
+                created_at=item.get("created_at", datetime.now(UTC).isoformat()),
+                metadata=item.get("metadata", {}),
+            )
+            for item in payload.get("decisions", [])
+        ]
+        return AgentOutput(
+            summary=payload.get("summary", self._summarize_output(payload.get("raw_content", ""))),
+            raw_content=payload.get("raw_content", ""),
+            artifacts=artifacts,
+            decisions=decisions,
+            metadata=payload.get("metadata", {}),
         )
 
     def _deserialize_artifact_record(self, artifact: Dict[str, Any] | str) -> ArtifactRecord:

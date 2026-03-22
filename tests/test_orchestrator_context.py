@@ -148,3 +148,83 @@ def test_orchestrator_context_includes_snapshot_decisions_and_artifacts_for_down
     assert context["artifacts"][0].metadata["task_id"] == "upstream"
     assert context["snapshot"]["decisions"][0]["topic"] == "stack"
     assert context["snapshot"]["artifacts"][0]["name"] == "architecture.md"
+
+
+@pytest.mark.parametrize(
+    ("task_title", "expected_key", "output"),
+    [
+        ("Architecture Decision", "architecture", "ARCHITECTURE DOC"),
+        ("Review Findings", "review", "PASS: reviewed"),
+        ("Integration Tests", "tests", "def test_example():\n    assert True"),
+        ("Docs Refresh", "documentation", "README content"),
+        ("License Audit", "legal", "Legal analysis"),
+    ],
+)
+def test_orchestrator_context_uses_task_title_fallback_for_semantic_keys(tmp_path, task_title, expected_key, output):
+    config = build_config(tmp_path)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="upstream",
+            title=task_title,
+            description="Produce upstream output",
+            assigned_to="custom_specialist",
+            status=TaskStatus.DONE.value,
+            output=output,
+        )
+    )
+    project.add_task(
+        Task(
+            id="inspect",
+            title="Inspector",
+            description="Inspect context",
+            assigned_to="inspector",
+            dependencies=["upstream"],
+        )
+    )
+
+    inspector = RecordingAgent()
+    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(project.get_task("inspect"), project)
+
+    context = inspector.last_input.context
+
+    assert context["upstream"] == output
+    assert context["completed_tasks"]["upstream"] == output
+    assert context[expected_key] == output
+
+
+def test_orchestrator_context_omits_semantic_alias_when_role_and_title_are_unknown(tmp_path):
+    config = build_config(tmp_path)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="upstream",
+            title="Unmapped Deliverable",
+            description="Produce upstream output",
+            assigned_to="custom_specialist",
+            status=TaskStatus.DONE.value,
+            output="RAW OUTPUT",
+        )
+    )
+    project.add_task(
+        Task(
+            id="inspect",
+            title="Inspector",
+            description="Inspect context",
+            assigned_to="inspector",
+            dependencies=["upstream"],
+        )
+    )
+
+    inspector = RecordingAgent()
+    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(project.get_task("inspect"), project)
+
+    context = inspector.last_input.context
+
+    assert context["upstream"] == "RAW OUTPUT"
+    assert context["completed_tasks"]["upstream"] == "RAW OUTPUT"
+    assert "architecture" not in context
+    assert "review" not in context
+    assert "tests" not in context
+    assert "documentation" not in context
+    assert "legal" not in context

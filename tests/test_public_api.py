@@ -1,4 +1,7 @@
 import kycortex_agents
+from kycortex_agents import config as config_module
+from kycortex_agents import exceptions as exceptions_module
+from kycortex_agents import types as types_module
 from kycortex_agents import (
     AgentRegistry,
     AnthropicProvider,
@@ -67,3 +70,33 @@ def test_workflows_module_exports_stable_workflow_surface():
     assert WorkflowTaskStatus is not None
     assert WorkflowModuleStatus is not None
     assert WorkflowModuleDefinitionError is WorkflowDefinitionError
+
+
+def test_public_contract_modules_define_explicit_exports():
+    assert config_module.__all__ == [
+        "DEFAULT_CONFIG",
+        "DEFAULT_PROVIDER_BASE_URLS",
+        "KYCortexConfig",
+        "PROVIDER_ENV_VARS",
+    ]
+    assert exceptions_module.__all__ == [
+        "AgentExecutionError",
+        "ConfigValidationError",
+        "KYCortexError",
+        "ProviderConfigurationError",
+        "StatePersistenceError",
+        "WorkflowDefinitionError",
+    ]
+    assert types_module.__all__ == [
+        "AgentInput",
+        "AgentOutput",
+        "ArtifactRecord",
+        "ArtifactType",
+        "DecisionRecord",
+        "FailureRecord",
+        "ProjectSnapshot",
+        "TaskResult",
+        "TaskStatus",
+        "WorkflowStatus",
+        "utc_now_iso",
+    ]

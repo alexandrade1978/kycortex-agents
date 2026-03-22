@@ -415,6 +415,10 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.failure.details["error_type"] == "RuntimeError"
     assert result.failure.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
     assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
+    assert result.failure.details["task_duration_ms"] == 360000.0
+    assert result.failure.details["last_attempt_duration_ms"] == 60000.0
+    assert result.details["task_duration_ms"] == 360000.0
+    assert result.details["last_attempt_duration_ms"] == 60000.0
     assert result.details["history"][0]["event"] == "failed"
 
 
@@ -460,7 +464,10 @@ def test_snapshot_includes_workflow_execution_metadata():
     project = ProjectState(
         project_name="Demo",
         goal="Build demo",
-        execution_events=[{"event": "workflow_started", "timestamp": "2026-03-22T10:00:00+00:00", "task_id": None, "status": "execution", "details": {}}],
+        execution_events=[
+            {"event": "workflow_started", "timestamp": "2026-03-22T10:00:00+00:00", "task_id": None, "status": "execution", "details": {}},
+            {"event": "workflow_finished", "timestamp": "2026-03-22T10:06:00+00:00", "task_id": None, "status": "completed", "details": {"workflow_duration_ms": 360000.0}},
+        ],
         workflow_started_at="2026-03-22T10:00:00+00:00",
         workflow_finished_at="2026-03-22T10:06:00+00:00",
         workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
@@ -474,6 +481,7 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.finished_at == "2026-03-22T10:06:00+00:00"
     assert snapshot.last_resumed_at == "2026-03-22T10:04:00+00:00"
     assert snapshot.execution_events[0]["event"] == "workflow_started"
+    assert snapshot.execution_events[1]["details"]["workflow_duration_ms"] == 360000.0
     assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
 
 

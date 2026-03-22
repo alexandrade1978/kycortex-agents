@@ -246,6 +246,7 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
     assert project.workflow_finished_at is not None
     assert project.execution_events[0]["event"] == "workflow_started"
     assert project.execution_events[-1]["event"] == "workflow_finished"
+    assert project.execution_events[-1]["details"]["workflow_duration_ms"] is not None
 
 
 def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path):

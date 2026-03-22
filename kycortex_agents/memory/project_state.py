@@ -114,7 +114,13 @@ class ProjectState:
                         event="task_retry_scheduled",
                         task_id=task.id,
                         status=task.status,
-                        details={"attempts": task.attempts, "retry_limit": task.retry_limit, "error_type": task.last_error_type, "provider_call": provider_call},
+                        details={
+                            "attempts": task.attempts,
+                            "retry_limit": task.retry_limit,
+                            "error_type": task.last_error_type,
+                            "provider_call": provider_call,
+                            "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, datetime.now(UTC).isoformat()),
+                        },
                     )
                     self._touch()
                     return
@@ -128,7 +134,13 @@ class ProjectState:
                     timestamp=task.completed_at,
                     task_id=task.id,
                     status=task.status,
-                    details={"attempts": task.attempts, "error_message": error_message, "error_type": error_type, "provider_call": provider_call},
+                    details={
+                        "attempts": task.attempts,
+                        "error_message": error_message,
+                        "error_type": error_type,
+                        "provider_call": provider_call,
+                        "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
+                    },
                 )
                 self._touch(task.completed_at)
                 return
@@ -153,7 +165,13 @@ class ProjectState:
                     timestamp=t.completed_at,
                     task_id=t.id,
                     status=t.status,
-                    details={"attempts": t.attempts, "assigned_to": t.assigned_to, "provider_call": provider_call},
+                    details={
+                        "attempts": t.attempts,
+                        "assigned_to": t.assigned_to,
+                        "provider_call": provider_call,
+                        "last_attempt_duration_ms": self._duration_ms(t.last_attempt_started_at, t.completed_at),
+                        "task_duration_ms": self._duration_ms(t.started_at, t.completed_at),
+                    },
                 )
                 self._touch(t.completed_at)
 
@@ -273,7 +291,12 @@ class ProjectState:
         finished_at = datetime.now(UTC).isoformat()
         self.phase = phase
         self.workflow_finished_at = finished_at
-        self._record_execution_event(event="workflow_finished", timestamp=finished_at, status=self.phase)
+        self._record_execution_event(
+            event="workflow_finished",
+            timestamp=finished_at,
+            status=self.phase,
+            details={"workflow_duration_ms": self._duration_ms(self.workflow_started_at, finished_at)},
+        )
         self._touch(finished_at)
 
     def save(self):
@@ -395,6 +418,8 @@ class ProjectState:
                         "started_at": task.started_at,
                         "last_attempt_started_at": task.last_attempt_started_at,
                         "last_resumed_at": task.last_resumed_at,
+                        "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
+                        "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                         "history": task.history,
                     },
                 )
@@ -414,6 +439,8 @@ class ProjectState:
                     "last_provider_call": task.last_provider_call,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,
+                    "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
+                    "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     "history": task.history,
                 },
                 started_at=task.started_at or task.created_at,
@@ -483,6 +510,16 @@ class ProjectState:
                 "details": details or {},
             }
         )
+
+    def _duration_ms(self, start: Optional[str], end: Optional[str]) -> Optional[float]:
+        if not start or not end:
+            return None
+        try:
+            started_at = datetime.fromisoformat(start)
+            finished_at = datetime.fromisoformat(end)
+        except ValueError:
+            return None
+        return round((finished_at - started_at).total_seconds() * 1000, 3)
 
     def _workflow_status(self) -> WorkflowStatus:
         statuses = {task.status for task in self.tasks}

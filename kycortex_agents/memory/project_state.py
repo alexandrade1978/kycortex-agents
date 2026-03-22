@@ -32,6 +32,9 @@ class Task:
     output: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    started_at: Optional[str] = None
+    last_attempt_started_at: Optional[str] = None
+    last_resumed_at: Optional[str] = None
     completed_at: Optional[str] = None
 
 @dataclass
@@ -67,9 +70,13 @@ class ProjectState:
     def start_task(self, task_id: str):
         for task in self.tasks:
             if task.id == task_id:
+                started_at = datetime.now(UTC).isoformat()
                 task.status = TaskStatus.RUNNING.value
                 task.attempts += 1
                 task.last_error = None
+                if task.started_at is None:
+                    task.started_at = started_at
+                task.last_attempt_started_at = started_at
                 return
 
     def fail_task(self, task_id: str, error_message: str):
@@ -103,6 +110,7 @@ class ProjectState:
         resumed_task_ids: List[str] = []
         for task in self.tasks:
             if task.status == TaskStatus.RUNNING.value:
+                task.last_resumed_at = datetime.now(UTC).isoformat()
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after interrupted execution"
                 task.completed_at = None
@@ -228,7 +236,17 @@ class ProjectState:
             failure = None
             output = None
             if task_status == TaskStatus.FAILED and task.output:
-                failure = FailureRecord(message=task.output)
+                failure = FailureRecord(
+                    message=task.output,
+                    retryable=task.attempts <= task.retry_limit,
+                    details={
+                        "attempts": task.attempts,
+                        "retry_limit": task.retry_limit,
+                        "started_at": task.started_at,
+                        "last_attempt_started_at": task.last_attempt_started_at,
+                        "last_resumed_at": task.last_resumed_at,
+                    },
+                )
             if task.output or task.output_payload:
                 output = self._build_agent_output(task)
             results[task.id] = TaskResult(
@@ -237,6 +255,7 @@ class ProjectState:
                 agent_name=task.assigned_to,
                 output=output,
                 failure=failure,
+                started_at=task.started_at or task.created_at,
                 completed_at=task.completed_at,
             )
         return results

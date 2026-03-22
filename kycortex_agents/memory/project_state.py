@@ -39,7 +39,7 @@ class ProjectState:
     goal: str
     tasks: List[Task] = field(default_factory=list)
     decisions: List[Dict[str, Any]] = field(default_factory=list)
-    artifacts: List[str] = field(default_factory=list)
+    artifacts: List[Dict[str, Any] | str] = field(default_factory=list)
     phase: str = "init"
     state_file: str = "project_state.json"
 
@@ -123,7 +123,7 @@ class ProjectState:
         )
 
     def add_artifact_record(self, record: ArtifactRecord):
-        self.artifacts.append(record.path or record.name)
+        self.artifacts.append(asdict(record))
 
     def save(self):
         state_store = resolve_state_store(self.state_file)
@@ -251,7 +251,7 @@ class ProjectState:
                 )
                 for decision in self.decisions
             ],
-            artifacts=[ArtifactRecord(name=artifact) for artifact in self.artifacts],
+            artifacts=[self._deserialize_artifact_record(artifact) for artifact in self.artifacts],
         )
 
     def _workflow_status(self) -> WorkflowStatus:
@@ -296,6 +296,23 @@ class ProjectState:
                 "status": task.status,
             },
         )
+
+    def _deserialize_artifact_record(self, artifact: Dict[str, Any] | str) -> ArtifactRecord:
+        if isinstance(artifact, dict):
+            raw_type = artifact.get("artifact_type", ArtifactType.OTHER.value)
+            try:
+                artifact_type = ArtifactType(raw_type)
+            except ValueError:
+                artifact_type = ArtifactType.OTHER
+            return ArtifactRecord(
+                name=artifact.get("name", artifact.get("path", "artifact")),
+                artifact_type=artifact_type,
+                path=artifact.get("path"),
+                content=artifact.get("content"),
+                created_at=artifact.get("created_at", datetime.now(UTC).isoformat()),
+                metadata=artifact.get("metadata", {}),
+            )
+        return ArtifactRecord(name=artifact)
 
     def _summarize_output(self, raw_content: str) -> str:
         stripped = raw_content.strip()

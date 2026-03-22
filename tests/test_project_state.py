@@ -5,7 +5,7 @@ import pytest
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import ArtifactType, TaskStatus
+from kycortex_agents.types import ArtifactRecord, ArtifactType, TaskStatus
 
 
 def test_save_and_load_project_state(tmp_path):
@@ -115,6 +115,61 @@ def test_snapshot_includes_structured_task_output():
     assert result.output.raw_content == "print('hello')\nprint('world')"
     assert result.output.artifacts[0].artifact_type == ArtifactType.CODE
     assert result.output.metadata["task_id"] == "code"
+
+
+def test_save_and_load_preserves_rich_artifact_records_json(tmp_path):
+    state_path = tmp_path / "project_state.json"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_artifact_record(
+        ArtifactRecord(
+            name="architecture_doc",
+            artifact_type=ArtifactType.DOCUMENT,
+            path="artifacts/architecture.md",
+            content="# Architecture",
+            metadata={"source": "architect"},
+        )
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+    snapshot = loaded.snapshot()
+
+    assert loaded.artifacts[0]["name"] == "architecture_doc"
+    assert loaded.artifacts[0]["artifact_type"] == ArtifactType.DOCUMENT.value
+    assert snapshot.artifacts[0].path == "artifacts/architecture.md"
+    assert snapshot.artifacts[0].content == "# Architecture"
+    assert snapshot.artifacts[0].metadata["source"] == "architect"
+
+
+def test_save_and_load_preserves_rich_artifact_records_sqlite(tmp_path):
+    state_path = tmp_path / "project_state.sqlite"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_artifact_record(
+        ArtifactRecord(
+            name="generated_tests",
+            artifact_type=ArtifactType.TEST,
+            content="def test_example(): pass",
+            metadata={"source": "qa_tester"},
+        )
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+    snapshot = loaded.snapshot()
+
+    assert loaded.artifacts[0]["artifact_type"] == ArtifactType.TEST.value
+    assert snapshot.artifacts[0].name == "generated_tests"
+    assert snapshot.artifacts[0].content == "def test_example(): pass"
+    assert snapshot.artifacts[0].metadata["source"] == "qa_tester"
+
+
+def test_snapshot_remains_backward_compatible_with_legacy_string_artifacts():
+    project = ProjectState(project_name="Demo", goal="Build demo", artifacts=["legacy-report.md"])
+
+    snapshot = project.snapshot()
+
+    assert snapshot.artifacts[0].name == "legacy-report.md"
+    assert snapshot.artifacts[0].artifact_type == ArtifactType.OTHER
 
 
 def test_runnable_tasks_respect_dependencies():

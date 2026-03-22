@@ -151,3 +151,57 @@ def test_persisted_failed_workflow_resumes_after_reload(tmp_path, state_filename
     assert failed.workflow_last_resumed_at is not None
     assert any(event["event"] == "task_requeued" for event in failed.execution_events)
     assert failed.execution_events[-1]["event"] == "workflow_finished"
+
+
+@pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
+def test_resume_failed_requeues_skipped_descendants_transitively(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+            output="boom",
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the architecture",
+            assigned_to="code_reviewer",
+            dependencies=["arch"],
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+            completed_at="2026-03-22T10:06:30+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Docs",
+            description="Document the review",
+            assigned_to="docs_writer",
+            dependencies=["review"],
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+            completed_at="2026-03-22T10:07:00+00:00",
+        )
+    )
+
+    project.save()
+    reloaded = ProjectState.load(str(state_path))
+
+    resumed = reloaded.resume_failed_tasks()
+
+    assert resumed == ["arch", "review", "docs"]
+    assert reloaded.get_task("arch").status == TaskStatus.PENDING.value
+    assert reloaded.get_task("review").status == TaskStatus.PENDING.value
+    assert reloaded.get_task("docs").status == TaskStatus.PENDING.value
+    assert reloaded.get_task("docs").output is None
+    assert reloaded.get_task("docs").last_error == "Task resumed after failed workflow execution"
+    assert reloaded.get_task("docs").history[-1]["event"] == "requeued"

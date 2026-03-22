@@ -34,9 +34,8 @@ pip install -e .
 ## Quick Start
 
 ```python
-from kycortex_agents.orchestrator import Orchestrator
-from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.config import KYCortexConfig
+from kycortex_agents import KYCortexConfig
+from kycortex_agents.workflows import Orchestrator, ProjectState, Task
 
 # Configure
 config = KYCortexConfig(llm_model="gpt-4o", api_key="your-key")

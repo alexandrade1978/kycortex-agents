@@ -8,12 +8,13 @@ from kycortex_agents.agents import (
 	LegalAdvisorAgent,
 	QATesterAgent,
 )
-from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.config import DEFAULT_CONFIG, KYCortexConfig
 from kycortex_agents.exceptions import (
 	AgentExecutionError,
 	ConfigValidationError,
 	KYCortexError,
 	ProviderConfigurationError,
+	StatePersistenceError,
 	WorkflowDefinitionError,
 )
 from kycortex_agents.providers import AnthropicProvider, BaseLLMProvider, OllamaProvider, OpenAIProvider, create_provider
@@ -52,6 +53,7 @@ __all__ = [
 	"config",
 	"ConfigValidationError",
 	"create_provider",
+	"DEFAULT_CONFIG",
 	"DecisionRecord",
 	"DocsWriterAgent",
 	"exceptions",
@@ -72,6 +74,7 @@ __all__ = [
 	"QATesterAgent",
 	"resolve_state_store",
 	"SqliteStateStore",
+	"StatePersistenceError",
 	"Task",
 	"TaskResult",
 	"TaskStatus",

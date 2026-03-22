@@ -12,6 +12,13 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
 class Orchestrator:
+    """Public workflow runtime for executing tasks with a configured or custom registry.
+
+    Pass a custom AgentRegistry when consumers need to register their own agent
+    implementations while keeping `execute_workflow()` and `run_task()` as the
+    supported execution entry points.
+    """
+
     def __init__(self, config: Optional[KYCortexConfig] = None, registry: Optional[AgentRegistry] = None):
         self.config = config or KYCortexConfig()
         self.registry = registry or build_default_registry(self.config)
@@ -22,6 +29,7 @@ class Orchestrator:
         log_method(event, extra={"event": event, **fields})
 
     def run_task(self, task: Task, project: ProjectState) -> str:
+        """Execute one task through the public orchestrator runtime contract."""
         self._log_event(
             "info",
             "task_started",
@@ -177,6 +185,7 @@ class Orchestrator:
         return None
 
     def execute_workflow(self, project: ProjectState):
+        """Execute the full workflow until completion or an unrecoverable failure."""
         self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         project.execution_plan()
         resumed_task_ids = project.resume_interrupted_tasks()

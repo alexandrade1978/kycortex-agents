@@ -10,6 +10,13 @@ from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, Artif
 
 
 class BaseAgent(ABC):
+    """Base class for public agent extensions.
+
+    Subclasses typically implement `run()` or `run_with_input()` and may override
+    lifecycle hooks to add validation, output shaping, or error handling.
+    """
+
+    """Context keys that must be present before execution starts."""
     required_context_keys: tuple[str, ...] = ()
     output_artifact_type: ArtifactType = ArtifactType.TEXT
     output_artifact_name: str = "output"
@@ -69,6 +76,7 @@ class BaseAgent(ABC):
             raise AssertionError("on_execution_error must raise an exception") from exc
 
     def validate_input(self, agent_input: AgentInput) -> None:
+        """Validate the public AgentInput contract before agent execution."""
         if not agent_input.task_id.strip():
             raise AgentExecutionError(f"{self.name}: task_id must not be empty")
         if not agent_input.task_title.strip():
@@ -87,9 +95,11 @@ class BaseAgent(ABC):
                 raise AgentExecutionError(f"{self.name}: required context key '{key}' must not be empty")
 
     def before_execute(self, agent_input: AgentInput) -> None:
+        """Hook invoked after input validation and before the agent runs."""
         return None
 
     def after_execute(self, agent_input: AgentInput, output: AgentOutput) -> AgentOutput:
+        """Hook invoked after normalization to finalize the public AgentOutput."""
         self.validate_output(output)
         output.metadata.setdefault("agent_name", self.name)
         output.metadata.setdefault("agent_role", self.role)
@@ -102,6 +112,7 @@ class BaseAgent(ABC):
         return output
 
     def validate_output(self, output: AgentOutput) -> None:
+        """Validate the public AgentOutput contract before state is persisted."""
         if not output.raw_content.strip():
             raise AgentExecutionError(f"{self.name}: agent output raw_content must not be empty")
         if not output.summary.strip():
@@ -114,6 +125,7 @@ class BaseAgent(ABC):
             raise AgentExecutionError(f"{self.name}: agent output metadata must be a dictionary")
 
     def on_execution_error(self, agent_input: AgentInput, exc: Exception) -> None:
+        """Hook invoked for execution failures before the final public error is raised."""
         if isinstance(exc, AgentExecutionError):
             raise exc
         raise AgentExecutionError(f"{self.name} failed during agent execution") from exc

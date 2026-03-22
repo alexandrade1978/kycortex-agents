@@ -13,6 +13,7 @@ from kycortex_agents import (
     BaseAgent,
     CodeEngineerAgent,
     CodeReviewerAgent,
+    DEFAULT_CONFIG,
     DocsWriterAgent,
     KYCortexConfig,
     JsonStateStore,
@@ -22,6 +23,7 @@ from kycortex_agents import (
     ProjectState,
     QATesterAgent,
     SqliteStateStore,
+    StatePersistenceError,
     Task,
     WorkflowDefinitionError,
     __version__,
@@ -54,6 +56,8 @@ def test_public_api_exports_core_symbols():
     assert OllamaProvider is not None
     assert resolve_state_store is not None
     assert SqliteStateStore is not None
+    assert DEFAULT_CONFIG is not None
+    assert StatePersistenceError is not None
     assert WorkflowDefinitionError is not None
 
 
@@ -124,3 +128,9 @@ def test_root_package_exposes_public_module_namespaces():
     assert kycortex_agents.providers is not None
     assert kycortex_agents.types is types_module
     assert kycortex_agents.workflows is not None
+
+
+def test_root_package_does_not_expose_internal_runtime_helpers():
+    assert not hasattr(kycortex_agents, "_build_context")
+    assert not hasattr(kycortex_agents, "_execute_agent")
+    assert not hasattr(kycortex_agents, "_normalize_agent_result")

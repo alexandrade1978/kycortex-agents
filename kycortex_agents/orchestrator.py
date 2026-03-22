@@ -206,11 +206,13 @@ class Orchestrator:
                 runnable = project.runnable_tasks()
             except WorkflowDefinitionError:
                 project.mark_workflow_finished("failed")
+                project.save()
                 self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                 raise
             if not runnable:
                 blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
                 project.mark_workflow_finished("failed")
+                project.save()
                 self._log_event(
                     "error",
                     "workflow_blocked",
@@ -243,6 +245,7 @@ class Orchestrator:
                             )
                         continue
                     project.mark_workflow_finished("failed")
+                    project.save()
                     self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                     raise
                 project.save()

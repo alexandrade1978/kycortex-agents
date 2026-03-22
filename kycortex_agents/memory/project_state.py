@@ -32,6 +32,7 @@ class Task:
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
+    skip_reason_type: Optional[str] = None
     last_provider_call: Optional[Dict[str, Any]] = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     started_at: Optional[str] = None
@@ -222,6 +223,7 @@ class ProjectState:
             for task in self.tasks:
                 should_resume = task.status == TaskStatus.FAILED.value or (
                     task.status == TaskStatus.SKIPPED.value
+                    and self._is_dependency_failed_skip(task)
                     and any(dep in resumable_dependency_ids for dep in task.dependencies)
                 )
                 if not should_resume or task.id in resumed_task_ids:
@@ -231,6 +233,7 @@ class ProjectState:
                 task.last_error_type = None
                 task.output = None
                 task.output_payload = None
+                task.skip_reason_type = None
                 task.last_provider_call = None
                 task.completed_at = None
                 task.last_resumed_at = resumed_at
@@ -258,6 +261,12 @@ class ProjectState:
         )
         self._touch(resumed_at)
         return resumed_task_ids
+
+    def _is_dependency_failed_skip(self, task: Task) -> bool:
+        if task.skip_reason_type is not None:
+            return task.skip_reason_type == "dependency_failed"
+        reason = task.last_error or task.output or ""
+        return reason.startswith("Skipped because dependency '") and reason.endswith("' failed")
 
     def should_retry_task(self, task_id: str) -> bool:
         task = self.get_task(task_id)
@@ -366,7 +375,7 @@ class ProjectState:
             if task.status == TaskStatus.PENDING.value and not self.is_task_ready(task)
         ]
 
-    def skip_task(self, task_id: str, reason: str):
+    def skip_task(self, task_id: str, reason: str, reason_type: str = "manual"):
         task = self.get_task(task_id)
         if task is None:
             return
@@ -375,6 +384,7 @@ class ProjectState:
         task.last_error_type = None
         task.output = reason
         task.output_payload = None
+        task.skip_reason_type = reason_type
         task.last_provider_call = None
         task.completed_at = datetime.now(UTC).isoformat()
         self._record_task_event(task, "skipped", task.completed_at, error_message=reason)
@@ -402,7 +412,7 @@ class ProjectState:
                 if dependent.id in visited:
                     continue
                 if dependent.status == TaskStatus.PENDING.value:
-                    self.skip_task(dependent.id, reason)
+                    self.skip_task(dependent.id, reason, reason_type="dependency_failed")
                     skipped.append(dependent.id)
                 visited.add(dependent.id)
                 queue.append(dependent.id)

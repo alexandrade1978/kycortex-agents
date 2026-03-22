@@ -346,6 +346,43 @@ def test_resume_interrupted_tasks_resets_running_tasks():
     assert project.tasks[1].status == TaskStatus.DONE.value
 
 
+def test_resume_failed_tasks_resets_failed_and_dependency_skipped_tasks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+            output="boom",
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review",
+            assigned_to="code_reviewer",
+            dependencies=["arch"],
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+            completed_at="2026-03-22T10:06:30+00:00",
+        )
+    )
+
+    resumed = project.resume_failed_tasks()
+
+    assert resumed == ["arch", "review"]
+    assert project.get_task("arch").status == TaskStatus.PENDING.value
+    assert project.get_task("arch").output is None
+    assert project.get_task("arch").history[-1]["event"] == "requeued"
+    assert project.get_task("review").status == TaskStatus.PENDING.value
+    assert project.get_task("review").output is None
+    assert project.get_task("review").history[-1]["event"] == "requeued"
+
+
 def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_details():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

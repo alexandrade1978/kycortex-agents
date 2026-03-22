@@ -123,6 +123,8 @@ class Orchestrator:
         self.logger.info(f"Starting workflow for project: {project.project_name}")
         project.execution_plan()
         resumed_task_ids = project.resume_interrupted_tasks()
+        if self.config.workflow_resume_policy == "resume_failed":
+            resumed_task_ids.extend(project.resume_failed_tasks())
         if resumed_task_ids:
             self.logger.info("Resuming interrupted tasks: %s", ", ".join(resumed_task_ids))
             project.save()

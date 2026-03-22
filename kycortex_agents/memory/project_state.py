@@ -138,6 +138,35 @@ class ProjectState:
             self._touch(resumed_at)
         return resumed_task_ids
 
+    def resume_failed_tasks(self) -> List[str]:
+        failed_task_ids = {
+            task.id for task in self.tasks if task.status == TaskStatus.FAILED.value
+        }
+        if not failed_task_ids:
+            return []
+
+        resumed_at = datetime.now(UTC).isoformat()
+        resumed_task_ids: List[str] = []
+        for task in self.tasks:
+            should_resume = task.status == TaskStatus.FAILED.value or (
+                task.status == TaskStatus.SKIPPED.value and any(dep in failed_task_ids for dep in task.dependencies)
+            )
+            if not should_resume:
+                continue
+            task.status = TaskStatus.PENDING.value
+            task.last_error = "Task resumed after failed workflow execution"
+            task.output = None
+            task.output_payload = None
+            task.completed_at = None
+            task.last_resumed_at = resumed_at
+            self._record_task_event(task, "requeued", resumed_at, error_message=task.last_error)
+            resumed_task_ids.append(task.id)
+
+        self.workflow_last_resumed_at = resumed_at
+        self.workflow_finished_at = None
+        self._touch(resumed_at)
+        return resumed_task_ids
+
     def should_retry_task(self, task_id: str) -> bool:
         task = self.get_task(task_id)
         if task is None:

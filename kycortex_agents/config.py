@@ -26,6 +26,7 @@ class KYCortexConfig:
     max_tokens: int = 4096
     timeout_seconds: float = 60.0
     workflow_failure_policy: str = "fail_fast"
+    workflow_resume_policy: str = "interrupted_only"
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
@@ -64,6 +65,10 @@ class KYCortexConfig:
             raise ConfigValidationError("base_url must not be empty when provided")
         if self.workflow_failure_policy not in {"fail_fast", "continue"}:
             raise ConfigValidationError("workflow_failure_policy must be 'fail_fast' or 'continue'")
+        if self.workflow_resume_policy not in {"interrupted_only", "resume_failed"}:
+            raise ConfigValidationError(
+                "workflow_resume_policy must be 'interrupted_only' or 'resume_failed'"
+            )
 
     def validate_runtime(self):
         if self.llm_provider not in PROVIDER_ENV_VARS:

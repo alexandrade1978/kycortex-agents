@@ -71,3 +71,8 @@ def test_validate_runtime_accepts_ollama_without_api_key(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
 
     config.validate_runtime()
+
+
+def test_config_rejects_invalid_workflow_resume_policy(tmp_path):
+    with pytest.raises(ConfigValidationError, match="workflow_resume_policy must be 'interrupted_only' or 'resume_failed'"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_resume_policy="always")

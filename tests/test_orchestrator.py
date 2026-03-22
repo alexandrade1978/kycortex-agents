@@ -362,3 +362,52 @@ def test_execute_workflow_can_continue_after_terminal_failure(tmp_path):
     assert project.get_task("code").status == TaskStatus.DONE.value
     assert project.get_task("review").status == TaskStatus.SKIPPED.value
     assert project.phase == "completed"
+
+
+def test_execute_workflow_can_resume_failed_workflow(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the application",
+            assigned_to="code_reviewer",
+            dependencies=["arch"],
+        )
+    )
+
+    architect = FlakyAgent(failures_before_success=1, success_response="ARCHITECTURE DOC")
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "architect": architect,
+                "code_reviewer": RecordingAgent("REVIEWED"),
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="boom-1"):
+        orchestrator.execute_workflow(project)
+
+    assert project.get_task("arch").status == TaskStatus.FAILED.value
+
+    orchestrator.execute_workflow(project)
+
+    assert project.get_task("arch").status == TaskStatus.DONE.value
+    assert project.get_task("review").status == TaskStatus.DONE.value
+    assert "requeued" in [entry["event"] for entry in project.get_task("arch").history]
+    assert project.get_task("arch").history[-1]["event"] == "completed"

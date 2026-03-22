@@ -351,6 +351,90 @@ def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path)
         orchestrator.execute_workflow(project)
 
 
+def test_execute_workflow_fails_when_task_assigned_to_missing_agent(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="missing_architect",
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({}))
+
+    with pytest.raises(AgentExecutionError, match="Task 'arch' is assigned to unknown agent 'missing_architect'"):
+        orchestrator.execute_workflow(project)
+
+    assert project.phase == "init"
+    assert project.workflow_started_at is None
+    assert project.execution_events == []
+
+
+def test_execute_workflow_fails_when_custom_registry_is_incomplete(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ARCHITECTURE DOC")}))
+
+    with pytest.raises(AgentExecutionError, match="Task 'code' is assigned to unknown agent 'code_engineer'"):
+        orchestrator.execute_workflow(project)
+
+    assert project.get_task("arch").status == TaskStatus.PENDING.value
+    assert project.get_task("code").status == TaskStatus.PENDING.value
+
+
+def test_execute_workflow_validates_all_tasks_before_any_execution(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the architecture",
+            assigned_to="code_reviewer",
+            dependencies=["arch"],
+        )
+    )
+
+    architect = RecordingAgent("ARCHITECTURE DOC")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": architect}))
+
+    with pytest.raises(AgentExecutionError, match="Task 'review' is assigned to unknown agent 'code_reviewer'"):
+        orchestrator.execute_workflow(project)
+
+    assert architect.last_input is None
+    assert all(task.attempts == 0 for task in project.tasks)
+    assert all(task.status == TaskStatus.PENDING.value for task in project.tasks)
+
+
 def test_execute_workflow_retries_task_until_success(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

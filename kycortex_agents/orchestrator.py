@@ -184,10 +184,18 @@ class Orchestrator:
             return "legal"
         return None
 
+    def _validate_agent_resolution(self, project: ProjectState) -> None:
+        for task in project.tasks:
+            if not self.registry.has(task.assigned_to):
+                raise AgentExecutionError(
+                    f"Task '{task.id}' is assigned to unknown agent '{task.assigned_to}'"
+                )
+
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""
-        self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         project.execution_plan()
+        self._validate_agent_resolution(project)
+        self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         resumed_task_ids = project.resume_interrupted_tasks()
         if self.config.workflow_resume_policy == "resume_failed":
             resumed_task_ids.extend(project.resume_failed_tasks())

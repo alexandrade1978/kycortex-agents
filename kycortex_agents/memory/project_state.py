@@ -46,6 +46,7 @@ class ProjectState:
     tasks: List[Task] = field(default_factory=list)
     decisions: List[Dict[str, Any]] = field(default_factory=list)
     artifacts: List[Dict[str, Any] | str] = field(default_factory=list)
+    execution_events: List[Dict[str, Any]] = field(default_factory=list)
     phase: str = "init"
     workflow_started_at: Optional[str] = None
     workflow_finished_at: Optional[str] = None
@@ -86,6 +87,13 @@ class ProjectState:
                     task.started_at = started_at
                 task.last_attempt_started_at = started_at
                 self._record_task_event(task, "started", started_at)
+                self._record_execution_event(
+                    event="task_started",
+                    timestamp=started_at,
+                    task_id=task.id,
+                    status=task.status,
+                    details={"attempts": task.attempts, "assigned_to": task.assigned_to},
+                )
                 self._touch(started_at)
                 return
 
@@ -100,6 +108,12 @@ class ProjectState:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
                     self._record_task_event(task, "retry_scheduled")
+                    self._record_execution_event(
+                        event="task_retry_scheduled",
+                        task_id=task.id,
+                        status=task.status,
+                        details={"attempts": task.attempts, "retry_limit": task.retry_limit, "error_type": task.last_error_type},
+                    )
                     self._touch()
                     return
                 task.status = TaskStatus.FAILED.value
@@ -107,6 +121,13 @@ class ProjectState:
                 task.output_payload = None
                 task.completed_at = datetime.now(UTC).isoformat()
                 self._record_task_event(task, "failed", task.completed_at, error_message=error_message)
+                self._record_execution_event(
+                    event="task_failed",
+                    timestamp=task.completed_at,
+                    task_id=task.id,
+                    status=task.status,
+                    details={"attempts": task.attempts, "error_message": error_message, "error_type": error_type},
+                )
                 self._touch(task.completed_at)
                 return
 
@@ -124,6 +145,13 @@ class ProjectState:
                 t.last_error_type = None
                 t.completed_at = datetime.now(UTC).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
+                self._record_execution_event(
+                    event="task_completed",
+                    timestamp=t.completed_at,
+                    task_id=t.id,
+                    status=t.status,
+                    details={"attempts": t.attempts, "assigned_to": t.assigned_to},
+                )
                 self._touch(t.completed_at)
 
     def resume_interrupted_tasks(self) -> List[str]:
@@ -138,10 +166,23 @@ class ProjectState:
                 task.last_error_type = None
                 task.completed_at = None
                 self._record_task_event(task, "resumed", resumed_at, error_message=task.last_error)
+                self._record_execution_event(
+                    event="task_resumed",
+                    timestamp=resumed_at,
+                    task_id=task.id,
+                    status=task.status,
+                    details={"reason": task.last_error},
+                )
                 resumed_task_ids.append(task.id)
         if resumed_at is not None:
             self.workflow_last_resumed_at = resumed_at
             self.workflow_finished_at = None
+            self._record_execution_event(
+                event="workflow_resumed",
+                timestamp=resumed_at,
+                status=self.phase,
+                details={"reason": "interrupted_tasks", "task_ids": resumed_task_ids},
+            )
             self._touch(resumed_at)
         return resumed_task_ids
 
@@ -168,10 +209,23 @@ class ProjectState:
             task.completed_at = None
             task.last_resumed_at = resumed_at
             self._record_task_event(task, "requeued", resumed_at, error_message=task.last_error)
+            self._record_execution_event(
+                event="task_requeued",
+                timestamp=resumed_at,
+                task_id=task.id,
+                status=task.status,
+                details={"reason": task.last_error},
+            )
             resumed_task_ids.append(task.id)
 
         self.workflow_last_resumed_at = resumed_at
         self.workflow_finished_at = None
+        self._record_execution_event(
+            event="workflow_resumed",
+            timestamp=resumed_at,
+            status=self.phase,
+            details={"reason": "failed_workflow", "task_ids": resumed_task_ids},
+        )
         self._touch(resumed_at)
         return resumed_task_ids
 
@@ -207,12 +261,14 @@ class ProjectState:
             self.workflow_started_at = started_at
         self.workflow_finished_at = None
         self.phase = "execution"
+        self._record_execution_event(event="workflow_started", timestamp=started_at, status=self.phase)
         self._touch(started_at)
 
     def mark_workflow_finished(self, phase: str):
         finished_at = datetime.now(UTC).isoformat()
         self.phase = phase
         self.workflow_finished_at = finished_at
+        self._record_execution_event(event="workflow_finished", timestamp=finished_at, status=self.phase)
         self._touch(finished_at)
 
     def save(self):
@@ -284,6 +340,13 @@ class ProjectState:
         task.output = reason
         task.completed_at = datetime.now(UTC).isoformat()
         self._record_task_event(task, "skipped", task.completed_at, error_message=reason)
+        self._record_execution_event(
+            event="task_skipped",
+            timestamp=task.completed_at,
+            task_id=task.id,
+            status=task.status,
+            details={"reason": reason},
+        )
         self._touch(task.completed_at)
 
     def skip_dependent_tasks(self, dependency_id: str, reason: str) -> List[str]:
@@ -371,6 +434,7 @@ class ProjectState:
                 for decision in self.decisions
             ],
             artifacts=[self._deserialize_artifact_record(artifact) for artifact in self.artifacts],
+            execution_events=list(self.execution_events),
             updated_at=self.updated_at,
         )
 
@@ -391,6 +455,24 @@ class ProjectState:
                 "status": task.status,
                 "attempts": task.attempts,
                 "error_message": error_message,
+            }
+        )
+
+    def _record_execution_event(
+        self,
+        event: str,
+        timestamp: Optional[str] = None,
+        task_id: Optional[str] = None,
+        status: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.execution_events.append(
+            {
+                "event": event,
+                "timestamp": timestamp or datetime.now(UTC).isoformat(),
+                "task_id": task_id,
+                "status": status,
+                "details": details or {},
             }
         )
 

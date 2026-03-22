@@ -147,6 +147,8 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert project.tasks[0].output_payload["summary"] == "Decision summary"
     assert project.tasks[0].history[0]["event"] == "started"
     assert project.tasks[0].history[-1]["event"] == "completed"
+    assert project.execution_events[0]["event"] == "task_started"
+    assert project.execution_events[-1]["event"] == "task_completed"
     assert project.decisions[0]["topic"] == "stack"
     assert project.artifacts[0]["name"] == "architecture_doc"
     assert project.artifacts[0]["path"] == "artifacts/architecture.md"
@@ -191,6 +193,8 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
     assert project.phase == "completed"
     assert project.workflow_started_at is not None
     assert project.workflow_finished_at is not None
+    assert project.execution_events[0]["event"] == "workflow_started"
+    assert project.execution_events[-1]["event"] == "workflow_finished"
 
 
 def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path):

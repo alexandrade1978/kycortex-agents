@@ -33,6 +33,7 @@ def test_save_and_load_project_state(tmp_path):
     assert len(loaded.tasks) == 1
     assert loaded.tasks[0].id == "arch"
     assert loaded.updated_at is not None
+    assert loaded.execution_events == []
 
 
 def test_load_rejects_invalid_json(tmp_path):
@@ -459,6 +460,7 @@ def test_snapshot_includes_workflow_execution_metadata():
     project = ProjectState(
         project_name="Demo",
         goal="Build demo",
+        execution_events=[{"event": "workflow_started", "timestamp": "2026-03-22T10:00:00+00:00", "task_id": None, "status": "execution", "details": {}}],
         workflow_started_at="2026-03-22T10:00:00+00:00",
         workflow_finished_at="2026-03-22T10:06:00+00:00",
         workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
@@ -471,7 +473,48 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.started_at == "2026-03-22T10:00:00+00:00"
     assert snapshot.finished_at == "2026-03-22T10:06:00+00:00"
     assert snapshot.last_resumed_at == "2026-03-22T10:04:00+00:00"
+    assert snapshot.execution_events[0]["event"] == "workflow_started"
     assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
+
+
+def test_save_and_load_preserves_execution_events_json(tmp_path):
+    state_path = tmp_path / "project_state.json"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.execution_events.append(
+        {
+            "event": "task_completed",
+            "timestamp": "2026-03-22T10:06:00+00:00",
+            "task_id": "arch",
+            "status": "done",
+            "details": {"attempts": 1},
+        }
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.execution_events[0]["event"] == "task_completed"
+    assert loaded.execution_events[0]["details"]["attempts"] == 1
+
+
+def test_save_and_load_preserves_execution_events_sqlite(tmp_path):
+    state_path = tmp_path / "project_state.sqlite"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.execution_events.append(
+        {
+            "event": "task_completed",
+            "timestamp": "2026-03-22T10:06:00+00:00",
+            "task_id": "arch",
+            "status": "done",
+            "details": {"attempts": 1},
+        }
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.execution_events[0]["event"] == "task_completed"
+    assert loaded.execution_events[0]["details"]["attempts"] == 1
 
 
 def test_save_and_load_preserves_execution_metadata_json(tmp_path):

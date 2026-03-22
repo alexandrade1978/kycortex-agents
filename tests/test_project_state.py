@@ -160,11 +160,13 @@ def test_complete_task_persists_structured_agent_output_payload():
 
     assert task.output == "ARCHITECTURE DOC"
     assert task.output_payload is not None
+    assert task.history[-1]["event"] == "completed"
     assert task.output_payload["summary"] == "Architecture summary"
     assert result.output is not None
     assert result.output.artifacts[0].path == "artifacts/architecture.md"
     assert result.output.decisions[0].decision == "Use FastAPI"
     assert result.output.metadata["agent_name"] == "Architect"
+    assert result.details["history"][-1]["event"] == "completed"
 
 
 def test_save_and_load_preserves_rich_artifact_records_json(tmp_path):
@@ -307,6 +309,7 @@ def test_fail_task_requeues_when_retry_budget_exists():
     assert task.last_error == "temporary failure"
     assert task.started_at is not None
     assert task.last_attempt_started_at is not None
+    assert task.history[-1]["event"] == "retry_scheduled"
     assert project.should_retry_task("code") is True
 
 
@@ -339,6 +342,7 @@ def test_resume_interrupted_tasks_resets_running_tasks():
     assert project.tasks[0].status == TaskStatus.PENDING.value
     assert project.tasks[0].last_error == "Task resumed after interrupted execution"
     assert project.tasks[0].last_resumed_at is not None
+    assert project.tasks[0].history[-1]["event"] == "resumed"
     assert project.tasks[1].status == TaskStatus.DONE.value
 
 
@@ -357,6 +361,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
             started_at="2026-03-22T10:00:00+00:00",
             last_attempt_started_at="2026-03-22T10:05:00+00:00",
             last_resumed_at="2026-03-22T10:04:00+00:00",
+            history=[{"event": "failed", "timestamp": "2026-03-22T10:06:00+00:00", "status": "failed", "attempts": 2, "error_message": "boom-2"}],
             completed_at="2026-03-22T10:06:00+00:00",
         )
     )
@@ -369,6 +374,45 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.failure.details["retry_limit"] == 1
     assert result.failure.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
     assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
+    assert result.details["history"][0]["event"] == "failed"
+
+
+def test_save_and_load_preserves_task_history_json(tmp_path):
+    state_path = tmp_path / "project_state.json"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            history=[{"event": "started", "timestamp": "2026-03-22T10:00:00+00:00", "status": "running", "attempts": 1, "error_message": None}],
+        )
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.get_task("arch").history[0]["event"] == "started"
+
+
+def test_save_and_load_preserves_task_history_sqlite(tmp_path):
+    state_path = tmp_path / "project_state.sqlite"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            history=[{"event": "started", "timestamp": "2026-03-22T10:00:00+00:00", "status": "running", "attempts": 1, "error_message": None}],
+        )
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.get_task("arch").history[0]["event"] == "started"
 
 
 def test_snapshot_includes_workflow_execution_metadata():

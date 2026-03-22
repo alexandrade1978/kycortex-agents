@@ -144,6 +144,8 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert project.tasks[0].status == TaskStatus.DONE.value
     assert project.tasks[0].output_payload is not None
     assert project.tasks[0].output_payload["summary"] == "Decision summary"
+    assert project.tasks[0].history[0]["event"] == "started"
+    assert project.tasks[0].history[-1]["event"] == "completed"
     assert project.decisions[0]["topic"] == "stack"
     assert project.artifacts[0]["name"] == "architecture_doc"
     assert project.artifacts[0]["path"] == "artifacts/architecture.md"

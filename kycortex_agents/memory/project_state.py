@@ -35,6 +35,7 @@ class Task:
     started_at: Optional[str] = None
     last_attempt_started_at: Optional[str] = None
     last_resumed_at: Optional[str] = None
+    history: List[Dict[str, Any]] = field(default_factory=list)
     completed_at: Optional[str] = None
 
 @dataclass
@@ -82,6 +83,7 @@ class ProjectState:
                 if task.started_at is None:
                     task.started_at = started_at
                 task.last_attempt_started_at = started_at
+                self._record_task_event(task, "started", started_at)
                 self._touch(started_at)
                 return
 
@@ -92,12 +94,14 @@ class ProjectState:
                 if task.attempts <= task.retry_limit:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
+                    self._record_task_event(task, "retry_scheduled")
                     self._touch()
                     return
                 task.status = TaskStatus.FAILED.value
                 task.output = error_message
                 task.output_payload = None
                 task.completed_at = datetime.now(UTC).isoformat()
+                self._record_task_event(task, "failed", task.completed_at, error_message=error_message)
                 self._touch(task.completed_at)
                 return
 
@@ -113,6 +117,7 @@ class ProjectState:
                     t.output_payload = None
                 t.last_error = None
                 t.completed_at = datetime.now(UTC).isoformat()
+                self._record_task_event(t, "completed", t.completed_at)
                 self._touch(t.completed_at)
 
     def resume_interrupted_tasks(self) -> List[str]:
@@ -125,6 +130,7 @@ class ProjectState:
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after interrupted execution"
                 task.completed_at = None
+                self._record_task_event(task, "resumed", resumed_at, error_message=task.last_error)
                 resumed_task_ids.append(task.id)
         if resumed_at is not None:
             self.workflow_last_resumed_at = resumed_at
@@ -240,6 +246,7 @@ class ProjectState:
         task.last_error = reason
         task.output = reason
         task.completed_at = datetime.now(UTC).isoformat()
+        self._record_task_event(task, "skipped", task.completed_at, error_message=reason)
         self._touch(task.completed_at)
 
     def skip_dependent_tasks(self, dependency_id: str, reason: str) -> List[str]:
@@ -279,6 +286,7 @@ class ProjectState:
                         "started_at": task.started_at,
                         "last_attempt_started_at": task.last_attempt_started_at,
                         "last_resumed_at": task.last_resumed_at,
+                        "history": task.history,
                     },
                 )
             if task.output or task.output_payload:
@@ -289,6 +297,14 @@ class ProjectState:
                 agent_name=task.assigned_to,
                 output=output,
                 failure=failure,
+                details={
+                    "attempts": task.attempts,
+                    "retry_limit": task.retry_limit,
+                    "last_error": task.last_error,
+                    "last_attempt_started_at": task.last_attempt_started_at,
+                    "last_resumed_at": task.last_resumed_at,
+                    "history": task.history,
+                },
                 started_at=task.started_at or task.created_at,
                 completed_at=task.completed_at,
             )
@@ -320,6 +336,23 @@ class ProjectState:
 
     def _touch(self, timestamp: Optional[str] = None):
         self.updated_at = timestamp or datetime.now(UTC).isoformat()
+
+    def _record_task_event(
+        self,
+        task: Task,
+        event: str,
+        timestamp: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ):
+        task.history.append(
+            {
+                "event": event,
+                "timestamp": timestamp or datetime.now(UTC).isoformat(),
+                "status": task.status,
+                "attempts": task.attempts,
+                "error_message": error_message,
+            }
+        )
 
     def _workflow_status(self) -> WorkflowStatus:
         statuses = {task.status for task in self.tasks}

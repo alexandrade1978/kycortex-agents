@@ -210,6 +210,85 @@ def test_run_task_persists_provider_call_metadata_from_base_agent(tmp_path):
     assert project.tasks[0].last_provider_call["usage"]["total_tokens"] == 34
 
 
+def test_run_task_emits_structured_log_fields(tmp_path, caplog):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    class ProviderBackedAgent(RecordingAgent):
+        def __init__(self):
+            super().__init__("unused")
+            from kycortex_agents.agents.base_agent import BaseAgent
+            from kycortex_agents.providers.base import BaseLLMProvider
+
+            class InlineProvider(BaseLLMProvider):
+                def generate(self, system_prompt: str, user_message: str) -> str:
+                    return "ARCHITECTURE DOC"
+
+                def get_last_call_metadata(self):
+                    return {"usage": {"input_tokens": 21, "output_tokens": 13, "total_tokens": 34}}
+
+            class InlineAgent(BaseAgent):
+                def __init__(self, cfg):
+                    super().__init__("Inline", "Testing", cfg)
+                    self._provider = InlineProvider()
+
+                def run(self, task_description: str, context: dict) -> str:
+                    return self.chat("system", task_description)
+
+            self.impl = InlineAgent(config)
+
+        def execute(self, agent_input):
+            return self.impl.execute(agent_input)
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": ProviderBackedAgent()}))
+
+    with caplog.at_level("INFO", logger="Orchestrator"):
+        orchestrator.run_task(project.tasks[0], project)
+
+    start_record = next(record for record in caplog.records if getattr(record, "event", None) == "task_started")
+    complete_record = next(record for record in caplog.records if getattr(record, "event", None) == "task_completed")
+
+    assert start_record.project_name == "Demo"
+    assert start_record.task_id == "arch"
+    assert start_record.assigned_to == "architect"
+    assert complete_record.project_name == "Demo"
+    assert complete_record.task_id == "arch"
+    assert complete_record.provider == "openai"
+    assert complete_record.total_tokens == 34
+
+
+def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ARCHITECTURE DOC")}))
+
+    with caplog.at_level("INFO", logger="Orchestrator"):
+        orchestrator.execute_workflow(project)
+
+    events = [getattr(record, "event", None) for record in caplog.records]
+
+    assert "workflow_started" in events
+    assert "workflow_completed" in events
+    assert "workflow_finished" in events
+
+
 def test_execute_workflow_respects_task_dependencies(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

@@ -17,8 +17,20 @@ class Orchestrator:
         self.registry = registry or build_default_registry(self.config)
         self.logger = logging.getLogger("Orchestrator")
 
+    def _log_event(self, level: str, event: str, **fields: Any) -> None:
+        log_method = getattr(self.logger, level)
+        log_method(event, extra={"event": event, **fields})
+
     def run_task(self, task: Task, project: ProjectState) -> str:
-        self.logger.info(f"Executing task {task.id}: {task.title}")
+        self._log_event(
+            "info",
+            "task_started",
+            project_name=project.project_name,
+            task_id=task.id,
+            task_title=task.title,
+            assigned_to=task.assigned_to,
+            attempt=task.attempts + 1,
+        )
         agent = self.registry.get(task.assigned_to)
         agent_input = self._build_agent_input(task, project)
         project.start_task(task.id)
@@ -27,17 +39,50 @@ class Orchestrator:
         except Exception as exc:
             project.fail_task(task.id, exc, provider_call=self._provider_call_metadata(agent))
             if project.should_retry_task(task.id):
-                self.logger.warning("Task %s failed on attempt %s and will be retried.", task.id, task.attempts)
+                self._log_event(
+                    "warning",
+                    "task_retry_scheduled",
+                    project_name=project.project_name,
+                    task_id=task.id,
+                    task_title=task.title,
+                    assigned_to=task.assigned_to,
+                    attempt=task.attempts,
+                    error_type=type(exc).__name__,
+                )
             else:
-                self.logger.exception("Task %s failed.", task.id)
+                provider_call = self._provider_call_metadata(agent)
+                self._log_event(
+                    "error",
+                    "task_failed",
+                    project_name=project.project_name,
+                    task_id=task.id,
+                    task_title=task.title,
+                    assigned_to=task.assigned_to,
+                    attempt=task.attempts,
+                    error_type=type(exc).__name__,
+                    provider=provider_call.get("provider") if provider_call else None,
+                    model=provider_call.get("model") if provider_call else None,
+                )
             raise
         normalized_output = self._normalize_agent_result(output)
         for decision in normalized_output.decisions:
             project.add_decision_record(decision)
         for artifact in normalized_output.artifacts:
             project.add_artifact_record(artifact)
-        project.complete_task(task.id, normalized_output, provider_call=self._provider_call_metadata(agent, normalized_output))
-        self.logger.info(f"Task {task.id} completed.")
+        provider_call = self._provider_call_metadata(agent, normalized_output)
+        project.complete_task(task.id, normalized_output, provider_call=provider_call)
+        self._log_event(
+            "info",
+            "task_completed",
+            project_name=project.project_name,
+            task_id=task.id,
+            task_title=task.title,
+            assigned_to=task.assigned_to,
+            attempt=task.attempts,
+            provider=provider_call.get("provider") if provider_call else None,
+            model=provider_call.get("model") if provider_call else None,
+            total_tokens=(provider_call.get("usage") or {}).get("total_tokens") if provider_call else None,
+        )
         return normalized_output.raw_content
 
     def _provider_call_metadata(self, agent: Any, output: Optional[AgentOutput] = None) -> Optional[Dict[str, Any]]:
@@ -132,13 +177,13 @@ class Orchestrator:
         return None
 
     def execute_workflow(self, project: ProjectState):
-        self.logger.info(f"Starting workflow for project: {project.project_name}")
+        self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         project.execution_plan()
         resumed_task_ids = project.resume_interrupted_tasks()
         if self.config.workflow_resume_policy == "resume_failed":
             resumed_task_ids.extend(project.resume_failed_tasks())
         if resumed_task_ids:
-            self.logger.info("Resuming interrupted tasks: %s", ", ".join(resumed_task_ids))
+            self._log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))
             project.save()
         project.mark_workflow_running()
         while True:
@@ -146,16 +191,24 @@ class Orchestrator:
             if not pending:
                 project.mark_workflow_finished("completed")
                 project.save()
-                self.logger.info("All tasks completed.")
+                self._log_event("info", "workflow_completed", project_name=project.project_name, phase=project.phase)
                 break
             try:
                 runnable = project.runnable_tasks()
             except WorkflowDefinitionError:
                 project.mark_workflow_finished("failed")
+                self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                 raise
             if not runnable:
                 blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
                 project.mark_workflow_finished("failed")
+                self._log_event(
+                    "error",
+                    "workflow_blocked",
+                    project_name=project.project_name,
+                    phase=project.phase,
+                    blocked_task_ids=blocked_task_ids,
+                )
                 raise AgentExecutionError(
                     f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
                 )
@@ -172,13 +225,16 @@ class Orchestrator:
                             f"Skipped because dependency '{task.id}' failed",
                         )
                         if skipped:
-                            self.logger.warning(
-                                "Skipping dependent tasks after %s failed: %s",
-                                task.id,
-                                ", ".join(skipped),
+                            self._log_event(
+                                "warning",
+                                "dependent_tasks_skipped",
+                                project_name=project.project_name,
+                                task_id=task.id,
+                                skipped_task_ids=list(skipped),
                             )
                         continue
                     project.mark_workflow_finished("failed")
+                    self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                     raise
                 project.save()
-        self.logger.info(f"Project {project.project_name} finished.")
+        self._log_event("info", "workflow_finished", project_name=project.project_name, phase=project.phase)

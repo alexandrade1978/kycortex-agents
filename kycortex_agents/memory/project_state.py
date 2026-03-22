@@ -28,6 +28,7 @@ class Task:
     retry_limit: int = 0
     attempts: int = 0
     last_error: Optional[str] = None
+    last_error_type: Optional[str] = None
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
@@ -80,6 +81,7 @@ class ProjectState:
                 task.status = TaskStatus.RUNNING.value
                 task.attempts += 1
                 task.last_error = None
+                task.last_error_type = None
                 if task.started_at is None:
                     task.started_at = started_at
                 task.last_attempt_started_at = started_at
@@ -87,10 +89,13 @@ class ProjectState:
                 self._touch(started_at)
                 return
 
-    def fail_task(self, task_id: str, error_message: str):
+    def fail_task(self, task_id: str, error: str | Exception):
         for task in self.tasks:
             if task.id == task_id:
+                error_message = str(error)
+                error_type = type(error).__name__ if isinstance(error, Exception) else "runtime_error"
                 task.last_error = error_message
+                task.last_error_type = error_type
                 if task.attempts <= task.retry_limit:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
@@ -116,6 +121,7 @@ class ProjectState:
                     t.output = output
                     t.output_payload = None
                 t.last_error = None
+                t.last_error_type = None
                 t.completed_at = datetime.now(UTC).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
                 self._touch(t.completed_at)
@@ -129,6 +135,7 @@ class ProjectState:
                 task.last_resumed_at = resumed_at
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after interrupted execution"
+                task.last_error_type = None
                 task.completed_at = None
                 self._record_task_event(task, "resumed", resumed_at, error_message=task.last_error)
                 resumed_task_ids.append(task.id)
@@ -155,6 +162,7 @@ class ProjectState:
                 continue
             task.status = TaskStatus.PENDING.value
             task.last_error = "Task resumed after failed workflow execution"
+            task.last_error_type = None
             task.output = None
             task.output_payload = None
             task.completed_at = None
@@ -308,10 +316,12 @@ class ProjectState:
             if task_status == TaskStatus.FAILED and task.output:
                 failure = FailureRecord(
                     message=task.output,
+                    error_type=task.last_error_type or "runtime_error",
                     retryable=task.attempts <= task.retry_limit,
                     details={
                         "attempts": task.attempts,
                         "retry_limit": task.retry_limit,
+                        "error_type": task.last_error_type,
                         "started_at": task.started_at,
                         "last_attempt_started_at": task.last_attempt_started_at,
                         "last_resumed_at": task.last_resumed_at,
@@ -330,6 +340,7 @@ class ProjectState:
                     "attempts": task.attempts,
                     "retry_limit": task.retry_limit,
                     "last_error": task.last_error,
+                    "last_error_type": task.last_error_type,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,
                     "history": task.history,

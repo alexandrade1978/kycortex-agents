@@ -395,6 +395,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
             attempts=2,
             status=TaskStatus.FAILED.value,
             output="boom-2",
+            last_error_type="RuntimeError",
             started_at="2026-03-22T10:00:00+00:00",
             last_attempt_started_at="2026-03-22T10:05:00+00:00",
             last_resumed_at="2026-03-22T10:04:00+00:00",
@@ -407,8 +408,10 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
 
     assert result.started_at == "2026-03-22T10:00:00+00:00"
     assert result.failure is not None
+    assert result.failure.error_type == "RuntimeError"
     assert result.failure.details["attempts"] == 2
     assert result.failure.details["retry_limit"] == 1
+    assert result.failure.details["error_type"] == "RuntimeError"
     assert result.failure.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
     assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
     assert result.details["history"][0]["event"] == "failed"

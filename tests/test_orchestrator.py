@@ -122,6 +122,7 @@ def test_run_task_marks_failure_and_reraises(tmp_path):
 
     assert project.tasks[0].status == TaskStatus.FAILED.value
     assert project.tasks[0].output == "boom"
+    assert project.tasks[0].last_error_type == "RuntimeError"
 
 
 def test_run_task_persists_structured_agent_outputs(tmp_path):

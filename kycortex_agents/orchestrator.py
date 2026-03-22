@@ -25,7 +25,7 @@ class Orchestrator:
         try:
             output = self._execute_agent(agent, agent_input)
         except Exception as exc:
-            project.fail_task(task.id, str(exc))
+            project.fail_task(task.id, exc)
             if project.should_retry_task(task.id):
                 self.logger.warning("Task %s failed on attempt %s and will be retried.", task.id, task.attempts)
             else:

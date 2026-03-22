@@ -126,23 +126,22 @@ class Orchestrator:
         if resumed_task_ids:
             self.logger.info("Resuming interrupted tasks: %s", ", ".join(resumed_task_ids))
             project.save()
-        if project.phase == "init":
-            project.phase = "execution"
+        project.mark_workflow_running()
         while True:
             pending = project.pending_tasks()
             if not pending:
-                project.phase = "completed"
+                project.mark_workflow_finished("completed")
                 project.save()
                 self.logger.info("All tasks completed.")
                 break
             try:
                 runnable = project.runnable_tasks()
             except WorkflowDefinitionError:
-                project.phase = "failed"
+                project.mark_workflow_finished("failed")
                 raise
             if not runnable:
                 blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
-                project.phase = "failed"
+                project.mark_workflow_finished("failed")
                 raise AgentExecutionError(
                     f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
                 )
@@ -165,7 +164,7 @@ class Orchestrator:
                                 ", ".join(skipped),
                             )
                         continue
-                    project.phase = "failed"
+                    project.mark_workflow_finished("failed")
                     raise
                 project.save()
         self.logger.info(f"Project {project.project_name} finished.")

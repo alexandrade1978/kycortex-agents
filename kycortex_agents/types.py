@@ -100,6 +100,9 @@ class ProjectSnapshot:
     goal: str
     workflow_status: WorkflowStatus = WorkflowStatus.INIT
     phase: str = "init"
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    last_resumed_at: Optional[str] = None
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
     decisions: List[DecisionRecord] = field(default_factory=list)
     artifacts: List[ArtifactRecord] = field(default_factory=list)

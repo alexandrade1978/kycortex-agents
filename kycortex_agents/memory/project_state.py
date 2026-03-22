@@ -45,10 +45,15 @@ class ProjectState:
     decisions: List[Dict[str, Any]] = field(default_factory=list)
     artifacts: List[Dict[str, Any] | str] = field(default_factory=list)
     phase: str = "init"
+    workflow_started_at: Optional[str] = None
+    workflow_finished_at: Optional[str] = None
+    workflow_last_resumed_at: Optional[str] = None
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     state_file: str = "project_state.json"
 
     def add_task(self, task: Task):
         self.tasks.append(task)
+        self._touch()
 
     def get_task(self, task_id: str) -> Optional[Task]:
         for task in self.tasks:
@@ -77,6 +82,7 @@ class ProjectState:
                 if task.started_at is None:
                     task.started_at = started_at
                 task.last_attempt_started_at = started_at
+                self._touch(started_at)
                 return
 
     def fail_task(self, task_id: str, error_message: str):
@@ -86,11 +92,13 @@ class ProjectState:
                 if task.attempts <= task.retry_limit:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
+                    self._touch()
                     return
                 task.status = TaskStatus.FAILED.value
                 task.output = error_message
                 task.output_payload = None
                 task.completed_at = datetime.now(UTC).isoformat()
+                self._touch(task.completed_at)
                 return
 
     def complete_task(self, task_id: str, output: str | AgentOutput):
@@ -105,16 +113,23 @@ class ProjectState:
                     t.output_payload = None
                 t.last_error = None
                 t.completed_at = datetime.now(UTC).isoformat()
+                self._touch(t.completed_at)
 
     def resume_interrupted_tasks(self) -> List[str]:
         resumed_task_ids: List[str] = []
+        resumed_at: Optional[str] = None
         for task in self.tasks:
             if task.status == TaskStatus.RUNNING.value:
-                task.last_resumed_at = datetime.now(UTC).isoformat()
+                resumed_at = resumed_at or datetime.now(UTC).isoformat()
+                task.last_resumed_at = resumed_at
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after interrupted execution"
                 task.completed_at = None
                 resumed_task_ids.append(task.id)
+        if resumed_at is not None:
+            self.workflow_last_resumed_at = resumed_at
+            self.workflow_finished_at = None
+            self._touch(resumed_at)
         return resumed_task_ids
 
     def should_retry_task(self, task_id: str) -> bool:
@@ -125,6 +140,7 @@ class ProjectState:
 
     def add_decision(self, topic: str, decision: str, rationale: str):
         self.decisions.append({"topic": topic, "decision": decision, "rationale": rationale, "at": datetime.now(UTC).isoformat()})
+        self._touch()
 
     def add_decision_record(self, record: DecisionRecord):
         self.decisions.append(
@@ -136,11 +152,28 @@ class ProjectState:
                 "metadata": record.metadata,
             }
         )
+        self._touch(record.created_at)
 
     def add_artifact_record(self, record: ArtifactRecord):
         self.artifacts.append(asdict(record))
+        self._touch(record.created_at)
+
+    def mark_workflow_running(self):
+        started_at = datetime.now(UTC).isoformat()
+        if self.workflow_started_at is None:
+            self.workflow_started_at = started_at
+        self.workflow_finished_at = None
+        self.phase = "execution"
+        self._touch(started_at)
+
+    def mark_workflow_finished(self, phase: str):
+        finished_at = datetime.now(UTC).isoformat()
+        self.phase = phase
+        self.workflow_finished_at = finished_at
+        self._touch(finished_at)
 
     def save(self):
+        self._touch()
         state_store = resolve_state_store(self.state_file)
         state_store.save(self.state_file, asdict(self))
 
@@ -207,6 +240,7 @@ class ProjectState:
         task.last_error = reason
         task.output = reason
         task.completed_at = datetime.now(UTC).isoformat()
+        self._touch(task.completed_at)
 
     def skip_dependent_tasks(self, dependency_id: str, reason: str) -> List[str]:
         skipped: List[str] = []
@@ -266,6 +300,9 @@ class ProjectState:
             goal=self.goal,
             workflow_status=self._workflow_status(),
             phase=self.phase,
+            started_at=self.workflow_started_at,
+            finished_at=self.workflow_finished_at,
+            last_resumed_at=self.workflow_last_resumed_at,
             task_results=self.task_results(),
             decisions=[
                 DecisionRecord(
@@ -278,7 +315,11 @@ class ProjectState:
                 for decision in self.decisions
             ],
             artifacts=[self._deserialize_artifact_record(artifact) for artifact in self.artifacts],
+            updated_at=self.updated_at,
         )
+
+    def _touch(self, timestamp: Optional[str] = None):
+        self.updated_at = timestamp or datetime.now(UTC).isoformat()
 
     def _workflow_status(self) -> WorkflowStatus:
         statuses = {task.status for task in self.tasks}

@@ -32,6 +32,7 @@ def test_save_and_load_project_state(tmp_path):
     assert loaded.goal == "Build demo"
     assert len(loaded.tasks) == 1
     assert loaded.tasks[0].id == "arch"
+    assert loaded.updated_at is not None
 
 
 def test_load_rejects_invalid_json(tmp_path):
@@ -81,6 +82,7 @@ def test_save_and_load_project_state_with_sqlite(tmp_path):
 
     assert loaded.project_name == "Demo"
     assert loaded.tasks[0].id == "arch"
+    assert loaded.updated_at is not None
 
 
 def test_load_rejects_invalid_sqlite(tmp_path):
@@ -369,6 +371,25 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
 
 
+def test_snapshot_includes_workflow_execution_metadata():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        workflow_started_at="2026-03-22T10:00:00+00:00",
+        workflow_finished_at="2026-03-22T10:06:00+00:00",
+        workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
+        updated_at="2026-03-22T10:06:00+00:00",
+        phase="completed",
+    )
+
+    snapshot = project.snapshot()
+
+    assert snapshot.started_at == "2026-03-22T10:00:00+00:00"
+    assert snapshot.finished_at == "2026-03-22T10:06:00+00:00"
+    assert snapshot.last_resumed_at == "2026-03-22T10:04:00+00:00"
+    assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
+
+
 def test_save_and_load_preserves_execution_metadata_json(tmp_path):
     state_path = tmp_path / "project_state.json"
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
@@ -392,6 +413,26 @@ def test_save_and_load_preserves_execution_metadata_json(tmp_path):
     assert loaded.get_task("arch").last_resumed_at == "2026-03-22T10:02:00+00:00"
 
 
+def test_save_and_load_preserves_workflow_metadata_json(tmp_path):
+    state_path = tmp_path / "project_state.json"
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        state_file=str(state_path),
+        workflow_started_at="2026-03-22T10:00:00+00:00",
+        workflow_finished_at="2026-03-22T10:06:00+00:00",
+        workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.workflow_started_at == "2026-03-22T10:00:00+00:00"
+    assert loaded.workflow_finished_at == "2026-03-22T10:06:00+00:00"
+    assert loaded.workflow_last_resumed_at == "2026-03-22T10:04:00+00:00"
+
+
 def test_save_and_load_preserves_execution_metadata_sqlite(tmp_path):
     state_path = tmp_path / "project_state.sqlite"
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
@@ -413,6 +454,26 @@ def test_save_and_load_preserves_execution_metadata_sqlite(tmp_path):
     assert loaded.get_task("arch").started_at == "2026-03-22T10:00:00+00:00"
     assert loaded.get_task("arch").last_attempt_started_at == "2026-03-22T10:01:00+00:00"
     assert loaded.get_task("arch").last_resumed_at == "2026-03-22T10:02:00+00:00"
+
+
+def test_save_and_load_preserves_workflow_metadata_sqlite(tmp_path):
+    state_path = tmp_path / "project_state.sqlite"
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        state_file=str(state_path),
+        workflow_started_at="2026-03-22T10:00:00+00:00",
+        workflow_finished_at="2026-03-22T10:06:00+00:00",
+        workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.workflow_started_at == "2026-03-22T10:00:00+00:00"
+    assert loaded.workflow_finished_at == "2026-03-22T10:06:00+00:00"
+    assert loaded.workflow_last_resumed_at == "2026-03-22T10:04:00+00:00"
 
 
 def test_execution_plan_rejects_cycles():

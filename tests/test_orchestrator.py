@@ -186,6 +186,8 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
     assert [task.status for task in project.tasks] == [TaskStatus.DONE.value, TaskStatus.DONE.value]
     assert project.tasks[1].output == "IMPLEMENTED CODE"
     assert project.phase == "completed"
+    assert project.workflow_started_at is not None
+    assert project.workflow_finished_at is not None
 
 
 def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path):
@@ -278,6 +280,7 @@ def test_execute_workflow_resumes_interrupted_running_tasks(tmp_path):
     assert project.tasks[0].status == TaskStatus.DONE.value
     assert project.tasks[0].attempts == 2
     assert project.tasks[0].output == "ARCHITECTURE DOC"
+    assert project.workflow_last_resumed_at is not None
 
 
 def test_execute_workflow_rejects_dependency_cycles(tmp_path):

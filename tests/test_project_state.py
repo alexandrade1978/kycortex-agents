@@ -374,6 +374,35 @@ def test_fail_task_requeues_when_retry_budget_exists():
     assert project.should_retry_task("code") is True
 
 
+def test_snapshot_hides_failed_output_after_task_is_requeued_for_retry():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            retry_limit=1,
+        )
+    )
+
+    project.start_task("code")
+    project.fail_task("code", RuntimeError("temporary failure"))
+
+    task = project.get_task("code")
+    result = project.snapshot().task_results["code"]
+
+    assert task is not None
+    assert task.status == TaskStatus.PENDING.value
+    assert task.last_error == "temporary failure"
+    assert task.output is None
+    assert result.status == TaskStatus.PENDING
+    assert result.output is None
+    assert result.failure is None
+    assert result.completed_at is None
+    assert result.details["history"][-1]["event"] == "retry_scheduled"
+
+
 def test_resume_interrupted_tasks_resets_running_tasks():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

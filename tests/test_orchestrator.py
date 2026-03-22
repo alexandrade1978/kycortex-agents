@@ -123,6 +123,7 @@ def test_run_task_marks_failure_and_reraises(tmp_path):
     assert project.tasks[0].status == TaskStatus.FAILED.value
     assert project.tasks[0].output == "boom"
     assert project.tasks[0].last_error_type == "RuntimeError"
+    assert project.tasks[0].last_provider_call is None
 
 
 def test_run_task_persists_structured_agent_outputs(tmp_path):
@@ -145,6 +146,7 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert project.tasks[0].status == TaskStatus.DONE.value
     assert project.tasks[0].output_payload is not None
     assert project.tasks[0].output_payload["summary"] == "Decision summary"
+    assert project.tasks[0].last_provider_call is None
     assert project.tasks[0].history[0]["event"] == "started"
     assert project.tasks[0].history[-1]["event"] == "completed"
     assert project.execution_events[0]["event"] == "task_started"
@@ -153,6 +155,55 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert project.artifacts[0]["name"] == "architecture_doc"
     assert project.artifacts[0]["path"] == "artifacts/architecture.md"
     assert project.artifacts[0]["artifact_type"] == ArtifactType.DOCUMENT.value
+
+
+def test_run_task_persists_provider_call_metadata_from_base_agent(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    class ProviderBackedAgent(RecordingAgent):
+        def __init__(self):
+            super().__init__("unused")
+            from kycortex_agents.agents.base_agent import BaseAgent
+            from kycortex_agents.providers.base import BaseLLMProvider
+
+            class InlineProvider(BaseLLMProvider):
+                def generate(self, system_prompt: str, user_message: str) -> str:
+                    return "ARCHITECTURE DOC"
+
+            class InlineAgent(BaseAgent):
+                def __init__(self, cfg):
+                    super().__init__("Inline", "Testing", cfg)
+                    self._provider = InlineProvider()
+
+                def run(self, task_description: str, context: dict) -> str:
+                    return self.chat("system", task_description)
+
+            self.impl = InlineAgent(config)
+
+        def execute(self, agent_input):
+            return self.impl.execute(agent_input)
+
+        def get_last_provider_call_metadata(self):
+            return self.impl.get_last_provider_call_metadata()
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": ProviderBackedAgent()}))
+
+    result = orchestrator.run_task(project.tasks[0], project)
+
+    assert result == "ARCHITECTURE DOC"
+    assert project.tasks[0].last_provider_call is not None
+    assert project.tasks[0].last_provider_call["provider"] == "openai"
+    assert project.tasks[0].last_provider_call["model"] == "gpt-4o"
+    assert project.tasks[0].last_provider_call["success"] is True
 
 
 def test_execute_workflow_respects_task_dependencies(tmp_path):

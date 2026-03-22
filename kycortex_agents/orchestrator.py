@@ -25,7 +25,7 @@ class Orchestrator:
         try:
             output = self._execute_agent(agent, agent_input)
         except Exception as exc:
-            project.fail_task(task.id, exc)
+            project.fail_task(task.id, exc, provider_call=self._provider_call_metadata(agent))
             if project.should_retry_task(task.id):
                 self.logger.warning("Task %s failed on attempt %s and will be retried.", task.id, task.attempts)
             else:
@@ -36,9 +36,21 @@ class Orchestrator:
             project.add_decision_record(decision)
         for artifact in normalized_output.artifacts:
             project.add_artifact_record(artifact)
-        project.complete_task(task.id, normalized_output)
+        project.complete_task(task.id, normalized_output, provider_call=self._provider_call_metadata(agent, normalized_output))
         self.logger.info(f"Task {task.id} completed.")
         return normalized_output.raw_content
+
+    def _provider_call_metadata(self, agent: Any, output: Optional[AgentOutput] = None) -> Optional[Dict[str, Any]]:
+        if output is not None:
+            provider_call = output.metadata.get("provider_call")
+            if isinstance(provider_call, dict):
+                return dict(provider_call)
+        getter = getattr(agent, "get_last_provider_call_metadata", None)
+        if callable(getter):
+            metadata = getter()
+            if isinstance(metadata, dict):
+                return metadata
+        return None
 
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
         snapshot = project.snapshot()

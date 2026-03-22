@@ -32,6 +32,7 @@ class Task:
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
+    last_provider_call: Optional[Dict[str, Any]] = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     started_at: Optional[str] = None
     last_attempt_started_at: Optional[str] = None
@@ -97,13 +98,14 @@ class ProjectState:
                 self._touch(started_at)
                 return
 
-    def fail_task(self, task_id: str, error: str | Exception):
+    def fail_task(self, task_id: str, error: str | Exception, provider_call: Optional[Dict[str, Any]] = None):
         for task in self.tasks:
             if task.id == task_id:
                 error_message = str(error)
                 error_type = type(error).__name__ if isinstance(error, Exception) else "runtime_error"
                 task.last_error = error_message
                 task.last_error_type = error_type
+                task.last_provider_call = provider_call
                 if task.attempts <= task.retry_limit:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
@@ -112,7 +114,7 @@ class ProjectState:
                         event="task_retry_scheduled",
                         task_id=task.id,
                         status=task.status,
-                        details={"attempts": task.attempts, "retry_limit": task.retry_limit, "error_type": task.last_error_type},
+                        details={"attempts": task.attempts, "retry_limit": task.retry_limit, "error_type": task.last_error_type, "provider_call": provider_call},
                     )
                     self._touch()
                     return
@@ -126,12 +128,12 @@ class ProjectState:
                     timestamp=task.completed_at,
                     task_id=task.id,
                     status=task.status,
-                    details={"attempts": task.attempts, "error_message": error_message, "error_type": error_type},
+                    details={"attempts": task.attempts, "error_message": error_message, "error_type": error_type, "provider_call": provider_call},
                 )
                 self._touch(task.completed_at)
                 return
 
-    def complete_task(self, task_id: str, output: str | AgentOutput):
+    def complete_task(self, task_id: str, output: str | AgentOutput, provider_call: Optional[Dict[str, Any]] = None):
         for t in self.tasks:
             if t.id == task_id:
                 t.status = TaskStatus.DONE.value
@@ -143,6 +145,7 @@ class ProjectState:
                     t.output_payload = None
                 t.last_error = None
                 t.last_error_type = None
+                t.last_provider_call = provider_call
                 t.completed_at = datetime.now(UTC).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
                 self._record_execution_event(
@@ -150,7 +153,7 @@ class ProjectState:
                     timestamp=t.completed_at,
                     task_id=t.id,
                     status=t.status,
-                    details={"attempts": t.attempts, "assigned_to": t.assigned_to},
+                    details={"attempts": t.attempts, "assigned_to": t.assigned_to, "provider_call": provider_call},
                 )
                 self._touch(t.completed_at)
 
@@ -164,6 +167,7 @@ class ProjectState:
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after interrupted execution"
                 task.last_error_type = None
+                task.last_provider_call = None
                 task.completed_at = None
                 self._record_task_event(task, "resumed", resumed_at, error_message=task.last_error)
                 self._record_execution_event(
@@ -206,6 +210,7 @@ class ProjectState:
             task.last_error_type = None
             task.output = None
             task.output_payload = None
+            task.last_provider_call = None
             task.completed_at = None
             task.last_resumed_at = resumed_at
             self._record_task_event(task, "requeued", resumed_at, error_message=task.last_error)
@@ -338,6 +343,7 @@ class ProjectState:
         task.status = TaskStatus.SKIPPED.value
         task.last_error = reason
         task.output = reason
+        task.last_provider_call = None
         task.completed_at = datetime.now(UTC).isoformat()
         self._record_task_event(task, "skipped", task.completed_at, error_message=reason)
         self._record_execution_event(
@@ -385,6 +391,7 @@ class ProjectState:
                         "attempts": task.attempts,
                         "retry_limit": task.retry_limit,
                         "error_type": task.last_error_type,
+                        "provider_call": task.last_provider_call,
                         "started_at": task.started_at,
                         "last_attempt_started_at": task.last_attempt_started_at,
                         "last_resumed_at": task.last_resumed_at,
@@ -404,6 +411,7 @@ class ProjectState:
                     "retry_limit": task.retry_limit,
                     "last_error": task.last_error,
                     "last_error_type": task.last_error_type,
+                    "last_provider_call": task.last_provider_call,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,
                     "history": task.history,

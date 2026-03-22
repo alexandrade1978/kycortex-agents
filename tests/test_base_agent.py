@@ -97,6 +97,10 @@ def test_execute_returns_standardized_agent_output():
     assert result.summary == "first line"
     assert result.raw_content == "first line\nsecond line"
     assert result.metadata["agent_name"] == "Dummy"
+    assert result.metadata["provider_call"]["provider"] == "openai"
+    assert result.metadata["provider_call"]["model"] == "gpt-4o"
+    assert result.metadata["provider_call"]["success"] is True
+    assert result.metadata["provider_call"]["duration_ms"] >= 0
     assert result.metadata["hook"] == "after"
     assert agent.events == [("before", "task-1"), ("after", "task-1")]
 
@@ -133,3 +137,20 @@ def test_execute_wraps_unexpected_runtime_errors():
 
     with pytest.raises(AgentExecutionError, match="Dummy failed during agent execution"):
         agent.execute(agent_input)
+
+
+def test_chat_captures_failed_provider_call_metadata():
+    provider = DummyProvider(error=RuntimeError("provider down"))
+    agent = DummyAgent(provider)
+
+    with pytest.raises(AgentExecutionError, match="Dummy failed to call the model provider"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+
+    assert metadata is not None
+    assert metadata["provider"] == "openai"
+    assert metadata["model"] == "gpt-4o"
+    assert metadata["success"] is False
+    assert metadata["error_type"] == "RuntimeError"
+    assert metadata["duration_ms"] >= 0

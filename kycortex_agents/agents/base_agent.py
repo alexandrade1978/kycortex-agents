@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from time import perf_counter
 from typing import Any, Optional
 
 from kycortex_agents.config import KYCortexConfig
@@ -18,6 +19,7 @@ class BaseAgent(ABC):
         self.role = role
         self.config = config
         self._provider: Optional[BaseLLMProvider] = None
+        self._last_provider_call_metadata: Optional[dict[str, Any]] = None
 
     def _get_provider(self) -> BaseLLMProvider:
         if self._provider is None:
@@ -25,12 +27,29 @@ class BaseAgent(ABC):
         return self._provider
 
     def chat(self, system_prompt: str, user_message: str) -> str:
+        provider = self._get_provider()
+        started_at = perf_counter()
         try:
-            return self._get_provider().generate(system_prompt, user_message)
+            response = provider.generate(system_prompt, user_message)
         except Exception as exc:
+            self._last_provider_call_metadata = {
+                "provider": self.config.llm_provider,
+                "model": self.config.llm_model,
+                "success": False,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+                "error_type": type(exc).__name__,
+            }
             if isinstance(exc, AgentExecutionError):
                 raise AgentExecutionError(f"{self.name}: {exc}") from exc
             raise AgentExecutionError(f"{self.name} failed to call the model provider") from exc
+        self._last_provider_call_metadata = {
+            "provider": self.config.llm_provider,
+            "model": self.config.llm_model,
+            "success": True,
+            "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+            "error_type": None,
+        }
+        return response
 
     def run_with_input(self, agent_input: AgentInput) -> str:
         return self.run(agent_input.task_description, agent_input.context)
@@ -73,6 +92,8 @@ class BaseAgent(ABC):
         output.metadata.setdefault("agent_role", self.role)
         output.metadata.setdefault("task_id", agent_input.task_id)
         output.metadata.setdefault("project_name", agent_input.project_name)
+        if self._last_provider_call_metadata is not None:
+            output.metadata.setdefault("provider_call", dict(self._last_provider_call_metadata))
         if not output.artifacts:
             output.artifacts.append(self._build_default_artifact(agent_input, output))
         return output
@@ -136,6 +157,11 @@ class BaseAgent(ABC):
         if isinstance(value, str) and not value.strip():
             raise AgentExecutionError(f"{self.name}: required context key '{key}' must not be empty")
         return value
+
+    def get_last_provider_call_metadata(self) -> Optional[dict[str, Any]]:
+        if self._last_provider_call_metadata is None:
+            return None
+        return dict(self._last_provider_call_metadata)
 
     @abstractmethod
     def run(self, task_description: str, context: dict) -> str:

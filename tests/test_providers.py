@@ -106,6 +106,45 @@ def test_create_provider_requires_runtime_credentials(tmp_path):
         create_provider(config)
 
 
+def test_create_provider_wraps_runtime_validation_error_cause(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="")
+
+    with pytest.raises(ProviderConfigurationError, match="Missing API key") as exc_info:
+        create_provider(config)
+
+    assert exc_info.value.__cause__ is not None
+    assert exc_info.value.__cause__.__class__.__name__ == "ConfigValidationError"
+
+
+def test_create_provider_preserves_original_provider_name_in_error(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="  Unknown  ")
+
+    with pytest.raises(ProviderConfigurationError, match="Unsupported LLM provider: unknown"):
+        create_provider(config)
+
+
+def test_create_provider_surfaces_provider_instantiation_failures(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token")
+
+    class ExplodingProvider:
+        def __init__(self, runtime_config):
+            raise RuntimeError(f"boom for {runtime_config.llm_provider}")
+
+    monkeypatch.setattr("kycortex_agents.providers.factory.OpenAIProvider", ExplodingProvider)
+
+    with pytest.raises(RuntimeError, match="boom for openai"):
+        create_provider(config)
+
+
+def test_create_provider_accepts_ollama_default_base_url(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
+
+    provider = create_provider(config)
+
+    assert isinstance(provider, OllamaProvider)
+    assert provider.config.base_url == "http://localhost:11434"
+
+
 def test_openai_provider_returns_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(response=build_response("ok")))

@@ -17,11 +17,20 @@ from kycortex_agents import (
     QATesterAgent,
     SqliteStateStore,
     Task,
+    WorkflowDefinitionError,
     __version__,
     resolve_state_store,
 )
 from kycortex_agents.memory import ProjectState as MemoryProjectState
 from kycortex_agents.memory import Task as MemoryTask
+from kycortex_agents.workflows import (
+    Orchestrator as WorkflowOrchestrator,
+    ProjectState as WorkflowProjectState,
+    Task as WorkflowTask,
+    TaskStatus as WorkflowTaskStatus,
+    WorkflowDefinitionError as WorkflowModuleDefinitionError,
+    WorkflowStatus as WorkflowModuleStatus,
+)
 
 
 def test_public_api_exports_core_symbols():
@@ -39,6 +48,7 @@ def test_public_api_exports_core_symbols():
     assert OllamaProvider is not None
     assert resolve_state_store is not None
     assert SqliteStateStore is not None
+    assert WorkflowDefinitionError is not None
 
 
 def test_public_api_exports_core_agent_types():
@@ -48,3 +58,12 @@ def test_public_api_exports_core_agent_types():
     assert DocsWriterAgent is not None
     assert LegalAdvisorAgent is not None
     assert QATesterAgent is not None
+
+
+def test_workflows_module_exports_stable_workflow_surface():
+    assert WorkflowOrchestrator is Orchestrator
+    assert WorkflowProjectState is MemoryProjectState
+    assert WorkflowTask is MemoryTask
+    assert WorkflowTaskStatus is not None
+    assert WorkflowModuleStatus is not None
+    assert WorkflowModuleDefinitionError is WorkflowDefinitionError

@@ -8,7 +8,13 @@ from kycortex_agents.agents import (
 	QATesterAgent,
 )
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError, ConfigValidationError, KYCortexError, ProviderConfigurationError
+from kycortex_agents.exceptions import (
+	AgentExecutionError,
+	ConfigValidationError,
+	KYCortexError,
+	ProviderConfigurationError,
+	WorkflowDefinitionError,
+)
 from kycortex_agents.providers import AnthropicProvider, BaseLLMProvider, OllamaProvider, OpenAIProvider, create_provider
 from kycortex_agents.memory import BaseStateStore, JsonStateStore, ProjectState, SqliteStateStore, Task, resolve_state_store
 from kycortex_agents.orchestrator import Orchestrator
@@ -64,5 +70,6 @@ __all__ = [
 	"TaskResult",
 	"TaskStatus",
 	"WorkflowStatus",
+	"WorkflowDefinitionError",
 	"__version__",
 ]

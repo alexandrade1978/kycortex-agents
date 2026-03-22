@@ -752,3 +752,42 @@ def test_skip_dependent_tasks_marks_pending_descendants_as_skipped():
     assert skipped == ["code", "test"]
     assert project.get_task("code").status == TaskStatus.SKIPPED.value
     assert project.get_task("test").status == TaskStatus.SKIPPED.value
+
+
+def test_skip_task_clears_stale_structured_output_from_snapshot():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Docs",
+            description="Document",
+            assigned_to="docs_writer",
+            output="STALE CONTENT",
+            output_payload={
+                "summary": "Stale summary",
+                "raw_content": "STALE CONTENT",
+                "artifacts": [],
+                "decisions": [],
+                "metadata": {"provider_call": {"provider": "openai"}},
+            },
+            last_provider_call={"provider": "openai", "model": "gpt-4o"},
+            last_error_type="RuntimeError",
+        )
+    )
+
+    project.skip_task("docs", "Skipped because dependency 'arch' failed")
+
+    task = project.get_task("docs")
+    result = project.snapshot().task_results["docs"]
+
+    assert task is not None
+    assert task.status == TaskStatus.SKIPPED.value
+    assert task.output == "Skipped because dependency 'arch' failed"
+    assert task.output_payload is None
+    assert task.last_provider_call is None
+    assert task.last_error_type is None
+    assert result.status == TaskStatus.SKIPPED
+    assert result.output is not None
+    assert result.output.summary == "Skipped because dependency 'arch' failed"
+    assert result.details["last_provider_call"] is None
+    assert result.details["last_error_type"] is None

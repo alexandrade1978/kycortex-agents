@@ -114,3 +114,13 @@ def test_public_extension_modules_define_explicit_exports():
         "SqliteStateStore",
         "resolve_state_store",
     ]
+
+
+def test_root_package_exposes_public_module_namespaces():
+    assert kycortex_agents.agents is not None
+    assert kycortex_agents.config is config_module
+    assert kycortex_agents.exceptions is exceptions_module
+    assert kycortex_agents.memory is not None
+    assert kycortex_agents.providers is not None
+    assert kycortex_agents.types is types_module
+    assert kycortex_agents.workflows is not None

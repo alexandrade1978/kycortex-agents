@@ -24,6 +24,29 @@ def test_registry_normalizes_agent_keys():
     assert registry.get("Code Engineer") is agent
 
 
+def test_registry_constructor_normalizes_seeded_agent_keys():
+    agent = DummyAgent()
+
+    registry = AgentRegistry({" Code Engineer ": agent})
+
+    assert registry.has("code_engineer")
+    assert registry.get("Code Engineer") is agent
+    assert list(registry.keys()) == ["code_engineer"]
+
+
+def test_registry_uses_latest_agent_for_normalized_key_collisions():
+    first_agent = DummyAgent()
+    second_agent = DummyAgent()
+    registry = AgentRegistry()
+
+    registry.register("Code Engineer", first_agent)
+    registry.register("code_engineer", second_agent)
+
+    assert registry.get("code_engineer") is second_agent
+    assert registry.get(" Code Engineer ") is second_agent
+    assert list(registry.keys()) == ["code_engineer"]
+
+
 def test_registry_rejects_unknown_agent():
     registry = AgentRegistry()
 

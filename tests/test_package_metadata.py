@@ -14,6 +14,34 @@ def test_pyproject_contains_expected_package_metadata():
     assert "openai>=1.0.0,<2.0.0" in project["dependencies"]
 
 
+def test_pyproject_declares_test_extra():
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    optional_dependencies = data["project"]["optional-dependencies"]
+    assert optional_dependencies["test"] == ["pytest>=7.0.0"]
+
+
+def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():
+    requirements_path = Path(__file__).resolve().parents[1] / "requirements.txt"
+    requirements_lines = [
+        line.strip()
+        for line in requirements_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    assert requirements_lines == ["-e .[test]"]
+
+
+def test_readme_installation_flow_uses_package_installs():
+    readme_path = Path(__file__).resolve().parents[1] / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+
+    assert "pip install ." in readme
+    assert 'pip install -e ".[test]"' in readme
+    assert "pip install -r requirements.txt" not in readme
+
+
 def test_pyproject_configures_pytest_testpaths():
     pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
     data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))

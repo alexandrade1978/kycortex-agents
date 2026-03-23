@@ -24,11 +24,11 @@ KYCortex is an open-source framework that simulates an entire AI software house 
 git clone https://github.com/alexandrade1978/kycortex-agents.git
 cd kycortex-agents
 
-# Install dependencies
-pip install -r requirements.txt
+# Install the package
+pip install .
 
-# Or install as package
-pip install -e .
+# Or install the editable test environment for local development
+pip install -e ".[test]"
 ```
 
 ## Quick Start

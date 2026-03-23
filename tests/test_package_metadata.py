@@ -90,6 +90,18 @@ def test_readme_installation_flow_uses_package_installs():
     assert "pip install -r requirements.txt" not in readme
 
 
+def test_readme_documents_current_package_layout_and_provider_support():
+    readme_path = Path(__file__).resolve().parents[1] / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+
+    assert "Supports OpenAI, Anthropic, and Ollama" in readme
+    assert "├── providers/      # Shared provider interface and implementations" in readme
+    assert "│   └── state_store.py" in readme
+    assert "├── workflows/      # Public workflow module surface" in readme
+    assert "└── types.py        # Public typed contracts" in readme
+    assert "Support for multiple LLM providers (Anthropic, local models)" not in readme
+
+
 def test_pyproject_configures_pytest_testpaths():
     pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
     data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))

@@ -7,6 +7,7 @@ KYCortex is an open-source framework that simulates an entire AI software house 
 ## Features
 
 - **Orchestrator**: Coordinates all agents, manages workflow state, and ensures tasks are completed in order
+- **Multi-provider runtime**: Supports OpenAI, Anthropic, and Ollama through a shared provider interface
 - **Specialized Agents**:
   - **Architect**: Designs software architecture and module structure
   - **Code Engineer**: Writes production-quality Python code
@@ -14,7 +15,7 @@ KYCortex is an open-source framework that simulates an entire AI software house 
   - **QA Tester**: Generates pytest test suites
   - **Docs Writer**: Creates README, API docs, tutorials
   - **Legal Advisor**: Handles licensing, compliance, NOTICE files
-- **Project Memory**: Persistent state management tracks tasks, decisions, and artifacts
+- **Project Memory**: Persistent JSON and SQLite state management tracks tasks, decisions, artifacts, and execution history
 - **Extensible**: Easy to add new agents or customize workflows
 
 ## Installation
@@ -77,23 +78,33 @@ config = KYCortexConfig(
 
 ```
 kycortex_agents/
-├── agents/         # Specialized agents
+├── agents/         # Specialized agents and registry
 │   ├── architect.py
 │   ├── code_engineer.py
 │   ├── code_reviewer.py
 │   ├── qa_tester.py
 │   ├── docs_writer.py
-│   └── legal_advisor.py
-├── memory/         # State management
-│   └── project_state.py
+│   ├── legal_advisor.py
+│   └── registry.py
+├── memory/         # State management and persistence backends
+│   ├── project_state.py
+│   └── state_store.py
+├── providers/      # Shared provider interface and implementations
+│   ├── base.py
+│   ├── factory.py
+│   ├── openai_provider.py
+│   ├── anthropic_provider.py
+│   └── ollama_provider.py
+├── workflows/      # Public workflow module surface
 ├── orchestrator.py # Main coordinator
-└── config.py       # Global config
+├── config.py       # Global config
+├── exceptions.py   # Public exception hierarchy
+└── types.py        # Public typed contracts
 ```
 
 ## Roadmap
 
 - [ ] Add vector store for long-term memory
-- [ ] Support for multiple LLM providers (Anthropic, local models)
 - [ ] Web UI for project monitoring
 - [ ] Agent templates for specific domains (MLOps, LLMOps)
 - [ ] Integration with CI/CD pipelines

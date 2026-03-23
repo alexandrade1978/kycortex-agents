@@ -328,25 +328,41 @@ class ProjectState:
         except TypeError as exc:
             raise StatePersistenceError(f"Project state data is invalid: {path}") from exc
         obj.tasks = tasks
+        obj.state_file = path
         obj._normalize_legacy_decision_timestamps()
+        obj._normalize_legacy_artifact_timestamps()
         obj._infer_legacy_skip_reason_types()
         return obj
 
     def _normalize_legacy_decision_timestamps(self) -> None:
-        fallback_timestamp = (
+        normalized_decisions: List[Dict[str, Any]] = []
+        for decision in self.decisions:
+            if not isinstance(decision, dict):
+                continue
+            if not decision.get("at"):
+                decision["at"] = decision.get("created_at") or self._legacy_timestamp_fallback()
+            normalized_decisions.append(decision)
+        self.decisions = normalized_decisions
+
+    def _normalize_legacy_artifact_timestamps(self) -> None:
+        normalized_artifacts: List[Dict[str, Any] | str] = []
+        for artifact in self.artifacts:
+            if not isinstance(artifact, dict):
+                normalized_artifacts.append(artifact)
+                continue
+            if not artifact.get("created_at"):
+                artifact["created_at"] = self._legacy_timestamp_fallback()
+            normalized_artifacts.append(artifact)
+        self.artifacts = normalized_artifacts
+
+    def _legacy_timestamp_fallback(self) -> str:
+        return (
             self.updated_at
             or self.workflow_finished_at
             or self.workflow_last_resumed_at
             or self.workflow_started_at
+            or datetime.now(UTC).isoformat()
         )
-        for decision in self.decisions:
-            if not isinstance(decision, dict) or decision.get("at"):
-                continue
-            decision["at"] = (
-                decision.get("created_at")
-                or fallback_timestamp
-                or datetime.now(UTC).isoformat()
-            )
 
     def _infer_legacy_skip_reason_types(self) -> None:
         for task in self.tasks:
@@ -492,9 +508,9 @@ class ProjectState:
             task_status = self._normalize_task_status(task.status)
             failure = None
             output = None
-            if task_status == TaskStatus.FAILED and task.output:
+            if task_status == TaskStatus.FAILED:
                 failure = FailureRecord(
-                    message=task.output,
+                    message=task.output or task.last_error or "Task failed without output",
                     error_type=task.last_error_type or "runtime_error",
                     retryable=task.attempts <= task.retry_limit,
                     details={
@@ -537,6 +553,7 @@ class ProjectState:
 
     def snapshot(self) -> ProjectSnapshot:
         self._normalize_legacy_decision_timestamps()
+        self._normalize_legacy_artifact_timestamps()
         return ProjectSnapshot(
             project_name=self.project_name,
             goal=self.goal,
@@ -551,7 +568,7 @@ class ProjectState:
                     topic=decision.get("topic", ""),
                     decision=decision.get("decision", ""),
                     rationale=decision.get("rationale", ""),
-                    created_at=decision.get("at", datetime.now(UTC).isoformat()),
+                    created_at=decision.get("at", self._legacy_timestamp_fallback()),
                     metadata=decision.get("metadata", {}),
                 )
                 for decision in self.decisions
@@ -655,16 +672,23 @@ class ProjectState:
         )
 
     def _deserialize_agent_output(self, payload: Dict[str, Any]) -> AgentOutput:
-        artifacts = [self._deserialize_artifact_record(item) for item in payload.get("artifacts", [])]
+        raw_artifacts = payload.get("artifacts", [])
+        artifacts = [
+            self._deserialize_artifact_record(item)
+            for item in raw_artifacts
+            if isinstance(item, (dict, str))
+        ] if isinstance(raw_artifacts, list) else []
+        raw_decisions = payload.get("decisions", [])
         decisions = [
             DecisionRecord(
                 topic=item.get("topic", ""),
                 decision=item.get("decision", ""),
                 rationale=item.get("rationale", ""),
-                created_at=item.get("created_at", datetime.now(UTC).isoformat()),
+                created_at=item.get("created_at") or item.get("at") or self._legacy_timestamp_fallback(),
                 metadata=item.get("metadata", {}),
             )
-            for item in payload.get("decisions", [])
+            for item in raw_decisions
+            if isinstance(item, dict)
         ]
         return AgentOutput(
             summary=payload.get("summary", self._summarize_output(payload.get("raw_content", ""))),
@@ -686,7 +710,7 @@ class ProjectState:
                 artifact_type=artifact_type,
                 path=artifact.get("path"),
                 content=artifact.get("content"),
-                created_at=artifact.get("created_at", datetime.now(UTC).isoformat()),
+                created_at=artifact.get("created_at") or self._legacy_timestamp_fallback(),
                 metadata=artifact.get("metadata", {}),
             )
         return ArtifactRecord(name=artifact)

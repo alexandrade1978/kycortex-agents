@@ -183,6 +183,83 @@ def test_load_normalizes_legacy_decision_timestamps_deterministically(tmp_path, 
     assert persisted["decisions"][0]["at"] == "2026-03-22T10:09:00+00:00"
 
 
+@pytest.mark.parametrize("state_filename", ["legacy-artifacts.json", "legacy-artifacts.sqlite"])
+def test_load_normalizes_legacy_artifact_timestamps_deterministically(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Keep artifact timestamps stable",
+        "tasks": [],
+        "decisions": [],
+        "artifacts": [
+            {
+                "name": "architecture.md",
+                "artifact_type": ArtifactType.DOCUMENT.value,
+                "path": "docs/architecture.md",
+                "content": "# Architecture",
+                "metadata": {"source": "architect"},
+            }
+        ],
+        "phase": "failed",
+        "updated_at": "2026-03-22T10:09:00+00:00",
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+    first_snapshot = loaded.snapshot()
+    second_snapshot = loaded.snapshot()
+
+    assert loaded.artifacts[0]["created_at"] == "2026-03-22T10:09:00+00:00"
+    assert first_snapshot.artifacts[0].created_at == "2026-03-22T10:09:00+00:00"
+    assert second_snapshot.artifacts[0].created_at == "2026-03-22T10:09:00+00:00"
+
+    loaded.save()
+    persisted = resolve_state_store(str(state_path)).load(str(state_path))
+
+    assert persisted["artifacts"][0]["created_at"] == "2026-03-22T10:09:00+00:00"
+
+
+@pytest.mark.parametrize("state_filename", ["legacy-load.json", "legacy-load.sqlite"])
+def test_load_uses_loaded_path_as_state_file_when_legacy_payload_omits_it(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Keep saving to the loaded path",
+        "tasks": [],
+        "decisions": [],
+        "artifacts": [],
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.state_file == str(state_path)
+
+
+def test_snapshot_skips_malformed_project_decisions_in_legacy_state():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        updated_at="2026-03-22T10:09:00+00:00",
+        decisions=[
+            "bad-decision-entry",
+            {
+                "topic": "architecture",
+                "decision": "Use layered runtime",
+                "rationale": "Keeps providers isolated",
+            },
+        ],
+    )
+
+    snapshot = project.snapshot()
+
+    assert len(snapshot.decisions) == 1
+    assert snapshot.decisions[0].topic == "architecture"
+    assert snapshot.decisions[0].created_at == "2026-03-22T10:09:00+00:00"
+
+
 def test_load_rejects_invalid_sqlite(tmp_path):
     state_path = tmp_path / "broken.sqlite"
     connection = sqlite3.connect(state_path)
@@ -567,6 +644,71 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.details["task_duration_ms"] == 360000.0
     assert result.details["last_attempt_duration_ms"] == 60000.0
     assert result.details["history"][0]["event"] == "failed"
+
+
+def test_snapshot_preserves_failure_record_for_failed_task_without_output():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            retry_limit=1,
+            attempts=2,
+            status=TaskStatus.FAILED.value,
+            last_error="provider timeout",
+            last_error_type="TimeoutError",
+            last_provider_call={"provider": "openai", "success": False},
+            started_at="2026-03-22T10:00:00+00:00",
+            last_attempt_started_at="2026-03-22T10:05:00+00:00",
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    result = project.snapshot().task_results["code"]
+
+    assert result.status == TaskStatus.FAILED
+    assert result.failure is not None
+    assert result.failure.message == "provider timeout"
+    assert result.failure.error_type == "TimeoutError"
+    assert result.failure.details["provider_call"]["provider"] == "openai"
+
+
+def test_snapshot_ignores_malformed_output_payload_entries():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+            output_payload={
+                "summary": "Architecture summary",
+                "raw_content": "ARCHITECTURE DOC",
+                "artifacts": [
+                    "legacy-report.md",
+                    123,
+                    {"name": "architecture.md", "artifact_type": ArtifactType.DOCUMENT.value},
+                ],
+                "decisions": [
+                    "bad-decision-entry",
+                    {"topic": "runtime", "decision": "Persist snapshots", "rationale": "Supports resume"},
+                ],
+            },
+        )
+    )
+    project.updated_at = "2026-03-22T10:09:00+00:00"
+
+    result = project.snapshot().task_results["arch"]
+
+    assert result.output is not None
+    assert [artifact.name for artifact in result.output.artifacts] == ["legacy-report.md", "architecture.md"]
+    assert result.output.artifacts[1].created_at == "2026-03-22T10:09:00+00:00"
+    assert len(result.output.decisions) == 1
+    assert result.output.decisions[0].decision == "Persist snapshots"
 
 
 def test_save_and_load_preserves_task_history_json(tmp_path):

@@ -11,6 +11,8 @@ from kycortex_agents.providers.base import BaseLLMProvider
 
 
 class OllamaProvider(BaseLLMProvider):
+    """Ollama-backed provider implementation for local or remote open-source models."""
+
     def __init__(
         self,
         config: KYCortexConfig,

@@ -8,6 +8,8 @@ from kycortex_agents.providers.base import BaseLLMProvider
 
 
 class OpenAIProvider(BaseLLMProvider):
+    """OpenAI-backed provider implementation for chat completion models."""
+
     def __init__(self, config: KYCortexConfig, client: Optional[Any] = None):
         self.config = config
         self._client = client

@@ -8,6 +8,8 @@ from kycortex_agents.providers.base import BaseLLMProvider
 
 
 class AnthropicProvider(BaseLLMProvider):
+    """Anthropic-backed provider implementation for Claude message models."""
+
     def __init__(self, config: KYCortexConfig, client: Optional[Any] = None):
         self.config = config
         self._client = client

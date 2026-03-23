@@ -7,6 +7,9 @@ from kycortex_agents import types as types_module
 from kycortex_agents.agents import registry as registry_module
 from kycortex_agents.memory import state_store as state_store_module
 from kycortex_agents.providers import BaseLLMProvider as ProviderBaseLLMProvider
+from kycortex_agents.providers import AnthropicProvider as ProviderAnthropicProvider
+from kycortex_agents.providers import OllamaProvider as ProviderOllamaProvider
+from kycortex_agents.providers import OpenAIProvider as ProviderOpenAIProvider
 from kycortex_agents.providers import factory as provider_factory_module
 from kycortex_agents import (
     AgentRegistry,
@@ -145,6 +148,9 @@ def test_public_package_modules_define_module_docstrings():
 
 def test_public_extension_types_define_class_docstrings():
     assert ProviderBaseLLMProvider.__doc__ == "Abstract provider contract for model-backed agent text generation."
+    assert ProviderOpenAIProvider.__doc__ == "OpenAI-backed provider implementation for chat completion models."
+    assert ProviderAnthropicProvider.__doc__ == "Anthropic-backed provider implementation for Claude message models."
+    assert ProviderOllamaProvider.__doc__ == "Ollama-backed provider implementation for local or remote open-source models."
     assert state_store_module.BaseStateStore.__doc__ == "Abstract persistence backend for saving and loading project state payloads."
     assert registry_module.AgentRegistry.__doc__ == "Registry that normalizes agent keys and resolves workflow agent instances."
 

@@ -191,6 +191,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     docs_readme = docs_readme_path.read_text(encoding="utf-8")
 
     assert "architecture.md" in docs_readme
+    assert "providers.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -229,6 +230,29 @@ def test_docs_architecture_guide_documents_current_runtime_shape():
     assert "OpenAIProvider" in architecture
     assert "AnthropicProvider" in architecture
     assert "OllamaProvider" in architecture
+
+
+def test_docs_provider_guide_documents_current_provider_runtime():
+    provider_guide_path = Path(__file__).resolve().parents[1] / "docs" / "providers.md"
+    provider_guide = provider_guide_path.read_text(encoding="utf-8")
+
+    assert "# Provider Guide" in provider_guide
+    assert "## Provider Architecture" in provider_guide
+    assert "## Common Contract" in provider_guide
+    assert "## Provider Selection" in provider_guide
+    assert "## OpenAI Configuration" in provider_guide
+    assert "## Anthropic Configuration" in provider_guide
+    assert "## Ollama Configuration" in provider_guide
+    assert "## Runtime Validation Rules" in provider_guide
+    assert "## Metadata and Observability" in provider_guide
+    assert "## Error Handling" in provider_guide
+    assert "## Extension Path" in provider_guide
+    assert "BaseLLMProvider" in provider_guide
+    assert "create_provider" in provider_guide
+    assert "OPENAI_API_KEY" in provider_guide
+    assert "ANTHROPIC_API_KEY" in provider_guide
+    assert "http://localhost:11434" in provider_guide
+    assert "AgentExecutionError" in provider_guide
 
 
 def test_docs_readme_documents_supported_environment_variables():

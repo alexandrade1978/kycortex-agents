@@ -32,7 +32,7 @@ test = ["pytest>=7.0.0"]
 [project.urls]
 Homepage = "https://github.com/alexandrade1978/kycortex-agents"
 "Source Code" = "https://github.com/alexandrade1978/kycortex-agents"
-Documentation = "https://kycortex.com"
+Documentation = "https://github.com/alexandrade1978/kycortex-agents/blob/main/docs/README.md"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

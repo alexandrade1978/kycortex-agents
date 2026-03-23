@@ -13,6 +13,8 @@ def test_pyproject_contains_expected_package_metadata():
     assert "Typing :: Typed" in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
     assert "openai>=1.0.0,<2.0.0" in project["dependencies"]
+    assert data["project"]["urls"]["Homepage"] == "https://github.com/alexandrade1978/kycortex-agents"
+    assert data["project"]["urls"]["Documentation"].endswith("/docs/README.md")
 
 
 def test_pyproject_declares_test_extra():
@@ -58,6 +60,7 @@ def test_top_level_contributing_guide_exists_for_readme_reference():
     project_root = Path(__file__).resolve().parents[1]
 
     assert (project_root / "CONTRIBUTING.md").is_file()
+    assert (project_root / "docs" / "README.md").is_file()
 
 
 def test_readme_relative_markdown_links_resolve_to_existing_files():
@@ -68,6 +71,17 @@ def test_readme_relative_markdown_links_resolve_to_existing_files():
     assert relative_targets
     for target in relative_targets:
         assert (project_root / target).is_file(), f"README link target does not exist: {target}"
+
+
+def test_readme_uses_repository_owned_links_in_links_section():
+    readme_path = Path(__file__).resolve().parents[1] / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+
+    assert "https://kycortex.com" not in readme
+    assert "https://kycortex.com/docs" not in readme
+    assert "- **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)" in readme
+    assert "- **Documentation**: [docs/README.md](docs/README.md)" in readme
+    assert "Built by Alexandre Andrade with KYCortex AI." in readme
 
 
 def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():

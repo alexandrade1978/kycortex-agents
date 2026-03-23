@@ -119,10 +119,9 @@ Apache License 2.0 - see [LICENSE](LICENSE)
 
 ## Links
 
-- **Homepage**: [kycortex.com](https://kycortex.com)
-- **Documentation**: [kycortex.com/docs](https://kycortex.com/docs)
-- **GitHub**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)
+- **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)
+- **Documentation**: [docs/README.md](docs/README.md)
 
 ---
 
-**Built with ❤️ by Alexandre Andrade | Powered by KYCortex AI**
+Built by Alexandre Andrade with KYCortex AI.

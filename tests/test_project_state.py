@@ -6,7 +6,7 @@ import pytest
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.memory.state_store import resolve_state_store
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowStatus
 
 
 def test_save_and_load_project_state(tmp_path):
@@ -572,6 +572,47 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.execution_events[0]["event"] == "workflow_started"
     assert snapshot.execution_events[1]["details"]["workflow_duration_ms"] == 360000.0
     assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
+
+
+def test_snapshot_reports_init_workflow_status_for_empty_and_pending_projects():
+    empty_project = ProjectState(project_name="Demo", goal="Build demo")
+    pending_project = ProjectState(project_name="Demo", goal="Build demo")
+    pending_project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+        )
+    )
+
+    assert empty_project.snapshot().workflow_status == WorkflowStatus.INIT
+    assert pending_project.snapshot().workflow_status == WorkflowStatus.INIT
+
+
+def test_snapshot_reports_running_workflow_status_when_any_task_is_running():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.RUNNING.value,
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Docs",
+            description="Document",
+            assigned_to="docs_writer",
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+        )
+    )
+
+    assert project.snapshot().workflow_status == WorkflowStatus.RUNNING
 
 
 def test_save_and_load_preserves_execution_events_json(tmp_path):

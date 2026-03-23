@@ -73,6 +73,17 @@ def test_readme_relative_markdown_links_resolve_to_existing_files():
         assert (project_root / target).is_file(), f"README link target does not exist: {target}"
 
 
+def test_docs_readme_internal_links_resolve_to_existing_files():
+    project_root = Path(__file__).resolve().parents[1]
+    docs_readme = (project_root / "docs" / "README.md").read_text(encoding="utf-8")
+    relative_targets = re.findall(r"\[[^\]]+\]\(((?!https?://)[^)#]+)\)", docs_readme)
+
+    assert relative_targets
+    docs_root = project_root / "docs"
+    for target in relative_targets:
+        assert (docs_root / target).exists(), f"docs/README.md link target does not exist: {target}"
+
+
 def test_readme_uses_repository_owned_links_in_links_section():
     readme_path = Path(__file__).resolve().parents[1] / "README.md"
     readme = readme_path.read_text(encoding="utf-8")
@@ -82,6 +93,23 @@ def test_readme_uses_repository_owned_links_in_links_section():
     assert "- **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)" in readme
     assert "- **Documentation**: [docs/README.md](docs/README.md)" in readme
     assert "Built by Alexandre Andrade with KYCortex AI." in readme
+
+
+def test_docs_readme_covers_current_public_navigation_surfaces():
+    docs_readme_path = Path(__file__).resolve().parents[1] / "docs" / "README.md"
+    docs_readme = docs_readme_path.read_text(encoding="utf-8")
+
+    assert "## Public API Navigation" in docs_readme
+    assert "## Module Guides" in docs_readme
+    assert "## Examples And Usage" in docs_readme
+    assert "kycortex_agents/config.py" in docs_readme
+    assert "kycortex_agents/orchestrator.py" in docs_readme
+    assert "kycortex_agents/types.py" in docs_readme
+    assert "kycortex_agents/exceptions.py" in docs_readme
+    assert "kycortex_agents/providers" in docs_readme
+    assert "kycortex_agents/memory" in docs_readme
+    assert "kycortex_agents/workflows" in docs_readme
+    assert "examples/example_simple_project.py" in docs_readme
 
 
 def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():

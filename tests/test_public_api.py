@@ -1,4 +1,5 @@
 import kycortex_agents
+from pathlib import Path
 from kycortex_agents import config as config_module
 from kycortex_agents import exceptions as exceptions_module
 from kycortex_agents import types as types_module
@@ -134,3 +135,19 @@ def test_root_package_does_not_expose_internal_runtime_helpers():
     assert not hasattr(kycortex_agents, "_build_context")
     assert not hasattr(kycortex_agents, "_execute_agent")
     assert not hasattr(kycortex_agents, "_normalize_agent_result")
+
+
+def test_readme_quick_start_uses_top_level_public_imports():
+    readme_path = Path(__file__).resolve().parents[1] / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in readme
+    assert "from kycortex_agents.workflows import Orchestrator, ProjectState, Task" not in readme
+
+
+def test_example_uses_top_level_public_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.workflows import Orchestrator, ProjectState, Task" not in example

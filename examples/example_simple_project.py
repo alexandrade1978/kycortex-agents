@@ -1,5 +1,4 @@
-from kycortex_agents import KYCortexConfig
-from kycortex_agents.workflows import Orchestrator, ProjectState, Task
+from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
 
 if __name__ == "__main__":
     config = KYCortexConfig(

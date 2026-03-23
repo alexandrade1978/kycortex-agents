@@ -55,6 +55,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `Makefile` targets and shared `.editorconfig` defaults when working locally.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for local `ruff` and `mypy` validation commands when checking the package and examples before opening a pull request.
+- Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `.pre-commit-config.yaml` workflow when installing local hooks or running pre-commit and pre-push automation before publishing changes.
 
 ## Environment Variables
 
@@ -68,4 +69,4 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Planned Expansion
 
-Phase 11 is expanding the example suite and developer experience beyond the current example suite with shared local tooling such as the repository `Makefile`, `.editorconfig`, local `ruff` and `mypy` validation commands, and more advanced workflow examples.
+Phase 11 is expanding the example suite and developer experience beyond the current example suite with shared local tooling such as the repository `Makefile`, `.editorconfig`, `.pre-commit-config.yaml`, local `ruff` and `mypy` validation commands, and more advanced workflow examples.

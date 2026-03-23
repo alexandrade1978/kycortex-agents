@@ -50,6 +50,7 @@ def test_pyproject_declares_test_extra():
     assert optional_dependencies["test"] == [
         "pytest>=7.0.0",
         "mypy>=1.10,<2.0",
+        "pre-commit>=3.7,<5.0",
         "ruff>=0.6,<1.0",
     ]
 
@@ -111,6 +112,7 @@ def test_manifest_in_exists_and_covers_core_distribution_assets():
     assert "include CONTRIBUTING.md" in manifest
     assert "include Makefile" in manifest
     assert "include .editorconfig" in manifest
+    assert "include .pre-commit-config.yaml" in manifest
     assert "recursive-include docs *.md" in manifest
     assert "recursive-include examples *.py" in manifest
     assert "recursive-include kycortex_agents py.typed" in manifest
@@ -126,6 +128,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
     assert "Requires-Dist: pytest>=7.0.0; extra == \"test\"" in metadata
     assert "Requires-Dist: mypy<2.0,>=1.10; extra == \"test\"" in metadata
+    assert "Requires-Dist: pre-commit<5.0,>=3.7; extra == \"test\"" in metadata
     assert "Requires-Dist: ruff<1.0,>=0.6; extra == \"test\"" in metadata
     assert "https://kycortex.com" not in metadata
     assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in metadata
@@ -134,6 +137,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "anthropic<1.0.0,>=0.34.0" in requirements
     assert "openai<2.0.0,>=1.0.0" in requirements
     assert "mypy<2.0,>=1.10" in requirements
+    assert "pre-commit<5.0,>=3.7" in requirements
     assert "ruff<1.0,>=0.6" in requirements
 
 
@@ -143,6 +147,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
 
     expected_members = {
         ".editorconfig",
+        ".pre-commit-config.yaml",
         "CONTRIBUTING.md",
         "Makefile",
         "docs/README.md",
@@ -182,7 +187,13 @@ def test_contributing_guide_documents_test_command_tiers():
     contributing = contributing_path.read_text(encoding="utf-8")
 
     assert "make setup" in contributing
+    assert "make install-hooks" in contributing
     assert "Suggested Test Commands" in contributing
+    assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in contributing
+    assert "python -m pre_commit run --all-files" in contributing
+    assert "python -m pre_commit run --all-files --hook-stage pre-push" in contributing
+    assert "make precommit" in contributing
+    assert "make prepush" in contributing
     assert "python -m ruff check ." in contributing
     assert "python -m mypy" in contributing
     assert "make lint" in contributing
@@ -199,9 +210,13 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     project_root = Path(__file__).resolve().parents[1]
     makefile = (project_root / "Makefile").read_text(encoding="utf-8")
     editorconfig = (project_root / ".editorconfig").read_text(encoding="utf-8")
+    precommit_config = (project_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
 
-    assert ".PHONY: setup lint typecheck test-public test-metadata test" in makefile
+    assert ".PHONY: setup install-hooks precommit prepush lint typecheck test-public test-metadata test" in makefile
     assert 'python -m pip install -e ".[test]"' in makefile
+    assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile
+    assert "python -m pre_commit run --all-files" in makefile
+    assert "python -m pre_commit run --all-files --hook-stage pre-push" in makefile
     assert "python -m ruff check ." in makefile
     assert "python -m mypy" in makefile
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
@@ -212,6 +227,13 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     assert "indent_size = 4" in editorconfig
     assert "[Makefile]" in editorconfig
     assert "indent_style = tab" in editorconfig
+    assert 'minimum_pre_commit_version: "3.7.0"' in precommit_config
+    assert "stages: [pre-commit, manual]" in precommit_config
+    assert "stages: [pre-push, manual]" in precommit_config
+    assert "entry: .venv/bin/python" in precommit_config
+    assert 'args: ["-m", "ruff", "check", "."]' in precommit_config
+    assert 'args: ["-m", "mypy"]' in precommit_config
+    assert 'args: ["-m", "pytest", "tests/test_public_api.py", "tests/test_package_metadata.py", "-q"]' in precommit_config
 
 
 def test_readme_relative_markdown_links_resolve_to_existing_files():
@@ -287,6 +309,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "persisted failed workflows reload and continue" in docs_readme
     assert "snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events" in docs_readme
     assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
+    assert "repository `.pre-commit-config.yaml` workflow" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 

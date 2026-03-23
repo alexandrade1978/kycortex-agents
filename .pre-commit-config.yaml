@@ -1,0 +1,28 @@
+minimum_pre_commit_version: "3.7.0"
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: .venv/bin/python
+        args: ["-m", "ruff", "check", "."]
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, manual]
+
+      - id: mypy
+        name: mypy
+        entry: .venv/bin/python
+        args: ["-m", "mypy"]
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, manual]
+
+      - id: focused-public-and-metadata-tests
+        name: focused public and metadata tests
+        entry: .venv/bin/python
+        args: ["-m", "pytest", "tests/test_public_api.py", "tests/test_package_metadata.py", "-q"]
+        language: system
+        pass_filenames: false
+        stages: [pre-push, manual]

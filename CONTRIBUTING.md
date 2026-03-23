@@ -14,6 +14,7 @@ If you prefer command aliases for the common local workflow, the repository also
 
 ```bash
 make setup
+make install-hooks
 ```
 
 ## Workflow
@@ -24,6 +25,22 @@ make setup
 4. Run the full test suite before opening a pull request.
 
 ### Suggested Test Commands
+
+- Install the repository hook automation locally:
+
+```bash
+python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push
+make install-hooks
+```
+
+- Run the full pre-commit automation locally before pushing:
+
+```bash
+python -m pre_commit run --all-files
+python -m pre_commit run --all-files --hook-stage pre-push
+make precommit
+make prepush
+```
 
 - Local lint and type-check baseline:
 
@@ -59,8 +76,10 @@ make test
 
 - `Makefile`: convenient aliases for setup and the main validation commands.
 - `.editorconfig`: shared line-ending, indentation, and trailing-whitespace defaults for Python, Markdown, TOML, YAML, and Makefile edits.
+- `.pre-commit-config.yaml`: repository-local pre-commit and pre-push automation for linting, type checking, and focused public-surface regressions.
 - `ruff`: repository lint baseline for the package, examples, tests, and docs-adjacent Python files.
 - `mypy`: local type-check baseline for `kycortex_agents` and `examples`, with third-party `anthropic` imports excluded from stub enforcement.
+- `pre-commit`: local hook runner that executes the repository-owned `ruff`, `mypy`, and focused pytest checks before commits and pushes.
 
 ## Pull Requests
 

@@ -1,7 +1,16 @@
-.PHONY: setup lint typecheck test-public test-metadata test
+.PHONY: setup install-hooks precommit prepush lint typecheck test-public test-metadata test
 
 setup:
 	python -m pip install -e ".[test]"
+
+install-hooks:
+	python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push
+
+precommit:
+	python -m pre_commit run --all-files
+
+prepush:
+	python -m pre_commit run --all-files --hook-stage pre-push
 
 lint:
 	python -m ruff check .

@@ -3,6 +3,7 @@ include README.md
 include CONTRIBUTING.md
 include Makefile
 include .editorconfig
+include .pre-commit-config.yaml
 recursive-include docs *.md
 recursive-include examples *.py
 recursive-include kycortex_agents py.typed

@@ -147,6 +147,17 @@ def test_public_package_modules_define_module_docstrings():
     assert kycortex_agents.workflows.__doc__ == "Public workflow-facing imports for orchestration state, tasks, and statuses."
 
 
+def test_public_config_and_factory_modules_define_docstrings():
+    assert config_module.__doc__ == "Public runtime configuration model and provider environment-variable mappings."
+    assert config_module.KYCortexConfig.__doc__ == "Public runtime configuration for providers, workflow behavior, and outputs."
+    assert config_module.KYCortexConfig.__post_init__.__doc__ == "Normalize defaults, resolve provider settings, validate config, and create output storage."
+    assert config_module.KYCortexConfig._resolve_api_key.__doc__ == "Resolve the configured provider API key from the matching environment variable."
+    assert config_module.KYCortexConfig._validate_static_config.__doc__ == "Validate static configuration values that do not require provider instantiation."
+    assert config_module.KYCortexConfig.validate_runtime.__doc__ == "Validate provider-specific runtime requirements such as credentials and base URLs."
+    assert provider_factory_module.__doc__ == "Public provider-factory helpers for resolving built-in LLM backends."
+    assert provider_factory_module.create_provider.__doc__ == "Instantiate the built-in provider configured by the supplied runtime settings."
+
+
 def test_public_type_module_defines_docstrings():
     assert types_module.__doc__ == "Public typed contracts for agent input/output, workflow state, and persisted records."
     assert types_module.utc_now_iso.__doc__ == "Return the current UTC timestamp in ISO-8601 format."

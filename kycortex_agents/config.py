@@ -1,3 +1,5 @@
+"""Public runtime configuration model and provider environment-variable mappings."""
+
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -24,7 +26,7 @@ __all__ = [
 
 @dataclass
 class KYCortexConfig:
-    """Global configuration for KYCortex agent system."""
+    """Public runtime configuration for providers, workflow behavior, and outputs."""
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o"
     api_key: Optional[str] = None
@@ -39,6 +41,8 @@ class KYCortexConfig:
     log_level: str = "INFO"
 
     def __post_init__(self):
+        """Normalize defaults, resolve provider settings, validate config, and create output storage."""
+
         self.llm_provider = self.llm_provider.strip().lower()
         if self.api_key is None:
             self.api_key = self._resolve_api_key()
@@ -48,12 +52,16 @@ class KYCortexConfig:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def _resolve_api_key(self) -> str:
+        """Resolve the configured provider API key from the matching environment variable."""
+
         env_var = PROVIDER_ENV_VARS.get(self.llm_provider)
         if env_var is None:
             return ""
         return os.environ.get(env_var, "")
 
     def _validate_static_config(self):
+        """Validate static configuration values that do not require provider instantiation."""
+
         if not self.llm_provider:
             raise ConfigValidationError("llm_provider must not be empty")
         if not self.llm_model.strip():
@@ -78,6 +86,8 @@ class KYCortexConfig:
             )
 
     def validate_runtime(self):
+        """Validate provider-specific runtime requirements such as credentials and base URLs."""
+
         if self.llm_provider not in PROVIDER_ENV_VARS:
             raise ConfigValidationError(f"Unsupported provider in configuration: {self.llm_provider}")
         env_var = PROVIDER_ENV_VARS[self.llm_provider]

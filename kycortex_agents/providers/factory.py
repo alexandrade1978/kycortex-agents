@@ -1,3 +1,5 @@
+"""Public provider-factory helpers for resolving built-in LLM backends."""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -13,6 +15,8 @@ __all__ = ["create_provider"]
 
 
 def create_provider(config: KYCortexConfig) -> BaseLLMProvider:
+    """Instantiate the built-in provider configured by the supplied runtime settings."""
+
     provider_name = config.llm_provider.lower().strip()
     provider_map = {
         "anthropic": AnthropicProvider,

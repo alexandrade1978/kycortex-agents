@@ -193,6 +193,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "architecture.md" in docs_readme
     assert "providers.md" in docs_readme
     assert "workflows.md" in docs_readme
+    assert "persistence.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -206,6 +207,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "examples/example_simple_project.py" in docs_readme
     assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
     assert "task dependencies, failure policies, and resume policies" in docs_readme
+    assert "JSON and SQLite state files or when debugging resume behavior" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 
@@ -280,6 +282,30 @@ def test_docs_workflow_guide_documents_current_workflow_runtime():
     assert "workflow_failure_policy" in workflow_guide
     assert "workflow_resume_policy" in workflow_guide
     assert "resume_failed_tasks()" in workflow_guide
+
+
+def test_docs_persistence_guide_documents_current_state_runtime():
+    persistence_guide_path = Path(__file__).resolve().parents[1] / "docs" / "persistence.md"
+    persistence_guide = persistence_guide_path.read_text(encoding="utf-8")
+
+    assert "# Persistence Guide" in persistence_guide
+    assert "## Persistence Model" in persistence_guide
+    assert "## Backend Selection" in persistence_guide
+    assert "## JSON Backend" in persistence_guide
+    assert "## SQLite Backend" in persistence_guide
+    assert "## Save And Load Lifecycle" in persistence_guide
+    assert "## Resume And Recovery" in persistence_guide
+    assert "## Snapshot Inspection" in persistence_guide
+    assert "## Legacy Compatibility" in persistence_guide
+    assert "## Failure Modes" in persistence_guide
+    assert "## Common Patterns" in persistence_guide
+    assert "ProjectState" in persistence_guide
+    assert "JsonStateStore" in persistence_guide
+    assert "SqliteStateStore" in persistence_guide
+    assert "resolve_state_store" in persistence_guide
+    assert "StatePersistenceError" in persistence_guide
+    assert "workflow_resume_policy=\"resume_failed\"" in persistence_guide
+    assert "snapshot()" in persistence_guide
 
 
 def test_docs_readme_documents_supported_environment_variables():

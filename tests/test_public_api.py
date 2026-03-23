@@ -151,3 +151,14 @@ def test_example_uses_top_level_public_imports():
 
     assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in example
     assert "from kycortex_agents.workflows import Orchestrator, ProjectState, Task" not in example
+
+
+def test_example_defines_dependency_aware_workflow_chain():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'id="task_1_arch"' in example
+    assert 'id="task_2_code"' in example
+    assert 'id="task_3_review"' in example
+    assert 'dependencies=["task_1_arch"]' in example
+    assert 'dependencies=["task_2_code"]' in example

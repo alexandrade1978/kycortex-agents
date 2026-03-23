@@ -23,14 +23,16 @@ if __name__ == "__main__":
         id="task_2_code",
         title="Implement code",
         description="Write the FastAPI application code based on architecture.",
-        assigned_to="code_engineer"
+        assigned_to="code_engineer",
+        dependencies=["task_1_arch"],
     ))
 
     project.add_task(Task(
         id="task_3_review",
         title="Code review",
         description="Review the FastAPI code for issues.",
-        assigned_to="code_reviewer"
+        assigned_to="code_reviewer",
+        dependencies=["task_2_code"],
     ))
 
     orchestrator = Orchestrator(config)

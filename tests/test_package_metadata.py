@@ -200,6 +200,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "kycortex_agents/workflows" in docs_readme
     assert "examples/example_simple_project.py" in docs_readme
     assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
+    assert "task dependencies, failure policies, and resume policies" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 
@@ -245,6 +246,18 @@ def test_readme_documents_current_package_layout_and_provider_support():
     assert "├── workflows/      # Public workflow module surface" in readme
     assert "└── types.py        # Public typed contracts" in readme
     assert "Support for multiple LLM providers (Anthropic, local models)" not in readme
+
+
+def test_readme_documents_workflow_resilience_controls():
+    readme_path = Path(__file__).resolve().parents[1] / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+
+    assert "Supports task dependencies, topological ordering, configurable failure policies, and resumable execution" in readme
+    assert 'workflow_failure_policy="continue"' in readme
+    assert 'workflow_resume_policy="resume_failed"' in readme
+    assert 'workflow_failure_policy="fail_fast"' in readme
+    assert 'workflow_resume_policy="interrupted_only"' in readme
+    assert "dependencies=[...]" in readme
 
 
 def test_readme_quick_start_model_matches_packaged_example():

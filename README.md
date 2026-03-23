@@ -8,6 +8,7 @@ KYCortex is an open-source framework that simulates an entire AI software house 
 
 - **Orchestrator**: Coordinates all agents, manages workflow state, and ensures tasks are completed in order
 - **Multi-provider runtime**: Supports OpenAI, Anthropic, and Ollama through a shared provider interface
+- **Workflow resilience**: Supports task dependencies, topological ordering, configurable failure policies, and resumable execution after interruptions or failed runs
 - **Specialized Agents**:
   - **Architect**: Designs software architecture and module structure
   - **Code Engineer**: Writes production-quality Python code
@@ -103,6 +104,26 @@ config = KYCortexConfig(
     output_dir="./output"
 )
 ```
+
+Workflow control example:
+
+```python
+config = KYCortexConfig(
+    llm_provider="openai",
+    llm_model="gpt-4o-mini",
+    workflow_failure_policy="continue",
+    workflow_resume_policy="resume_failed",
+    project_name="my-project",
+    output_dir="./output"
+)
+```
+
+- `workflow_failure_policy="fail_fast"`: stop the workflow on the first terminal task failure.
+- `workflow_failure_policy="continue"`: allow independent work to continue while dependency-blocked descendants are skipped.
+- `workflow_resume_policy="interrupted_only"`: resume only tasks that were in flight when execution stopped.
+- `workflow_resume_policy="resume_failed"`: re-queue failed tasks and dependency-skipped descendants for another run.
+
+Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow graph, as shown in `examples/example_simple_project.py`.
 
 ## Architecture
 

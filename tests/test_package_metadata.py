@@ -195,6 +195,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "workflows.md" in docs_readme
     assert "persistence.md" in docs_readme
     assert "extensions.md" in docs_readme
+    assert "troubleshooting.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -210,6 +211,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "task dependencies, failure policies, and resume policies" in docs_readme
     assert "JSON and SQLite state files or when debugging resume behavior" in docs_readme
     assert "custom agents, registries, providers, or persistence backends" in docs_readme
+    assert "debugging configuration failures, blocked workflows, retries, or persisted-state recovery" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 
@@ -333,6 +335,31 @@ def test_docs_extension_guide_documents_current_extension_surface():
     assert "after_execute()" in extension_guide
     assert "get_last_call_metadata()" in extension_guide
     assert "StatePersistenceError" in extension_guide
+
+
+def test_docs_troubleshooting_guide_documents_current_failure_surface():
+    troubleshooting_path = Path(__file__).resolve().parents[1] / "docs" / "troubleshooting.md"
+    troubleshooting = troubleshooting_path.read_text(encoding="utf-8")
+
+    assert "# Troubleshooting Guide" in troubleshooting
+    assert "## Failure Surface Overview" in troubleshooting
+    assert "## Configuration Problems" in troubleshooting
+    assert "## Provider And Agent Failures" in troubleshooting
+    assert "## Unknown Agents And Invalid Workflows" in troubleshooting
+    assert "## Blocked Workflows" in troubleshooting
+    assert "## Retries And Resume Behavior" in troubleshooting
+    assert "## Persistence Failures" in troubleshooting
+    assert "## Inspecting Persisted State" in troubleshooting
+    assert "## Recovery Patterns" in troubleshooting
+    assert "## Audit Trail Signals" in troubleshooting
+    assert "## Preventive Practices" in troubleshooting
+    assert "ConfigValidationError" in troubleshooting
+    assert "AgentExecutionError" in troubleshooting
+    assert "StatePersistenceError" in troubleshooting
+    assert "WorkflowDefinitionError" in troubleshooting
+    assert "workflow_blocked" in troubleshooting
+    assert "workflow_resume_policy=\"resume_failed\"" in troubleshooting
+    assert "snapshot()" in troubleshooting
 
 
 def test_docs_readme_documents_supported_environment_variables():

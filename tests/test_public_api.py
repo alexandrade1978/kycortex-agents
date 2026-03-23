@@ -5,6 +5,7 @@ from kycortex_agents import config as config_module
 from kycortex_agents import exceptions as exceptions_module
 from kycortex_agents import types as types_module
 from kycortex_agents.agents import registry as registry_module
+from kycortex_agents.memory import project_state as project_state_module
 from kycortex_agents.memory import state_store as state_store_module
 from kycortex_agents.providers import BaseLLMProvider as ProviderBaseLLMProvider
 from kycortex_agents.providers import AnthropicProvider as ProviderAnthropicProvider
@@ -165,6 +166,36 @@ def test_public_extension_types_define_method_docstrings():
     assert registry_module.AgentRegistry.has.__doc__ == "Return whether an agent is registered for the normalized key."
     assert registry_module.AgentRegistry.keys.__doc__ == "Return the normalized registry keys currently available."
     assert registry_module.AgentRegistry.normalize_key.__doc__ == "Normalize a registry key so workflow task assignments resolve consistently."
+
+
+def test_project_state_public_api_defines_docstrings():
+    assert project_state_module.Task.__doc__ == "Serializable workflow task record tracked inside a project state."
+    assert project_state_module.ProjectState.__doc__ == "Mutable workflow state for tasks, decisions, artifacts, and execution metadata."
+    assert project_state_module.ProjectState.add_task.__doc__ == "Append a task to the workflow and refresh the project timestamp."
+    assert project_state_module.ProjectState.get_task.__doc__ == "Return the task with the matching identifier, if it exists."
+    assert project_state_module.ProjectState.is_task_ready.__doc__ == "Return whether a pending task has all dependencies completed."
+    assert project_state_module.ProjectState.start_task.__doc__ == "Mark a task as running and record timing plus audit metadata."
+    assert project_state_module.ProjectState.fail_task.__doc__ == "Record a task failure, re-queueing it when retry budget remains."
+    assert project_state_module.ProjectState.complete_task.__doc__ == "Mark a task complete and persist its raw or structured output payload."
+    assert project_state_module.ProjectState.resume_interrupted_tasks.__doc__ == "Re-queue tasks left running by an interrupted workflow execution."
+    assert project_state_module.ProjectState.resume_failed_tasks.__doc__ == "Re-queue failed tasks and dependency-skipped descendants for another run."
+    assert project_state_module.ProjectState.should_retry_task.__doc__ == "Return whether a pending task is currently in its retry window."
+    assert project_state_module.ProjectState.add_decision.__doc__ == "Append a lightweight project-level decision entry with a fresh timestamp."
+    assert project_state_module.ProjectState.add_decision_record.__doc__ == "Append a structured decision record to the project history."
+    assert project_state_module.ProjectState.add_artifact_record.__doc__ == "Append a structured artifact record to the project artifact list."
+    assert project_state_module.ProjectState.mark_workflow_running.__doc__ == "Mark the workflow execution as active and emit a workflow-start event."
+    assert project_state_module.ProjectState.mark_workflow_finished.__doc__ == "Mark the workflow finished under the supplied phase label."
+    assert project_state_module.ProjectState.save.__doc__ == "Persist the current project state through the configured state-store backend."
+    assert project_state_module.ProjectState.load.__doc__ == "Load a project state from disk and normalize legacy persisted fields."
+    assert project_state_module.ProjectState.pending_tasks.__doc__ == "Return all tasks that are still pending execution."
+    assert project_state_module.ProjectState.execution_plan.__doc__ == "Return tasks in dependency-safe topological execution order."
+    assert project_state_module.ProjectState.runnable_tasks.__doc__ == "Return pending tasks whose dependencies are already satisfied."
+    assert project_state_module.ProjectState.blocked_tasks.__doc__ == "Return pending tasks that are blocked by unfinished dependencies."
+    assert project_state_module.ProjectState.skip_task.__doc__ == "Mark a task skipped and clear stale execution payloads or timing data."
+    assert project_state_module.ProjectState.skip_dependent_tasks.__doc__ == "Skip all pending descendants of a failed dependency and return their ids."
+    assert project_state_module.ProjectState.task_results.__doc__ == "Return normalized task-result snapshots keyed by task identifier."
+    assert project_state_module.ProjectState.snapshot.__doc__ == "Build a normalized project snapshot for downstream orchestration and inspection."
+    assert project_state_module.ProjectState.summary.__doc__ == "Return a compact human-readable summary of workflow progress."
 
 
 def test_root_package_does_not_expose_internal_runtime_helpers():

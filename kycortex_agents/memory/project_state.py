@@ -20,6 +20,8 @@ from kycortex_agents.types import (
 
 @dataclass
 class Task:
+    """Serializable workflow task record tracked inside a project state."""
+
     id: str
     title: str
     description: str
@@ -43,6 +45,8 @@ class Task:
 
 @dataclass
 class ProjectState:
+    """Mutable workflow state for tasks, decisions, artifacts, and execution metadata."""
+
     project_name: str
     goal: str
     tasks: List[Task] = field(default_factory=list)
@@ -57,16 +61,22 @@ class ProjectState:
     state_file: str = "project_state.json"
 
     def add_task(self, task: Task):
+        """Append a task to the workflow and refresh the project timestamp."""
+
         self.tasks.append(task)
         self._touch()
 
     def get_task(self, task_id: str) -> Optional[Task]:
+        """Return the task with the matching identifier, if it exists."""
+
         for task in self.tasks:
             if task.id == task_id:
                 return task
         return None
 
     def is_task_ready(self, task: Task) -> bool:
+        """Return whether a pending task has all dependencies completed."""
+
         if task.status != TaskStatus.PENDING.value:
             return False
         for dependency_id in task.dependencies:
@@ -78,6 +88,8 @@ class ProjectState:
         return True
 
     def start_task(self, task_id: str):
+        """Mark a task as running and record timing plus audit metadata."""
+
         for task in self.tasks:
             if task.id == task_id:
                 started_at = datetime.now(UTC).isoformat()
@@ -100,6 +112,8 @@ class ProjectState:
                 return
 
     def fail_task(self, task_id: str, error: str | Exception, provider_call: Optional[Dict[str, Any]] = None):
+        """Record a task failure, re-queueing it when retry budget remains."""
+
         for task in self.tasks:
             if task.id == task_id:
                 error_message = str(error)
@@ -147,6 +161,8 @@ class ProjectState:
                 return
 
     def complete_task(self, task_id: str, output: str | AgentOutput, provider_call: Optional[Dict[str, Any]] = None):
+        """Mark a task complete and persist its raw or structured output payload."""
+
         for t in self.tasks:
             if t.id == task_id:
                 t.status = TaskStatus.DONE.value
@@ -177,6 +193,8 @@ class ProjectState:
                 self._touch(t.completed_at)
 
     def resume_interrupted_tasks(self) -> List[str]:
+        """Re-queue tasks left running by an interrupted workflow execution."""
+
         resumed_task_ids: List[str] = []
         resumed_at: Optional[str] = None
         for task in self.tasks:
@@ -210,6 +228,8 @@ class ProjectState:
         return resumed_task_ids
 
     def resume_failed_tasks(self) -> List[str]:
+        """Re-queue failed tasks and dependency-skipped descendants for another run."""
+
         failed_task_ids = [task.id for task in self.tasks if task.status == TaskStatus.FAILED.value]
         if not failed_task_ids:
             return []
@@ -268,16 +288,22 @@ class ProjectState:
         return self._matching_dependency_failed_reason_task_id(task) is not None
 
     def should_retry_task(self, task_id: str) -> bool:
+        """Return whether a pending task is currently in its retry window."""
+
         task = self.get_task(task_id)
         if task is None:
             return False
         return task.status == TaskStatus.PENDING.value and task.attempts > 0 and task.attempts <= task.retry_limit
 
     def add_decision(self, topic: str, decision: str, rationale: str):
+        """Append a lightweight project-level decision entry with a fresh timestamp."""
+
         self.decisions.append({"topic": topic, "decision": decision, "rationale": rationale, "at": datetime.now(UTC).isoformat()})
         self._touch()
 
     def add_decision_record(self, record: DecisionRecord):
+        """Append a structured decision record to the project history."""
+
         self.decisions.append(
             {
                 "topic": record.topic,
@@ -290,10 +316,14 @@ class ProjectState:
         self._touch(record.created_at)
 
     def add_artifact_record(self, record: ArtifactRecord):
+        """Append a structured artifact record to the project artifact list."""
+
         self.artifacts.append(asdict(record))
         self._touch(record.created_at)
 
     def mark_workflow_running(self):
+        """Mark the workflow execution as active and emit a workflow-start event."""
+
         started_at = datetime.now(UTC).isoformat()
         if self.workflow_started_at is None:
             self.workflow_started_at = started_at
@@ -303,6 +333,8 @@ class ProjectState:
         self._touch(started_at)
 
     def mark_workflow_finished(self, phase: str):
+        """Mark the workflow finished under the supplied phase label."""
+
         finished_at = datetime.now(UTC).isoformat()
         self.phase = phase
         self.workflow_finished_at = finished_at
@@ -315,12 +347,16 @@ class ProjectState:
         self._touch(finished_at)
 
     def save(self):
+        """Persist the current project state through the configured state-store backend."""
+
         self._touch()
         state_store = resolve_state_store(self.state_file)
         state_store.save(self.state_file, asdict(self))
 
     @classmethod
     def load(cls, path: str) -> "ProjectState":
+        """Load a project state from disk and normalize legacy persisted fields."""
+
         data = resolve_state_store(path).load(path)
         tasks = [Task(**t) for t in data.pop("tasks", [])]
         try:
@@ -413,9 +449,13 @@ class ProjectState:
         return dependency_id
 
     def pending_tasks(self) -> List[Task]:
+        """Return all tasks that are still pending execution."""
+
         return [t for t in self.tasks if t.status == TaskStatus.PENDING.value]
 
     def execution_plan(self) -> List[Task]:
+        """Return tasks in dependency-safe topological execution order."""
+
         task_by_id = {task.id: task for task in self.tasks}
         indegree: Dict[str, int] = {task.id: 0 for task in self.tasks}
         adjacency: Dict[str, List[str]] = {task.id: [] for task in self.tasks}
@@ -447,9 +487,13 @@ class ProjectState:
         return [task_by_id[task_id] for task_id in ordered_ids]
 
     def runnable_tasks(self) -> List[Task]:
+        """Return pending tasks whose dependencies are already satisfied."""
+
         return [task for task in self.execution_plan() if self.is_task_ready(task)]
 
     def blocked_tasks(self) -> List[Task]:
+        """Return pending tasks that are blocked by unfinished dependencies."""
+
         return [
             task
             for task in self.execution_plan()
@@ -457,6 +501,8 @@ class ProjectState:
         ]
 
     def skip_task(self, task_id: str, reason: str, reason_type: str = "manual"):
+        """Mark a task skipped and clear stale execution payloads or timing data."""
+
         task = self.get_task(task_id)
         if task is None:
             return
@@ -482,6 +528,8 @@ class ProjectState:
         self._touch(task.completed_at)
 
     def skip_dependent_tasks(self, dependency_id: str, reason: str) -> List[str]:
+        """Skip all pending descendants of a failed dependency and return their ids."""
+
         skipped: List[str] = []
         dependents_map: Dict[str, List[Task]] = {}
         for task in self.tasks:
@@ -503,6 +551,8 @@ class ProjectState:
         return skipped
 
     def task_results(self) -> Dict[str, TaskResult]:
+        """Return normalized task-result snapshots keyed by task identifier."""
+
         results: Dict[str, TaskResult] = {}
         for task in self.tasks:
             task_status = self._normalize_task_status(task.status)
@@ -552,6 +602,8 @@ class ProjectState:
         return results
 
     def snapshot(self) -> ProjectSnapshot:
+        """Build a normalized project snapshot for downstream orchestration and inspection."""
+
         self._normalize_legacy_decision_timestamps()
         self._normalize_legacy_artifact_timestamps()
         return ProjectSnapshot(
@@ -737,5 +789,7 @@ class ProjectState:
         return ArtifactType.TEXT
 
     def summary(self) -> str:
+        """Return a compact human-readable summary of workflow progress."""
+
         done = sum(1 for t in self.tasks if t.status == TaskStatus.DONE.value)
         return f"Project: {self.project_name} | Phase: {self.phase} | Tasks: {done}/{len(self.tasks)} done"

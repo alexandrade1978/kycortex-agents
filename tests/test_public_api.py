@@ -271,6 +271,14 @@ def test_custom_agent_example_uses_top_level_public_imports():
     assert "from kycortex_agents.workflows import" not in example
 
 
+def test_multi_provider_example_uses_top_level_public_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_multi_provider.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import KYCortexConfig, ProjectState, Task" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
 def test_example_defines_dependency_aware_workflow_chain():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
     example = example_path.read_text(encoding="utf-8")
@@ -307,3 +315,19 @@ def test_custom_agent_example_documents_public_extension_flow():
     assert 'assigned_to="summary_agent"' in example
     assert 'dependencies=["arch"]' in example
     assert 'Orchestrator(config, registry=registry)' in example
+
+
+def test_multi_provider_example_documents_supported_provider_switching():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_multi_provider.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'def build_provider_configs() -> dict[str, KYCortexConfig]:' in example
+    assert 'llm_provider="openai"' in example
+    assert 'llm_provider="anthropic"' in example
+    assert 'llm_provider="ollama"' in example
+    assert 'llm_model="gpt-4o-mini"' in example
+    assert 'llm_model="claude-3-5-sonnet-latest"' in example
+    assert 'llm_model="llama3"' in example
+    assert 'base_url="http://localhost:11434"' in example
+    assert 'dependencies=["arch"]' in example
+    assert 'Use one of these configurations with Orchestrator(config).execute_workflow(project).' in example

@@ -513,7 +513,7 @@ class ProjectState:
                     "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     "history": task.history,
                 },
-                started_at=task.started_at or task.created_at,
+                started_at=task.started_at,
                 completed_at=task.completed_at,
             )
         return results

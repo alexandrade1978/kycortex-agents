@@ -793,6 +793,7 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert task.last_attempt_started_at is None
     assert task.last_resumed_at is None
     assert result.status == TaskStatus.SKIPPED
+    assert result.started_at is None
     assert result.output is not None
     assert result.output.summary == "Skipped because dependency 'arch' failed"
     assert result.details["last_provider_call"] is None
@@ -801,3 +802,22 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.details["last_resumed_at"] is None
     assert result.details["task_duration_ms"] is None
     assert result.details["last_attempt_duration_ms"] is None
+
+
+def test_snapshot_does_not_expose_created_at_as_started_at_for_never_started_tasks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Docs",
+            description="Document",
+            assigned_to="docs_writer",
+            created_at="2026-03-22T10:00:00+00:00",
+        )
+    )
+
+    result = project.snapshot().task_results["docs"]
+
+    assert result.status == TaskStatus.PENDING
+    assert result.started_at is None
+    assert result.completed_at is None

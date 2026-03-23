@@ -105,7 +105,7 @@ class TaskResult:
     output: Optional[AgentOutput] = None
     failure: Optional[FailureRecord] = None
     details: Dict[str, Any] = field(default_factory=dict)
-    started_at: str = field(default_factory=utc_now_iso)
+    started_at: Optional[str] = None
     completed_at: Optional[str] = None
 
 

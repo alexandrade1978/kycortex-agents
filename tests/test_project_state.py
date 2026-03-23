@@ -180,6 +180,27 @@ def test_snapshot_includes_structured_task_output():
     assert result.output.metadata["task_id"] == "code"
 
 
+def test_snapshot_uses_text_artifact_fallback_for_unknown_roles():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="ops",
+            title="Operations handoff",
+            description="Prepare release handoff",
+            assigned_to="release_manager",
+            status=TaskStatus.DONE.value,
+            output="Ship checklist",
+        )
+    )
+
+    result = project.snapshot().task_results["ops"]
+
+    assert result.output is not None
+    assert result.output.summary == "Ship checklist"
+    assert result.output.artifacts[0].artifact_type == ArtifactType.TEXT
+    assert result.output.artifacts[0].metadata["assigned_to"] == "release_manager"
+
+
 def test_complete_task_persists_structured_agent_output_payload():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

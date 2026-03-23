@@ -247,6 +247,26 @@ def test_readme_documents_all_supported_provider_configuration_paths():
     assert 'llm_provider="ollama"' in readme
 
 
+def test_readme_documents_all_public_configuration_parameters():
+    readme_path = Path(__file__).resolve().parents[1] / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+
+    assert "### Configuration Parameters" in readme
+    assert "`KYCortexConfig` exposes the following public runtime parameters:" in readme
+    assert "| `llm_provider` |" in readme
+    assert "| `llm_model` |" in readme
+    assert "| `api_key` |" in readme
+    assert "| `base_url` |" in readme
+    assert "| `temperature` |" in readme
+    assert "| `max_tokens` |" in readme
+    assert "| `timeout_seconds` |" in readme
+    assert "| `workflow_failure_policy` |" in readme
+    assert "| `workflow_resume_policy` |" in readme
+    assert "| `project_name` |" in readme
+    assert "| `output_dir` |" in readme
+    assert "| `log_level` |" in readme
+
+
 def test_readme_documents_current_package_layout_and_provider_support():
     readme_path = Path(__file__).resolve().parents[1] / "README.md"
     readme = readme_path.read_text(encoding="utf-8")

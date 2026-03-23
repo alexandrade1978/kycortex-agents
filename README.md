@@ -125,6 +125,25 @@ config = KYCortexConfig(
 
 Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow graph, as shown in `examples/example_simple_project.py`.
 
+### Configuration Parameters
+
+`KYCortexConfig` exposes the following public runtime parameters:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `llm_provider` | `"openai"` | Selects the built-in provider backend. Supported values are `openai`, `anthropic`, and `ollama`. |
+| `llm_model` | `"gpt-4o"` | Provider-specific model name used for agent execution. |
+| `api_key` | `None` | Optional explicit API key. When omitted, OpenAI and Anthropic fall back to `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`. |
+| `base_url` | `None` or Ollama default | Optional provider base URL. Ollama defaults to `http://localhost:11434`. |
+| `temperature` | `0.2` | Sampling temperature validated between `0` and `2`. |
+| `max_tokens` | `4096` | Maximum number of output tokens requested from the provider. |
+| `timeout_seconds` | `60.0` | Provider request timeout in seconds. |
+| `workflow_failure_policy` | `"fail_fast"` | Controls whether workflow execution stops immediately or continues while skipping blocked descendants. |
+| `workflow_resume_policy` | `"interrupted_only"` | Controls whether resume only re-queues interrupted tasks or also re-queues failed and dependency-skipped tasks. |
+| `project_name` | `"kycortex-project"` | Human-readable project name persisted into workflow state and snapshots. |
+| `output_dir` | `"./output"` | Output directory created during configuration initialization. |
+| `log_level` | `"INFO"` | Public log-level setting reserved for orchestrator and runtime logging configuration. |
+
 ## Architecture
 
 ```

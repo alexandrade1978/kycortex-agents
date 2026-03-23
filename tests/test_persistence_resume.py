@@ -276,3 +276,81 @@ def test_resume_failed_does_not_revive_manually_skipped_tasks(tmp_path, state_fi
     assert reloaded.get_task("legal").status == TaskStatus.SKIPPED.value
     assert reloaded.get_task("legal").output == "Skipped pending legal approval"
     assert reloaded.get_task("legal").skip_reason_type == "manual"
+
+
+@pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
+def test_resume_failed_does_not_revive_legacy_manual_skip_with_dependency_shaped_reason(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+            output="boom",
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the architecture",
+            assigned_to="code_reviewer",
+            dependencies=["arch"],
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+            completed_at="2026-03-22T10:06:30+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Docs",
+            description="Document the review",
+            assigned_to="docs_writer",
+            dependencies=["review"],
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+            completed_at="2026-03-22T10:07:00+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="signoff",
+            title="Signoff",
+            description="Await approval",
+            assigned_to="legal_advisor",
+            status=TaskStatus.DONE.value,
+            output="APPROVED",
+            completed_at="2026-03-22T10:07:15+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="legal",
+            title="Legal",
+            description="Hold for manual sign-off",
+            assigned_to="legal_advisor",
+            dependencies=["signoff"],
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+            completed_at="2026-03-22T10:07:30+00:00",
+        )
+    )
+
+    project.save()
+    reloaded = ProjectState.load(str(state_path))
+
+    assert reloaded.get_task("review").skip_reason_type == "dependency_failed"
+    assert reloaded.get_task("docs").skip_reason_type == "dependency_failed"
+    assert reloaded.get_task("legal").skip_reason_type == "manual"
+
+    resumed = reloaded.resume_failed_tasks()
+
+    assert resumed == ["arch", "review", "docs"]
+    assert reloaded.get_task("legal").status == TaskStatus.SKIPPED.value
+    assert reloaded.get_task("legal").output == "Skipped because dependency 'arch' failed"
+    assert reloaded.get_task("legal").skip_reason_type == "manual"

@@ -265,8 +265,7 @@ class ProjectState:
     def _is_dependency_failed_skip(self, task: Task) -> bool:
         if task.skip_reason_type is not None:
             return task.skip_reason_type == "dependency_failed"
-        reason = task.last_error or task.output or ""
-        return reason.startswith("Skipped because dependency '") and reason.endswith("' failed")
+        return self._matching_dependency_failed_reason_task_id(task) is not None
 
     def should_retry_task(self, task_id: str) -> bool:
         task = self.get_task(task_id)
@@ -329,7 +328,56 @@ class ProjectState:
         except TypeError as exc:
             raise StatePersistenceError(f"Project state data is invalid: {path}") from exc
         obj.tasks = tasks
+        obj._infer_legacy_skip_reason_types()
         return obj
+
+    def _infer_legacy_skip_reason_types(self) -> None:
+        for task in self.tasks:
+            if task.status != TaskStatus.SKIPPED.value or task.skip_reason_type is not None:
+                continue
+            task.skip_reason_type = self._infer_legacy_skip_reason_type(task)
+
+    def _infer_legacy_skip_reason_type(self, task: Task) -> str:
+        dependency_id = self._matching_dependency_failed_reason_task_id(task)
+        if dependency_id is None:
+            return "manual"
+        dependency = self.get_task(dependency_id)
+        if dependency is None or dependency.status != TaskStatus.FAILED.value:
+            return "manual"
+        return "dependency_failed"
+
+    def _extract_dependency_failed_task_id(self, task: Task) -> Optional[str]:
+        reason = task.last_error or task.output or ""
+        prefix = "Skipped because dependency '"
+        suffix = "' failed"
+        if not reason.startswith(prefix) or not reason.endswith(suffix):
+            return None
+        return reason[len(prefix):-len(suffix)]
+
+    def _depends_on_task(self, task: Task, dependency_id: str) -> bool:
+        pending_dependency_ids = list(task.dependencies)
+        visited: set[str] = set()
+
+        while pending_dependency_ids:
+            current_id = pending_dependency_ids.pop()
+            if current_id in visited:
+                continue
+            if current_id == dependency_id:
+                return True
+            visited.add(current_id)
+            dependency = self.get_task(current_id)
+            if dependency is None:
+                continue
+            pending_dependency_ids.extend(dependency.dependencies)
+        return False
+
+    def _matching_dependency_failed_reason_task_id(self, task: Task) -> Optional[str]:
+        dependency_id = self._extract_dependency_failed_task_id(task)
+        if dependency_id is None:
+            return None
+        if not self._depends_on_task(task, dependency_id):
+            return None
+        return dependency_id
 
     def pending_tasks(self) -> List[Task]:
         return [t for t in self.tasks if t.status == TaskStatus.PENDING.value]

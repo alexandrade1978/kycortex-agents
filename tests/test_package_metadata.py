@@ -56,6 +56,21 @@ def test_pyproject_metadata_file_pointers_exist():
     assert (project_root / "LICENSE").is_file()
 
 
+def test_manifest_in_exists_and_covers_core_distribution_assets():
+    project_root = Path(__file__).resolve().parents[1]
+    manifest_path = project_root / "MANIFEST.in"
+
+    assert manifest_path.is_file()
+
+    manifest = manifest_path.read_text(encoding="utf-8")
+    assert "include LICENSE" in manifest
+    assert "include README.md" in manifest
+    assert "include CONTRIBUTING.md" in manifest
+    assert "recursive-include docs *.md" in manifest
+    assert "recursive-include examples *.py" in manifest
+    assert "recursive-include kycortex_agents py.typed" in manifest
+
+
 def test_top_level_contributing_guide_exists_for_readme_reference():
     project_root = Path(__file__).resolve().parents[1]
 

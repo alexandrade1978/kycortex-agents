@@ -91,6 +91,8 @@ def test_manifest_in_exists_and_covers_core_distribution_assets():
     assert "include LICENSE" in manifest
     assert "include README.md" in manifest
     assert "include CONTRIBUTING.md" in manifest
+    assert "include Makefile" in manifest
+    assert "include .editorconfig" in manifest
     assert "recursive-include docs *.md" in manifest
     assert "recursive-include examples *.py" in manifest
     assert "recursive-include kycortex_agents py.typed" in manifest
@@ -118,7 +120,9 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
     members = set((egg_info_dir / "SOURCES.txt").read_text(encoding="utf-8").splitlines())
 
     expected_members = {
+        ".editorconfig",
         "CONTRIBUTING.md",
+        "Makefile",
         "docs/README.md",
         "examples/example_custom_agent.py",
         "examples/example_multi_provider.py",
@@ -152,10 +156,31 @@ def test_contributing_guide_documents_test_command_tiers():
     contributing_path = Path(__file__).resolve().parents[1] / "CONTRIBUTING.md"
     contributing = contributing_path.read_text(encoding="utf-8")
 
+    assert "make setup" in contributing
     assert "Suggested Test Commands" in contributing
     assert "tests/test_public_api.py tests/test_public_smoke.py -q" in contributing
     assert "tests/test_package_metadata.py -q" in contributing
     assert "python -m pytest -q" in contributing
+    assert "make test-public" in contributing
+    assert "make test-metadata" in contributing
+    assert "make test" in contributing
+
+
+def test_local_tooling_files_exist_and_cover_expected_commands():
+    project_root = Path(__file__).resolve().parents[1]
+    makefile = (project_root / "Makefile").read_text(encoding="utf-8")
+    editorconfig = (project_root / ".editorconfig").read_text(encoding="utf-8")
+
+    assert ".PHONY: setup test-public test-metadata test" in makefile
+    assert 'python -m pip install -e ".[test]"' in makefile
+    assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
+    assert "python -m pytest tests/test_package_metadata.py -q" in makefile
+    assert "python -m pytest -q" in makefile
+    assert "root = true" in editorconfig
+    assert "[*.py]" in editorconfig
+    assert "indent_size = 4" in editorconfig
+    assert "[Makefile]" in editorconfig
+    assert "indent_style = tab" in editorconfig
 
 
 def test_readme_relative_markdown_links_resolve_to_existing_files():
@@ -224,6 +249,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "custom agents plug into the public runtime" in docs_readme
     assert "supported provider configurations against the same workflow definition" in docs_readme
     assert "validating workflow behavior locally without calling a live provider" in docs_readme
+    assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 

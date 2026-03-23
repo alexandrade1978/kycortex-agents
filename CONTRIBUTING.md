@@ -10,6 +10,12 @@
 pip install -e ".[test]"
 ```
 
+If you prefer command aliases for the common local workflow, the repository also includes a `Makefile`:
+
+```bash
+make setup
+```
+
 ## Workflow
 
 1. Make a focused change.
@@ -23,19 +29,27 @@ pip install -e ".[test]"
 
 ```bash
 python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q
+make test-public
 ```
 
 - Packaging, metadata, or documentation contract changes:
 
 ```bash
 python -m pytest tests/test_package_metadata.py -q
+make test-metadata
 ```
 
 - Full repository validation before opening a pull request:
 
 ```bash
 python -m pytest -q
+make test
 ```
+
+## Local Tooling
+
+- `Makefile`: convenient aliases for setup and the main validation commands.
+- `.editorconfig`: shared line-ending, indentation, and trailing-whitespace defaults for Python, Markdown, TOML, YAML, and Makefile edits.
 
 ## Pull Requests
 

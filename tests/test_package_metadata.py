@@ -87,6 +87,16 @@ def test_top_level_contributing_guide_exists_for_readme_reference():
     assert (project_root / "docs" / "README.md").is_file()
 
 
+def test_contributing_guide_documents_test_command_tiers():
+    contributing_path = Path(__file__).resolve().parents[1] / "CONTRIBUTING.md"
+    contributing = contributing_path.read_text(encoding="utf-8")
+
+    assert "Suggested Test Commands" in contributing
+    assert "tests/test_public_api.py tests/test_public_smoke.py -q" in contributing
+    assert "tests/test_package_metadata.py -q" in contributing
+    assert "python -m pytest -q" in contributing
+
+
 def test_readme_relative_markdown_links_resolve_to_existing_files():
     project_root = Path(__file__).resolve().parents[1]
     readme = (project_root / "README.md").read_text(encoding="utf-8")

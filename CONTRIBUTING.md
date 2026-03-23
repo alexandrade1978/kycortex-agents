@@ -17,6 +17,22 @@ pip install -e ".[test]"
 3. Run the relevant test subset locally.
 4. Run the full test suite before opening a pull request.
 
+### Suggested Test Commands
+
+- Public API or import-surface changes:
+
+```bash
+python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q
+```
+
+- Packaging, metadata, or documentation contract changes:
+
+```bash
+python -m pytest tests/test_package_metadata.py -q
+```
+
+- Full repository validation before opening a pull request:
+
 ```bash
 python -m pytest -q
 ```

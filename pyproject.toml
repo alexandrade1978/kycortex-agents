@@ -38,5 +38,11 @@ Documentation = "https://kycortex.com"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["kycortex_agents", "kycortex_agents.*"]
+
 [tool.setuptools.package-data]
 kycortex_agents = ["py.typed"]

@@ -22,6 +22,37 @@ def test_pyproject_declares_test_extra():
     assert optional_dependencies["test"] == ["pytest>=7.0.0"]
 
 
+def test_pyproject_declares_explicit_setuptools_package_discovery():
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    setuptools_config = data["tool"]["setuptools"]
+    assert setuptools_config["include-package-data"] is True
+    assert setuptools_config["packages"]["find"]["include"] == [
+        "kycortex_agents",
+        "kycortex_agents.*",
+    ]
+
+
+def test_typed_package_marker_exists_and_is_declared_in_package_data():
+    project_root = Path(__file__).resolve().parents[1]
+    pyproject_path = project_root / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    assert (project_root / "kycortex_agents" / "py.typed").is_file()
+    assert data["tool"]["setuptools"]["package-data"]["kycortex_agents"] == ["py.typed"]
+
+
+def test_pyproject_metadata_file_pointers_exist():
+    project_root = Path(__file__).resolve().parents[1]
+    pyproject_path = project_root / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    project = data["project"]
+    assert (project_root / project["readme"]).is_file()
+    assert (project_root / "LICENSE").is_file()
+
+
 def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():
     requirements_path = Path(__file__).resolve().parents[1] / "requirements.txt"
     requirements_lines = [

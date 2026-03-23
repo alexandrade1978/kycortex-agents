@@ -80,6 +80,7 @@ make test
 - `ruff`: repository lint baseline for the package, examples, tests, and docs-adjacent Python files.
 - `mypy`: local type-check baseline for `kycortex_agents` and `examples`, with third-party `anthropic` imports excluded from stub enforcement.
 - `pre-commit`: local hook runner that executes the repository-owned `ruff`, `mypy`, and focused pytest checks before commits and pushes.
+- `.github/workflows/ci.yml`: GitHub Actions baseline that runs linting, type checking, focused public-surface regressions, and the full pytest suite on pull requests and pushes to `main`.
 
 ## Pull Requests
 

@@ -180,6 +180,7 @@ def test_top_level_contributing_guide_exists_for_readme_reference():
 
     assert (project_root / "CONTRIBUTING.md").is_file()
     assert (project_root / "docs" / "README.md").is_file()
+    assert (project_root / ".github" / "workflows" / "ci.yml").is_file()
 
 
 def test_contributing_guide_documents_test_command_tiers():
@@ -234,6 +235,26 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     assert 'args: ["-m", "ruff", "check", "."]' in precommit_config
     assert 'args: ["-m", "mypy"]' in precommit_config
     assert 'args: ["-m", "pytest", "tests/test_public_api.py", "tests/test_package_metadata.py", "-q"]' in precommit_config
+
+
+def test_github_actions_ci_workflow_covers_repository_validation_baseline():
+    project_root = Path(__file__).resolve().parents[1]
+    ci_workflow = (project_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "name: CI" in ci_workflow
+    assert "pull_request:" in ci_workflow
+    assert "workflow_dispatch:" in ci_workflow
+    assert "branches:" in ci_workflow
+    assert "- main" in ci_workflow
+    assert "actions/checkout@v4" in ci_workflow
+    assert "actions/setup-python@v5" in ci_workflow
+    assert 'python-version: ["3.10", "3.12"]' in ci_workflow
+    assert 'python-version: "3.12"' in ci_workflow
+    assert 'python -m pip install -e ".[test]"' in ci_workflow
+    assert "python -m ruff check ." in ci_workflow
+    assert "python -m mypy" in ci_workflow
+    assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py tests/test_package_metadata.py -q" in ci_workflow
+    assert "python -m pytest -q" in ci_workflow
 
 
 def test_readme_relative_markdown_links_resolve_to_existing_files():
@@ -310,6 +331,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events" in docs_readme
     assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
     assert "repository `.pre-commit-config.yaml` workflow" in docs_readme
+    assert ".github/workflows/ci.yml" in docs_readme
+    assert "repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 

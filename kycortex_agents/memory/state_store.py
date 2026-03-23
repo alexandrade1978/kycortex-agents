@@ -1,3 +1,5 @@
+"""Public persistence backends for JSON and SQLite project-state storage."""
+
 from __future__ import annotations
 
 import json
@@ -30,6 +32,8 @@ class BaseStateStore(ABC):
 
 
 class JsonStateStore(BaseStateStore):
+    """JSON-file persistence backend that saves project state atomically on disk."""
+
     def save(self, path: str, data: Dict[str, Any]) -> None:
         state_dir = os.path.dirname(path)
         if state_dir:
@@ -58,6 +62,8 @@ class JsonStateStore(BaseStateStore):
 
 
 class SqliteStateStore(BaseStateStore):
+    """SQLite persistence backend that stores the latest project-state payload transactionally."""
+
     def save(self, path: str, data: Dict[str, Any]) -> None:
         state_dir = os.path.dirname(path)
         if state_dir:
@@ -113,6 +119,8 @@ class SqliteStateStore(BaseStateStore):
 
 
 def resolve_state_store(path: str) -> BaseStateStore:
+    """Return the built-in persistence backend that matches the target state-file extension."""
+
     lower_path = path.lower()
     if lower_path.endswith((".sqlite", ".db")):
         return SqliteStateStore()

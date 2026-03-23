@@ -147,6 +147,13 @@ def test_public_package_modules_define_module_docstrings():
     assert kycortex_agents.workflows.__doc__ == "Public workflow-facing imports for orchestration state, tasks, and statuses."
 
 
+def test_public_state_store_module_defines_docstrings():
+    assert state_store_module.__doc__ == "Public persistence backends for JSON and SQLite project-state storage."
+    assert state_store_module.JsonStateStore.__doc__ == "JSON-file persistence backend that saves project state atomically on disk."
+    assert state_store_module.SqliteStateStore.__doc__ == "SQLite persistence backend that stores the latest project-state payload transactionally."
+    assert state_store_module.resolve_state_store.__doc__ == "Return the built-in persistence backend that matches the target state-file extension."
+
+
 def test_public_config_and_factory_modules_define_docstrings():
     assert config_module.__doc__ == "Public runtime configuration model and provider environment-variable mappings."
     assert config_module.KYCortexConfig.__doc__ == "Public runtime configuration for providers, workflow behavior, and outputs."

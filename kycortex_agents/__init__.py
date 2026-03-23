@@ -1,3 +1,5 @@
+"""Public agent orchestration and configuration for multi-provider LLM workflows."""
+
 from kycortex_agents import agents, config, exceptions, memory, providers, types, workflows
 from kycortex_agents.agents import AgentRegistry, BaseAgent, build_default_registry
 from kycortex_agents.agents import (

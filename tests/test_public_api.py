@@ -141,6 +141,7 @@ def test_root_package_exposes_public_module_namespaces():
 
 
 def test_public_package_modules_define_module_docstrings():
+    assert kycortex_agents.__doc__ == "Public agent orchestration and configuration for multi-provider LLM workflows."
     assert kycortex_agents.agents.__doc__ == "Public agent implementations and registry helpers for workflow execution."
     assert kycortex_agents.providers.__doc__ == "Public provider interfaces and built-in OpenAI, Anthropic, and Ollama integrations."
     assert kycortex_agents.memory.__doc__ == "Public project-state models and persistence backends for workflow storage."

@@ -23,8 +23,9 @@ class SummaryAgent(BaseAgent):
         raise NotImplementedError
 
 
-class RecordingAgent:
-    def __init__(self, response: str):
+class RecordingArchitectAgent(BaseAgent):
+    def __init__(self, config: KYCortexConfig, response: str):
+        super().__init__(name="Recording Architect", role="architect", config=config)
         self.response = response
 
     def run(self, task_description: str, context: dict) -> str:
@@ -39,7 +40,7 @@ if __name__ == "__main__":
 
     registry = AgentRegistry(
         {
-            "architect": RecordingAgent("Service boundary: API, worker, storage"),
+            "architect": RecordingArchitectAgent(config, "Service boundary: API, worker, storage"),
             "summary_agent": SummaryAgent(config),
         }
     )
@@ -68,8 +69,11 @@ if __name__ == "__main__":
 
     orchestrator = Orchestrator(config, registry=registry)
     orchestrator.execute_workflow(project)
+    summary_task = project.get_task("summary")
+    if summary_task is None:
+        raise RuntimeError("summary task missing from project state")
 
     print("Custom agent workflow summary:")
     print(project.summary())
     print("\nSummary output:")
-    print(project.get_task("summary").output)
+    print(summary_task.output)

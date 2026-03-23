@@ -135,6 +135,13 @@ def test_root_package_exposes_public_module_namespaces():
     assert kycortex_agents.workflows is not None
 
 
+def test_public_package_modules_define_module_docstrings():
+    assert kycortex_agents.agents.__doc__ == "Public agent implementations and registry helpers for workflow execution."
+    assert kycortex_agents.providers.__doc__ == "Public provider interfaces and built-in OpenAI, Anthropic, and Ollama integrations."
+    assert kycortex_agents.memory.__doc__ == "Public project-state models and persistence backends for workflow storage."
+    assert kycortex_agents.workflows.__doc__ == "Public workflow-facing imports for orchestration state, tasks, and statuses."
+
+
 def test_root_package_does_not_expose_internal_runtime_helpers():
     assert not hasattr(kycortex_agents, "_build_context")
     assert not hasattr(kycortex_agents, "_execute_agent")

@@ -1,3 +1,5 @@
+"""Public agent implementations and registry helpers for workflow execution."""
+
 from kycortex_agents.agents.architect import ArchitectAgent
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.code_engineer import CodeEngineerAgent

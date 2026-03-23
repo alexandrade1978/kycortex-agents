@@ -279,6 +279,14 @@ def test_multi_provider_example_uses_top_level_public_imports():
     assert "from kycortex_agents.workflows import" not in example
 
 
+def test_test_mode_example_uses_top_level_public_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_test_mode.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
 def test_example_defines_dependency_aware_workflow_chain():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
     example = example_path.read_text(encoding="utf-8")
@@ -331,3 +339,18 @@ def test_multi_provider_example_documents_supported_provider_switching():
     assert 'base_url="http://localhost:11434"' in example
     assert 'dependencies=["arch"]' in example
     assert 'Use one of these configurations with Orchestrator(config).execute_workflow(project).' in example
+
+
+def test_test_mode_example_documents_deterministic_local_execution():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_test_mode.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'def build_test_registry() -> AgentRegistry:' in example
+    assert '"architect": RecordingAgent("ARCHITECTURE READY")' in example
+    assert '"code_engineer": RecordingAgent("IMPLEMENTATION READY")' in example
+    assert '"code_reviewer": RecordingAgent("REVIEW COMPLETE")' in example
+    assert 'def build_test_project() -> ProjectState:' in example
+    assert 'dependencies=["arch"]' in example
+    assert 'dependencies=["code"]' in example
+    assert 'Orchestrator(config, registry=registry)' in example
+    assert 'Deterministic test-mode workflow summary:' in example

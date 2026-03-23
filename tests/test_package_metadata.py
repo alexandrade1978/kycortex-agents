@@ -124,6 +124,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "examples/example_multi_provider.py",
         "examples/example_resume_workflow.py",
         "examples/example_simple_project.py",
+        "examples/example_test_mode.py",
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
         "kycortex_agents/agents/registry.py",
@@ -213,6 +214,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "examples/example_resume_workflow.py" in docs_readme
     assert "examples/example_custom_agent.py" in docs_readme
     assert "examples/example_multi_provider.py" in docs_readme
+    assert "examples/example_test_mode.py" in docs_readme
     assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
     assert "task dependencies, failure policies, and resume policies" in docs_readme
     assert "JSON and SQLite state files or when debugging resume behavior" in docs_readme
@@ -221,6 +223,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "persisted reload and resume behavior" in docs_readme
     assert "custom agents plug into the public runtime" in docs_readme
     assert "supported provider configurations against the same workflow definition" in docs_readme
+    assert "validating workflow behavior locally without calling a live provider" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 

@@ -2,6 +2,8 @@ from pathlib import Path
 import re
 import tomllib
 
+import kycortex_agents
+
 
 def test_pyproject_contains_expected_package_metadata():
     pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -9,12 +11,19 @@ def test_pyproject_contains_expected_package_metadata():
 
     project = data["project"]
     assert project["name"] == "kycortex-agents"
-    assert project["version"] == "0.1.0"
+    assert project["version"] == kycortex_agents.__version__
     assert "Typing :: Typed" in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
     assert "openai>=1.0.0,<2.0.0" in project["dependencies"]
     assert data["project"]["urls"]["Homepage"] == "https://github.com/alexandrade1978/kycortex-agents"
     assert data["project"]["urls"]["Documentation"].endswith("/docs/README.md")
+
+
+def test_pyproject_version_matches_package_version_constant():
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    assert data["project"]["version"] == kycortex_agents.__version__
 
 
 def test_pyproject_declares_test_extra():

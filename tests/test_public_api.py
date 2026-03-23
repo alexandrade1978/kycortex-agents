@@ -1,5 +1,6 @@
 import kycortex_agents
 from pathlib import Path
+import tomllib
 from kycortex_agents import config as config_module
 from kycortex_agents import exceptions as exceptions_module
 from kycortex_agents import types as types_module
@@ -43,8 +44,11 @@ from kycortex_agents.workflows import (
 
 
 def test_public_api_exports_core_symbols():
-    assert kycortex_agents.__version__ == "0.1.0"
-    assert __version__ == "0.1.0"
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    assert kycortex_agents.__version__ == pyproject["project"]["version"]
+    assert __version__ == pyproject["project"]["version"]
     assert Orchestrator is not None
     assert KYCortexConfig is not None
     assert ProjectState is MemoryProjectState

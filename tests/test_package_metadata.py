@@ -192,6 +192,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
 
     assert "architecture.md" in docs_readme
     assert "providers.md" in docs_readme
+    assert "workflows.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -253,6 +254,32 @@ def test_docs_provider_guide_documents_current_provider_runtime():
     assert "ANTHROPIC_API_KEY" in provider_guide
     assert "http://localhost:11434" in provider_guide
     assert "AgentExecutionError" in provider_guide
+
+
+def test_docs_workflow_guide_documents_current_workflow_runtime():
+    workflow_guide_path = Path(__file__).resolve().parents[1] / "docs" / "workflows.md"
+    workflow_guide = workflow_guide_path.read_text(encoding="utf-8")
+
+    assert "# Workflow Guide" in workflow_guide
+    assert "## Workflow Model" in workflow_guide
+    assert "## Defining Tasks" in workflow_guide
+    assert "## Dependency Scheduling" in workflow_guide
+    assert "## Agent Resolution" in workflow_guide
+    assert "## Retry Behavior" in workflow_guide
+    assert "## Failure Policies" in workflow_guide
+    assert "## Resume Policies" in workflow_guide
+    assert "## Persistence During Execution" in workflow_guide
+    assert "## Context Flow Between Tasks" in workflow_guide
+    assert "## Inspecting Workflow State" in workflow_guide
+    assert "## Common Configuration Patterns" in workflow_guide
+    assert "## Troubleshooting Workflow Failures" in workflow_guide
+    assert "ProjectState" in workflow_guide
+    assert "Task" in workflow_guide
+    assert "Orchestrator" in workflow_guide
+    assert "retry_limit" in workflow_guide
+    assert "workflow_failure_policy" in workflow_guide
+    assert "workflow_resume_policy" in workflow_guide
+    assert "resume_failed_tasks()" in workflow_guide
 
 
 def test_docs_readme_documents_supported_environment_variables():

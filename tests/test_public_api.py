@@ -254,6 +254,14 @@ def test_example_uses_top_level_public_imports():
     assert "from kycortex_agents.workflows import Orchestrator, ProjectState, Task" not in example
 
 
+def test_resume_example_uses_top_level_public_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_resume_workflow.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
 def test_example_defines_dependency_aware_workflow_chain():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
     example = example_path.read_text(encoding="utf-8")
@@ -263,3 +271,15 @@ def test_example_defines_dependency_aware_workflow_chain():
     assert 'id="task_3_review"' in example
     assert 'dependencies=["task_1_arch"]' in example
     assert 'dependencies=["task_2_code"]' in example
+
+
+def test_resume_example_documents_persisted_reload_and_resume_flow():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_resume_workflow.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'state_file=state_path' in example
+    assert 'workflow_resume_policy="resume_failed"' in example
+    assert 'status="running"' in example
+    assert 'project.save()' in example
+    assert 'ProjectState.load(state_path)' in example
+    assert 'orchestrator.execute_workflow(reloaded)' in example

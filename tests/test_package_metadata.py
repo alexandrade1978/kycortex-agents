@@ -120,6 +120,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
     expected_members = {
         "CONTRIBUTING.md",
         "docs/README.md",
+        "examples/example_resume_workflow.py",
         "examples/example_simple_project.py",
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
@@ -207,11 +208,13 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "kycortex_agents/memory" in docs_readme
     assert "kycortex_agents/workflows" in docs_readme
     assert "examples/example_simple_project.py" in docs_readme
+    assert "examples/example_resume_workflow.py" in docs_readme
     assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
     assert "task dependencies, failure policies, and resume policies" in docs_readme
     assert "JSON and SQLite state files or when debugging resume behavior" in docs_readme
     assert "custom agents, registries, providers, or persistence backends" in docs_readme
     assert "debugging configuration failures, blocked workflows, retries, or persisted-state recovery" in docs_readme
+    assert "persisted reload and resume behavior" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 

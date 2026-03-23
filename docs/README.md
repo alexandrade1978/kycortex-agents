@@ -13,6 +13,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [extensions.md](extensions.md): supported public customization seams for agents, registries, providers, and persistence backends.
 - [troubleshooting.md](troubleshooting.md): common failure classes, audit signals, recovery paths, and persisted-state inspection.
 - [examples/example_simple_project.py](../examples/example_simple_project.py): minimal packaged example using the public top-level API.
+- [examples/example_resume_workflow.py](../examples/example_resume_workflow.py): persisted-state resume example using the public top-level API.
 
 ## Public API Navigation
 
@@ -38,6 +39,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [extensions.md](extensions.md) when adding custom agents, registries, providers, or persistence backends.
 - Use [troubleshooting.md](troubleshooting.md) when debugging configuration failures, blocked workflows, retries, or persisted-state recovery.
 - Start from [examples/example_simple_project.py](../examples/example_simple_project.py) when validating local installs or learning the workflow model.
+- Use [examples/example_resume_workflow.py](../examples/example_resume_workflow.py) when learning persisted reload and resume behavior.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 
 ## Environment Variables
@@ -52,4 +54,4 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Planned Expansion
 
-The core Phase 10 guides are now repository-owned. Phase 11 continues with curated examples and developer-experience improvements.
+Phase 11 is expanding the example suite and developer experience beyond the current simple workflow and persisted-resume examples.

@@ -31,6 +31,16 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Start from [examples/example_simple_project.py](../examples/example_simple_project.py) when validating local installs or learning the workflow model.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 
+## Environment Variables
+
+| Provider | Environment Variable | Requirement | Notes |
+| --- | --- | --- | --- |
+| OpenAI | `OPENAI_API_KEY` | Required unless `api_key` is passed directly | Used when `llm_provider="openai"`. |
+| Anthropic | `ANTHROPIC_API_KEY` | Required unless `api_key` is passed directly | Used when `llm_provider="anthropic"`. |
+| Ollama | None | Not required | Uses `base_url="http://localhost:11434"` by default. |
+
+These values mirror the provider mappings and defaults exported by `kycortex_agents.config`.
+
 ## Planned Expansion
 
 Dedicated architecture, provider, workflow, persistence, troubleshooting, and extension guides will be expanded during the documentation rewrite phase of the roadmap.

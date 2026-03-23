@@ -204,6 +204,17 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 
+def test_docs_readme_documents_supported_environment_variables():
+    docs_readme_path = Path(__file__).resolve().parents[1] / "docs" / "README.md"
+    docs_readme = docs_readme_path.read_text(encoding="utf-8")
+
+    assert "## Environment Variables" in docs_readme
+    assert "OPENAI_API_KEY" in docs_readme
+    assert "ANTHROPIC_API_KEY" in docs_readme
+    assert 'base_url="http://localhost:11434"' in docs_readme
+    assert "These values mirror the provider mappings and defaults exported by `kycortex_agents.config`." in docs_readme
+
+
 def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():
     requirements_path = Path(__file__).resolve().parents[1] / "requirements.txt"
     requirements_lines = [

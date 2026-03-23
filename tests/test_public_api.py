@@ -6,6 +6,7 @@ from kycortex_agents import exceptions as exceptions_module
 from kycortex_agents import types as types_module
 from kycortex_agents.agents import registry as registry_module
 from kycortex_agents.memory import state_store as state_store_module
+from kycortex_agents.providers import BaseLLMProvider as ProviderBaseLLMProvider
 from kycortex_agents.providers import factory as provider_factory_module
 from kycortex_agents import (
     AgentRegistry,
@@ -140,6 +141,24 @@ def test_public_package_modules_define_module_docstrings():
     assert kycortex_agents.providers.__doc__ == "Public provider interfaces and built-in OpenAI, Anthropic, and Ollama integrations."
     assert kycortex_agents.memory.__doc__ == "Public project-state models and persistence backends for workflow storage."
     assert kycortex_agents.workflows.__doc__ == "Public workflow-facing imports for orchestration state, tasks, and statuses."
+
+
+def test_public_extension_types_define_class_docstrings():
+    assert ProviderBaseLLMProvider.__doc__ == "Abstract provider contract for model-backed agent text generation."
+    assert state_store_module.BaseStateStore.__doc__ == "Abstract persistence backend for saving and loading project state payloads."
+    assert registry_module.AgentRegistry.__doc__ == "Registry that normalizes agent keys and resolves workflow agent instances."
+
+
+def test_public_extension_types_define_method_docstrings():
+    assert ProviderBaseLLMProvider.generate.__doc__ == "Return a model response for the given system and user prompts."
+    assert ProviderBaseLLMProvider.get_last_call_metadata.__doc__ == "Return provider-specific metadata captured from the most recent model call."
+    assert state_store_module.BaseStateStore.save.__doc__ == "Persist the serialized project-state payload to the target path."
+    assert state_store_module.BaseStateStore.load.__doc__ == "Load and return the serialized project-state payload from the target path."
+    assert registry_module.AgentRegistry.register.__doc__ == "Register or replace an agent under the normalized registry key."
+    assert registry_module.AgentRegistry.get.__doc__ == "Return the agent bound to the normalized key or raise when it is unknown."
+    assert registry_module.AgentRegistry.has.__doc__ == "Return whether an agent is registered for the normalized key."
+    assert registry_module.AgentRegistry.keys.__doc__ == "Return the normalized registry keys currently available."
+    assert registry_module.AgentRegistry.normalize_key.__doc__ == "Normalize a registry key so workflow task assignments resolve consistently."
 
 
 def test_root_package_does_not_expose_internal_runtime_helpers():

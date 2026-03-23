@@ -14,12 +14,18 @@ __all__ = ["BaseStateStore", "JsonStateStore", "SqliteStateStore", "resolve_stat
 
 
 class BaseStateStore(ABC):
+    """Abstract persistence backend for saving and loading project state payloads."""
+
     @abstractmethod
     def save(self, path: str, data: Dict[str, Any]) -> None:
+        """Persist the serialized project-state payload to the target path."""
+
         raise NotImplementedError
 
     @abstractmethod
     def load(self, path: str) -> Dict[str, Any]:
+        """Load and return the serialized project-state payload from the target path."""
+
         raise NotImplementedError
 
 

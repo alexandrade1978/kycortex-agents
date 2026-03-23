@@ -262,6 +262,15 @@ def test_resume_example_uses_top_level_public_imports():
     assert "from kycortex_agents.workflows import" not in example
 
 
+def test_custom_agent_example_uses_top_level_public_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_custom_agent.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, ArtifactType, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.types import AgentInput, AgentOutput" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
 def test_example_defines_dependency_aware_workflow_chain():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
     example = example_path.read_text(encoding="utf-8")
@@ -283,3 +292,18 @@ def test_resume_example_documents_persisted_reload_and_resume_flow():
     assert 'project.save()' in example
     assert 'ProjectState.load(state_path)' in example
     assert 'orchestrator.execute_workflow(reloaded)' in example
+
+
+def test_custom_agent_example_documents_public_extension_flow():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_custom_agent.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'class SummaryAgent(BaseAgent):' in example
+    assert 'required_context_keys = ("architecture",)' in example
+    assert 'output_artifact_type = ArtifactType.DOCUMENT' in example
+    assert 'def run_with_input(self, agent_input: AgentInput) -> AgentOutput:' in example
+    assert 'self.require_context_value(agent_input, "architecture")' in example
+    assert 'registry = AgentRegistry(' in example
+    assert 'assigned_to="summary_agent"' in example
+    assert 'dependencies=["arch"]' in example
+    assert 'Orchestrator(config, registry=registry)' in example

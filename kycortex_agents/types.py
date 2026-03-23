@@ -1,3 +1,5 @@
+"""Public typed contracts for agent input/output, workflow state, and persisted records."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -21,10 +23,14 @@ __all__ = [
 
 
 def utc_now_iso() -> str:
+    """Return the current UTC timestamp in ISO-8601 format."""
+
     return datetime.now(UTC).isoformat()
 
 
 class TaskStatus(str, Enum):
+    """Lifecycle states for persisted workflow tasks."""
+
     PENDING = "pending"
     RUNNING = "running"
     DONE = "done"
@@ -33,6 +39,8 @@ class TaskStatus(str, Enum):
 
 
 class WorkflowStatus(str, Enum):
+    """Lifecycle states for overall workflow execution."""
+
     INIT = "init"
     RUNNING = "running"
     PAUSED = "paused"
@@ -41,6 +49,8 @@ class WorkflowStatus(str, Enum):
 
 
 class ArtifactType(str, Enum):
+    """Normalized artifact categories emitted by agents and snapshots."""
+
     TEXT = "text"
     CODE = "code"
     DOCUMENT = "document"
@@ -51,6 +61,8 @@ class ArtifactType(str, Enum):
 
 @dataclass
 class ArtifactRecord:
+    """Structured artifact entry captured from an agent output or project snapshot."""
+
     name: str
     artifact_type: ArtifactType = ArtifactType.OTHER
     path: Optional[str] = None
@@ -61,6 +73,8 @@ class ArtifactRecord:
 
 @dataclass
 class DecisionRecord:
+    """Structured project decision captured during workflow execution."""
+
     topic: str
     decision: str
     rationale: str
@@ -70,6 +84,8 @@ class DecisionRecord:
 
 @dataclass
 class FailureRecord:
+    """Normalized failure details exposed through task results and snapshots."""
+
     message: str
     error_type: str = "runtime_error"
     retryable: bool = False
@@ -79,6 +95,8 @@ class FailureRecord:
 
 @dataclass
 class AgentInput:
+    """Validated input payload passed into an agent execution entrypoint."""
+
     task_id: str
     task_title: str
     task_description: str
@@ -90,6 +108,8 @@ class AgentInput:
 
 @dataclass
 class AgentOutput:
+    """Normalized agent result payload persisted back into workflow state."""
+
     summary: str
     raw_content: str
     artifacts: List[ArtifactRecord] = field(default_factory=list)
@@ -99,6 +119,8 @@ class AgentOutput:
 
 @dataclass
 class TaskResult:
+    """Public task-result view exposed through workflow snapshots."""
+
     task_id: str
     status: TaskStatus
     agent_name: str
@@ -111,6 +133,8 @@ class TaskResult:
 
 @dataclass
 class ProjectSnapshot:
+    """Immutable workflow snapshot consumed by agents, callers, and tests."""
+
     project_name: str
     goal: str
     workflow_status: WorkflowStatus = WorkflowStatus.INIT

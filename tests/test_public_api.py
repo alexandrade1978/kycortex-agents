@@ -147,6 +147,21 @@ def test_public_package_modules_define_module_docstrings():
     assert kycortex_agents.workflows.__doc__ == "Public workflow-facing imports for orchestration state, tasks, and statuses."
 
 
+def test_public_type_module_defines_docstrings():
+    assert types_module.__doc__ == "Public typed contracts for agent input/output, workflow state, and persisted records."
+    assert types_module.utc_now_iso.__doc__ == "Return the current UTC timestamp in ISO-8601 format."
+    assert types_module.TaskStatus.__doc__ == "Lifecycle states for persisted workflow tasks."
+    assert types_module.WorkflowStatus.__doc__ == "Lifecycle states for overall workflow execution."
+    assert types_module.ArtifactType.__doc__ == "Normalized artifact categories emitted by agents and snapshots."
+    assert types_module.ArtifactRecord.__doc__ == "Structured artifact entry captured from an agent output or project snapshot."
+    assert types_module.DecisionRecord.__doc__ == "Structured project decision captured during workflow execution."
+    assert types_module.FailureRecord.__doc__ == "Normalized failure details exposed through task results and snapshots."
+    assert types_module.AgentInput.__doc__ == "Validated input payload passed into an agent execution entrypoint."
+    assert types_module.AgentOutput.__doc__ == "Normalized agent result payload persisted back into workflow state."
+    assert types_module.TaskResult.__doc__ == "Public task-result view exposed through workflow snapshots."
+    assert types_module.ProjectSnapshot.__doc__ == "Immutable workflow snapshot consumed by agents, callers, and tests."
+
+
 def test_public_extension_types_define_class_docstrings():
     assert ProviderBaseLLMProvider.__doc__ == "Abstract provider contract for model-backed agent text generation."
     assert ProviderOpenAIProvider.__doc__ == "OpenAI-backed provider implementation for chat completion models."

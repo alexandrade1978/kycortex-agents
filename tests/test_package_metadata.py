@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import tomllib
 
 
@@ -51,6 +52,22 @@ def test_pyproject_metadata_file_pointers_exist():
     project = data["project"]
     assert (project_root / project["readme"]).is_file()
     assert (project_root / "LICENSE").is_file()
+
+
+def test_top_level_contributing_guide_exists_for_readme_reference():
+    project_root = Path(__file__).resolve().parents[1]
+
+    assert (project_root / "CONTRIBUTING.md").is_file()
+
+
+def test_readme_relative_markdown_links_resolve_to_existing_files():
+    project_root = Path(__file__).resolve().parents[1]
+    readme = (project_root / "README.md").read_text(encoding="utf-8")
+    relative_targets = re.findall(r"\[[^\]]+\]\(((?!https?://)[^)#]+)\)", readme)
+
+    assert relative_targets
+    for target in relative_targets:
+        assert (project_root / target).is_file(), f"README link target does not exist: {target}"
 
 
 def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():

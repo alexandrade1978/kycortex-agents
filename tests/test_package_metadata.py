@@ -1,8 +1,22 @@
 from pathlib import Path
 import re
+import subprocess
+import sys
 import tomllib
 
 import kycortex_agents
+
+
+def _refresh_generated_egg_info() -> Path:
+    project_root = Path(__file__).resolve().parents[1]
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "--quiet"],
+        cwd=project_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return project_root / "kycortex_agents.egg-info"
 
 
 def test_pyproject_contains_expected_package_metadata():
@@ -78,6 +92,47 @@ def test_manifest_in_exists_and_covers_core_distribution_assets():
     assert "recursive-include docs *.md" in manifest
     assert "recursive-include examples *.py" in manifest
     assert "recursive-include kycortex_agents py.typed" in manifest
+
+
+def test_generated_egg_info_metadata_matches_current_package_contract():
+    egg_info_dir = _refresh_generated_egg_info()
+    metadata = (egg_info_dir / "PKG-INFO").read_text(encoding="utf-8")
+    requirements = (egg_info_dir / "requires.txt").read_text(encoding="utf-8")
+
+    assert "Project-URL: Documentation, https://github.com/alexandrade1978/kycortex-agents/blob/main/docs/README.md" in metadata
+    assert "Requires-Dist: anthropic<1.0.0,>=0.34.0" in metadata
+    assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
+    assert "Requires-Dist: pytest>=7.0.0; extra == \"test\"" in metadata
+    assert "https://kycortex.com" not in metadata
+    assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in metadata
+    assert "OPENAI_API_KEY" in metadata
+    assert "ANTHROPIC_API_KEY" in metadata
+    assert "anthropic<1.0.0,>=0.34.0" in requirements
+    assert "openai<2.0.0,>=1.0.0" in requirements
+
+
+def test_generated_egg_info_sources_include_current_distribution_assets():
+    egg_info_dir = _refresh_generated_egg_info()
+    members = set((egg_info_dir / "SOURCES.txt").read_text(encoding="utf-8").splitlines())
+
+    expected_members = {
+        "CONTRIBUTING.md",
+        "docs/README.md",
+        "examples/example_simple_project.py",
+        "kycortex_agents/exceptions.py",
+        "kycortex_agents/py.typed",
+        "kycortex_agents/agents/registry.py",
+        "kycortex_agents/memory/state_store.py",
+        "kycortex_agents/providers/__init__.py",
+        "kycortex_agents/providers/anthropic_provider.py",
+        "kycortex_agents/providers/base.py",
+        "kycortex_agents/providers/factory.py",
+        "kycortex_agents/providers/ollama_provider.py",
+        "kycortex_agents/providers/openai_provider.py",
+    }
+
+    missing_members = sorted(expected_members - members)
+    assert not missing_members, f"generated egg-info is missing: {missing_members}"
 
 
 def test_top_level_contributing_guide_exists_for_readme_reference():

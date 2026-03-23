@@ -328,8 +328,25 @@ class ProjectState:
         except TypeError as exc:
             raise StatePersistenceError(f"Project state data is invalid: {path}") from exc
         obj.tasks = tasks
+        obj._normalize_legacy_decision_timestamps()
         obj._infer_legacy_skip_reason_types()
         return obj
+
+    def _normalize_legacy_decision_timestamps(self) -> None:
+        fallback_timestamp = (
+            self.updated_at
+            or self.workflow_finished_at
+            or self.workflow_last_resumed_at
+            or self.workflow_started_at
+        )
+        for decision in self.decisions:
+            if not isinstance(decision, dict) or decision.get("at"):
+                continue
+            decision["at"] = (
+                decision.get("created_at")
+                or fallback_timestamp
+                or datetime.now(UTC).isoformat()
+            )
 
     def _infer_legacy_skip_reason_types(self) -> None:
         for task in self.tasks:
@@ -519,6 +536,7 @@ class ProjectState:
         return results
 
     def snapshot(self) -> ProjectSnapshot:
+        self._normalize_legacy_decision_timestamps()
         return ProjectSnapshot(
             project_name=self.project_name,
             goal=self.goal,

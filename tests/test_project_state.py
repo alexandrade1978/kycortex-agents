@@ -146,6 +146,43 @@ def test_load_accepts_legacy_payloads_missing_newer_fields(tmp_path, state_filen
     assert snapshot.artifacts[0].artifact_type == ArtifactType.OTHER
 
 
+@pytest.mark.parametrize("state_filename", ["legacy-decisions.json", "legacy-decisions.sqlite"])
+def test_load_normalizes_legacy_decision_timestamps_deterministically(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Keep decision timestamps stable",
+        "tasks": [],
+        "decisions": [
+            {
+                "topic": "architecture",
+                "decision": "Use layered runtime",
+                "rationale": "Keeps providers isolated",
+                "metadata": {"owner": "architect"},
+            }
+        ],
+        "artifacts": [],
+        "phase": "failed",
+        "updated_at": "2026-03-22T10:09:00+00:00",
+        "state_file": str(state_path),
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+    first_snapshot = loaded.snapshot()
+    second_snapshot = loaded.snapshot()
+
+    assert loaded.decisions[0]["at"] == "2026-03-22T10:09:00+00:00"
+    assert first_snapshot.decisions[0].created_at == "2026-03-22T10:09:00+00:00"
+    assert second_snapshot.decisions[0].created_at == "2026-03-22T10:09:00+00:00"
+
+    loaded.save()
+    persisted = resolve_state_store(str(state_path)).load(str(state_path))
+
+    assert persisted["decisions"][0]["at"] == "2026-03-22T10:09:00+00:00"
+
+
 def test_load_rejects_invalid_sqlite(tmp_path):
     state_path = tmp_path / "broken.sqlite"
     connection = sqlite3.connect(state_path)

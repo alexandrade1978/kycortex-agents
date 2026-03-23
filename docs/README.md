@@ -10,6 +10,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [providers.md](providers.md): provider selection, backend-specific configuration, metadata behavior, and extension guidance.
 - [workflows.md](workflows.md): task definitions, dependency scheduling, retry/resume behavior, and workflow troubleshooting.
 - [persistence.md](persistence.md): state-file backends, save/load semantics, resume behavior, and snapshot inspection.
+- [extensions.md](extensions.md): supported public customization seams for agents, registries, providers, and persistence backends.
 - [examples/example_simple_project.py](../examples/example_simple_project.py): minimal packaged example using the public top-level API.
 
 ## Public API Navigation
@@ -33,6 +34,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use the provider configuration section in [README.md](../README.md) when choosing between OpenAI, Anthropic, and Ollama runtime setup.
 - Use the workflow control examples in [README.md](../README.md) when configuring task dependencies, failure policies, and resume policies.
 - Use [persistence.md](persistence.md) when choosing between JSON and SQLite state files or when debugging resume behavior.
+- Use [extensions.md](extensions.md) when adding custom agents, registries, providers, or persistence backends.
 - Start from [examples/example_simple_project.py](../examples/example_simple_project.py) when validating local installs or learning the workflow model.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 
@@ -48,4 +50,4 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Planned Expansion
 
-Dedicated extension guides will be expanded during the documentation rewrite phase of the roadmap.
+Dedicated troubleshooting guides will be expanded during the documentation rewrite phase of the roadmap.

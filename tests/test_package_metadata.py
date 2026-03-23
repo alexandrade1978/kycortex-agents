@@ -194,6 +194,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "providers.md" in docs_readme
     assert "workflows.md" in docs_readme
     assert "persistence.md" in docs_readme
+    assert "extensions.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -208,6 +209,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
     assert "task dependencies, failure policies, and resume policies" in docs_readme
     assert "JSON and SQLite state files or when debugging resume behavior" in docs_readme
+    assert "custom agents, registries, providers, or persistence backends" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 
@@ -306,6 +308,31 @@ def test_docs_persistence_guide_documents_current_state_runtime():
     assert "StatePersistenceError" in persistence_guide
     assert "workflow_resume_policy=\"resume_failed\"" in persistence_guide
     assert "snapshot()" in persistence_guide
+
+
+def test_docs_extension_guide_documents_current_extension_surface():
+    extension_guide_path = Path(__file__).resolve().parents[1] / "docs" / "extensions.md"
+    extension_guide = extension_guide_path.read_text(encoding="utf-8")
+
+    assert "# Extension Guide" in extension_guide
+    assert "## Supported Extension Surface" in extension_guide
+    assert "## Custom Agents" in extension_guide
+    assert "## Lifecycle Hooks" in extension_guide
+    assert "## Registry Customization" in extension_guide
+    assert "## Custom Providers" in extension_guide
+    assert "## Custom Persistence Backends" in extension_guide
+    assert "## Orchestrator Integration" in extension_guide
+    assert "## Design Boundaries" in extension_guide
+    assert "## Testing Extensions" in extension_guide
+    assert "BaseAgent" in extension_guide
+    assert "AgentRegistry" in extension_guide
+    assert "BaseLLMProvider" in extension_guide
+    assert "BaseStateStore" in extension_guide
+    assert "Orchestrator" in extension_guide
+    assert "validate_input()" in extension_guide
+    assert "after_execute()" in extension_guide
+    assert "get_last_call_metadata()" in extension_guide
+    assert "StatePersistenceError" in extension_guide
 
 
 def test_docs_readme_documents_supported_environment_variables():

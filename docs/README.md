@@ -26,8 +26,9 @@ This repository keeps its primary user and contributor guidance in a small set o
 ## Examples And Usage
 
 - Use the top-level package imports shown in [README.md](../README.md) for the canonical public API.
+- Use the provider configuration section in [README.md](../README.md) when choosing between OpenAI, Anthropic, and Ollama runtime setup.
 - Start from [examples/example_simple_project.py](../examples/example_simple_project.py) when validating local installs or learning the workflow model.
-- Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup and test commands before making changes.
+- Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 
 ## Planned Expansion
 

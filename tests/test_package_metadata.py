@@ -144,6 +144,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "kycortex_agents/memory" in docs_readme
     assert "kycortex_agents/workflows" in docs_readme
     assert "examples/example_simple_project.py" in docs_readme
+    assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
+    assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 
 def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():

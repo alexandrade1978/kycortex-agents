@@ -25,6 +25,15 @@ make setup
 
 ### Suggested Test Commands
 
+- Local lint and type-check baseline:
+
+```bash
+python -m ruff check .
+python -m mypy
+make lint
+make typecheck
+```
+
 - Public API or import-surface changes:
 
 ```bash
@@ -50,6 +59,8 @@ make test
 
 - `Makefile`: convenient aliases for setup and the main validation commands.
 - `.editorconfig`: shared line-ending, indentation, and trailing-whitespace defaults for Python, Markdown, TOML, YAML, and Makefile edits.
+- `ruff`: repository lint baseline for the package, examples, tests, and docs-adjacent Python files.
+- `mypy`: local type-check baseline for `kycortex_agents` and `examples`, with third-party `anthropic` imports excluded from stub enforcement.
 
 ## Pull Requests
 

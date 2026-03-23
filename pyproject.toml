@@ -27,7 +27,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7.0.0"]
+test = [
+    "pytest>=7.0.0",
+    "mypy>=1.10,<2.0",
+    "ruff>=0.6,<1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/alexandrade1978/kycortex-agents"
@@ -37,6 +41,17 @@ Documentation = "https://github.com/alexandrade1978/kycortex-agents/blob/main/do
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["kycortex_agents", "examples"]
+
+[[tool.mypy.overrides]]
+module = ["anthropic"]
+ignore_missing_imports = true
 
 [tool.setuptools]
 include-package-data = true

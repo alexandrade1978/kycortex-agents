@@ -7,7 +7,7 @@ import os
 import sqlite3
 import tempfile
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from kycortex_agents.exceptions import StatePersistenceError
@@ -90,7 +90,7 @@ class SqliteStateStore(BaseStateStore):
                         payload = excluded.payload,
                         updated_at = excluded.updated_at
                     """,
-                    (payload, datetime.now(UTC).isoformat()),
+                    (payload, datetime.now(timezone.utc).isoformat()),
                 )
         except sqlite3.Error as exc:
             raise StatePersistenceError(f"Failed to save project state to {path}") from exc

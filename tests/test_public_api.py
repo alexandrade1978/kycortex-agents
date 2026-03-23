@@ -283,7 +283,7 @@ def test_test_mode_example_uses_top_level_public_imports():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_test_mode.py"
     example = example_path.read_text(encoding="utf-8")
 
-    assert "from kycortex_agents import AgentRegistry, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
     assert "from kycortex_agents.workflows import" not in example
 
 
@@ -345,10 +345,11 @@ def test_test_mode_example_documents_deterministic_local_execution():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_test_mode.py"
     example = example_path.read_text(encoding="utf-8")
 
-    assert 'def build_test_registry() -> AgentRegistry:' in example
-    assert '"architect": RecordingAgent("ARCHITECTURE READY")' in example
-    assert '"code_engineer": RecordingAgent("IMPLEMENTATION READY")' in example
-    assert '"code_reviewer": RecordingAgent("REVIEW COMPLETE")' in example
+    assert 'class RecordingAgent(BaseAgent):' in example
+    assert 'def build_test_registry(config: KYCortexConfig) -> AgentRegistry:' in example
+    assert '"architect": RecordingAgent(config, "ARCHITECTURE READY")' in example
+    assert '"code_engineer": RecordingAgent(config, "IMPLEMENTATION READY")' in example
+    assert '"code_reviewer": RecordingAgent(config, "REVIEW COMPLETE")' in example
     assert 'def build_test_project() -> ProjectState:' in example
     assert 'dependencies=["arch"]' in example
     assert 'dependencies=["code"]' in example

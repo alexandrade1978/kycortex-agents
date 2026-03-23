@@ -61,7 +61,7 @@ class BaseAgent(ABC):
             self._last_provider_call_metadata.update(provider_metadata)
         return response
 
-    def run_with_input(self, agent_input: AgentInput) -> str:
+    def run_with_input(self, agent_input: AgentInput) -> str | AgentOutput:
         return self.run(agent_input.task_description, agent_input.context)
 
     def execute(self, agent_input: AgentInput) -> AgentOutput:
@@ -179,7 +179,7 @@ class BaseAgent(ABC):
         return dict(self._last_provider_call_metadata)
 
     @abstractmethod
-    def run(self, task_description: str, context: dict) -> str:
+    def run(self, task_description: str, context: dict) -> str | AgentOutput:
         pass
 
     def __repr__(self):

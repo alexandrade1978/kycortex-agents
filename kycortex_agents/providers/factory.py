@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import ConfigValidationError, ProviderConfigurationError
@@ -23,7 +23,7 @@ def create_provider(config: KYCortexConfig) -> BaseLLMProvider:
         "ollama": OllamaProvider,
         "openai": OpenAIProvider,
     }
-    provider_class: Optional[type[BaseLLMProvider]] = provider_map.get(provider_name)
+    provider_class: Optional[Callable[[KYCortexConfig], BaseLLMProvider]] = provider_map.get(provider_name)
     if provider_class is None:
         raise ProviderConfigurationError(f"Unsupported LLM provider: {config.llm_provider}")
     try:

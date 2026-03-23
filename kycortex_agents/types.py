@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -25,7 +25,7 @@ __all__ = [
 def utc_now_iso() -> str:
     """Return the current UTC timestamp in ISO-8601 format."""
 
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 class TaskStatus(str, Enum):

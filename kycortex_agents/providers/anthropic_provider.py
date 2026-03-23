@@ -17,7 +17,7 @@ class AnthropicProvider(BaseLLMProvider):
 
     def _get_client(self) -> Any:
         if self._client is None:
-            from anthropic import Anthropic
+            from anthropic import Anthropic  # type: ignore[import-not-found]
 
             self._client = Anthropic(api_key=self.config.api_key)
         return self._client

@@ -1,20 +1,21 @@
-from kycortex_agents import AgentRegistry, KYCortexConfig, Orchestrator, ProjectState, Task
+from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task
 
 
-class RecordingAgent:
-    def __init__(self, response: str):
+class RecordingAgent(BaseAgent):
+    def __init__(self, config: KYCortexConfig, response: str):
+        super().__init__(name="Recording Agent", role="deterministic", config=config)
         self.response = response
 
     def run(self, task_description: str, context: dict) -> str:
         return self.response
 
 
-def build_test_registry() -> AgentRegistry:
+def build_test_registry(config: KYCortexConfig) -> AgentRegistry:
     return AgentRegistry(
         {
-            "architect": RecordingAgent("ARCHITECTURE READY"),
-            "code_engineer": RecordingAgent("IMPLEMENTATION READY"),
-            "code_reviewer": RecordingAgent("REVIEW COMPLETE"),
+            "architect": RecordingAgent(config, "ARCHITECTURE READY"),
+            "code_engineer": RecordingAgent(config, "IMPLEMENTATION READY"),
+            "code_reviewer": RecordingAgent(config, "REVIEW COMPLETE"),
         }
     )
 
@@ -58,7 +59,7 @@ if __name__ == "__main__":
         project_name="test-mode-demo",
         output_dir="./output_test_mode_demo",
     )
-    registry = build_test_registry()
+    registry = build_test_registry(config)
     project = build_test_project()
 
     orchestrator = Orchestrator(config, registry=registry)

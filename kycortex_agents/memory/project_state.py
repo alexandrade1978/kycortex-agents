@@ -1,8 +1,7 @@
-import os
 from collections import deque
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.state_store import resolve_state_store
@@ -36,7 +35,7 @@ class Task:
     output_payload: Optional[Dict[str, Any]] = None
     skip_reason_type: Optional[str] = None
     last_provider_call: Optional[Dict[str, Any]] = None
-    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     started_at: Optional[str] = None
     last_attempt_started_at: Optional[str] = None
     last_resumed_at: Optional[str] = None
@@ -57,7 +56,7 @@ class ProjectState:
     workflow_started_at: Optional[str] = None
     workflow_finished_at: Optional[str] = None
     workflow_last_resumed_at: Optional[str] = None
-    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     state_file: str = "project_state.json"
 
     def add_task(self, task: Task):
@@ -92,7 +91,7 @@ class ProjectState:
 
         for task in self.tasks:
             if task.id == task_id:
-                started_at = datetime.now(UTC).isoformat()
+                started_at = datetime.now(timezone.utc).isoformat()
                 task.status = TaskStatus.RUNNING.value
                 task.attempts += 1
                 task.last_error = None
@@ -134,7 +133,7 @@ class ProjectState:
                             "retry_limit": task.retry_limit,
                             "error_type": task.last_error_type,
                             "provider_call": provider_call,
-                            "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, datetime.now(UTC).isoformat()),
+                            "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, datetime.now(timezone.utc).isoformat()),
                         },
                     )
                     self._touch()
@@ -142,7 +141,7 @@ class ProjectState:
                 task.status = TaskStatus.FAILED.value
                 task.output = error_message
                 task.output_payload = None
-                task.completed_at = datetime.now(UTC).isoformat()
+                task.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(task, "failed", task.completed_at, error_message=error_message)
                 self._record_execution_event(
                     event="task_failed",
@@ -175,7 +174,7 @@ class ProjectState:
                 t.last_error = None
                 t.last_error_type = None
                 t.last_provider_call = provider_call
-                t.completed_at = datetime.now(UTC).isoformat()
+                t.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
                 self._record_execution_event(
                     event="task_completed",
@@ -199,7 +198,7 @@ class ProjectState:
         resumed_at: Optional[str] = None
         for task in self.tasks:
             if task.status == TaskStatus.RUNNING.value:
-                resumed_at = resumed_at or datetime.now(UTC).isoformat()
+                resumed_at = resumed_at or datetime.now(timezone.utc).isoformat()
                 task.last_resumed_at = resumed_at
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after interrupted execution"
@@ -234,7 +233,7 @@ class ProjectState:
         if not failed_task_ids:
             return []
 
-        resumed_at = datetime.now(UTC).isoformat()
+        resumed_at = datetime.now(timezone.utc).isoformat()
         resumed_task_ids: List[str] = []
         resumable_dependency_ids = set(failed_task_ids)
 
@@ -298,7 +297,7 @@ class ProjectState:
     def add_decision(self, topic: str, decision: str, rationale: str):
         """Append a lightweight project-level decision entry with a fresh timestamp."""
 
-        self.decisions.append({"topic": topic, "decision": decision, "rationale": rationale, "at": datetime.now(UTC).isoformat()})
+        self.decisions.append({"topic": topic, "decision": decision, "rationale": rationale, "at": datetime.now(timezone.utc).isoformat()})
         self._touch()
 
     def add_decision_record(self, record: DecisionRecord):
@@ -324,7 +323,7 @@ class ProjectState:
     def mark_workflow_running(self):
         """Mark the workflow execution as active and emit a workflow-start event."""
 
-        started_at = datetime.now(UTC).isoformat()
+        started_at = datetime.now(timezone.utc).isoformat()
         if self.workflow_started_at is None:
             self.workflow_started_at = started_at
         self.workflow_finished_at = None
@@ -335,7 +334,7 @@ class ProjectState:
     def mark_workflow_finished(self, phase: str):
         """Mark the workflow finished under the supplied phase label."""
 
-        finished_at = datetime.now(UTC).isoformat()
+        finished_at = datetime.now(timezone.utc).isoformat()
         self.phase = phase
         self.workflow_finished_at = finished_at
         self._record_execution_event(
@@ -397,7 +396,7 @@ class ProjectState:
             or self.workflow_finished_at
             or self.workflow_last_resumed_at
             or self.workflow_started_at
-            or datetime.now(UTC).isoformat()
+            or datetime.now(timezone.utc).isoformat()
         )
 
     def _infer_legacy_skip_reason_types(self) -> None:
@@ -516,7 +515,7 @@ class ProjectState:
         task.started_at = None
         task.last_attempt_started_at = None
         task.last_resumed_at = None
-        task.completed_at = datetime.now(UTC).isoformat()
+        task.completed_at = datetime.now(timezone.utc).isoformat()
         self._record_task_event(task, "skipped", task.completed_at, error_message=reason)
         self._record_execution_event(
             event="task_skipped",
@@ -631,7 +630,7 @@ class ProjectState:
         )
 
     def _touch(self, timestamp: Optional[str] = None):
-        self.updated_at = timestamp or datetime.now(UTC).isoformat()
+        self.updated_at = timestamp or datetime.now(timezone.utc).isoformat()
 
     def _record_task_event(
         self,
@@ -643,7 +642,7 @@ class ProjectState:
         task.history.append(
             {
                 "event": event,
-                "timestamp": timestamp or datetime.now(UTC).isoformat(),
+                "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
                 "status": task.status,
                 "attempts": task.attempts,
                 "error_message": error_message,
@@ -661,7 +660,7 @@ class ProjectState:
         self.execution_events.append(
             {
                 "event": event,
-                "timestamp": timestamp or datetime.now(UTC).isoformat(),
+                "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
                 "task_id": task_id,
                 "status": status,
                 "details": details or {},
@@ -757,8 +756,9 @@ class ProjectState:
                 artifact_type = ArtifactType(raw_type)
             except ValueError:
                 artifact_type = ArtifactType.OTHER
+            name = artifact.get("name") or artifact.get("path") or "artifact"
             return ArtifactRecord(
-                name=artifact.get("name", artifact.get("path", "artifact")),
+                name=str(name),
                 artifact_type=artifact_type,
                 path=artifact.get("path"),
                 content=artifact.get("content"),

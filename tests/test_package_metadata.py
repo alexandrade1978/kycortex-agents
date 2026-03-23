@@ -47,7 +47,25 @@ def test_pyproject_declares_test_extra():
     data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
 
     optional_dependencies = data["project"]["optional-dependencies"]
-    assert optional_dependencies["test"] == ["pytest>=7.0.0"]
+    assert optional_dependencies["test"] == [
+        "pytest>=7.0.0",
+        "mypy>=1.10,<2.0",
+        "ruff>=0.6,<1.0",
+    ]
+
+
+def test_pyproject_declares_local_lint_and_typecheck_tooling():
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    ruff_config = data["tool"]["ruff"]
+    mypy_config = data["tool"]["mypy"]
+
+    assert ruff_config["target-version"] == "py310"
+    assert mypy_config["python_version"] == "3.10"
+    assert mypy_config["files"] == ["kycortex_agents", "examples"]
+    assert data["tool"]["mypy"]["overrides"][0]["module"] == ["anthropic"]
+    assert data["tool"]["mypy"]["overrides"][0]["ignore_missing_imports"] is True
 
 
 def test_pyproject_declares_explicit_setuptools_package_discovery():
@@ -107,12 +125,16 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "Requires-Dist: anthropic<1.0.0,>=0.34.0" in metadata
     assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
     assert "Requires-Dist: pytest>=7.0.0; extra == \"test\"" in metadata
+    assert "Requires-Dist: mypy<2.0,>=1.10; extra == \"test\"" in metadata
+    assert "Requires-Dist: ruff<1.0,>=0.6; extra == \"test\"" in metadata
     assert "https://kycortex.com" not in metadata
     assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in metadata
     assert "OPENAI_API_KEY" in metadata
     assert "ANTHROPIC_API_KEY" in metadata
     assert "anthropic<1.0.0,>=0.34.0" in requirements
     assert "openai<2.0.0,>=1.0.0" in requirements
+    assert "mypy<2.0,>=1.10" in requirements
+    assert "ruff<1.0,>=0.6" in requirements
 
 
 def test_generated_egg_info_sources_include_current_distribution_assets():
@@ -158,6 +180,10 @@ def test_contributing_guide_documents_test_command_tiers():
 
     assert "make setup" in contributing
     assert "Suggested Test Commands" in contributing
+    assert "python -m ruff check ." in contributing
+    assert "python -m mypy" in contributing
+    assert "make lint" in contributing
+    assert "make typecheck" in contributing
     assert "tests/test_public_api.py tests/test_public_smoke.py -q" in contributing
     assert "tests/test_package_metadata.py -q" in contributing
     assert "python -m pytest -q" in contributing
@@ -171,8 +197,10 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     makefile = (project_root / "Makefile").read_text(encoding="utf-8")
     editorconfig = (project_root / ".editorconfig").read_text(encoding="utf-8")
 
-    assert ".PHONY: setup test-public test-metadata test" in makefile
+    assert ".PHONY: setup lint typecheck test-public test-metadata test" in makefile
     assert 'python -m pip install -e ".[test]"' in makefile
+    assert "python -m ruff check ." in makefile
+    assert "python -m mypy" in makefile
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
     assert "python -m pytest tests/test_package_metadata.py -q" in makefile
     assert "python -m pytest -q" in makefile
@@ -250,6 +278,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "supported provider configurations against the same workflow definition" in docs_readme
     assert "validating workflow behavior locally without calling a live provider" in docs_readme
     assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
+    assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 
 

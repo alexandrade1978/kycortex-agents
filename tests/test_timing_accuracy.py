@@ -1,5 +1,5 @@
 from collections import deque
-from datetime import UTC, datetime
+from datetime import datetime
 
 from kycortex_agents.memory import project_state as project_state_module
 from kycortex_agents.memory.project_state import ProjectState, Task

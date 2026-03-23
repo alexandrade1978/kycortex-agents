@@ -17,6 +17,9 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [examples/example_custom_agent.py](../examples/example_custom_agent.py): custom-agent example using `BaseAgent` and `AgentRegistry` through the public API.
 - [examples/example_multi_provider.py](../examples/example_multi_provider.py): provider-configuration example showing the same workflow across OpenAI, Anthropic, and Ollama.
 - [examples/example_test_mode.py](../examples/example_test_mode.py): deterministic local execution example using fake agents instead of live provider calls.
+- [examples/example_complex_workflow.py](../examples/example_complex_workflow.py): converging multi-parent workflow example showing merged artifacts and decisions flowing into a downstream task.
+- [examples/example_failure_recovery.py](../examples/example_failure_recovery.py): persisted failure-and-resume example showing retry exhaustion, reload, and `resume_failed` recovery.
+- [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py): structured snapshot-inspection example showing task results, provider metadata, artifacts, decisions, and execution events.
 
 ## Public API Navigation
 
@@ -46,6 +49,9 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [examples/example_custom_agent.py](../examples/example_custom_agent.py) when learning how custom agents plug into the public runtime.
 - Use [examples/example_multi_provider.py](../examples/example_multi_provider.py) when comparing supported provider configurations against the same workflow definition.
 - Use [examples/example_test_mode.py](../examples/example_test_mode.py) when validating workflow behavior locally without calling a live provider.
+- Use [examples/example_complex_workflow.py](../examples/example_complex_workflow.py) when learning how converging DAGs expose merged upstream artifacts and decisions to a downstream agent.
+- Use [examples/example_failure_recovery.py](../examples/example_failure_recovery.py) when learning how persisted failed workflows reload and continue under `workflow_resume_policy="resume_failed"`.
+- Use [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py) when learning how snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `Makefile` targets and shared `.editorconfig` defaults when working locally.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for local `ruff` and `mypy` validation commands when checking the package and examples before opening a pull request.
@@ -62,4 +68,4 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Planned Expansion
 
-Phase 11 is expanding the example suite and developer experience beyond the current example suite with shared local tooling such as the repository `Makefile`, `.editorconfig`, and local `ruff` and `mypy` validation commands.
+Phase 11 is expanding the example suite and developer experience beyond the current example suite with shared local tooling such as the repository `Makefile`, `.editorconfig`, local `ruff` and `mypy` validation commands, and more advanced workflow examples.

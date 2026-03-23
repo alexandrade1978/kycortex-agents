@@ -146,10 +146,13 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "CONTRIBUTING.md",
         "Makefile",
         "docs/README.md",
+        "examples/example_complex_workflow.py",
         "examples/example_custom_agent.py",
+        "examples/example_failure_recovery.py",
         "examples/example_multi_provider.py",
         "examples/example_resume_workflow.py",
         "examples/example_simple_project.py",
+        "examples/example_snapshot_inspection.py",
         "examples/example_test_mode.py",
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
@@ -268,6 +271,9 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "examples/example_custom_agent.py" in docs_readme
     assert "examples/example_multi_provider.py" in docs_readme
     assert "examples/example_test_mode.py" in docs_readme
+    assert "examples/example_complex_workflow.py" in docs_readme
+    assert "examples/example_failure_recovery.py" in docs_readme
+    assert "examples/example_snapshot_inspection.py" in docs_readme
     assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
     assert "task dependencies, failure policies, and resume policies" in docs_readme
     assert "JSON and SQLite state files or when debugging resume behavior" in docs_readme
@@ -277,6 +283,9 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "custom agents plug into the public runtime" in docs_readme
     assert "supported provider configurations against the same workflow definition" in docs_readme
     assert "validating workflow behavior locally without calling a live provider" in docs_readme
+    assert "converging DAGs expose merged upstream artifacts and decisions" in docs_readme
+    assert "persisted failed workflows reload and continue" in docs_readme
+    assert "snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events" in docs_readme
     assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme

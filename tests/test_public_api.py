@@ -287,6 +287,33 @@ def test_test_mode_example_uses_top_level_public_imports():
     assert "from kycortex_agents.workflows import" not in example
 
 
+def test_complex_workflow_example_uses_top_level_public_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_complex_workflow.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, ArtifactType, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.types import AgentInput, AgentOutput, DecisionRecord" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
+def test_failure_recovery_example_uses_top_level_public_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_failure_recovery.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
+def test_snapshot_inspection_example_uses_public_runtime_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_snapshot_inspection.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, ArtifactType, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.providers import BaseLLMProvider" in example
+    assert "from kycortex_agents.types import AgentInput, AgentOutput, DecisionRecord" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
 def test_example_defines_dependency_aware_workflow_chain():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
     example = example_path.read_text(encoding="utf-8")
@@ -355,3 +382,44 @@ def test_test_mode_example_documents_deterministic_local_execution():
     assert 'dependencies=["code"]' in example
     assert 'Orchestrator(config, registry=registry)' in example
     assert 'Deterministic test-mode workflow summary:' in example
+
+
+def test_complex_workflow_example_documents_converging_dag_and_merge_context():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_complex_workflow.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'class MergeDocumentationAgent(BaseAgent):' in example
+    assert 'required_context_keys = ("architecture", "code", "review", "tests")' in example
+    assert 'agent_input.context["artifacts"]' in example
+    assert 'agent_input.context["decisions"]' in example
+    assert 'dependencies=["arch"]' in example
+    assert 'dependencies=["code"]' in example
+    assert 'dependencies=["review", "tests"]' in example
+    assert 'Complex workflow summary:' in example
+
+
+def test_failure_recovery_example_documents_reload_and_resume_failed_flow():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_failure_recovery.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'state_file=state_path' in example
+    assert 'retry_limit=1' in example
+    assert 'workflow_failure_policy="fail_fast"' in example
+    assert 'workflow_resume_policy="resume_failed"' in example
+    assert 'ProjectState.load(state_path)' in example
+    assert 'resume_orchestrator.execute_workflow(failed)' in example
+    assert 'Task histories:' in example
+
+
+def test_snapshot_inspection_example_documents_snapshot_outputs_and_provider_metadata():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_snapshot_inspection.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'class FakeMetadataProvider(BaseLLMProvider):' in example
+    assert 'snapshot = project.snapshot()' in example
+    assert 'snapshot.workflow_status' in example
+    assert 'snapshot.task_results.items()' in example
+    assert 'task_result.details.get("last_provider_call")' in example
+    assert 'snapshot.artifacts' in example
+    assert 'snapshot.decisions' in example
+    assert 'snapshot.execution_events' in example

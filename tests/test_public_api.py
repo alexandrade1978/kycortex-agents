@@ -258,7 +258,7 @@ def test_resume_example_uses_top_level_public_imports():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_resume_workflow.py"
     example = example_path.read_text(encoding="utf-8")
 
-    assert "from kycortex_agents import AgentRegistry, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
     assert "from kycortex_agents.workflows import" not in example
 
 

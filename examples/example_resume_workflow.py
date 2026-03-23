@@ -1,8 +1,9 @@
-from kycortex_agents import AgentRegistry, KYCortexConfig, Orchestrator, ProjectState, Task
+from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task
 
 
-class RecordingAgent:
-    def __init__(self, response: str):
+class RecordingAgent(BaseAgent):
+    def __init__(self, config: KYCortexConfig, name: str, role: str, response: str):
+        super().__init__(name=name, role=role, config=config)
         self.response = response
 
     def run(self, task_description: str, context: dict) -> str:
@@ -19,8 +20,8 @@ if __name__ == "__main__":
 
     registry = AgentRegistry(
         {
-            "architect": RecordingAgent("ARCHITECTURE DOC"),
-            "code_reviewer": RecordingAgent("REVIEWED ARCHITECTURE"),
+            "architect": RecordingAgent(config, "Recording Architect", "architect", "ARCHITECTURE DOC"),
+            "code_reviewer": RecordingAgent(config, "Recording Reviewer", "code_reviewer", "REVIEWED ARCHITECTURE"),
         }
     )
 

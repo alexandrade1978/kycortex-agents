@@ -17,7 +17,7 @@ class LegalAdvisorAgent(BaseAgent):
 
     def run_with_input(self, agent_input: AgentInput) -> str:
         dependencies = agent_input.context.get("dependencies", [])
-        chosen_license = agent_input.context.get("license", "Apache-2.0")
+        chosen_license = agent_input.context.get("license", "AGPL-3.0-only")
         dep_list = "\n".join(f"- {dependency}" for dependency in dependencies) if dependencies else "Not specified"
         user_msg = f"""Project: {agent_input.project_name}
 Goal: {agent_input.project_goal}
@@ -32,7 +32,7 @@ Provide legal analysis and draft any required legal documents."""
 
     def run(self, task_description: str, context: dict) -> str:
         dependencies = context.get("dependencies", [])
-        chosen_license = context.get("license", "Apache-2.0")
+        chosen_license = context.get("license", "AGPL-3.0-only")
         dep_list = "\n".join(f"- {d}" for d in dependencies) if dependencies else "Not specified"
         user_msg = f"""Project License: {chosen_license}
 Dependencies:

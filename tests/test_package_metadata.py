@@ -26,7 +26,9 @@ def test_pyproject_contains_expected_package_metadata():
     project = data["project"]
     assert project["name"] == "kycortex-agents"
     assert project["version"] == kycortex_agents.__version__
+    assert project["license"]["text"] == "AGPL-3.0-only"
     assert "Typing :: Typed" in project["classifiers"]
+    assert "License :: OSI Approved :: GNU Affero General Public License v3" in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
     assert "openai>=1.0.0,<2.0.0" in project["dependencies"]
     assert data["project"]["urls"]["Homepage"] == "https://github.com/alexandrade1978/kycortex-agents"

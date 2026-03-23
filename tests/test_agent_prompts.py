@@ -146,7 +146,7 @@ def test_legal_advisor_formats_dependencies_from_typed_context(tmp_path):
         task_description="Review licensing",
         project_name="Demo",
         project_goal="Build demo",
-        context={"license": "Apache-2.0", "dependencies": ["openai", "anthropic"]},
+        context={"license": "AGPL-3.0-only", "dependencies": ["openai", "anthropic"]},
     )
 
     result = agent.run_with_input(agent_input)

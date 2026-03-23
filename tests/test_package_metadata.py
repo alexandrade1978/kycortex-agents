@@ -156,6 +156,18 @@ def test_readme_installation_flow_uses_package_installs():
     assert "pip install -r requirements.txt" not in readme
 
 
+def test_readme_documents_all_supported_provider_configuration_paths():
+    readme_path = Path(__file__).resolve().parents[1] / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+
+    assert "OPENAI_API_KEY" in readme
+    assert "ANTHROPIC_API_KEY" in readme
+    assert "http://localhost:11434" in readme
+    assert 'llm_provider="openai"' in readme
+    assert 'llm_provider="anthropic"' in readme
+    assert 'llm_provider="ollama"' in readme
+
+
 def test_readme_documents_current_package_layout_and_provider_support():
     readme_path = Path(__file__).resolve().parents[1] / "README.md"
     readme = readme_path.read_text(encoding="utf-8")
@@ -166,6 +178,15 @@ def test_readme_documents_current_package_layout_and_provider_support():
     assert "├── workflows/      # Public workflow module surface" in readme
     assert "└── types.py        # Public typed contracts" in readme
     assert "Support for multiple LLM providers (Anthropic, local models)" not in readme
+
+
+def test_readme_quick_start_model_matches_packaged_example():
+    project_root = Path(__file__).resolve().parents[1]
+    readme = (project_root / "README.md").read_text(encoding="utf-8")
+    example = (project_root / "examples" / "example_simple_project.py").read_text(encoding="utf-8")
+
+    assert 'config = KYCortexConfig(llm_model="gpt-4o-mini", api_key="your-key")' in readme
+    assert 'llm_model="gpt-4o-mini"' in example
 
 
 def test_pyproject_configures_pytest_testpaths():

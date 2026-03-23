@@ -38,7 +38,7 @@ pip install -e ".[test]"
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
 
 # Configure
-config = KYCortexConfig(llm_model="gpt-4o", api_key="your-key")
+config = KYCortexConfig(llm_model="gpt-4o-mini", api_key="your-key")
 
 # Define project
 project = ProjectState(
@@ -62,13 +62,43 @@ See `examples/` for complete examples.
 
 ## Configuration
 
-Set `OPENAI_API_KEY` environment variable or pass to `KYCortexConfig`:
+Choose a provider and either pass credentials directly or rely on the provider-specific environment variable:
+
+- OpenAI: `OPENAI_API_KEY`
+- Anthropic: `ANTHROPIC_API_KEY`
+- Ollama: no API key required; defaults to `http://localhost:11434`
+
+OpenAI example:
 
 ```python
 config = KYCortexConfig(
     llm_provider="openai",
-    llm_model="gpt-4o",
+    llm_model="gpt-4o-mini",
     temperature=0.2,
+    project_name="my-project",
+    output_dir="./output"
+)
+```
+
+Anthropic example:
+
+```python
+config = KYCortexConfig(
+    llm_provider="anthropic",
+    llm_model="claude-3-5-sonnet-latest",
+    temperature=0.2,
+    project_name="my-project",
+    output_dir="./output"
+)
+```
+
+Ollama example:
+
+```python
+config = KYCortexConfig(
+    llm_provider="ollama",
+    llm_model="llama3",
+    base_url="http://localhost:11434",
     project_name="my-project",
     output_dir="./output"
 )

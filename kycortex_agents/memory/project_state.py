@@ -386,6 +386,9 @@ class ProjectState:
         task.output_payload = None
         task.skip_reason_type = reason_type
         task.last_provider_call = None
+        task.started_at = None
+        task.last_attempt_started_at = None
+        task.last_resumed_at = None
         task.completed_at = datetime.now(UTC).isoformat()
         self._record_task_event(task, "skipped", task.completed_at, error_message=reason)
         self._record_execution_event(

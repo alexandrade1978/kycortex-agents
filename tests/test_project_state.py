@@ -772,6 +772,9 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
             },
             last_provider_call={"provider": "openai", "model": "gpt-4o"},
             last_error_type="RuntimeError",
+            started_at="2026-03-22T10:00:00+00:00",
+            last_attempt_started_at="2026-03-22T10:05:00+00:00",
+            last_resumed_at="2026-03-22T10:04:00+00:00",
         )
     )
 
@@ -786,8 +789,15 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert task.output_payload is None
     assert task.last_provider_call is None
     assert task.last_error_type is None
+    assert task.started_at is None
+    assert task.last_attempt_started_at is None
+    assert task.last_resumed_at is None
     assert result.status == TaskStatus.SKIPPED
     assert result.output is not None
     assert result.output.summary == "Skipped because dependency 'arch' failed"
     assert result.details["last_provider_call"] is None
     assert result.details["last_error_type"] is None
+    assert result.details["last_attempt_started_at"] is None
+    assert result.details["last_resumed_at"] is None
+    assert result.details["task_duration_ms"] is None
+    assert result.details["last_attempt_duration_ms"] is None

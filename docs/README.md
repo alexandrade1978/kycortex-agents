@@ -6,6 +6,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 
 - [README.md](../README.md): installation, quick start, architecture overview, and current project status.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): development workflow and contribution expectations.
+- [architecture.md](architecture.md): runtime layers, workflow execution model, persistence design, and supported extension seams.
 - [examples/example_simple_project.py](../examples/example_simple_project.py): minimal packaged example using the public top-level API.
 
 ## Public API Navigation
@@ -43,4 +44,4 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Planned Expansion
 
-Dedicated architecture, provider, workflow, persistence, troubleshooting, and extension guides will be expanded during the documentation rewrite phase of the roadmap.
+Dedicated provider, workflow, persistence, troubleshooting, and extension guides will be expanded during the documentation rewrite phase of the roadmap.

@@ -190,6 +190,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     docs_readme_path = Path(__file__).resolve().parents[1] / "docs" / "README.md"
     docs_readme = docs_readme_path.read_text(encoding="utf-8")
 
+    assert "architecture.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -204,6 +205,30 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
     assert "task dependencies, failure policies, and resume policies" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
+
+
+def test_docs_architecture_guide_documents_current_runtime_shape():
+    architecture_path = Path(__file__).resolve().parents[1] / "docs" / "architecture.md"
+    architecture = architecture_path.read_text(encoding="utf-8")
+
+    assert "# Architecture Guide" in architecture
+    assert "## Runtime Layers" in architecture
+    assert "## Core Domain Contracts" in architecture
+    assert "## Workflow Execution Model" in architecture
+    assert "## Context Assembly" in architecture
+    assert "## Persistence Model" in architecture
+    assert "## Provider Layer" in architecture
+    assert "## Extension Points" in architecture
+    assert "Orchestrator" in architecture
+    assert "ProjectState" in architecture
+    assert "ProjectSnapshot" in architecture
+    assert "AgentInput" in architecture
+    assert "AgentOutput" in architecture
+    assert "JsonStateStore" in architecture
+    assert "SqliteStateStore" in architecture
+    assert "OpenAIProvider" in architecture
+    assert "AnthropicProvider" in architecture
+    assert "OllamaProvider" in architecture
 
 
 def test_docs_readme_documents_supported_environment_variables():

@@ -28,6 +28,12 @@ This file tracks the current repository-owned release state for KYCortex after t
 - coverage gate: passing
 - full pytest suite: passing
 
+## Latest Published Release Verification
+
+- GitHub Actions release workflow for `v1.0.0` completed successfully.
+- The published GitHub release is marked as the latest release for the repository.
+- Attached assets include `kycortex_agents-1.0.0-py3-none-any.whl` and `kycortex_agents-1.0.0.tar.gz`.
+
 ## Release Outcome
 
 The 1.0.0 release state is now captured directly in the package metadata, changelog, migration notes, release guide, and release-check workflow.

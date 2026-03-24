@@ -1,6 +1,12 @@
 import kycortex_agents
+import importlib
 from pathlib import Path
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 in CI
+    tomllib = importlib.import_module("tomli")
+
 from kycortex_agents import config as config_module
 from kycortex_agents import exceptions as exceptions_module
 from kycortex_agents import types as types_module

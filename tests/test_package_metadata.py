@@ -1,8 +1,13 @@
 from pathlib import Path
+import importlib
 import re
 import subprocess
 import sys
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 in CI
+    tomllib = importlib.import_module("tomli")
 
 import kycortex_agents
 
@@ -58,6 +63,7 @@ def test_pyproject_declares_test_extra():
     assert optional_dependencies["test"] == [
         "build>=1.2,<2.0",
         "pytest>=7.0.0",
+        "tomli>=2.0.1,<3.0; python_version < '3.11'",
         "mypy>=1.10,<2.0",
         "pre-commit>=3.7,<5.0",
         "ruff>=0.6,<1.0",
@@ -138,6 +144,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
     assert "Requires-Dist: pytest>=7.0.0; extra == \"test\"" in metadata
     assert "Requires-Dist: build<2.0,>=1.2; extra == \"test\"" in metadata
+    assert "Requires-Dist: tomli<3.0,>=2.0.1; python_version < \"3.11\" and extra == \"test\"" in metadata
     assert "Requires-Dist: mypy<2.0,>=1.10; extra == \"test\"" in metadata
     assert "Requires-Dist: pre-commit<5.0,>=3.7; extra == \"test\"" in metadata
     assert "Requires-Dist: ruff<1.0,>=0.6; extra == \"test\"" in metadata
@@ -147,6 +154,8 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "ANTHROPIC_API_KEY" in metadata
     assert "anthropic<1.0.0,>=0.34.0" in requirements
     assert "build<2.0,>=1.2" in requirements
+    assert '[test:python_version < "3.11"]' in requirements
+    assert "tomli<3.0,>=2.0.1" in requirements
     assert "openai<2.0.0,>=1.0.0" in requirements
     assert "mypy<2.0,>=1.10" in requirements
     assert "pre-commit<5.0,>=3.7" in requirements
@@ -270,6 +279,7 @@ def test_github_actions_ci_workflow_covers_repository_validation_baseline():
     assert "actions/setup-python@v5" in ci_workflow
     assert 'python-version: ["3.10", "3.12"]' in ci_workflow
     assert 'python-version: "3.12"' in ci_workflow
+    assert "name: Focused Regressions (${{ matrix.python-version }})" in ci_workflow
     assert 'python -m pip install -e ".[test]"' in ci_workflow
     assert "python -m ruff check ." in ci_workflow
     assert "python -m mypy" in ci_workflow

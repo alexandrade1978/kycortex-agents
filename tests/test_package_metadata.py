@@ -26,13 +26,21 @@ def test_pyproject_contains_expected_package_metadata():
     project = data["project"]
     assert project["name"] == "kycortex-agents"
     assert project["version"] == kycortex_agents.__version__
-    assert project["license"]["text"] == "AGPL-3.0-only"
+    assert project["license"] == "AGPL-3.0-only"
+    assert project["license-files"] == ["LICENSE"]
     assert "Typing :: Typed" in project["classifiers"]
-    assert "License :: OSI Approved :: GNU Affero General Public License v3" in project["classifiers"]
+    assert "License :: OSI Approved :: GNU Affero General Public License v3" not in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
     assert "openai>=1.0.0,<2.0.0" in project["dependencies"]
     assert data["project"]["urls"]["Homepage"] == "https://github.com/alexandrade1978/kycortex-agents"
     assert data["project"]["urls"]["Documentation"].endswith("/docs/README.md")
+
+
+def test_pyproject_build_backend_supports_spdx_license_metadata():
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    assert data["build-system"]["requires"] == ["setuptools>=77.0.0", "wheel"]
 
 
 def test_pyproject_version_matches_package_version_constant():
@@ -186,6 +194,7 @@ def test_top_level_contributing_guide_exists_for_readme_reference():
     assert (project_root / "CONTRIBUTING.md").is_file()
     assert (project_root / "docs" / "README.md").is_file()
     assert (project_root / ".github" / "workflows" / "ci.yml").is_file()
+    assert (project_root / ".github" / "workflows" / "release.yml").is_file()
 
 
 def test_contributing_guide_documents_test_command_tiers():
@@ -200,6 +209,9 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in contributing
     assert "python scripts/package_check.py" in contributing
     assert "make package-check" in contributing
+    assert "git tag v0.1.0" in contributing
+    assert "git push origin v0.1.0" in contributing
+    assert ".github/workflows/release.yml" in contributing
     assert "make precommit" in contributing
     assert "make prepush" in contributing
     assert "python -m ruff check ." in contributing
@@ -265,6 +277,29 @@ def test_github_actions_ci_workflow_covers_repository_validation_baseline():
     assert "package-validation:" in ci_workflow
     assert "python scripts/package_check.py" in ci_workflow
     assert "python -m pytest -q" in ci_workflow
+
+
+def test_github_actions_release_workflow_covers_tagged_release_automation():
+    project_root = Path(__file__).resolve().parents[1]
+    release_workflow = (project_root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "name: Release" in release_workflow
+    assert "workflow_dispatch:" in release_workflow
+    assert "tags:" in release_workflow
+    assert '- "v*"' in release_workflow
+    assert "actions/checkout@v4" in release_workflow
+    assert "actions/setup-python@v5" in release_workflow
+    assert 'python -m pip install -e ".[test]"' in release_workflow
+    assert "python -m ruff check ." in release_workflow
+    assert "python -m mypy" in release_workflow
+    assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py tests/test_package_metadata.py -q" in release_workflow
+    assert "python scripts/package_check.py" in release_workflow
+    assert "python -m pytest -q" in release_workflow
+    assert "python -m build" in release_workflow
+    assert "actions/upload-artifact@v4" in release_workflow
+    assert "actions/download-artifact@v4" in release_workflow
+    assert "softprops/action-gh-release@v2" in release_workflow
+    assert "generate_release_notes: true" in release_workflow
 
 
 def test_readme_relative_markdown_links_resolve_to_existing_files():
@@ -342,9 +377,11 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
     assert "repository `.pre-commit-config.yaml` workflow" in docs_readme
     assert ".github/workflows/ci.yml" in docs_readme
+    assert ".github/workflows/release.yml" in docs_readme
     assert "repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification" in docs_readme
     assert "scripts/package_check.py" in docs_readme
     assert "validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata" in docs_readme
+    assert "manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 

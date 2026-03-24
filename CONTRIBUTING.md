@@ -49,6 +49,16 @@ python scripts/package_check.py
 make package-check
 ```
 
+- Trigger the repository release workflow after local validation:
+
+```bash
+python -m pytest -q
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+- Use `.github/workflows/release.yml` for manual `workflow_dispatch` dry runs and for tagged GitHub releases that attach built wheel and source-distribution artifacts.
+
 - Local lint and type-check baseline:
 
 ```bash
@@ -85,6 +95,7 @@ make test
 - `.editorconfig`: shared line-ending, indentation, and trailing-whitespace defaults for Python, Markdown, TOML, YAML, and Makefile edits.
 - `.pre-commit-config.yaml`: repository-local pre-commit and pre-push automation for linting, type checking, and focused public-surface regressions.
 - `scripts/package_check.py`: local built-artifact validator that builds both wheel and source distributions, installs them into temporary virtual environments, and smoke-tests the public package imports.
+- `.github/workflows/release.yml`: tagged-release automation that reruns validation, builds wheel and source distributions, uploads them as workflow artifacts, and publishes them on GitHub releases for `v*` tags.
 - `ruff`: repository lint baseline for the package, examples, tests, and docs-adjacent Python files.
 - `mypy`: local type-check baseline for `kycortex_agents` and `examples`, with third-party `anthropic` imports excluded from stub enforcement.
 - `pre-commit`: local hook runner that executes the repository-owned `ruff`, `mypy`, and focused pytest checks before commits and pushes.

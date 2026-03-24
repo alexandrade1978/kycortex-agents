@@ -1,14 +1,14 @@
 # Documentation
 
-This repository keeps its primary user and contributor guidance in a small set of repository-owned entry points while the larger documentation rewrite remains in the roadmap.
+This repository keeps its primary user and contributor guidance in a small set of repository-owned entry points so the 1.0 line stays easy to navigate.
 
 ## Core Entry Points
 
 - [README.md](../README.md): installation, quick start, architecture overview, and current project status.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): development workflow and contribution expectations.
-- [RELEASE.md](../RELEASE.md): local release-candidate validation, version tagging, and post-tag verification steps.
-- [RELEASE_STATUS.md](../RELEASE_STATUS.md): current release-readiness snapshot and final manual release decision status.
-- [CHANGELOG.md](../CHANGELOG.md): release-facing summary of the repository changes being prepared for the 1.0 release candidate.
+- [RELEASE.md](../RELEASE.md): local release validation, version tagging, and post-tag verification steps.
+- [RELEASE_STATUS.md](../RELEASE_STATUS.md): current release-state snapshot and next maintenance-release action.
+- [CHANGELOG.md](../CHANGELOG.md): release-facing summary of the repository changes shipped in the 1.0 line.
 - [MIGRATION.md](../MIGRATION.md): upgrade guidance for users moving from the early prototype to the stabilized public API surface.
 - [.github/workflows/release.yml](../.github/workflows/release.yml): tagged-release workflow that revalidates the repository, builds distribution artifacts, and publishes GitHub releases for version tags.
 - [architecture.md](architecture.md): runtime layers, workflow execution model, persistence design, and supported extension seams.
@@ -61,7 +61,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `Makefile` targets and shared `.editorconfig` defaults when working locally.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for local `ruff` and `mypy` validation commands when checking the package and examples before opening a pull request.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository coverage gate command when validating release-readiness against the maintained package coverage threshold.
-- Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_check.py](../scripts/release_check.py) for the repository release-candidate validation pass before tagging a version or triggering the release workflow.
+- Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_check.py](../scripts/release_check.py) for the repository release validation pass before tagging a version or triggering the release workflow.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_metadata_check.py](../scripts/release_metadata_check.py) when validating version alignment and release-facing metadata before a tag is created.
 - Use [RELEASE.md](../RELEASE.md) when preparing a version tag, reviewing the final release gate, or verifying the post-tag GitHub release workflow results.
 - Use [RELEASE_STATUS.md](../RELEASE_STATUS.md) when checking the repository's current release-readiness state before deciding whether to update the version and tag a release.
@@ -69,7 +69,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/ci.yml](../.github/workflows/ci.yml) when you need the repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/package_check.py](../scripts/package_check.py) when validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/release.yml](../.github/workflows/release.yml) when preparing manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts.
-- Use [CHANGELOG.md](../CHANGELOG.md) and [MIGRATION.md](../MIGRATION.md) when preparing release-candidate notes or explaining the stabilized public surface to users migrating from earlier prototype revisions.
+- Use [CHANGELOG.md](../CHANGELOG.md) and [MIGRATION.md](../MIGRATION.md) when preparing release notes or explaining the stabilized public surface to users migrating from earlier prototype revisions.
 
 ## Environment Variables
 
@@ -81,6 +81,6 @@ This repository keeps its primary user and contributor guidance in a small set o
 
 These values mirror the provider mappings and defaults exported by `kycortex_agents.config`.
 
-## Planned Expansion
+## Current Release State
 
-Phase 13 is now focused on final release-candidate hardening, including changelog and migration-note preparation, coverage-gate enforcement, and final checklist review alongside the already-shipped CI, package-validation, and release-automation flow.
+Phase 13 is complete. The repository now ships a 1.0.0 baseline with changelog and migration guidance, release-metadata validation, coverage-gate enforcement, and tagged release automation.

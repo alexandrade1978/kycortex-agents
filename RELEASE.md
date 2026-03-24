@@ -1,6 +1,6 @@
 # Release Guide
 
-This document describes the repository-owned release procedure for KYCortex as the project closes out the 1.0 release candidate.
+This document describes the repository-owned release procedure for KYCortex 1.0.0 and later maintenance releases.
 
 ## Preconditions
 
@@ -20,7 +20,7 @@ python scripts/release_check.py
 make release-check
 ```
 
-This executes the same local release-readiness sequence used throughout Phase 13:
+This executes the same local release-readiness sequence used for tagged releases:
 
 - `ruff`
 - `mypy`

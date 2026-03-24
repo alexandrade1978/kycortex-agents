@@ -185,7 +185,7 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Releases
 
-Use [RELEASE.md](RELEASE.md) for the repository-owned release-candidate and tagging procedure.
+Use [RELEASE.md](RELEASE.md) for the repository-owned release validation and tagging procedure.
 Use [RELEASE_STATUS.md](RELEASE_STATUS.md) for the current release-readiness snapshot.
 
 ## License

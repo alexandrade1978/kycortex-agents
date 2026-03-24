@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is intentionally lightweight while the project moves toward its 1.0 release candidate. Entries group changes by milestone so release readiness stays visible even before the final 1.0 tag exists.
+The format is intentionally lightweight for the stabilized 1.0 line. Entries group changes by milestone so release history stays visible directly in the repository.
 
 ## Unreleased
 
@@ -14,7 +14,7 @@ The format is intentionally lightweight while the project moves toward its 1.0 r
 - Python 3.10 CI hardening for TOML-reading tests through conditional `tomli` support and broader focused regression coverage.
 - Repository-owned architecture, provider, workflow, persistence, extension, and troubleshooting guides.
 - Curated public examples covering resume, failure recovery, custom agents, multi-provider usage, deterministic test mode, complex DAGs, and snapshot inspection.
-- A repository-owned `scripts/release_check.py` validator and `make release-check` target for full local release-candidate verification.
+- A repository-owned `scripts/release_check.py` validator and `make release-check` target for full local release verification.
 - A repository-owned `RELEASE.md` guide describing the final release gate, version-tag flow, and post-tag verification steps.
 - A repository-owned `RELEASE_STATUS.md` snapshot describing the current release-readiness state and the remaining manual release decision.
 - A repository-owned `scripts/release_metadata_check.py` validator and `make release-metadata-check` target for version and release-document alignment checks before tagging.
@@ -32,5 +32,5 @@ The format is intentionally lightweight while the project moves toward its 1.0 r
 
 ### Release Readiness Notes
 
-- Current package version remains `0.1.0` while the repository completes 1.0 release-candidate hardening.
-- The remaining Phase 13 work is focused on final release-candidate closeout and checking off the last release-gate items before tagging `1.0.0`.
+- Version `1.0.0` is now the released package baseline.
+- Phase 13 release-readiness work is complete, and future changes should build from the shipped `1.0.0` baseline.

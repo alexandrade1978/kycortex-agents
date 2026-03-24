@@ -48,25 +48,36 @@ def main() -> int:
         raise ValueError("RELEASE_STATUS.md does not reflect the current package version")
 
     target_version_match = re.search(r"Release target under final Phase 13 review: `([^`]+)`", release_status)
-    if target_version_match is None:
-        raise ValueError("RELEASE_STATUS.md does not declare a release target")
+    released_version_match = re.search(r"Latest released version: `([^`]+)`", release_status)
 
-    target_version = target_version_match.group(1)
-    if _parse_semver(target_version) <= _parse_semver(project_version):
-        raise ValueError(
-            f"release target {target_version} must be greater than current package version {project_version}"
-        )
+    if target_version_match is not None:
+        target_version = target_version_match.group(1)
+        if _parse_semver(target_version) <= _parse_semver(project_version):
+            raise ValueError(
+                f"release target {target_version} must be greater than current package version {project_version}"
+            )
+        release_state = f"target={target_version}"
+    elif released_version_match is not None:
+        released_version = released_version_match.group(1)
+        if released_version != project_version:
+            raise ValueError(
+                "RELEASE_STATUS.md latest released version does not match the current package version"
+            )
+        release_state = f"released={released_version}"
+    else:
+        raise ValueError("RELEASE_STATUS.md must declare either a future release target or the latest released version")
 
     if "git tag v<version>" not in release_guide or "git push origin v<version>" not in release_guide:
         raise ValueError("RELEASE.md must use generic version-tag examples")
 
     changelog_line = f"Current package version remains `{project_version}`"
-    if changelog_line not in changelog:
+    released_changelog_line = f"Version `{project_version}` is now the released package baseline."
+    if changelog_line not in changelog and released_changelog_line not in changelog:
         raise ValueError("CHANGELOG.md does not reflect the current package version")
 
     print(
         "Release metadata validation passed: "
-        f"current={project_version}, target={target_version}, docs and package metadata are aligned.",
+        f"current={project_version}, {release_state}, docs and package metadata are aligned.",
         flush=True,
     )
     return 0

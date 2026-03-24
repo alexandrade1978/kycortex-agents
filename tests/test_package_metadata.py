@@ -33,6 +33,7 @@ def test_pyproject_contains_expected_package_metadata():
     assert project["version"] == kycortex_agents.__version__
     assert project["license"] == "AGPL-3.0-only"
     assert project["license-files"] == ["LICENSE"]
+    assert "Development Status :: 5 - Production/Stable" in project["classifiers"]
     assert "Typing :: Typed" in project["classifiers"]
     assert "License :: OSI Approved :: GNU Affero General Public License v3" not in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
@@ -436,20 +437,20 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "scripts/package_check.py" in docs_readme
     assert "validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata" in docs_readme
     assert "manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts" in docs_readme
-    assert "release-candidate notes" in docs_readme
+    assert "release notes" in docs_readme
     assert "migrating from earlier prototype revisions" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
     assert "repository coverage gate command" in docs_readme
     assert "scripts/release_check.py" in docs_readme
     assert "scripts/release_metadata_check.py" in docs_readme
-    assert "release-candidate validation pass" in docs_readme
+    assert "release validation pass" in docs_readme
     assert "post-tag GitHub release workflow results" in docs_readme
     assert "current release-readiness state" in docs_readme
     assert "coverage-gate enforcement" in docs_readme
 
 
-def test_changelog_documents_current_release_candidate_scope():
+def test_changelog_documents_current_release_scope():
     changelog_path = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
     changelog = changelog_path.read_text(encoding="utf-8")
 
@@ -467,8 +468,8 @@ def test_changelog_documents_current_release_candidate_scope():
     assert "make release-metadata-check" in changelog
     assert "GitHub release automation" in changelog
     assert "Python 3.10 CI hardening" in changelog
-    assert "Current package version remains `0.1.0`" in changelog
-    assert "tagging `1.0.0`" in changelog
+    assert "Version `1.0.0` is now the released package baseline." in changelog
+    assert "shipped `1.0.0` baseline" in changelog
 
 
 def test_release_check_script_runs_repository_release_readiness_sequence():
@@ -503,8 +504,10 @@ def test_release_metadata_check_script_validates_version_and_release_docs_alignm
     assert '"RELEASE_STATUS.md"' in script
     assert '"CHANGELOG.md"' in script
     assert '"Release target under final Phase 13 review: `([^`]+)`"' in script
+    assert '"Latest released version: `([^`]+)`"' in script
     assert '"git tag v<version>"' in script
     assert '"git push origin v<version>"' in script
+    assert '"RELEASE_STATUS.md must declare either a future release target or the latest released version"' in script
     assert '"Release metadata validation passed: "' in script
 
 
@@ -536,8 +539,9 @@ def test_release_status_documents_current_repository_release_readiness_state():
 
     assert "# Release Status" in release_status
     assert "## Current State" in release_status
-    assert "Package version in `pyproject.toml`: `0.1.0`" in release_status
-    assert "Release target under final Phase 13 review: `1.0.0`" in release_status
+    assert "Package version in `pyproject.toml`: `1.0.0`" in release_status
+    assert "Latest released version: `1.0.0`" in release_status
+    assert "Release tag for this version: `v1.0.0`" in release_status
     assert "## Repository Release Gates" in release_status
     assert "python scripts/release_check.py" in release_status
     assert "make release-check" in release_status
@@ -547,11 +551,11 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert ".github/workflows/release.yml" in release_status
     assert "## Latest Validated Release-Readiness Pass" in release_status
     assert "release metadata check: passing" in release_status
-    assert "## Remaining Manual Decision" in release_status
+    assert "## Release Outcome" in release_status
     assert "RELEASE.md" in release_status
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
-    assert "## Next Release Action" in release_status
+    assert "## Next Maintenance Action" in release_status
     assert "create and push the matching `v<version>` tag" in release_status
 
 

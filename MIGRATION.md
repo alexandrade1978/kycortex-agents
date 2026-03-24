@@ -1,6 +1,6 @@
 # Migration Notes
 
-These notes describe the migration path from the early KYCortex prototype to the stabilized public surface being prepared for the 1.0 release candidate.
+These notes describe the migration path from the early KYCortex prototype to the stabilized public surface shipped in KYCortex 1.0.0.
 
 ## Who Should Read This
 
@@ -84,7 +84,7 @@ Legacy `run(task_description, context)` compatibility still exists, but new inte
 
 - The repository still exports compatibility paths for legacy agent protocol dispatch where practical.
 - Persisted legacy states continue to load with safe defaults when newer fields are missing.
-- The 1.0 release candidate will treat the documented public API as the supported stability boundary.
+- The 1.0 release treats the documented public API as the supported stability boundary.
 
 ## Recommended Validation After Migration
 

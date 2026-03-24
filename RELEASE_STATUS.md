@@ -1,11 +1,12 @@
 # Release Status
 
-This file tracks the current repository-owned release-readiness state for KYCortex while the project closes out the 1.0 release candidate.
+This file tracks the current repository-owned release state for KYCortex after the 1.0.0 baseline was prepared.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `0.1.0`
-- Release target under final Phase 13 review: `1.0.0`
+- Package version in `pyproject.toml`: `1.0.0`
+- Latest released version: `1.0.0`
+- Release tag for this version: `v1.0.0`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -27,20 +28,20 @@ This file tracks the current repository-owned release-readiness state for KYCort
 - coverage gate: passing
 - full pytest suite: passing
 
-## Remaining Manual Decision
+## Release Outcome
 
-The remaining release action is a human decision to update the package version for the intended release and push the final version tag after reviewing the current release guide and checklist.
+The 1.0.0 release state is now captured directly in the package metadata, changelog, migration notes, release guide, and release-check workflow.
 
-Use the following repository-owned references before tagging:
+Use the following repository-owned references when validating follow-up maintenance releases:
 
 - `RELEASE.md`
 - `.local-docs/release-checklist.md`
 - `CHANGELOG.md`
 - `MIGRATION.md`
 
-## Next Release Action
+## Next Maintenance Action
 
-When the final release decision is made:
+For future tagged releases:
 
 1. update the package version for the intended release
 2. rerun `python scripts/release_check.py`

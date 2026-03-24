@@ -201,6 +201,8 @@ def test_top_level_contributing_guide_exists_for_readme_reference():
     project_root = Path(__file__).resolve().parents[1]
 
     assert (project_root / "CONTRIBUTING.md").is_file()
+    assert (project_root / "CHANGELOG.md").is_file()
+    assert (project_root / "MIGRATION.md").is_file()
     assert (project_root / "docs" / "README.md").is_file()
     assert (project_root / ".github" / "workflows" / "ci.yml").is_file()
     assert (project_root / ".github" / "workflows" / "release.yml").is_file()
@@ -341,6 +343,8 @@ def test_readme_uses_repository_owned_links_in_links_section():
     assert "https://kycortex.com/docs" not in readme
     assert "- **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)" in readme
     assert "- **Documentation**: [docs/README.md](docs/README.md)" in readme
+    assert "- **Changelog**: [CHANGELOG.md](CHANGELOG.md)" in readme
+    assert "- **Migration Notes**: [MIGRATION.md](MIGRATION.md)" in readme
     assert "Built by Alexandre Andrade with KYCortex AI." in readme
 
 
@@ -354,6 +358,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "persistence.md" in docs_readme
     assert "extensions.md" in docs_readme
     assert "troubleshooting.md" in docs_readme
+    assert "CHANGELOG.md" in docs_readme
+    assert "MIGRATION.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -392,8 +398,45 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "scripts/package_check.py" in docs_readme
     assert "validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata" in docs_readme
     assert "manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts" in docs_readme
+    assert "release-candidate notes" in docs_readme
+    assert "migrating from earlier prototype revisions" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
+
+
+def test_changelog_documents_current_release_candidate_scope():
+    changelog_path = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
+    changelog = changelog_path.read_text(encoding="utf-8")
+
+    assert "# Changelog" in changelog
+    assert "## Unreleased" in changelog
+    assert "### Added" in changelog
+    assert "### Changed" in changelog
+    assert "### Release Readiness Notes" in changelog
+    assert "GitHub Actions CI covering linting, type checking, focused regressions, package validation, and the full pytest suite" in changelog
+    assert "GitHub release automation" in changelog
+    assert "Python 3.10 CI hardening" in changelog
+    assert "Current package version remains `0.1.0`" in changelog
+    assert "tagging `1.0.0`" in changelog
+
+
+def test_migration_notes_document_public_upgrade_path():
+    migration_path = Path(__file__).resolve().parents[1] / "MIGRATION.md"
+    migration = migration_path.read_text(encoding="utf-8")
+
+    assert "# Migration Notes" in migration
+    assert "## Who Should Read This" in migration
+    assert "## Main Migration Themes" in migration
+    assert "Use the public package surface" in migration
+    assert "Migrate from sequential tasks to dependency-aware workflows" in migration
+    assert "Expect structured runtime state" in migration
+    assert "Expect provider abstraction instead of OpenAI-only behavior" in migration
+    assert "Prefer runtime-aware agents and registries" in migration
+    assert "## Practical Upgrade Checklist" in migration
+    assert "## Compatibility Notes" in migration
+    assert "## Recommended Validation After Migration" in migration
+    assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in migration
+    assert "python scripts/package_check.py" in migration
 
 
 def test_docs_architecture_guide_documents_current_runtime_shape():

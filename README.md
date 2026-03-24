@@ -191,6 +191,8 @@ GNU Affero General Public License v3.0 - see [LICENSE](LICENSE)
 
 - **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)
 - **Documentation**: [docs/README.md](docs/README.md)
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+- **Migration Notes**: [MIGRATION.md](MIGRATION.md)
 
 ---
 

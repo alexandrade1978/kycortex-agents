@@ -6,6 +6,8 @@ This repository keeps its primary user and contributor guidance in a small set o
 
 - [README.md](../README.md): installation, quick start, architecture overview, and current project status.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): development workflow and contribution expectations.
+- [CHANGELOG.md](../CHANGELOG.md): release-facing summary of the repository changes being prepared for the 1.0 release candidate.
+- [MIGRATION.md](../MIGRATION.md): upgrade guidance for users moving from the early prototype to the stabilized public API surface.
 - [.github/workflows/release.yml](../.github/workflows/release.yml): tagged-release workflow that revalidates the repository, builds distribution artifacts, and publishes GitHub releases for version tags.
 - [architecture.md](architecture.md): runtime layers, workflow execution model, persistence design, and supported extension seams.
 - [providers.md](providers.md): provider selection, backend-specific configuration, metadata behavior, and extension guidance.
@@ -60,6 +62,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/ci.yml](../.github/workflows/ci.yml) when you need the repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/package_check.py](../scripts/package_check.py) when validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/release.yml](../.github/workflows/release.yml) when preparing manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts.
+- Use [CHANGELOG.md](../CHANGELOG.md) and [MIGRATION.md](../MIGRATION.md) when preparing release-candidate notes or explaining the stabilized public surface to users migrating from earlier prototype revisions.
 
 ## Environment Variables
 
@@ -73,4 +76,4 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Planned Expansion
 
-Phase 12 has started with repository CI automation in `.github/workflows/ci.yml`, extending the local `Makefile`, `.pre-commit-config.yaml`, `ruff`, `mypy`, pytest, package-validation, and release-artifact flow into GitHub Actions for pull requests, pushes, and tagged releases.
+Phase 13 is now focused on final release-candidate hardening, including changelog and migration-note preparation alongside the already-shipped CI, package-validation, and release-automation flow.

@@ -1,4 +1,4 @@
-.PHONY: setup install-hooks precommit prepush lint typecheck test-public test-metadata test
+.PHONY: setup install-hooks precommit prepush lint typecheck package-check test-public test-metadata test
 
 setup:
 	python -m pip install -e ".[test]"
@@ -17,6 +17,9 @@ lint:
 
 typecheck:
 	python -m mypy
+
+package-check:
+	python scripts/package_check.py
 
 test-public:
 	python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q

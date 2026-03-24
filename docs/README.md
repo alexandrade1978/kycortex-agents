@@ -57,6 +57,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for local `ruff` and `mypy` validation commands when checking the package and examples before opening a pull request.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `.pre-commit-config.yaml` workflow when installing local hooks or running pre-commit and pre-push automation before publishing changes.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/ci.yml](../.github/workflows/ci.yml) when you need the repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification.
+- Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/package_check.py](../scripts/package_check.py) when validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata.
 
 ## Environment Variables
 
@@ -70,4 +71,4 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Planned Expansion
 
-Phase 12 has started with repository CI automation in `.github/workflows/ci.yml`, extending the local `Makefile`, `.pre-commit-config.yaml`, `ruff`, `mypy`, and pytest validation flow into GitHub Actions for pull requests and pushes.
+Phase 12 has started with repository CI automation in `.github/workflows/ci.yml`, extending the local `Makefile`, `.pre-commit-config.yaml`, `ruff`, `mypy`, pytest, and package-validation flow into GitHub Actions for pull requests and pushes.

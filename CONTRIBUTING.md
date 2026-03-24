@@ -42,6 +42,13 @@ make precommit
 make prepush
 ```
 
+- Validate built package artifacts locally before publishing:
+
+```bash
+python scripts/package_check.py
+make package-check
+```
+
 - Local lint and type-check baseline:
 
 ```bash
@@ -77,6 +84,7 @@ make test
 - `Makefile`: convenient aliases for setup and the main validation commands.
 - `.editorconfig`: shared line-ending, indentation, and trailing-whitespace defaults for Python, Markdown, TOML, YAML, and Makefile edits.
 - `.pre-commit-config.yaml`: repository-local pre-commit and pre-push automation for linting, type checking, and focused public-surface regressions.
+- `scripts/package_check.py`: local built-artifact validator that builds both wheel and source distributions, installs them into temporary virtual environments, and smoke-tests the public package imports.
 - `ruff`: repository lint baseline for the package, examples, tests, and docs-adjacent Python files.
 - `mypy`: local type-check baseline for `kycortex_agents` and `examples`, with third-party `anthropic` imports excluded from stub enforcement.
 - `pre-commit`: local hook runner that executes the repository-owned `ruff`, `mypy`, and focused pytest checks before commits and pushes.

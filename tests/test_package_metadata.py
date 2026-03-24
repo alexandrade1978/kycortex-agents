@@ -48,6 +48,7 @@ def test_pyproject_declares_test_extra():
 
     optional_dependencies = data["project"]["optional-dependencies"]
     assert optional_dependencies["test"] == [
+        "build>=1.2,<2.0",
         "pytest>=7.0.0",
         "mypy>=1.10,<2.0",
         "pre-commit>=3.7,<5.0",
@@ -113,6 +114,7 @@ def test_manifest_in_exists_and_covers_core_distribution_assets():
     assert "include Makefile" in manifest
     assert "include .editorconfig" in manifest
     assert "include .pre-commit-config.yaml" in manifest
+    assert "recursive-include scripts *.py" in manifest
     assert "recursive-include docs *.md" in manifest
     assert "recursive-include examples *.py" in manifest
     assert "recursive-include kycortex_agents py.typed" in manifest
@@ -127,6 +129,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "Requires-Dist: anthropic<1.0.0,>=0.34.0" in metadata
     assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
     assert "Requires-Dist: pytest>=7.0.0; extra == \"test\"" in metadata
+    assert "Requires-Dist: build<2.0,>=1.2; extra == \"test\"" in metadata
     assert "Requires-Dist: mypy<2.0,>=1.10; extra == \"test\"" in metadata
     assert "Requires-Dist: pre-commit<5.0,>=3.7; extra == \"test\"" in metadata
     assert "Requires-Dist: ruff<1.0,>=0.6; extra == \"test\"" in metadata
@@ -135,6 +138,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "OPENAI_API_KEY" in metadata
     assert "ANTHROPIC_API_KEY" in metadata
     assert "anthropic<1.0.0,>=0.34.0" in requirements
+    assert "build<2.0,>=1.2" in requirements
     assert "openai<2.0.0,>=1.0.0" in requirements
     assert "mypy<2.0,>=1.10" in requirements
     assert "pre-commit<5.0,>=3.7" in requirements
@@ -161,6 +165,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "examples/example_test_mode.py",
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
+        "scripts/package_check.py",
         "kycortex_agents/agents/registry.py",
         "kycortex_agents/memory/state_store.py",
         "kycortex_agents/providers/__init__.py",
@@ -193,6 +198,8 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in contributing
     assert "python -m pre_commit run --all-files" in contributing
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in contributing
+    assert "python scripts/package_check.py" in contributing
+    assert "make package-check" in contributing
     assert "make precommit" in contributing
     assert "make prepush" in contributing
     assert "python -m ruff check ." in contributing
@@ -213,13 +220,14 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     editorconfig = (project_root / ".editorconfig").read_text(encoding="utf-8")
     precommit_config = (project_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
 
-    assert ".PHONY: setup install-hooks precommit prepush lint typecheck test-public test-metadata test" in makefile
+    assert ".PHONY: setup install-hooks precommit prepush lint typecheck package-check test-public test-metadata test" in makefile
     assert 'python -m pip install -e ".[test]"' in makefile
     assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile
     assert "python -m pre_commit run --all-files" in makefile
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in makefile
     assert "python -m ruff check ." in makefile
     assert "python -m mypy" in makefile
+    assert "python scripts/package_check.py" in makefile
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
     assert "python -m pytest tests/test_package_metadata.py -q" in makefile
     assert "python -m pytest -q" in makefile
@@ -254,6 +262,8 @@ def test_github_actions_ci_workflow_covers_repository_validation_baseline():
     assert "python -m ruff check ." in ci_workflow
     assert "python -m mypy" in ci_workflow
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py tests/test_package_metadata.py -q" in ci_workflow
+    assert "package-validation:" in ci_workflow
+    assert "python scripts/package_check.py" in ci_workflow
     assert "python -m pytest -q" in ci_workflow
 
 
@@ -333,6 +343,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "repository `.pre-commit-config.yaml` workflow" in docs_readme
     assert ".github/workflows/ci.yml" in docs_readme
     assert "repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification" in docs_readme
+    assert "scripts/package_check.py" in docs_readme
+    assert "validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
 

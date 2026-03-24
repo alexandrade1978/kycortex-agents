@@ -196,6 +196,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
         "scripts/package_check.py",
+        "scripts/release_check.py",
         "kycortex_agents/agents/registry.py",
         "kycortex_agents/memory/state_store.py",
         "kycortex_agents/providers/__init__.py",
@@ -244,6 +245,8 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "make typecheck" in contributing
     assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in contributing
     assert "make coverage" in contributing
+    assert "python scripts/release_check.py" in contributing
+    assert "make release-check" in contributing
     assert "tests/test_public_api.py tests/test_public_smoke.py -q" in contributing
     assert "tests/test_package_metadata.py -q" in contributing
     assert "python -m pytest -q" in contributing
@@ -258,7 +261,7 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     editorconfig = (project_root / ".editorconfig").read_text(encoding="utf-8")
     precommit_config = (project_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
 
-    assert ".PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check test-public test-metadata test" in makefile
+    assert ".PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check release-check test-public test-metadata test" in makefile
     assert 'python -m pip install -e ".[test]"' in makefile
     assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile
     assert "python -m pre_commit run --all-files" in makefile
@@ -267,6 +270,7 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     assert "python -m mypy" in makefile
     assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in makefile
     assert "python scripts/package_check.py" in makefile
+    assert "python scripts/release_check.py" in makefile
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
     assert "python -m pytest tests/test_package_metadata.py -q" in makefile
     assert "python -m pytest -q" in makefile
@@ -421,6 +425,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
     assert "repository coverage gate command" in docs_readme
+    assert "scripts/release_check.py" in docs_readme
+    assert "release-candidate validation pass" in docs_readme
     assert "coverage-gate enforcement" in docs_readme
 
 
@@ -434,10 +440,31 @@ def test_changelog_documents_current_release_candidate_scope():
     assert "### Changed" in changelog
     assert "### Release Readiness Notes" in changelog
     assert "GitHub Actions CI covering linting, type checking, focused regressions, package validation, and the full pytest suite" in changelog
+    assert "scripts/release_check.py" in changelog
+    assert "make release-check" in changelog
     assert "GitHub release automation" in changelog
     assert "Python 3.10 CI hardening" in changelog
     assert "Current package version remains `0.1.0`" in changelog
     assert "tagging `1.0.0`" in changelog
+
+
+def test_release_check_script_runs_repository_release_readiness_sequence():
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "release_check.py"
+    script = script_path.read_text(encoding="utf-8")
+
+    assert "COMMANDS" in script
+    assert '"ruff"' in script
+    assert '"mypy"' in script
+    assert '"focused regressions"' in script
+    assert '"package validation"' in script
+    assert '"coverage gate"' in script
+    assert '"full test suite"' in script
+    assert '"tests/test_public_api.py"' in script
+    assert '"tests/test_public_smoke.py"' in script
+    assert '"tests/test_package_metadata.py"' in script
+    assert '"scripts/package_check.py"' in script
+    assert '"--cov=kycortex_agents"' in script
+    assert '"Release readiness validation completed successfully."' in script
 
 
 def test_migration_notes_document_public_upgrade_path():

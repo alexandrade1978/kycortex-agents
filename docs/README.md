@@ -62,6 +62,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for local `ruff` and `mypy` validation commands when checking the package and examples before opening a pull request.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository coverage gate command when validating release-readiness against the maintained package coverage threshold.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_check.py](../scripts/release_check.py) for the repository release-candidate validation pass before tagging a version or triggering the release workflow.
+- Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_metadata_check.py](../scripts/release_metadata_check.py) when validating version alignment and release-facing metadata before a tag is created.
 - Use [RELEASE.md](../RELEASE.md) when preparing a version tag, reviewing the final release gate, or verifying the post-tag GitHub release workflow results.
 - Use [RELEASE_STATUS.md](../RELEASE_STATUS.md) when checking the repository's current release-readiness state before deciding whether to update the version and tag a release.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `.pre-commit-config.yaml` workflow when installing local hooks or running pre-commit and pre-push automation before publishing changes.

@@ -200,6 +200,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
         "scripts/package_check.py",
+        "scripts/release_metadata_check.py",
         "scripts/release_check.py",
         "kycortex_agents/agents/registry.py",
         "kycortex_agents/memory/state_store.py",
@@ -240,6 +241,8 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in contributing
     assert "python scripts/package_check.py" in contributing
     assert "make package-check" in contributing
+    assert "python scripts/release_metadata_check.py" in contributing
+    assert "make release-metadata-check" in contributing
     assert "git tag v<version>" in contributing
     assert "git push origin v<version>" in contributing
     assert "RELEASE.md" in contributing
@@ -269,7 +272,7 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     editorconfig = (project_root / ".editorconfig").read_text(encoding="utf-8")
     precommit_config = (project_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
 
-    assert ".PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check release-check test-public test-metadata test" in makefile
+    assert ".PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check release-metadata-check release-check test-public test-metadata test" in makefile
     assert 'python -m pip install -e ".[test]"' in makefile
     assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile
     assert "python -m pre_commit run --all-files" in makefile
@@ -278,6 +281,7 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     assert "python -m mypy" in makefile
     assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in makefile
     assert "python scripts/package_check.py" in makefile
+    assert "python scripts/release_metadata_check.py" in makefile
     assert "python scripts/release_check.py" in makefile
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
     assert "python -m pytest tests/test_package_metadata.py -q" in makefile
@@ -438,6 +442,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
     assert "repository coverage gate command" in docs_readme
     assert "scripts/release_check.py" in docs_readme
+    assert "scripts/release_metadata_check.py" in docs_readme
     assert "release-candidate validation pass" in docs_readme
     assert "post-tag GitHub release workflow results" in docs_readme
     assert "current release-readiness state" in docs_readme
@@ -458,6 +463,8 @@ def test_changelog_documents_current_release_candidate_scope():
     assert "make release-check" in changelog
     assert "RELEASE.md" in changelog
     assert "RELEASE_STATUS.md" in changelog
+    assert "scripts/release_metadata_check.py" in changelog
+    assert "make release-metadata-check" in changelog
     assert "GitHub release automation" in changelog
     assert "Python 3.10 CI hardening" in changelog
     assert "Current package version remains `0.1.0`" in changelog
@@ -473,14 +480,32 @@ def test_release_check_script_runs_repository_release_readiness_sequence():
     assert '"mypy"' in script
     assert '"focused regressions"' in script
     assert '"package validation"' in script
+    assert '"release metadata"' in script
     assert '"coverage gate"' in script
     assert '"full test suite"' in script
     assert '"tests/test_public_api.py"' in script
     assert '"tests/test_public_smoke.py"' in script
     assert '"tests/test_package_metadata.py"' in script
     assert '"scripts/package_check.py"' in script
+    assert '"scripts/release_metadata_check.py"' in script
     assert '"--cov=kycortex_agents"' in script
     assert '"Release readiness validation completed successfully."' in script
+
+
+def test_release_metadata_check_script_validates_version_and_release_docs_alignment():
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "release_metadata_check.py"
+    script = script_path.read_text(encoding="utf-8")
+
+    assert "def _parse_semver" in script
+    assert '"pyproject.toml"' in script
+    assert '"kycortex_agents/__init__.py"' in script
+    assert '"RELEASE.md"' in script
+    assert '"RELEASE_STATUS.md"' in script
+    assert '"CHANGELOG.md"' in script
+    assert '"Release target under final Phase 13 review: `([^`]+)`"' in script
+    assert '"git tag v<version>"' in script
+    assert '"git push origin v<version>"' in script
+    assert '"Release metadata validation passed: "' in script
 
 
 def test_release_guide_documents_repository_release_gate_procedure():
@@ -490,13 +515,16 @@ def test_release_guide_documents_repository_release_gate_procedure():
     assert "# Release Guide" in release_guide
     assert "## Preconditions" in release_guide
     assert "## Local Validation" in release_guide
+    assert "python scripts/release_metadata_check.py" in release_guide
+    assert "make release-metadata-check" in release_guide
     assert "python scripts/release_check.py" in release_guide
     assert "make release-check" in release_guide
     assert "scripts/package_check.py" in release_guide
+    assert "scripts/release_metadata_check.py" in release_guide
     assert "coverage gate" in release_guide
     assert "## Tagging A Release" in release_guide
-    assert "git tag v1.0.0" in release_guide
-    assert "git push origin v1.0.0" in release_guide
+    assert "git tag v<version>" in release_guide
+    assert "git push origin v<version>" in release_guide
     assert ".github/workflows/release.yml" in release_guide
     assert "## Post-Tag Verification" in release_guide
     assert "## Release Gate Summary" in release_guide
@@ -514,8 +542,11 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "python scripts/release_check.py" in release_status
     assert "make release-check" in release_status
     assert "scripts/package_check.py" in release_status
+    assert "python scripts/release_metadata_check.py" in release_status
+    assert "make release-metadata-check" in release_status
     assert ".github/workflows/release.yml" in release_status
     assert "## Latest Validated Release-Readiness Pass" in release_status
+    assert "release metadata check: passing" in release_status
     assert "## Remaining Manual Decision" in release_status
     assert "RELEASE.md" in release_status
     assert "CHANGELOG.md" in release_status

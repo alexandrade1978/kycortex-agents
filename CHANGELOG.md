@@ -17,6 +17,7 @@ The format is intentionally lightweight while the project moves toward its 1.0 r
 - A repository-owned `scripts/release_check.py` validator and `make release-check` target for full local release-candidate verification.
 - A repository-owned `RELEASE.md` guide describing the final release gate, version-tag flow, and post-tag verification steps.
 - A repository-owned `RELEASE_STATUS.md` snapshot describing the current release-readiness state and the remaining manual release decision.
+- A repository-owned `scripts/release_metadata_check.py` validator and `make release-metadata-check` target for version and release-document alignment checks before tagging.
 
 ### Changed
 
@@ -27,6 +28,7 @@ The format is intentionally lightweight while the project moves toward its 1.0 r
 - Packaging metadata now uses SPDX license metadata and modern setuptools configuration for cleaner automated builds.
 - Release-readiness validation is now codified in a single local command that runs linting, typing, focused regressions, package validation, the coverage gate, and the full pytest suite in sequence.
 - Release-facing documentation now separates the stable operator procedure from the current release-readiness snapshot so the final tag decision is explicit.
+- Release metadata validation now checks that package version declarations and release-facing documents remain aligned before a version tag is created.
 
 ### Release Readiness Notes
 

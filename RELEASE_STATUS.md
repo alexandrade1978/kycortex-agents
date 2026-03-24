@@ -12,6 +12,7 @@ This file tracks the current repository-owned release-readiness state for KYCort
 
 - Local release validation is available through `python scripts/release_check.py` and `make release-check`.
 - Built package artifacts are validated through `scripts/package_check.py`.
+- Release metadata alignment is validated through `python scripts/release_metadata_check.py` and `make release-metadata-check`.
 - Repository coverage is enforced through the `pytest-cov` gate configured in `pyproject.toml`.
 - Tagged release automation is defined in `.github/workflows/release.yml`.
 - Changelog and migration guidance are maintained in `CHANGELOG.md` and `MIGRATION.md`.
@@ -22,6 +23,7 @@ This file tracks the current repository-owned release-readiness state for KYCort
 - `mypy`: passing
 - focused public and metadata regressions: passing
 - package validation: passing
+- release metadata check: passing
 - coverage gate: passing
 - full pytest suite: passing
 

@@ -23,6 +23,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
         ],
     ),
     ("package validation", [sys.executable, "scripts/package_check.py"]),
+    ("release metadata", [sys.executable, "scripts/release_metadata_check.py"]),
     (
         "coverage gate",
         [

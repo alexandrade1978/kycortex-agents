@@ -1,4 +1,4 @@
-.PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check release-check test-public test-metadata test
+.PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check release-metadata-check release-check test-public test-metadata test
 
 setup:
 	python -m pip install -e ".[test]"
@@ -23,6 +23,9 @@ coverage:
 
 package-check:
 	python scripts/package_check.py
+
+release-metadata-check:
+	python scripts/release_metadata_check.py
 
 release-check:
 	python scripts/release_check.py

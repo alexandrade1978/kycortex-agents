@@ -77,6 +77,13 @@ python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xm
 make coverage
 ```
 
+- Release metadata and version-alignment check before tagging:
+
+```bash
+python scripts/release_metadata_check.py
+make release-metadata-check
+```
+
 - Full release-candidate validation before tagging a version:
 
 ```bash
@@ -111,6 +118,7 @@ make test
 - `.editorconfig`: shared line-ending, indentation, and trailing-whitespace defaults for Python, Markdown, TOML, YAML, and Makefile edits.
 - `.pre-commit-config.yaml`: repository-local pre-commit and pre-push automation for linting, type checking, and focused public-surface regressions.
 - `scripts/package_check.py`: local built-artifact validator that builds both wheel and source distributions, installs them into temporary virtual environments, and smoke-tests the public package imports.
+- `scripts/release_metadata_check.py`: local release-metadata validator that checks package version alignment, release-target metadata, and release-facing documentation cues before a tag is created.
 - `scripts/release_check.py`: local release-candidate validator that runs the repository lint, type-check, focused regression, package-validation, coverage-gate, and full-suite commands in the same order used for release readiness.
 - `.github/workflows/release.yml`: tagged-release automation that reruns validation, builds wheel and source distributions, uploads them as workflow artifacts, and publishes them on GitHub releases for `v*` tags.
 - `coverage.py` and `pytest-cov`: repository-owned coverage gate tooling configured through `pyproject.toml` and exercised in both local validation and GitHub Actions.

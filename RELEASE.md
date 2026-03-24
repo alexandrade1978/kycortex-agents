@@ -14,6 +14,8 @@ This document describes the repository-owned release procedure for KYCortex as t
 Run the repository-owned release validation pass before creating a tag:
 
 ```bash
+python scripts/release_metadata_check.py
+make release-metadata-check
 python scripts/release_check.py
 make release-check
 ```
@@ -24,6 +26,7 @@ This executes the same local release-readiness sequence used throughout Phase 13
 - `mypy`
 - focused public and metadata regressions
 - package validation via `scripts/package_check.py`
+- release metadata validation via `scripts/release_metadata_check.py`
 - the repository coverage gate
 - the full pytest suite
 
@@ -32,8 +35,8 @@ This executes the same local release-readiness sequence used throughout Phase 13
 After local validation passes, create and push the version tag:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v<version>
+git push origin v<version>
 ```
 
 The release workflow at `.github/workflows/release.yml` will:

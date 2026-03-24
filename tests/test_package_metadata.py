@@ -63,6 +63,7 @@ def test_pyproject_declares_test_extra():
     assert optional_dependencies["test"] == [
         "build>=1.2,<2.0",
         "pytest>=7.0.0",
+        "pytest-cov>=5,<7",
         "tomli>=2.0.1,<3.0; python_version < '3.11'",
         "mypy>=1.10,<2.0",
         "pre-commit>=3.7,<5.0",
@@ -82,6 +83,16 @@ def test_pyproject_declares_local_lint_and_typecheck_tooling():
     assert mypy_config["files"] == ["kycortex_agents", "examples"]
     assert data["tool"]["mypy"]["overrides"][0]["module"] == ["anthropic"]
     assert data["tool"]["mypy"]["overrides"][0]["ignore_missing_imports"] is True
+
+
+def test_pyproject_declares_repository_coverage_gate_configuration():
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+
+    assert data["tool"]["coverage"]["run"] == {"source": ["kycortex_agents"], "branch": True}
+    assert data["tool"]["coverage"]["report"]["fail_under"] == 90
+    assert data["tool"]["coverage"]["report"]["show_missing"] is True
+    assert data["tool"]["coverage"]["report"]["skip_covered"] is False
 
 
 def test_pyproject_declares_explicit_setuptools_package_discovery():
@@ -144,6 +155,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
     assert "Requires-Dist: pytest>=7.0.0; extra == \"test\"" in metadata
     assert "Requires-Dist: build<2.0,>=1.2; extra == \"test\"" in metadata
+    assert "Requires-Dist: pytest-cov<7,>=5; extra == \"test\"" in metadata
     assert "Requires-Dist: tomli<3.0,>=2.0.1; python_version < \"3.11\" and extra == \"test\"" in metadata
     assert "Requires-Dist: mypy<2.0,>=1.10; extra == \"test\"" in metadata
     assert "Requires-Dist: pre-commit<5.0,>=3.7; extra == \"test\"" in metadata
@@ -154,6 +166,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "ANTHROPIC_API_KEY" in metadata
     assert "anthropic<1.0.0,>=0.34.0" in requirements
     assert "build<2.0,>=1.2" in requirements
+    assert "pytest-cov<7,>=5" in requirements
     assert '[test:python_version < "3.11"]' in requirements
     assert "tomli<3.0,>=2.0.1" in requirements
     assert "openai<2.0.0,>=1.0.0" in requirements
@@ -229,6 +242,8 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python -m mypy" in contributing
     assert "make lint" in contributing
     assert "make typecheck" in contributing
+    assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in contributing
+    assert "make coverage" in contributing
     assert "tests/test_public_api.py tests/test_public_smoke.py -q" in contributing
     assert "tests/test_package_metadata.py -q" in contributing
     assert "python -m pytest -q" in contributing
@@ -243,13 +258,14 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     editorconfig = (project_root / ".editorconfig").read_text(encoding="utf-8")
     precommit_config = (project_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
 
-    assert ".PHONY: setup install-hooks precommit prepush lint typecheck package-check test-public test-metadata test" in makefile
+    assert ".PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check test-public test-metadata test" in makefile
     assert 'python -m pip install -e ".[test]"' in makefile
     assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile
     assert "python -m pre_commit run --all-files" in makefile
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in makefile
     assert "python -m ruff check ." in makefile
     assert "python -m mypy" in makefile
+    assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in makefile
     assert "python scripts/package_check.py" in makefile
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
     assert "python -m pytest tests/test_package_metadata.py -q" in makefile
@@ -287,7 +303,9 @@ def test_github_actions_ci_workflow_covers_repository_validation_baseline():
     assert "python -m mypy" in ci_workflow
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py tests/test_package_metadata.py -q" in ci_workflow
     assert "package-validation:" in ci_workflow
+    assert "coverage-gate:" in ci_workflow
     assert "python scripts/package_check.py" in ci_workflow
+    assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in ci_workflow
     assert "python -m pytest -q" in ci_workflow
 
 
@@ -306,7 +324,7 @@ def test_github_actions_release_workflow_covers_tagged_release_automation():
     assert "python -m mypy" in release_workflow
     assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py tests/test_package_metadata.py -q" in release_workflow
     assert "python scripts/package_check.py" in release_workflow
-    assert "python -m pytest -q" in release_workflow
+    assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in release_workflow
     assert "python -m build" in release_workflow
     assert "actions/upload-artifact@v4" in release_workflow
     assert "actions/download-artifact@v4" in release_workflow
@@ -402,6 +420,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "migrating from earlier prototype revisions" in docs_readme
     assert "local `ruff` and `mypy` validation commands" in docs_readme
     assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
+    assert "repository coverage gate command" in docs_readme
+    assert "coverage-gate enforcement" in docs_readme
 
 
 def test_changelog_documents_current_release_candidate_scope():

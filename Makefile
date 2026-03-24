@@ -1,4 +1,4 @@
-.PHONY: setup install-hooks precommit prepush lint typecheck package-check test-public test-metadata test
+.PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check test-public test-metadata test
 
 setup:
 	python -m pip install -e ".[test]"
@@ -17,6 +17,9 @@ lint:
 
 typecheck:
 	python -m mypy
+
+coverage:
+	python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q
 
 package-check:
 	python scripts/package_check.py

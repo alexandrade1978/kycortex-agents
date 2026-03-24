@@ -68,6 +68,13 @@ make lint
 make typecheck
 ```
 
+- Coverage gate used by the release-readiness workflow:
+
+```bash
+python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q
+make coverage
+```
+
 - Public API or import-surface changes:
 
 ```bash
@@ -96,6 +103,7 @@ make test
 - `.pre-commit-config.yaml`: repository-local pre-commit and pre-push automation for linting, type checking, and focused public-surface regressions.
 - `scripts/package_check.py`: local built-artifact validator that builds both wheel and source distributions, installs them into temporary virtual environments, and smoke-tests the public package imports.
 - `.github/workflows/release.yml`: tagged-release automation that reruns validation, builds wheel and source distributions, uploads them as workflow artifacts, and publishes them on GitHub releases for `v*` tags.
+- `coverage.py` and `pytest-cov`: repository-owned coverage gate tooling configured through `pyproject.toml` and exercised in both local validation and GitHub Actions.
 - `ruff`: repository lint baseline for the package, examples, tests, and docs-adjacent Python files.
 - `mypy`: local type-check baseline for `kycortex_agents` and `examples`, with third-party `anthropic` imports excluded from stub enforcement.
 - `pre-commit`: local hook runner that executes the repository-owned `ruff`, `mypy`, and focused pytest checks before commits and pushes.

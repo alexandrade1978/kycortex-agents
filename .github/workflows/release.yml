@@ -40,8 +40,8 @@ jobs:
       - name: Validate built package artifacts
         run: python scripts/package_check.py
 
-      - name: Run full pytest suite
-        run: python -m pytest -q
+      - name: Run coverage gate
+        run: python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q
 
   build-distributions:
     name: Build Distributions

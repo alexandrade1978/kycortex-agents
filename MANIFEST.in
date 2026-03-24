@@ -1,4 +1,6 @@
 include LICENSE
+include COMMERCIAL_LICENSE.md
+include CONTRIBUTOR_RIGHTS.md
 include README.md
 include CONTRIBUTING.md
 include RELEASE.md

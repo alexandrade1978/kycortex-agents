@@ -2,6 +2,8 @@ from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.types import AgentInput, ArtifactType
 
+DEFAULT_CONSTRAINTS = "Python 3.10+, production-ready dependencies, licensing suitable for open-source or commercial distribution"
+
 SYSTEM_PROMPT = """You are a Senior Software Architect at KYCortex AI Software House.
 Your job is to design modular, scalable Python project architectures.
 Output structured architecture documents including: module breakdown, file structure,
@@ -16,7 +18,7 @@ class ArchitectAgent(BaseAgent):
         super().__init__("Architect", "Software Architecture Design", config)
 
     def run_with_input(self, agent_input: AgentInput) -> str:
-        constraints = ", ".join(agent_input.constraints) if agent_input.constraints else "AGPLv3, Python 3.10+, copyleft-compatible deps"
+        constraints = ", ".join(agent_input.constraints) if agent_input.constraints else DEFAULT_CONSTRAINTS
         user_msg = f"""Project Name: {agent_input.project_name}
 Project Goal: {agent_input.project_goal}
 Constraints: {constraints}
@@ -27,7 +29,7 @@ Provide a detailed architecture document."""
 
     def run(self, task_description: str, context: dict) -> str:
         goal = context.get("goal", "")
-        constraints = context.get("constraints", "AGPLv3, Python 3.10+, copyleft-compatible deps")
+        constraints = context.get("constraints", DEFAULT_CONSTRAINTS)
         user_msg = f"""Project Goal: {goal}
 Constraints: {constraints}
 Task: {task_description}

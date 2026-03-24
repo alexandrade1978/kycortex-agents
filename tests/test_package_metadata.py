@@ -31,6 +31,7 @@ def test_pyproject_contains_expected_package_metadata():
     project = data["project"]
     assert project["name"] == "kycortex-agents"
     assert project["version"] == kycortex_agents.__version__
+    assert project["authors"] == [{"name": "Alexandre Andrade", "email": "alex@kycortex.com"}]
     assert project["license"] == "AGPL-3.0-only"
     assert project["license-files"] == ["LICENSE"]
     assert "Development Status :: 5 - Production/Stable" in project["classifiers"]
@@ -125,6 +126,8 @@ def test_pyproject_metadata_file_pointers_exist():
     project = data["project"]
     assert (project_root / project["readme"]).is_file()
     assert (project_root / "LICENSE").is_file()
+    assert (project_root / "COMMERCIAL_LICENSE.md").is_file()
+    assert (project_root / "CONTRIBUTOR_RIGHTS.md").is_file()
 
 
 def test_manifest_in_exists_and_covers_core_distribution_assets():
@@ -135,6 +138,8 @@ def test_manifest_in_exists_and_covers_core_distribution_assets():
 
     manifest = manifest_path.read_text(encoding="utf-8")
     assert "include LICENSE" in manifest
+    assert "include COMMERCIAL_LICENSE.md" in manifest
+    assert "include CONTRIBUTOR_RIGHTS.md" in manifest
     assert "include README.md" in manifest
     assert "include CONTRIBUTING.md" in manifest
     assert "include RELEASE.md" in manifest
@@ -153,6 +158,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     metadata = (egg_info_dir / "PKG-INFO").read_text(encoding="utf-8")
     requirements = (egg_info_dir / "requires.txt").read_text(encoding="utf-8")
 
+    assert "Author-email: Alexandre Andrade <alex@kycortex.com>" in metadata
     assert "Project-URL: Documentation, https://github.com/alexandrade1978/kycortex-agents/blob/main/docs/README.md" in metadata
     assert "Requires-Dist: anthropic<1.0.0,>=0.34.0" in metadata
     assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
@@ -185,6 +191,8 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
     expected_members = {
         ".editorconfig",
         ".pre-commit-config.yaml",
+        "COMMERCIAL_LICENSE.md",
+        "CONTRIBUTOR_RIGHTS.md",
         "CONTRIBUTING.md",
         "Makefile",
         "RELEASE.md",
@@ -221,6 +229,8 @@ def test_top_level_contributing_guide_exists_for_readme_reference():
     project_root = Path(__file__).resolve().parents[1]
 
     assert (project_root / "CONTRIBUTING.md").is_file()
+    assert (project_root / "COMMERCIAL_LICENSE.md").is_file()
+    assert (project_root / "CONTRIBUTOR_RIGHTS.md").is_file()
     assert (project_root / "RELEASE.md").is_file()
     assert (project_root / "RELEASE_STATUS.md").is_file()
     assert (project_root / "CHANGELOG.md").is_file()
@@ -259,6 +269,11 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "make coverage" in contributing
     assert "python scripts/release_check.py" in contributing
     assert "make release-check" in contributing
+    assert "## Contribution Licensing" in contributing
+    assert "COMMERCIAL_LICENSE.md" in contributing
+    assert "CONTRIBUTOR_RIGHTS.md" in contributing
+    assert "case-by-case basis" in contributing
+    assert "explicit written rights grant" in contributing
     assert "tests/test_public_api.py tests/test_public_smoke.py -q" in contributing
     assert "tests/test_package_metadata.py -q" in contributing
     assert "python -m pytest -q" in contributing
@@ -378,6 +393,10 @@ def test_readme_uses_repository_owned_links_in_links_section():
     assert "https://kycortex.com/docs" not in readme
     assert "- **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)" in readme
     assert "- **Documentation**: [docs/README.md](docs/README.md)" in readme
+    assert "KYCortex Agents is available under a dual-license model." in readme
+    assert "Commercial licensing: available directly from KYCortex" in readme
+    assert "- **Commercial Licensing**: [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)" in readme
+    assert "- **Contributor Rights**: [CONTRIBUTOR_RIGHTS.md](CONTRIBUTOR_RIGHTS.md)" in readme
     assert "- **Release Guide**: [RELEASE.md](RELEASE.md)" in readme
     assert "- **Release Status**: [RELEASE_STATUS.md](RELEASE_STATUS.md)" in readme
     assert "- **Changelog**: [CHANGELOG.md](CHANGELOG.md)" in readme
@@ -390,6 +409,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     docs_readme = docs_readme_path.read_text(encoding="utf-8")
 
     assert "architecture.md" in docs_readme
+    assert "COMMERCIAL_LICENSE.md" in docs_readme
+    assert "CONTRIBUTOR_RIGHTS.md" in docs_readme
     assert "providers.md" in docs_readme
     assert "workflows.md" in docs_readme
     assert "persistence.md" in docs_readme
@@ -430,6 +451,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "persisted failed workflows reload and continue" in docs_readme
     assert "snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events" in docs_readme
     assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
+    assert "dual-license overview" in docs_readme
+    assert "contributor-rights policy" in docs_readme
     assert "repository `.pre-commit-config.yaml` workflow" in docs_readme
     assert ".github/workflows/ci.yml" in docs_readme
     assert ".github/workflows/release.yml" in docs_readme
@@ -459,6 +482,8 @@ def test_changelog_documents_current_release_scope():
     assert "### Added" in changelog
     assert "### Changed" in changelog
     assert "### Release Readiness Notes" in changelog
+    assert "COMMERCIAL_LICENSE.md" in changelog
+    assert "CONTRIBUTOR_RIGHTS.md" in changelog
     assert "GitHub Actions CI covering linting, type checking, focused regressions, package validation, and the full pytest suite" in changelog
     assert "scripts/release_check.py" in changelog
     assert "make release-check" in changelog
@@ -470,6 +495,7 @@ def test_changelog_documents_current_release_scope():
     assert "Python 3.10 CI hardening" in changelog
     assert "Version `1.0.0` is now the released package baseline." in changelog
     assert "shipped `1.0.0` baseline" in changelog
+    assert "commercial licensing path" in changelog
 
 
 def test_release_check_script_runs_repository_release_readiness_sequence():
@@ -517,6 +543,7 @@ def test_release_guide_documents_repository_release_gate_procedure():
 
     assert "# Release Guide" in release_guide
     assert "## Preconditions" in release_guide
+    assert "COMMERCIAL_LICENSE.md" in release_guide
     assert "## Local Validation" in release_guide
     assert "python scripts/release_metadata_check.py" in release_guide
     assert "make release-metadata-check" in release_guide
@@ -552,6 +579,8 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "## Latest Validated Release-Readiness Pass" in release_status
     assert "release metadata check: passing" in release_status
     assert "## Release Outcome" in release_status
+    assert "COMMERCIAL_LICENSE.md" in release_status
+    assert "commercial licensing path" in release_status
     assert "RELEASE.md" in release_status
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status

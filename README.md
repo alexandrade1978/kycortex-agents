@@ -181,21 +181,28 @@ kycortex_agents/
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow guidance and [CONTRIBUTOR_RIGHTS.md](CONTRIBUTOR_RIGHTS.md) for contributor-rights expectations under the dual-license model.
 
 ## Releases
 
 Use [RELEASE.md](RELEASE.md) for the repository-owned release validation and tagging procedure.
-Use [RELEASE_STATUS.md](RELEASE_STATUS.md) for the current release-readiness snapshot.
+Use [RELEASE_STATUS.md](RELEASE_STATUS.md) for the current repository release-state snapshot.
 
 ## License
 
-GNU Affero General Public License v3.0 - see [LICENSE](LICENSE)
+KYCortex Agents is available under a dual-license model.
+
+- Open-source distribution: GNU Affero General Public License v3.0 - see [LICENSE](LICENSE)
+- Commercial licensing: available directly from KYCortex for teams that need proprietary deployment or terms outside AGPL - see [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)
+
+The published package metadata currently reflects the open-source distribution license.
 
 ## Links
 
 - **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)
 - **Documentation**: [docs/README.md](docs/README.md)
+- **Commercial Licensing**: [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)
+- **Contributor Rights**: [CONTRIBUTOR_RIGHTS.md](CONTRIBUTOR_RIGHTS.md)
 - **Release Guide**: [RELEASE.md](RELEASE.md)
 - **Release Status**: [RELEASE_STATUS.md](RELEASE_STATUS.md)
 - **Changelog**: [CHANGELOG.md](CHANGELOG.md)

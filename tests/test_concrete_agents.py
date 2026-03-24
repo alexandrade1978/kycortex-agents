@@ -64,7 +64,7 @@ def test_architect_agent_execute_uses_default_constraints_and_document_artifact(
     result = agent.execute(agent_input)
 
     assert result.raw_content == "ok"
-    assert "AGPLv3, Python 3.10+, copyleft-compatible deps" in agent.last_user_message
+    assert "Python 3.10+, production-ready dependencies, licensing suitable for open-source or commercial distribution" in agent.last_user_message
     assert result.artifacts[0].artifact_type == ArtifactType.DOCUMENT
     assert result.artifacts[0].name == "arch_architecture"
 
@@ -155,7 +155,7 @@ def test_legal_advisor_agent_execute_uses_default_license_and_dependency_placeho
 
     result = agent.execute(agent_input)
 
-    assert "Project License: AGPL-3.0-only" in agent.last_user_message
+    assert "Project License: Dual-licensed: AGPL-3.0 open-source distribution or separate commercial terms" in agent.last_user_message
     assert "Not specified" in agent.last_user_message
     assert result.artifacts[0].artifact_type == ArtifactType.DOCUMENT
     assert result.artifacts[0].name == "legal_legal_analysis"

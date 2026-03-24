@@ -38,8 +38,11 @@ This file tracks the current repository-owned release state for KYCortex after t
 
 The 1.0.0 release state is now captured directly in the package metadata, changelog, migration notes, release guide, and release-check workflow.
 
+The repository's public licensing guidance now documents the AGPL open-source distribution together with a separate commercial licensing path.
+
 Use the following repository-owned references when validating follow-up maintenance releases:
 
+- `COMMERCIAL_LICENSE.md`
 - `RELEASE.md`
 - `.local-docs/release-checklist.md`
 - `CHANGELOG.md`

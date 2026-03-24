@@ -146,12 +146,16 @@ def test_legal_advisor_formats_dependencies_from_typed_context(tmp_path):
         task_description="Review licensing",
         project_name="Demo",
         project_goal="Build demo",
-        context={"license": "AGPL-3.0-only", "dependencies": ["openai", "anthropic"]},
+        context={
+            "license": "Dual-licensed: AGPL-3.0 open-source distribution or separate commercial terms",
+            "dependencies": ["openai", "anthropic"],
+        },
     )
 
     result = agent.run_with_input(agent_input)
 
     assert result == "ok"
+    assert "Project License: Dual-licensed: AGPL-3.0 open-source distribution or separate commercial terms" in agent.last_user_message
     assert "- openai" in agent.last_user_message
     assert "- anthropic" in agent.last_user_message
 

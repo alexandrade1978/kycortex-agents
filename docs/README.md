@@ -6,6 +6,8 @@ This repository keeps its primary user and contributor guidance in a small set o
 
 - [README.md](../README.md): installation, quick start, architecture overview, and current project status.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): development workflow and contribution expectations.
+- [CONTRIBUTOR_RIGHTS.md](../CONTRIBUTOR_RIGHTS.md): contributor-rights expectations for a dual-licensed repository.
+- [COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md): dual-license overview and commercial licensing contact path.
 - [RELEASE.md](../RELEASE.md): local release validation, version tagging, and post-tag verification steps.
 - [RELEASE_STATUS.md](../RELEASE_STATUS.md): current release-state snapshot and next maintenance-release action.
 - [CHANGELOG.md](../CHANGELOG.md): release-facing summary of the repository changes shipped in the 1.0 line.
@@ -58,6 +60,8 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [examples/example_failure_recovery.py](../examples/example_failure_recovery.py) when learning how persisted failed workflows reload and continue under `workflow_resume_policy="resume_failed"`.
 - Use [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py) when learning how snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
+- Use [CONTRIBUTOR_RIGHTS.md](../CONTRIBUTOR_RIGHTS.md) when you need the repository's contributor-rights policy for dual-licensed maintenance.
+- Use [COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md) when you need the repository's dual-license overview or the contact path for commercial terms.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `Makefile` targets and shared `.editorconfig` defaults when working locally.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for local `ruff` and `mypy` validation commands when checking the package and examples before opening a pull request.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository coverage gate command when validating release-readiness against the maintained package coverage threshold.

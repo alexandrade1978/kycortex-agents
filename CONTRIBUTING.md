@@ -134,6 +134,14 @@ make test
 3. Preserve backward compatibility unless the change explicitly updates the public contract.
 4. Include a clear summary of the problem, the fix, and the validation you ran.
 
+## Contribution Licensing
+
+- The public repository is distributed under AGPL-3.0. See [LICENSE](LICENSE).
+- KYCortex may also distribute the codebase under separate commercial terms. See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md).
+- See [CONTRIBUTOR_RIGHTS.md](CONTRIBUTOR_RIGHTS.md) for the repository's contributor-rights policy under the dual-license model.
+- If a contribution is intended to ship in a dual-licensed commercial distribution, maintainers may review contributor rights on a case-by-case basis and request an explicit written rights grant when needed.
+- If you contribute on behalf of an employer or client, make sure you have the authority to submit that contribution.
+
 ## Quality Expectations
 
 - Keep all repository content in English.

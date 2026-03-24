@@ -8,6 +8,8 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Added
 
+- A repository-owned `COMMERCIAL_LICENSE.md` guide describing the dual-license model and the commercial licensing contact path.
+- A repository-owned `CONTRIBUTOR_RIGHTS.md` guide describing contributor-rights expectations for the dual-license model.
 - GitHub Actions CI covering linting, type checking, focused regressions, package validation, and the full pytest suite.
 - Tagged and manual GitHub release automation that rebuilds artifacts and publishes wheel and source-distribution assets.
 - Built-artifact validation through `scripts/package_check.py`, including wheel and sdist install smoke checks.
@@ -21,6 +23,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Changed
 
+- Public licensing guidance now documents the AGPL open-source distribution together with a separate commercial licensing path, while package metadata remains aligned to the open-source distribution.
 - Public package imports are now centered on the stable top-level `kycortex_agents` surface and the public `workflows` module.
 - Workflow execution now supports explicit dependencies, retry policies, failure policies, resumable execution, and persisted audit history.
 - Persistence now supports both JSON and SQLite backends while retaining compatibility with older state payloads.

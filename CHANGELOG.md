@@ -16,6 +16,7 @@ The format is intentionally lightweight while the project moves toward its 1.0 r
 - Curated public examples covering resume, failure recovery, custom agents, multi-provider usage, deterministic test mode, complex DAGs, and snapshot inspection.
 - A repository-owned `scripts/release_check.py` validator and `make release-check` target for full local release-candidate verification.
 - A repository-owned `RELEASE.md` guide describing the final release gate, version-tag flow, and post-tag verification steps.
+- A repository-owned `RELEASE_STATUS.md` snapshot describing the current release-readiness state and the remaining manual release decision.
 
 ### Changed
 
@@ -25,6 +26,7 @@ The format is intentionally lightweight while the project moves toward its 1.0 r
 - Provider execution now exposes structured metadata for latency, usage, and failure diagnostics across OpenAI, Anthropic, and Ollama.
 - Packaging metadata now uses SPDX license metadata and modern setuptools configuration for cleaner automated builds.
 - Release-readiness validation is now codified in a single local command that runs linting, typing, focused regressions, package validation, the coverage gate, and the full pytest suite in sequence.
+- Release-facing documentation now separates the stable operator procedure from the current release-readiness snapshot so the final tag decision is explicit.
 
 ### Release Readiness Notes
 

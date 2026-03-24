@@ -137,6 +137,7 @@ def test_manifest_in_exists_and_covers_core_distribution_assets():
     assert "include README.md" in manifest
     assert "include CONTRIBUTING.md" in manifest
     assert "include RELEASE.md" in manifest
+    assert "include RELEASE_STATUS.md" in manifest
     assert "include Makefile" in manifest
     assert "include .editorconfig" in manifest
     assert "include .pre-commit-config.yaml" in manifest
@@ -186,6 +187,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "CONTRIBUTING.md",
         "Makefile",
         "RELEASE.md",
+        "RELEASE_STATUS.md",
         "docs/README.md",
         "examples/example_complex_workflow.py",
         "examples/example_custom_agent.py",
@@ -218,6 +220,7 @@ def test_top_level_contributing_guide_exists_for_readme_reference():
 
     assert (project_root / "CONTRIBUTING.md").is_file()
     assert (project_root / "RELEASE.md").is_file()
+    assert (project_root / "RELEASE_STATUS.md").is_file()
     assert (project_root / "CHANGELOG.md").is_file()
     assert (project_root / "MIGRATION.md").is_file()
     assert (project_root / "docs" / "README.md").is_file()
@@ -237,9 +240,10 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in contributing
     assert "python scripts/package_check.py" in contributing
     assert "make package-check" in contributing
-    assert "git tag v0.1.0" in contributing
-    assert "git push origin v0.1.0" in contributing
+    assert "git tag v<version>" in contributing
+    assert "git push origin v<version>" in contributing
     assert "RELEASE.md" in contributing
+    assert "RELEASE_STATUS.md" in contributing
     assert ".github/workflows/release.yml" in contributing
     assert "make precommit" in contributing
     assert "make prepush" in contributing
@@ -370,6 +374,7 @@ def test_readme_uses_repository_owned_links_in_links_section():
     assert "- **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)" in readme
     assert "- **Documentation**: [docs/README.md](docs/README.md)" in readme
     assert "- **Release Guide**: [RELEASE.md](RELEASE.md)" in readme
+    assert "- **Release Status**: [RELEASE_STATUS.md](RELEASE_STATUS.md)" in readme
     assert "- **Changelog**: [CHANGELOG.md](CHANGELOG.md)" in readme
     assert "- **Migration Notes**: [MIGRATION.md](MIGRATION.md)" in readme
     assert "Built by Alexandre Andrade with KYCortex AI." in readme
@@ -388,6 +393,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "CHANGELOG.md" in docs_readme
     assert "MIGRATION.md" in docs_readme
     assert "RELEASE.md" in docs_readme
+    assert "RELEASE_STATUS.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
     assert "## Module Guides" in docs_readme
     assert "## Examples And Usage" in docs_readme
@@ -434,6 +440,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "scripts/release_check.py" in docs_readme
     assert "release-candidate validation pass" in docs_readme
     assert "post-tag GitHub release workflow results" in docs_readme
+    assert "current release-readiness state" in docs_readme
     assert "coverage-gate enforcement" in docs_readme
 
 
@@ -450,6 +457,7 @@ def test_changelog_documents_current_release_candidate_scope():
     assert "scripts/release_check.py" in changelog
     assert "make release-check" in changelog
     assert "RELEASE.md" in changelog
+    assert "RELEASE_STATUS.md" in changelog
     assert "GitHub release automation" in changelog
     assert "Python 3.10 CI hardening" in changelog
     assert "Current package version remains `0.1.0`" in changelog
@@ -492,6 +500,28 @@ def test_release_guide_documents_repository_release_gate_procedure():
     assert ".github/workflows/release.yml" in release_guide
     assert "## Post-Tag Verification" in release_guide
     assert "## Release Gate Summary" in release_guide
+
+
+def test_release_status_documents_current_repository_release_readiness_state():
+    release_status_path = Path(__file__).resolve().parents[1] / "RELEASE_STATUS.md"
+    release_status = release_status_path.read_text(encoding="utf-8")
+
+    assert "# Release Status" in release_status
+    assert "## Current State" in release_status
+    assert "Package version in `pyproject.toml`: `0.1.0`" in release_status
+    assert "Release target under final Phase 13 review: `1.0.0`" in release_status
+    assert "## Repository Release Gates" in release_status
+    assert "python scripts/release_check.py" in release_status
+    assert "make release-check" in release_status
+    assert "scripts/package_check.py" in release_status
+    assert ".github/workflows/release.yml" in release_status
+    assert "## Latest Validated Release-Readiness Pass" in release_status
+    assert "## Remaining Manual Decision" in release_status
+    assert "RELEASE.md" in release_status
+    assert "CHANGELOG.md" in release_status
+    assert "MIGRATION.md" in release_status
+    assert "## Next Release Action" in release_status
+    assert "create and push the matching `v<version>` tag" in release_status
 
 
 def test_migration_notes_document_public_upgrade_path():

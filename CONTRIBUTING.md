@@ -53,12 +53,13 @@ make package-check
 
 ```bash
 python -m pytest -q
-git tag v0.1.0
-git push origin v0.1.0
+git tag v<version>
+git push origin v<version>
 ```
 
 - Use `.github/workflows/release.yml` for manual `workflow_dispatch` dry runs and for tagged GitHub releases that attach built wheel and source-distribution artifacts.
 - Use `RELEASE.md` for the full repository-owned release-candidate, tagging, and post-tag verification procedure.
+- Use `RELEASE_STATUS.md` for the current repository-owned release-readiness snapshot before making a tagging decision.
 
 - Local lint and type-check baseline:
 

@@ -7,6 +7,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [README.md](../README.md): installation, quick start, architecture overview, and current project status.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): development workflow and contribution expectations.
 - [RELEASE.md](../RELEASE.md): local release-candidate validation, version tagging, and post-tag verification steps.
+- [RELEASE_STATUS.md](../RELEASE_STATUS.md): current release-readiness snapshot and final manual release decision status.
 - [CHANGELOG.md](../CHANGELOG.md): release-facing summary of the repository changes being prepared for the 1.0 release candidate.
 - [MIGRATION.md](../MIGRATION.md): upgrade guidance for users moving from the early prototype to the stabilized public API surface.
 - [.github/workflows/release.yml](../.github/workflows/release.yml): tagged-release workflow that revalidates the repository, builds distribution artifacts, and publishes GitHub releases for version tags.
@@ -62,6 +63,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository coverage gate command when validating release-readiness against the maintained package coverage threshold.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_check.py](../scripts/release_check.py) for the repository release-candidate validation pass before tagging a version or triggering the release workflow.
 - Use [RELEASE.md](../RELEASE.md) when preparing a version tag, reviewing the final release gate, or verifying the post-tag GitHub release workflow results.
+- Use [RELEASE_STATUS.md](../RELEASE_STATUS.md) when checking the repository's current release-readiness state before deciding whether to update the version and tag a release.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `.pre-commit-config.yaml` workflow when installing local hooks or running pre-commit and pre-push automation before publishing changes.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/ci.yml](../.github/workflows/ci.yml) when you need the repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/package_check.py](../scripts/package_check.py) when validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata.

@@ -176,4 +176,6 @@ def test_run_task_normalizes_missing_summary_and_persists_output_provider_metada
     assert task.last_provider_call["provider"] == "openai"
     assert task.last_provider_call["usage"]["total_tokens"] == 21
     assert project.artifacts[0]["name"] == "docs_output"
+    assert project.artifacts[0]["path"] == "artifacts/docs_output.txt"
     assert project.artifacts[0]["content"] == "Normalized summary\nMore detail"
+    assert (tmp_path / "output" / "artifacts" / "docs_output.txt").read_text(encoding="utf-8") == "Normalized summary\nMore detail"

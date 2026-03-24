@@ -141,7 +141,7 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | `workflow_failure_policy` | `"fail_fast"` | Controls whether workflow execution stops immediately or continues while skipping blocked descendants. |
 | `workflow_resume_policy` | `"interrupted_only"` | Controls whether resume only re-queues interrupted tasks or also re-queues failed and dependency-skipped tasks. |
 | `project_name` | `"kycortex-project"` | Human-readable project name persisted into workflow state and snapshots. |
-| `output_dir` | `"./output"` | Output directory created during configuration initialization. |
+| `output_dir` | `"./output"` | Output directory created during configuration initialization and used to persist artifact files emitted by agents. |
 | `log_level` | `"INFO"` | Public log-level setting reserved for orchestrator and runtime logging configuration. |
 
 ## Architecture

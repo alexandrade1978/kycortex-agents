@@ -1,12 +1,14 @@
 import logging
+import re
 from dataclasses import asdict
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, AgentOutput, TaskStatus
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, TaskStatus
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
@@ -73,6 +75,7 @@ class Orchestrator:
                 )
             raise
         normalized_output = self._normalize_agent_result(output)
+        self._persist_artifacts(normalized_output.artifacts)
         for decision in normalized_output.decisions:
             project.add_decision_record(decision)
         for artifact in normalized_output.artifacts:
@@ -104,6 +107,44 @@ class Orchestrator:
             if isinstance(metadata, dict):
                 return metadata
         return None
+
+    def _persist_artifacts(self, artifacts: list[ArtifactRecord]) -> None:
+        for artifact in artifacts:
+            content = artifact.content
+            if not isinstance(content, str) or not content.strip():
+                continue
+            target_path = self._resolve_artifact_output_path(artifact)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(content, encoding="utf-8")
+            artifact.path = self._artifact_record_path(target_path)
+
+    def _resolve_artifact_output_path(self, artifact: ArtifactRecord) -> Path:
+        configured_path = Path(artifact.path) if artifact.path else None
+        if configured_path is not None and configured_path.is_absolute():
+            return configured_path
+        output_root = Path(self.config.output_dir).resolve()
+        relative_path = configured_path if configured_path is not None else Path(self._default_artifact_path(artifact))
+        return output_root / relative_path
+
+    def _artifact_record_path(self, target_path: Path) -> str:
+        output_root = Path(self.config.output_dir).resolve()
+        resolved_target = target_path.resolve()
+        try:
+            return str(resolved_target.relative_to(output_root))
+        except ValueError:
+            return str(resolved_target)
+
+    def _default_artifact_path(self, artifact: ArtifactRecord) -> str:
+        suffix_map = {
+            ArtifactType.DOCUMENT: ".md",
+            ArtifactType.CODE: ".py",
+            ArtifactType.TEST: ".py",
+            ArtifactType.CONFIG: ".json",
+            ArtifactType.TEXT: ".txt",
+            ArtifactType.OTHER: ".artifact",
+        }
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", artifact.name).strip("._") or "artifact"
+        return f"artifacts/{safe_name}{suffix_map.get(artifact.artifact_type, '.artifact')}"
 
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
         snapshot = project.snapshot()

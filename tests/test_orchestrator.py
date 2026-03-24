@@ -157,6 +157,69 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert project.artifacts[0]["artifact_type"] == ArtifactType.DOCUMENT.value
 
 
+def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    from kycortex_agents.agents.base_agent import BaseAgent
+
+    class BaseArtifactAgent(BaseAgent):
+        def __init__(self, cfg):
+            super().__init__("Architect", "Architecture", cfg)
+
+        def run(self, task_description: str, context: dict) -> str:
+            return "ARCHITECTURE DOC"
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": BaseArtifactAgent(config)}))
+
+    orchestrator.run_task(project.tasks[0], project)
+
+    assert project.artifacts[0]["path"] == "artifacts/arch_output.txt"
+    assert (tmp_path / "output" / "artifacts" / "arch_output.txt").read_text(encoding="utf-8") == "ARCHITECTURE DOC"
+
+
+def test_run_task_writes_structured_artifact_content_to_relative_output_path(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    class StructuredWritableAgent:
+        def execute(self, agent_input) -> AgentOutput:
+            return AgentOutput(
+                summary="Architecture summary",
+                raw_content="ARCHITECTURE DOC",
+                artifacts=[
+                    ArtifactRecord(
+                        name="architecture_doc",
+                        artifact_type=ArtifactType.DOCUMENT,
+                        path="artifacts/architecture.md",
+                        content="# Architecture\n\nSystem design",
+                    )
+                ],
+            )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": StructuredWritableAgent()}))
+
+    orchestrator.run_task(project.tasks[0], project)
+
+    assert (tmp_path / "output" / "artifacts" / "architecture.md").read_text(encoding="utf-8") == "# Architecture\n\nSystem design"
+
+
 def test_run_task_persists_provider_call_metadata_from_base_agent(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

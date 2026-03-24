@@ -40,4 +40,4 @@ if __name__ == "__main__":
 
     print("\nProject Summary:")
     print(project.summary())
-    print(f"\nAll outputs saved to {config.output_dir}")
+    print(f"\nArtifact files saved to {config.output_dir}")

@@ -183,6 +183,10 @@ kycortex_agents/
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+## Releases
+
+Use [RELEASE.md](RELEASE.md) for the repository-owned release-candidate and tagging procedure.
+
 ## License
 
 GNU Affero General Public License v3.0 - see [LICENSE](LICENSE)
@@ -191,6 +195,7 @@ GNU Affero General Public License v3.0 - see [LICENSE](LICENSE)
 
 - **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)
 - **Documentation**: [docs/README.md](docs/README.md)
+- **Release Guide**: [RELEASE.md](RELEASE.md)
 - **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 - **Migration Notes**: [MIGRATION.md](MIGRATION.md)
 

@@ -15,6 +15,7 @@ The format is intentionally lightweight while the project moves toward its 1.0 r
 - Repository-owned architecture, provider, workflow, persistence, extension, and troubleshooting guides.
 - Curated public examples covering resume, failure recovery, custom agents, multi-provider usage, deterministic test mode, complex DAGs, and snapshot inspection.
 - A repository-owned `scripts/release_check.py` validator and `make release-check` target for full local release-candidate verification.
+- A repository-owned `RELEASE.md` guide describing the final release gate, version-tag flow, and post-tag verification steps.
 
 ### Changed
 

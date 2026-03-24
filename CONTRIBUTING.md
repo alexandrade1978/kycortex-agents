@@ -58,6 +58,7 @@ git push origin v0.1.0
 ```
 
 - Use `.github/workflows/release.yml` for manual `workflow_dispatch` dry runs and for tagged GitHub releases that attach built wheel and source-distribution artifacts.
+- Use `RELEASE.md` for the full repository-owned release-candidate, tagging, and post-tag verification procedure.
 
 - Local lint and type-check baseline:
 

@@ -549,6 +549,82 @@ class Orchestrator:
                 return self._build_dependency_validation_summary(dependency_analysis)
         return fallback_message
 
+    def _active_repair_cycle(self, project: ProjectState) -> Optional[Dict[str, Any]]:
+        if not project.repair_history:
+            return None
+        current_cycle = project.repair_history[-1]
+        if not isinstance(current_cycle, dict):
+            return None
+        return current_cycle
+
+    def _build_repair_context(self, task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
+        failure_category = task.last_error_category or FailureCategory.UNKNOWN.value
+        return {
+            "cycle": cycle.get("cycle"),
+            "failure_category": failure_category,
+            "failure_message": task.last_error or task.output or "",
+            "failure_error_type": task.last_error_type,
+            "repair_owner": self._repair_owner_for_category(task, failure_category),
+            "original_assigned_to": task.assigned_to,
+            "instruction": self._build_repair_instruction(task, failure_category),
+            "validation_summary": self._build_repair_validation_summary(task, failure_category),
+            "failed_output": task.output or "",
+            "failed_artifact_content": self._failed_artifact_content_for_category(task, failure_category),
+            "provider_call": task.last_provider_call,
+        }
+
+    def _has_repair_task_for_cycle(self, project: ProjectState, task_id: str, cycle_number: int) -> bool:
+        for existing_task in project.tasks:
+            if existing_task.repair_origin_task_id != task_id:
+                continue
+            if existing_task.repair_attempt != cycle_number:
+                continue
+            return True
+        return False
+
+    def _queue_active_cycle_repair(self, project: ProjectState, task: Task) -> bool:
+        if self.config.workflow_resume_policy != "resume_failed":
+            return False
+        if task.repair_origin_task_id is not None:
+            return False
+        current_cycle = self._active_repair_cycle(project)
+        if current_cycle is None:
+            return False
+        cycle_number = int(current_cycle.get("cycle") or 0)
+        if cycle_number <= 0:
+            return False
+        if self._has_repair_task_for_cycle(project, task.id, cycle_number):
+            return False
+
+        repair_context = self._build_repair_context(task, current_cycle)
+        project._plan_task_repair(task.id, repair_context)
+        repair_task_ids = self._repair_task_ids_for_cycle(project, [task.id])
+        if not repair_task_ids:
+            return False
+        project.resume_failed_tasks(
+            include_failed_tasks=False,
+            failed_task_ids=[task.id],
+            additional_task_ids=repair_task_ids,
+        )
+        project._record_execution_event(
+            event="task_repair_chained",
+            task_id=task.id,
+            status=task.status,
+            details={
+                "repair_task_ids": repair_task_ids,
+                "repair_cycle_count": project.repair_cycle_count,
+            },
+        )
+        self._log_event(
+            "info",
+            "task_repair_chained",
+            project_name=project.project_name,
+            task_id=task.id,
+            repair_task_ids=repair_task_ids,
+            repair_cycle_count=project.repair_cycle_count,
+        )
+        return True
+
     def _failed_artifact_content_for_category(self, task: Task, failure_category: str) -> str:
         if failure_category == FailureCategory.CODE_VALIDATION.value:
             return self._failed_artifact_content(task, ArtifactType.CODE)
@@ -562,20 +638,7 @@ class Orchestrator:
         for task in project.tasks:
             if task.id not in failed_task_ids:
                 continue
-            failure_category = task.last_error_category or FailureCategory.UNKNOWN.value
-            repair_context = {
-                "cycle": cycle.get("cycle"),
-                "failure_category": failure_category,
-                "failure_message": task.last_error or task.output or "",
-                "failure_error_type": task.last_error_type,
-                "repair_owner": self._repair_owner_for_category(task, failure_category),
-                "original_assigned_to": task.assigned_to,
-                "instruction": self._build_repair_instruction(task, failure_category),
-                "validation_summary": self._build_repair_validation_summary(task, failure_category),
-                "failed_output": task.output or "",
-                "failed_artifact_content": self._failed_artifact_content_for_category(task, failure_category),
-                "provider_call": task.last_provider_call,
-            }
+            repair_context = self._build_repair_context(task, cycle)
             project._plan_task_repair(task.id, repair_context)
 
     def _repair_task_ids_for_cycle(self, project: ProjectState, failed_task_ids: list[str]) -> list[str]:
@@ -1513,9 +1576,13 @@ class Orchestrator:
                 try:
                     self.run_task(task, project)
                 except Exception as exc:
-                    project.save()
                     if project.should_retry_task(task.id):
+                        project.save()
                         continue
+                    if self._queue_active_cycle_repair(project, task):
+                        project.save()
+                        continue
+                    project.save()
                     if self.config.workflow_failure_policy == "continue":
                         skipped = project.skip_dependent_tasks(
                             task.id,

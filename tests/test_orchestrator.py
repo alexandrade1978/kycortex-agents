@@ -50,6 +50,20 @@ class FlakyAgent:
         return self.success_response
 
 
+class AgentExecutionFlakyAgent:
+    def __init__(self, failures_before_success: int, success_response: str, error_message: str):
+        self.failures_before_success = failures_before_success
+        self.success_response = success_response
+        self.error_message = error_message
+        self.calls = 0
+
+    def run(self, task_description: str, context: dict) -> str:
+        self.calls += 1
+        if self.calls <= self.failures_before_success:
+            raise AgentExecutionError(self.error_message)
+        return self.success_response
+
+
 class StructuredAgent:
     def execute(self, agent_input) -> AgentOutput:
         return AgentOutput(
@@ -1805,6 +1819,63 @@ def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
     assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
     assert any(event["event"] == "task_repair_planned" for event in project.execution_events)
     assert any(event["event"] == "task_repair_created" for event in project.execution_events)
+
+
+def test_execute_workflow_can_chain_new_failed_task_within_active_repair_cycle(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+            output="boom-1",
+            last_error="boom-1",
+            last_error_type="RuntimeError",
+            last_error_category=FailureCategory.TASK_EXECUTION.value,
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["arch"],
+        )
+    )
+
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "architect": RecordingAgent("ARCHITECTURE DOC"),
+                "qa_tester": AgentExecutionFlakyAgent(
+                    failures_before_success=1,
+                    success_response="def test_ok():\n    assert True",
+                    error_message="generated tests failed",
+                ),
+            }
+        ),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    assert project.repair_cycle_count == 1
+    assert project.get_task("arch").status == TaskStatus.DONE.value
+    assert project.get_task("arch__repair_1").status == TaskStatus.DONE.value
+    assert project.get_task("tests").status == TaskStatus.DONE.value
+    assert project.get_task("tests__repair_1").status == TaskStatus.DONE.value
+    assert any(event["event"] == "task_repair_created" and event["task_id"] == "tests__repair_1" for event in project.execution_events)
+    assert any(event["event"] == "task_repair_chained" and event["task_id"] == "tests" for event in project.execution_events)
 
 
 def test_execute_workflow_does_not_spawn_duplicate_repair_task_when_pending_child_exists(tmp_path):

@@ -122,6 +122,11 @@ def test_config_rejects_negative_provider_retry_backoff(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_backoff_seconds=-0.1)
 
 
+def test_config_rejects_invalid_provider_retry_jitter_ratio(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_retry_jitter_ratio must be between 0 and 1"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_jitter_ratio=1.5)
+
+
 def test_validate_runtime_rejects_ollama_without_base_url(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
     config.base_url = ""

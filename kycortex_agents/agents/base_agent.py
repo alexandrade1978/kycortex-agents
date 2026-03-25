@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import random
 import re
 from time import perf_counter, sleep
 from typing import Any, Optional
@@ -38,11 +39,38 @@ class BaseAgent(ABC):
         provider = self._get_provider()
         started_at = perf_counter()
         max_attempts = self.config.provider_max_attempts
+        attempt_history: list[dict[str, Any]] = []
         for attempt in range(1, max_attempts + 1):
             try:
                 response = provider.generate(system_prompt, user_message)
+                attempt_history.append(
+                    {
+                        "attempt": attempt,
+                        "success": True,
+                        "retryable": False,
+                        "backoff_seconds": 0.0,
+                    }
+                )
                 break
             except ProviderTransientError as exc:
+                base_backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
+                jitter_seconds = 0.0
+                if base_backoff_seconds > 0 and self.config.provider_retry_jitter_ratio > 0:
+                    jitter_seconds = random.uniform(
+                        0.0,
+                        base_backoff_seconds * self.config.provider_retry_jitter_ratio,
+                    )
+                total_backoff_seconds = base_backoff_seconds + jitter_seconds
+                attempt_history.append(
+                    {
+                        "attempt": attempt,
+                        "success": False,
+                        "retryable": True,
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                        "backoff_seconds": round(total_backoff_seconds, 6),
+                    }
+                )
                 self._last_provider_call_metadata = {
                     "provider": self.config.llm_provider,
                     "model": self.config.llm_model,
@@ -53,13 +81,23 @@ class BaseAgent(ABC):
                     "retryable": True,
                     "attempts_used": attempt,
                     "max_attempts": max_attempts,
+                    "attempt_history": list(attempt_history),
                 }
                 if attempt >= max_attempts:
                     raise AgentExecutionError(f"{self.name}: {exc}") from exc
-                backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
-                if backoff_seconds > 0:
-                    sleep(backoff_seconds)
+                if total_backoff_seconds > 0:
+                    sleep(total_backoff_seconds)
             except Exception as exc:
+                attempt_history.append(
+                    {
+                        "attempt": attempt,
+                        "success": False,
+                        "retryable": False,
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                        "backoff_seconds": 0.0,
+                    }
+                )
                 self._last_provider_call_metadata = {
                     "provider": self.config.llm_provider,
                     "model": self.config.llm_model,
@@ -70,6 +108,7 @@ class BaseAgent(ABC):
                     "retryable": False,
                     "attempts_used": attempt,
                     "max_attempts": max_attempts,
+                    "attempt_history": list(attempt_history),
                 }
                 if isinstance(exc, AgentExecutionError):
                     raise AgentExecutionError(f"{self.name}: {exc}") from exc
@@ -82,6 +121,7 @@ class BaseAgent(ABC):
             "error_type": None,
             "attempts_used": attempt,
             "max_attempts": max_attempts,
+            "attempt_history": list(attempt_history),
         }
         provider_metadata = provider.get_last_call_metadata()
         if provider_metadata is not None:

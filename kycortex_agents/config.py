@@ -41,6 +41,7 @@ class KYCortexConfig:
     workflow_max_repair_cycles: int = 1
     provider_max_attempts: int = 1
     provider_retry_backoff_seconds: float = 0.0
+    provider_retry_jitter_ratio: float = 0.0
     execution_sandbox_enabled: bool = True
     execution_sandbox_allow_network: bool = False
     execution_sandbox_allow_subprocesses: bool = False
@@ -105,6 +106,8 @@ class KYCortexConfig:
             raise ConfigValidationError("provider_max_attempts must be greater than zero")
         if self.provider_retry_backoff_seconds < 0:
             raise ConfigValidationError("provider_retry_backoff_seconds must be zero or greater")
+        if not 0 <= self.provider_retry_jitter_ratio <= 1:
+            raise ConfigValidationError("provider_retry_jitter_ratio must be between 0 and 1")
         if self.execution_sandbox_max_cpu_seconds <= 0:
             raise ConfigValidationError("execution_sandbox_max_cpu_seconds must be greater than zero")
         if self.execution_sandbox_max_memory_mb <= 0:

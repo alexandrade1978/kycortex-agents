@@ -171,6 +171,16 @@ def test_chat_captures_failed_provider_call_metadata():
     assert metadata["error_type"] == "RuntimeError"
     assert metadata["error_message"] == "provider down"
     assert metadata["duration_ms"] >= 0
+    assert metadata["attempt_history"] == [
+        {
+            "attempt": 1,
+            "success": False,
+            "retryable": False,
+            "error_type": "RuntimeError",
+            "error_message": "provider down",
+            "backoff_seconds": 0.0,
+        }
+    ]
 
 
 def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
@@ -191,6 +201,7 @@ def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
     agent.config.provider_max_attempts = 2
     agent.config.provider_retry_backoff_seconds = 0.0
     monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda _: None)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
 
     result = agent.chat("system", "message")
 
@@ -201,6 +212,22 @@ def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
     assert metadata["success"] is True
     assert metadata["attempts_used"] == 2
     assert metadata["max_attempts"] == 2
+    assert metadata["attempt_history"] == [
+        {
+            "attempt": 1,
+            "success": False,
+            "retryable": True,
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "backoff_seconds": 0.0,
+        },
+        {
+            "attempt": 2,
+            "success": True,
+            "retryable": False,
+            "backoff_seconds": 0.0,
+        },
+    ]
 
 
 def test_chat_exhausts_transient_provider_retries(monkeypatch):
@@ -214,6 +241,7 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
     agent.config.provider_max_attempts = 2
     agent.config.provider_retry_backoff_seconds = 0.0
     monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda _: None)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
 
     with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
         agent.chat("system", "message")
@@ -225,6 +253,55 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
     assert metadata["attempts_used"] == 2
     assert metadata["max_attempts"] == 2
     assert metadata["error_type"] == "ProviderTransientError"
+    assert metadata["attempt_history"] == [
+        {
+            "attempt": 1,
+            "success": False,
+            "retryable": True,
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "backoff_seconds": 0.0,
+        },
+        {
+            "attempt": 2,
+            "success": False,
+            "retryable": True,
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "backoff_seconds": 0.0,
+        },
+    ]
+
+
+def test_chat_applies_retry_jitter_to_sleep(monkeypatch):
+    class JitterProvider(DummyProvider):
+        def __init__(self):
+            super().__init__(response="ok")
+            self.attempts = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            self.attempts += 1
+            if self.attempts == 1:
+                raise ProviderTransientError("temporary provider outage")
+            return "ok"
+
+    sleep_calls: list[float] = []
+    provider = JitterProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 2
+    agent.config.provider_retry_backoff_seconds = 1.0
+    agent.config.provider_retry_jitter_ratio = 0.5
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.25)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda seconds: sleep_calls.append(seconds))
+
+    result = agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert result == "ok"
+    assert sleep_calls == [1.25]
+    assert metadata is not None
+    assert metadata["attempt_history"][0]["backoff_seconds"] == 1.25
 
 
 @pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])

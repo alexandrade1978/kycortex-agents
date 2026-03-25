@@ -204,6 +204,7 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_n
     assert metadata["retryable"] is True
     assert metadata["attempts_used"] == 1
     assert metadata["max_attempts"] == 1
+    assert metadata["attempt_history"][0]["error_type"] == "ProviderTransientError"
     assert expected_message in metadata["error_message"]
     assert metadata["duration_ms"] >= 0
 
@@ -230,6 +231,7 @@ def test_execute_records_retry_attempt_metadata_for_transient_provider_recovery(
             return {"usage": {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5}}
 
     monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda _: None)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
     provider = FlakyProvider()
     agent = ProviderBackedAgent(provider, provider.config)
 
@@ -238,4 +240,5 @@ def test_execute_records_retry_attempt_metadata_for_transient_provider_recovery(
     assert result.metadata["provider_call"]["success"] is True
     assert result.metadata["provider_call"]["attempts_used"] == 2
     assert result.metadata["provider_call"]["max_attempts"] == 2
+    assert len(result.metadata["provider_call"]["attempt_history"]) == 2
     assert result.metadata["provider_call"]["usage"]["total_tokens"] == 5

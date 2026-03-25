@@ -833,6 +833,143 @@ def test_run_task_fails_qa_tester_when_generated_tests_import_entrypoints(tmp_pa
     assert validation["imported_entrypoint_symbols"] == ["main"]
 
 
+def test_run_task_fails_qa_tester_when_generated_tests_violate_payload_contract(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class Service:\n"
+        "    def intake_request(self, request_id, data):\n"
+        "        if not self.validate_request(data):\n"
+        "            raise ValueError('Invalid request data')\n"
+        "        return data\n\n"
+        "    def validate_request(self, data):\n"
+        "        required_fields = ['name', 'email', 'compliance_type']\n"
+        "        return all(field in data for field in required_fields)\n\n"
+        "    def process_batch(self, requests):\n"
+        "        for req in requests:\n"
+        "            self.intake_request(req['request_id'], req)\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class Service:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "import pytest\n"
+        "from code_implementation import Service\n\n"
+        "@pytest.fixture\n"
+        "def service():\n"
+        "    return Service()\n\n"
+        "def test_intake_request(service):\n"
+        "    payload = {'field1': 'value1'}\n"
+        "    with pytest.raises(ValueError):\n"
+        "        service.intake_request('req-1', payload)\n\n"
+        "def test_process_batch(service):\n"
+        "    requests = [{'request_id': 'req-1', 'field1': 'value1'}]\n"
+        "    service.process_batch(requests)\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"payload contract violations"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["payload_contract_violations"] == [
+        "intake_request payload missing required fields: name, email, compliance_type at line 11",
+        "process_batch batch item missing required fields: name, email, compliance_type at line 14",
+    ]
+
+
+def test_run_task_fails_qa_tester_when_generated_tests_treat_non_batch_api_as_batch(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceCase:\n"
+        "    def __init__(self, case_id):\n"
+        "        self.case_id = case_id\n\n"
+        "def process_case(case):\n"
+        "    return case.case_id\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceCase:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceCase, process_case\n\n"
+        "def test_process_case_list():\n"
+        "    cases = [ComplianceCase(1), ComplianceCase(2)]\n"
+        "    assert process_case(cases) == 1\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"non-batch sequence calls"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["non_batch_sequence_calls"] == [
+        "process_case does not accept batch/list inputs at line 5"
+    ]
+
+
 def test_code_artifact_context_includes_behavior_contract(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

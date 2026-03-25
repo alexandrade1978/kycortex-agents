@@ -209,7 +209,13 @@ class Orchestrator:
         if not self._should_validate_test_content(test_content, has_typed_artifact=bool(test_artifact_content)):
             return
         test_filename = self._artifact_filename(output, ArtifactType.TEST, default_filename="tests_tests.py")
-        test_analysis = self._analyze_test_module(test_content, module_name, code_analysis)
+        code_behavior_contract = context.get("code_behavior_contract")
+        test_analysis = self._analyze_test_module(
+            test_content,
+            module_name,
+            code_analysis,
+            code_behavior_contract if isinstance(code_behavior_contract, str) else "",
+        )
         test_execution = self._execute_generated_tests(module_filename, code_content, test_filename, test_content)
         self._record_output_validation(output, "test_analysis", test_analysis)
         self._record_output_validation(output, "test_execution", test_execution)
@@ -222,6 +228,8 @@ class Orchestrator:
             ("unknown_module_symbols", "unknown module symbols"),
             ("invalid_member_references", "invalid member references"),
             ("constructor_arity_mismatches", "constructor arity mismatches"),
+            ("payload_contract_violations", "payload contract violations"),
+            ("non_batch_sequence_calls", "non-batch sequence calls"),
             ("undefined_fixtures", "undefined test fixtures"),
             ("imported_entrypoint_symbols", "imported entrypoint symbols"),
             ("unsafe_entrypoint_calls", "unsafe entrypoint calls"),
@@ -1159,7 +1167,13 @@ class Orchestrator:
                         )
         return ""
 
-    def _analyze_test_module(self, raw_content: str, module_name: str, code_analysis: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze_test_module(
+        self,
+        raw_content: str,
+        module_name: str,
+        code_analysis: Dict[str, Any],
+        code_behavior_contract: str = "",
+    ) -> Dict[str, Any]:
         analysis: Dict[str, Any] = {
             "syntax_ok": True,
             "syntax_error": None,
@@ -1168,6 +1182,8 @@ class Orchestrator:
             "unknown_module_symbols": [],
             "invalid_member_references": [],
             "constructor_arity_mismatches": [],
+            "payload_contract_violations": [],
+            "non_batch_sequence_calls": [],
             "undefined_fixtures": [],
             "imported_entrypoint_symbols": [],
             "unsafe_entrypoint_calls": [],
@@ -1185,6 +1201,7 @@ class Orchestrator:
         function_names = {item["name"] for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
         entrypoint_names = self._entrypoint_function_names(code_analysis)
+        validation_rules, batch_rules = self._parse_behavior_contract(code_behavior_contract)
 
         imported_symbols: set[str] = set()
         called_names: list[tuple[str, int]] = []
@@ -1253,16 +1270,262 @@ class Orchestrator:
             }
         )
         imported_entrypoint_symbols = sorted(symbol for symbol in imported_symbols if symbol in entrypoint_names)
+        payload_contract_violations, non_batch_sequence_calls = self._analyze_test_behavior_contracts(
+            tree,
+            validation_rules,
+            batch_rules,
+            function_names,
+        )
 
         analysis["imported_module_symbols"] = sorted(imported_symbols)
         analysis["missing_function_imports"] = missing_imports
         analysis["unknown_module_symbols"] = unknown_symbols
         analysis["invalid_member_references"] = sorted(set(invalid_member_refs))
         analysis["constructor_arity_mismatches"] = sorted(set(arity_mismatches))
+        analysis["payload_contract_violations"] = payload_contract_violations
+        analysis["non_batch_sequence_calls"] = non_batch_sequence_calls
         analysis["undefined_fixtures"] = undefined_fixtures
         analysis["imported_entrypoint_symbols"] = imported_entrypoint_symbols
         analysis["unsafe_entrypoint_calls"] = sorted(set(unsafe_entrypoint_calls))
         return analysis
+
+    def _parse_behavior_contract(self, contract: str) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, Any]]]:
+        validation_rules: Dict[str, list[str]] = {}
+        batch_rules: Dict[str, Dict[str, Any]] = {}
+        if not contract.strip():
+            return validation_rules, batch_rules
+
+        for raw_line in contract.splitlines():
+            line = raw_line.strip()
+            if not line.startswith("- "):
+                continue
+            validation_match = re.match(r"-\s+(\w+) requires fields: (.+)$", line)
+            if validation_match:
+                function_name = validation_match.group(1)
+                fields = [field.strip() for field in validation_match.group(2).split(",") if field.strip()]
+                if fields:
+                    validation_rules[function_name] = fields
+                continue
+
+            nested_match = re.match(
+                r"-\s+(\w+) expects each batch item to include key `([^`]+)` and nested `([^`]+)` fields: (.+)$",
+                line,
+            )
+            if nested_match:
+                batch_rules[nested_match.group(1)] = {
+                    "request_key": nested_match.group(2),
+                    "wrapper_key": nested_match.group(3),
+                    "fields": [field.strip() for field in nested_match.group(4).split(",") if field.strip()],
+                }
+                continue
+
+            direct_match = re.match(r"-\s+(\w+) expects each batch item to include: (.+)$", line)
+            if direct_match:
+                batch_rules[direct_match.group(1)] = {
+                    "request_key": None,
+                    "wrapper_key": None,
+                    "fields": [field.strip() for field in direct_match.group(2).split(",") if field.strip()],
+                }
+                continue
+
+            wrapper_match = re.match(r"-\s+(\w+) expects nested `([^`]+)` fields: (.+)$", line)
+            if wrapper_match:
+                batch_rules[wrapper_match.group(1)] = {
+                    "request_key": None,
+                    "wrapper_key": wrapper_match.group(2),
+                    "fields": [field.strip() for field in wrapper_match.group(3).split(",") if field.strip()],
+                }
+
+        return validation_rules, batch_rules
+
+    def _analyze_test_behavior_contracts(
+        self,
+        tree: ast.AST,
+        validation_rules: Dict[str, list[str]],
+        batch_rules: Dict[str, Dict[str, Any]],
+        function_names: set[str],
+    ) -> tuple[list[str], list[str]]:
+        payload_violations: set[str] = set()
+        non_batch_calls: set[str] = set()
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
+                continue
+
+            bindings = self._collect_local_bindings(node)
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Call):
+                    continue
+                callable_name = self._callable_name(child)
+                if not callable_name:
+                    continue
+
+                if callable_name in validation_rules:
+                    payload_arg = self._payload_argument_for_validation(child, callable_name)
+                    payload_node = self._resolve_bound_value(payload_arg, bindings)
+                    payload_keys = self._extract_literal_dict_keys(payload_node, bindings)
+                    if payload_keys is not None:
+                        missing_fields = [field for field in validation_rules[callable_name] if field not in payload_keys]
+                        if missing_fields:
+                            payload_violations.add(
+                                f"{callable_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
+                            )
+
+                if callable_name in batch_rules:
+                    batch_violations = self._validate_batch_call(child, bindings, callable_name, batch_rules[callable_name])
+                    payload_violations.update(batch_violations)
+                    continue
+
+                if callable_name in function_names and "batch" not in callable_name:
+                    sequence_arg = self._first_call_argument(child)
+                    sequence_node = self._resolve_bound_value(sequence_arg, bindings)
+                    if isinstance(sequence_node, ast.List):
+                        non_batch_calls.add(
+                            f"{callable_name} does not accept batch/list inputs at line {child.lineno}"
+                        )
+
+        return sorted(payload_violations), sorted(non_batch_calls)
+
+    def _collect_local_bindings(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, ast.AST]:
+        bindings: Dict[str, ast.AST] = {}
+        for stmt in node.body:
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                bindings[stmt.targets[0].id] = stmt.value
+            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value is not None:
+                bindings[stmt.target.id] = stmt.value
+        return bindings
+
+    def _callable_name(self, node: ast.Call) -> str:
+        if isinstance(node.func, ast.Name):
+            return node.func.id
+        if isinstance(node.func, ast.Attribute):
+            return node.func.attr
+        return ""
+
+    def _first_call_argument(self, node: ast.Call) -> Optional[ast.AST]:
+        if node.args:
+            return node.args[0]
+        if node.keywords:
+            return node.keywords[0].value
+        return None
+
+    def _payload_argument_for_validation(self, node: ast.Call, callable_name: str) -> Optional[ast.AST]:
+        if callable_name == "validate_request":
+            return self._first_call_argument(node)
+        if len(node.args) >= 2:
+            return node.args[1]
+        if node.keywords:
+            for keyword in node.keywords:
+                if keyword.arg in {"data", "payload", "request", "item"}:
+                    return keyword.value
+        return self._first_call_argument(node)
+
+    def _resolve_bound_value(
+        self,
+        node: Optional[ast.AST],
+        bindings: Dict[str, ast.AST],
+        *,
+        max_depth: int = 3,
+    ) -> Optional[ast.AST]:
+        current = node
+        depth = 0
+        while isinstance(current, ast.Name) and depth < max_depth:
+            current = bindings.get(current.id, current)
+            depth += 1
+        return current
+
+    def _extract_literal_dict_keys(
+        self,
+        node: Optional[ast.AST],
+        bindings: Dict[str, ast.AST],
+    ) -> Optional[set[str]]:
+        resolved = self._resolve_bound_value(node, bindings)
+        if isinstance(resolved, ast.Dict):
+            keys = {
+                key.value
+                for key in resolved.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            }
+            return keys
+        if (
+            isinstance(resolved, ast.Subscript)
+            and isinstance(resolved.value, ast.Name)
+            and isinstance(resolved.slice, ast.Constant)
+            and isinstance(resolved.slice.value, str)
+        ):
+            source = self._resolve_bound_value(resolved.value, bindings)
+            if isinstance(source, ast.Dict):
+                for key_node, value_node in zip(source.keys, source.values):
+                    if (
+                        isinstance(key_node, ast.Constant)
+                        and key_node.value == resolved.slice.value
+                    ):
+                        return self._extract_literal_dict_keys(value_node, bindings)
+        return None
+
+    def _extract_literal_list_items(
+        self,
+        node: Optional[ast.AST],
+        bindings: Dict[str, ast.AST],
+    ) -> Optional[list[ast.AST]]:
+        resolved = self._resolve_bound_value(node, bindings)
+        if isinstance(resolved, ast.List):
+            return list(resolved.elts)
+        return None
+
+    def _validate_batch_call(
+        self,
+        node: ast.Call,
+        bindings: Dict[str, ast.AST],
+        callable_name: str,
+        batch_rule: Dict[str, Any],
+    ) -> list[str]:
+        violations: list[str] = []
+        batch_arg = self._first_call_argument(node)
+        batch_items = self._extract_literal_list_items(batch_arg, bindings)
+        if batch_items is None:
+            return violations
+
+        required_fields = batch_rule.get("fields") or []
+        request_key = batch_rule.get("request_key")
+        wrapper_key = batch_rule.get("wrapper_key")
+        for item in batch_items:
+            resolved_item = self._resolve_bound_value(item, bindings)
+            if not isinstance(resolved_item, ast.Dict):
+                violations.append(
+                    f"{callable_name} expects dict-like batch items, but test uses {type(resolved_item).__name__} at line {getattr(item, 'lineno', node.lineno)}"
+                )
+                continue
+
+            item_keys = self._extract_literal_dict_keys(resolved_item, bindings) or set()
+            if request_key and request_key not in item_keys:
+                violations.append(
+                    f"{callable_name} batch item missing required key: {request_key} at line {getattr(item, 'lineno', node.lineno)}"
+                )
+            if wrapper_key:
+                nested_keys = self._extract_literal_dict_keys(
+                    ast.Subscript(value=resolved_item, slice=ast.Constant(value=wrapper_key)),
+                    bindings,
+                )
+                if nested_keys is None:
+                    violations.append(
+                        f"{callable_name} batch item missing nested payload `{wrapper_key}` at line {getattr(item, 'lineno', node.lineno)}"
+                    )
+                    continue
+                missing_nested_fields = [field for field in required_fields if field not in nested_keys]
+                if missing_nested_fields:
+                    violations.append(
+                        f"{callable_name} batch item nested `{wrapper_key}` missing required fields: {', '.join(missing_nested_fields)} at line {getattr(item, 'lineno', node.lineno)}"
+                    )
+                continue
+
+            missing_fields = [field for field in required_fields if field not in item_keys]
+            if missing_fields:
+                violations.append(
+                    f"{callable_name} batch item missing required fields: {', '.join(missing_fields)} at line {getattr(item, 'lineno', node.lineno)}"
+                )
+
+        return violations
 
     def _is_pytest_fixture(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
         for decorator in node.decorator_list:
@@ -1303,6 +1566,12 @@ class Orchestrator:
             f"- Constructor arity mismatches: {', '.join(test_analysis.get('constructor_arity_mismatches') or ['none'])}"
         )
         lines.append(
+            f"- Payload contract violations: {', '.join(test_analysis.get('payload_contract_violations') or ['none'])}"
+        )
+        lines.append(
+            f"- Non-batch sequence calls: {', '.join(test_analysis.get('non_batch_sequence_calls') or ['none'])}"
+        )
+        lines.append(
             f"- Undefined test fixtures: {', '.join(test_analysis.get('undefined_fixtures') or ['none'])}"
         )
         lines.append(
@@ -1327,6 +1596,8 @@ class Orchestrator:
                 "unknown_module_symbols",
                 "invalid_member_references",
                 "constructor_arity_mismatches",
+                "payload_contract_violations",
+                "non_batch_sequence_calls",
                 "undefined_fixtures",
                 "imported_entrypoint_symbols",
                 "unsafe_entrypoint_calls",

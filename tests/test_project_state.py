@@ -238,6 +238,132 @@ def test_load_uses_loaded_path_as_state_file_when_legacy_payload_omits_it(tmp_pa
     assert loaded.state_file == str(state_path)
 
 
+@pytest.mark.parametrize("state_filename", ["legacy-skips.json", "legacy-skips.sqlite"])
+def test_load_infers_dependency_failed_skip_reason_for_legacy_tasks(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Recover legacy skip metadata",
+        "tasks": [
+            {
+                "id": "arch",
+                "title": "Architecture",
+                "description": "Design",
+                "assigned_to": "architect",
+                "status": TaskStatus.FAILED.value,
+                "output": "boom",
+            },
+            {
+                "id": "docs",
+                "title": "Docs",
+                "description": "Document",
+                "assigned_to": "docs_writer",
+                "dependencies": ["arch"],
+                "status": TaskStatus.SKIPPED.value,
+                "output": "Skipped because dependency 'arch' failed",
+            },
+        ],
+        "decisions": [],
+        "artifacts": [],
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.get_task("docs").skip_reason_type == "dependency_failed"
+
+
+@pytest.mark.parametrize("state_filename", ["legacy-manual-skips.json", "legacy-manual-skips.sqlite"])
+def test_load_infers_manual_skip_reason_when_dependency_reason_does_not_match_graph(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Keep manual skips explicit",
+        "tasks": [
+            {
+                "id": "arch",
+                "title": "Architecture",
+                "description": "Design",
+                "assigned_to": "architect",
+                "status": TaskStatus.FAILED.value,
+                "output": "boom",
+            },
+            {
+                "id": "docs",
+                "title": "Docs",
+                "description": "Document",
+                "assigned_to": "docs_writer",
+                "dependencies": [],
+                "status": TaskStatus.SKIPPED.value,
+                "output": "Skipped because dependency 'arch' failed",
+            },
+        ],
+        "decisions": [],
+        "artifacts": [],
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.get_task("docs").skip_reason_type == "manual"
+
+
+@pytest.mark.parametrize("state_filename", ["legacy-nondict.json", "legacy-nondict.sqlite"])
+def test_load_discards_non_dict_legacy_decisions_and_preserves_string_artifacts(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Normalize legacy containers",
+        "tasks": [],
+        "decisions": ["freeform note", {"topic": "arch", "decision": "Layered", "rationale": "Simple"}],
+        "artifacts": ["README.md", {"name": "docs.md", "artifact_type": ArtifactType.DOCUMENT.value, "content": "# Docs"}],
+        "updated_at": "2026-03-22T10:09:00+00:00",
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+
+    assert len(loaded.decisions) == 1
+    assert loaded.decisions[0]["at"] == "2026-03-22T10:09:00+00:00"
+    assert loaded.artifacts[0] == "README.md"
+    assert loaded.artifacts[1]["created_at"] == "2026-03-22T10:09:00+00:00"
+
+
+def test_project_state_handles_missing_tasks_unresolved_dependencies_and_lightweight_decisions():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    blocked_task = Task(
+        id="docs",
+        title="Docs",
+        description="Document",
+        assigned_to="docs_writer",
+        dependencies=["arch"],
+    )
+    retryable_task = Task(
+        id="test",
+        title="Tests",
+        description="Test",
+        assigned_to="qa_tester",
+        attempts=1,
+        retry_limit=2,
+    )
+
+    project.add_task(blocked_task)
+    project.add_task(retryable_task)
+    project.add_decision("architecture", "Layered", "Keeps dependencies isolated")
+
+    assert project.get_task("missing") is None
+    assert project.is_task_ready(blocked_task) is False
+    assert project.should_retry_task("missing") is False
+    assert project.should_retry_task("test") is True
+    assert project.decisions[0]["topic"] == "architecture"
+    assert project.decisions[0]["decision"] == "Layered"
+    assert project.decisions[0]["rationale"] == "Keeps dependencies isolated"
+    assert project.decisions[0]["at"]
+
+
 def test_snapshot_skips_malformed_project_decisions_in_legacy_state():
     project = ProjectState(
         project_name="Demo",

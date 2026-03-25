@@ -363,3 +363,43 @@ def test_legal_advisor_agent_execute_uses_default_license_and_dependency_placeho
     assert "Not specified" in agent.last_user_message
     assert result.artifacts[0].artifact_type == ArtifactType.DOCUMENT
     assert result.artifacts[0].name == "legal_legal_analysis"
+
+
+def test_legal_advisor_agent_execute_includes_custom_license_and_dependencies(tmp_path):
+    agent = CaptureLegalAdvisorAgent(build_config(tmp_path))
+    agent_input = AgentInput(
+        task_id="legal",
+        task_title="Legal",
+        task_description="Review dependencies and licensing",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={
+            "license": "MIT",
+            "dependencies": ["fastapi==0.115.0", "uvicorn==0.30.0"],
+        },
+    )
+
+    agent.execute(agent_input)
+
+    assert "Project License: MIT" in agent.last_user_message
+    assert "- fastapi==0.115.0" in agent.last_user_message
+    assert "- uvicorn==0.30.0" in agent.last_user_message
+    assert "Goal: Build demo" in agent.last_user_message
+
+
+def test_legal_advisor_agent_run_uses_custom_license_and_dependency_list(tmp_path):
+    agent = CaptureLegalAdvisorAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Assess compliance posture",
+        {
+            "license": "Apache-2.0",
+            "dependencies": ["requests>=2.31.0", "pydantic>=2.0"],
+        },
+    )
+
+    assert result == "ok"
+    assert "Project License: Apache-2.0" in agent.last_user_message
+    assert "- requests>=2.31.0" in agent.last_user_message
+    assert "- pydantic>=2.0" in agent.last_user_message
+    assert "Task: Assess compliance posture" in agent.last_user_message

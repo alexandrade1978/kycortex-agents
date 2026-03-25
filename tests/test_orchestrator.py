@@ -1,3 +1,4 @@
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -83,6 +84,13 @@ class FakeHTTPResponse:
 
     def __exit__(self, exc_type, exc, tb):
         return False
+
+
+class CompletedProcessStub:
+    def __init__(self, returncode: int = 0, stdout: str = "1 passed in 0.01s", stderr: str = ""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 def build_openai_client(response=None, error=None):
@@ -545,6 +553,38 @@ def test_run_task_fails_qa_tester_when_generated_tests_fail_pytest_execution(tmp
     assert project.tasks[1].output_payload is not None
     assert project.tasks[1].output_payload["raw_content"].startswith("from code_implementation import run")
     assert project.tasks[1].output_payload["metadata"]["validation"]["test_execution"]["returncode"] != 0
+
+
+def test_generated_test_subprocess_strips_inherited_coverage_env(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    orchestrator = Orchestrator(config, registry=AgentRegistry({}))
+    captured_env: dict[str, str] = {}
+
+    monkeypatch.setenv("COV_CORE_SOURCE", "kycortex_agents")
+    monkeypatch.setenv("COV_CORE_CONFIG", "/tmp/.coveragerc")
+    monkeypatch.setenv("COV_CORE_DATAFILE", "/tmp/.coverage")
+    monkeypatch.setenv("COVERAGE_PROCESS_START", "/tmp/.coveragerc")
+
+    def fake_run(*args, **kwargs):
+        captured_env.update(kwargs["env"])
+        return CompletedProcessStub()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = orchestrator._execute_generated_tests(
+        "code_implementation.py",
+        "def run():\n    return 1\n",
+        "tests_tests.py",
+        "from code_implementation import run\n\ndef test_run():\n    assert run() == 1\n",
+    )
+
+    assert result["ran"] is True
+    assert result["returncode"] == 0
+    assert captured_env["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert "COV_CORE_SOURCE" not in captured_env
+    assert "COV_CORE_CONFIG" not in captured_env
+    assert "COV_CORE_DATAFILE" not in captured_env
+    assert "COVERAGE_PROCESS_START" not in captured_env
 
 
 def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_fixtures(tmp_path):

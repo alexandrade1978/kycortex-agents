@@ -52,6 +52,25 @@ def test_config_rejects_invalid_max_tokens(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), max_tokens=0)
 
 
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"llm_provider": "   "}, "llm_provider must not be empty"),
+        ({"llm_model": "   "}, "llm_model must not be empty"),
+        ({"project_name": "   "}, "project_name must not be empty"),
+        ({"output_dir": "   "}, "output_dir must not be empty"),
+        (
+            {"base_url": "   ", "api_key": "token"},
+            "base_url must not be empty when provided",
+        ),
+    ],
+)
+def test_config_rejects_blank_required_fields(tmp_path, overrides, message):
+    with pytest.raises(ConfigValidationError, match=message):
+        init_kwargs = {"output_dir": str(tmp_path / "output"), **overrides}
+        KYCortexConfig(**init_kwargs)
+
+
 def test_validate_runtime_requires_api_key(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), api_key="")
@@ -78,6 +97,19 @@ def test_config_rejects_invalid_workflow_resume_policy(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_resume_policy="always")
 
 
+def test_config_rejects_invalid_workflow_failure_policy(tmp_path):
+    with pytest.raises(ConfigValidationError, match="workflow_failure_policy must be 'fail_fast' or 'continue'"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_failure_policy="retry_forever")
+
+
 def test_config_rejects_invalid_workflow_acceptance_policy(tmp_path):
     with pytest.raises(ConfigValidationError, match="workflow_acceptance_policy must be 'all_tasks' or 'required_tasks'"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_acceptance_policy="optional_only")
+
+
+def test_validate_runtime_rejects_ollama_without_base_url(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
+    config.base_url = ""
+
+    with pytest.raises(ConfigValidationError, match="Missing base URL for provider 'ollama'"):
+        config.validate_runtime()

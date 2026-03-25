@@ -309,8 +309,7 @@ class Orchestrator:
             tmp_path = Path(tmp_dir)
             (tmp_path / module_filename).write_text(code_content, encoding="utf-8")
             (tmp_path / test_filename).write_text(test_content, encoding="utf-8")
-            env = os.environ.copy()
-            env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+            env = self._build_generated_test_env()
             try:
                 completed = subprocess.run(
                     [sys.executable, "-m", "pytest", test_filename, "-q"],
@@ -335,6 +334,15 @@ class Orchestrator:
         result["stderr"] = completed.stderr.strip()
         result["summary"] = self._summarize_pytest_output(completed.stdout, completed.stderr, completed.returncode)
         return result
+
+    def _build_generated_test_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        for key in list(env):
+            if key.startswith("COV_CORE_"):
+                env.pop(key, None)
+        env.pop("COVERAGE_PROCESS_START", None)
+        return env
 
     def _summarize_pytest_output(self, stdout: str, stderr: str, returncode: int) -> str:
         combined_lines = [line.strip() for line in f"{stdout}\n{stderr}".splitlines() if line.strip()]

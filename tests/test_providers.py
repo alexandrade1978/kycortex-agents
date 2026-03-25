@@ -6,6 +6,7 @@ import pytest
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderConfigurationError
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
+from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.providers.factory import create_provider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
@@ -323,3 +324,20 @@ def test_ollama_provider_rejects_invalid_json_response(tmp_path):
 
     with pytest.raises(AgentExecutionError, match=r"invalid JSON response"):
         provider.generate("system", "message")
+
+
+def test_base_provider_default_metadata_is_none():
+    class MinimalProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+    assert MinimalProvider().get_last_call_metadata() is None
+
+
+def test_base_provider_generate_super_raises_not_implemented():
+    class SuperCallingProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return super().generate(system_prompt, user_message)
+
+    with pytest.raises(NotImplementedError):
+        SuperCallingProvider().generate("system", "message")

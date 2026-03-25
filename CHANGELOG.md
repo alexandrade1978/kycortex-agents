@@ -6,6 +6,23 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.4 - 2026-03-25
+
+### Added
+
+- Targeted regression coverage for config validation edge cases, provider base-contract behavior, legal advisor prompt construction, and legacy project-state normalization paths.
+- A project-state regression proving missing-task lookup, unresolved dependency readiness checks, retry-window evaluation, and lightweight decision recording stay deterministic.
+
+### Changed
+
+- Generated pytest subprocess execution now strips inherited coverage instrumentation environment variables before running model-generated test validation.
+- The repository coverage gate now passes without mixing incompatible nested coverage data from orchestrator-managed subprocesses.
+- Release validation and CI coverage execution now stabilize on the repository's enforced `90%` threshold with the new regression coverage.
+
+### Release Readiness Notes
+
+- Version `1.0.4` is now the released package baseline.
+
 ## 1.0.3 - 2026-03-25
 
 ### Added

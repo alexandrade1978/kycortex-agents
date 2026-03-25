@@ -53,7 +53,11 @@ class BaseAgent(ABC):
                 )
                 break
             except ProviderTransientError as exc:
-                base_backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
+                uncapped_backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
+                max_backoff_seconds = self.config.provider_retry_max_backoff_seconds
+                base_backoff_seconds = uncapped_backoff_seconds
+                if max_backoff_seconds is not None:
+                    base_backoff_seconds = min(base_backoff_seconds, max_backoff_seconds)
                 jitter_seconds = 0.0
                 if base_backoff_seconds > 0 and self.config.provider_retry_jitter_ratio > 0:
                     jitter_seconds = random.uniform(
@@ -68,6 +72,9 @@ class BaseAgent(ABC):
                         "retryable": True,
                         "error_type": type(exc).__name__,
                         "error_message": str(exc),
+                        "uncapped_backoff_seconds": round(uncapped_backoff_seconds, 6),
+                        "base_backoff_seconds": round(base_backoff_seconds, 6),
+                        "jitter_seconds": round(jitter_seconds, 6),
                         "backoff_seconds": round(total_backoff_seconds, 6),
                     }
                 )

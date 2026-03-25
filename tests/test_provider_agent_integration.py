@@ -205,6 +205,7 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_n
     assert metadata["attempts_used"] == 1
     assert metadata["max_attempts"] == 1
     assert metadata["attempt_history"][0]["error_type"] == "ProviderTransientError"
+    assert metadata["attempt_history"][0]["base_backoff_seconds"] == 0.0
     assert expected_message in metadata["error_message"]
     assert metadata["duration_ms"] >= 0
 

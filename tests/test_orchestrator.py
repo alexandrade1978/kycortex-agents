@@ -970,6 +970,131 @@ def test_run_task_fails_qa_tester_when_generated_tests_treat_non_batch_api_as_ba
     ]
 
 
+def test_run_task_fails_qa_tester_when_generated_tests_miss_nested_constructor_payload_fields(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, data):\n"
+        "        self.request_id = request_id\n"
+        "        self.data = data\n\n"
+        "class Service:\n"
+        "    def validate_request(self, request):\n"
+        "        return 'compliance_data' in request.data\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, Service\n\n"
+        "def test_validate_request(service=Service()):\n"
+        "    request = ComplianceRequest(request_id='req-1', data={'key': 'value'})\n"
+        "    assert service.validate_request(request) is True\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"payload contract violations"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["payload_contract_violations"] == [
+        "validate_request payload missing required fields: compliance_data at line 5"
+    ]
+
+
+def test_run_task_fails_qa_tester_when_generated_tests_use_unsupported_field_literals(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, document_type):\n"
+        "        self.document_type = document_type\n\n"
+        "def score_request(request):\n"
+        "    risk_scores = {'document_type': {'contract': 0.5}}\n"
+        "    return risk_scores[request.document_type].get('contract', 0)\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, score_request\n\n"
+        "def test_score_request():\n"
+        "    request = ComplianceRequest(document_type='type')\n"
+        "    assert score_request(request) == 0.5\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"payload contract violations"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["payload_contract_violations"] == [
+        "score_request field `document_type` uses unsupported values: type at line 5"
+    ]
+
+
 def test_code_artifact_context_includes_behavior_contract(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -1042,6 +1167,48 @@ def test_code_artifact_context_includes_behavior_contract(tmp_path):
     assert "Entry points to avoid in tests: none" in context["code_test_targets"]
     assert "validate_request requires fields: name, email, compliance_type" in context["code_behavior_contract"]
     assert "process_batch expects each batch item to include: request_id, name, email, compliance_type" in context["code_behavior_contract"]
+
+
+def test_code_artifact_context_includes_field_value_contracts(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, document_type):\n"
+        "        self.document_type = document_type\n\n"
+        "def score_request(request):\n"
+        "    risk_scores = {'document_type': {'contract': 0.5}}\n"
+        "    return risk_scores[request.document_type].get('contract', 0)\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+
+    orchestrator = Orchestrator(config)
+    context = orchestrator._build_context(project.tasks[0], project)
+
+    assert "score_request expects field `document_type` to be one of: document_type" in context["code_behavior_contract"]
 
 
 @pytest.mark.parametrize(

@@ -1034,6 +1034,7 @@ class Orchestrator:
             return ""
 
         validation_rules: dict[str, list[str]] = {}
+        field_value_rules: dict[str, Dict[str, list[str]]] = {}
         batch_rules: list[str] = []
         function_map: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
 
@@ -1060,12 +1061,17 @@ class Orchestrator:
             if propagated_fields:
                 validation_rules[function_name] = propagated_fields
 
+        for function_name, function_node in function_map.items():
+            lookup_rules = self._extract_lookup_field_rules(function_node)
+            if lookup_rules:
+                field_value_rules[function_name] = lookup_rules
+
         for function_node in function_map.values():
             batch_rule = self._extract_batch_rule(function_node, validation_rules)
             if batch_rule:
                 batch_rules.append(batch_rule)
 
-        if not validation_rules and not batch_rules:
+        if not validation_rules and not field_value_rules and not batch_rules:
             return ""
 
         lines = ["Behavior contract:"]
@@ -1073,13 +1079,24 @@ class Orchestrator:
             lines.append(
                 f"- {function_name} requires fields: {', '.join(validation_rules[function_name])}"
             )
+        for function_name in sorted(field_value_rules):
+            for field_name in sorted(field_value_rules[function_name]):
+                lines.append(
+                    f"- {function_name} expects field `{field_name}` to be one of: {', '.join(field_value_rules[function_name][field_name])}"
+                )
         for rule in batch_rules:
             lines.append(f"- {rule}")
         return "\n".join(lines)
 
     def _extract_required_fields(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+        literal_fields: list[str] = []
         for stmt in ast.walk(node):
             if not isinstance(stmt, ast.Assign):
+                if not isinstance(stmt, ast.Compare):
+                    continue
+                field_name = self._comparison_required_field(stmt)
+                if field_name and field_name not in literal_fields:
+                    literal_fields.append(field_name)
                 continue
             if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
                 continue
@@ -1091,7 +1108,17 @@ class Orchestrator:
                     fields.append(element.value)
             if fields:
                 return fields
-        return []
+        return literal_fields
+
+    def _comparison_required_field(self, node: ast.Compare) -> str:
+        if not node.ops or not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
+            return ""
+        comparator = node.comparators[0] if node.comparators else None
+        if not isinstance(comparator, (ast.Name, ast.Attribute, ast.Subscript)):
+            return ""
+        if not any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops):
+            return ""
+        return node.left.value
 
     def _extract_indirect_required_fields(
         self,
@@ -1109,6 +1136,44 @@ class Orchestrator:
             if callable_name in validation_rules:
                 return list(validation_rules[callable_name])
         return []
+
+    def _extract_lookup_field_rules(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, list[str]]:
+        dict_key_sets: Dict[str, list[str]] = {}
+        lookup_rules: Dict[str, list[str]] = {}
+
+        for child in ast.walk(node):
+            if isinstance(child, ast.Assign) and len(child.targets) == 1 and isinstance(child.targets[0], ast.Name):
+                if not isinstance(child.value, ast.Dict):
+                    continue
+                literal_keys = [
+                    key.value
+                    for key in child.value.keys
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                ]
+                if literal_keys:
+                    dict_key_sets[child.targets[0].id] = literal_keys
+
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Subscript) or not isinstance(child.value, ast.Name):
+                continue
+            allowed_values = dict_key_sets.get(child.value.id)
+            if not allowed_values:
+                continue
+            field_name = self._field_selector_name(child.slice)
+            if not field_name:
+                continue
+            lookup_rules[field_name] = list(dict.fromkeys(allowed_values))
+
+        return lookup_rules
+
+    def _field_selector_name(self, node: ast.AST) -> str:
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+            return node.slice.value
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return ""
 
     def _extract_batch_rule(
         self,
@@ -1201,7 +1266,7 @@ class Orchestrator:
         function_names = {item["name"] for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
         entrypoint_names = self._entrypoint_function_names(code_analysis)
-        validation_rules, batch_rules = self._parse_behavior_contract(code_behavior_contract)
+        validation_rules, field_value_rules, batch_rules = self._parse_behavior_contract(code_behavior_contract)
 
         imported_symbols: set[str] = set()
         called_names: list[tuple[str, int]] = []
@@ -1273,8 +1338,10 @@ class Orchestrator:
         payload_contract_violations, non_batch_sequence_calls = self._analyze_test_behavior_contracts(
             tree,
             validation_rules,
+            field_value_rules,
             batch_rules,
             function_names,
+            class_map,
         )
 
         analysis["imported_module_symbols"] = sorted(imported_symbols)
@@ -1289,11 +1356,15 @@ class Orchestrator:
         analysis["unsafe_entrypoint_calls"] = sorted(set(unsafe_entrypoint_calls))
         return analysis
 
-    def _parse_behavior_contract(self, contract: str) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, Any]]]:
+    def _parse_behavior_contract(
+        self,
+        contract: str,
+    ) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]]]:
         validation_rules: Dict[str, list[str]] = {}
+        field_value_rules: Dict[str, Dict[str, list[str]]] = {}
         batch_rules: Dict[str, Dict[str, Any]] = {}
         if not contract.strip():
-            return validation_rules, batch_rules
+            return validation_rules, field_value_rules, batch_rules
 
         for raw_line in contract.splitlines():
             line = raw_line.strip()
@@ -1305,6 +1376,15 @@ class Orchestrator:
                 fields = [field.strip() for field in validation_match.group(2).split(",") if field.strip()]
                 if fields:
                     validation_rules[function_name] = fields
+                continue
+
+            field_value_match = re.match(r"-\s+(\w+) expects field `([^`]+)` to be one of: (.+)$", line)
+            if field_value_match:
+                function_name = field_value_match.group(1)
+                field_name = field_value_match.group(2)
+                values = [value.strip() for value in field_value_match.group(3).split(",") if value.strip()]
+                if values:
+                    field_value_rules.setdefault(function_name, {})[field_name] = values
                 continue
 
             nested_match = re.match(
@@ -1336,14 +1416,16 @@ class Orchestrator:
                     "fields": [field.strip() for field in wrapper_match.group(3).split(",") if field.strip()],
                 }
 
-        return validation_rules, batch_rules
+        return validation_rules, field_value_rules, batch_rules
 
     def _analyze_test_behavior_contracts(
         self,
         tree: ast.AST,
         validation_rules: Dict[str, list[str]],
+        field_value_rules: Dict[str, Dict[str, list[str]]],
         batch_rules: Dict[str, Dict[str, Any]],
         function_names: set[str],
+        class_map: Dict[str, Any],
     ) -> tuple[list[str], list[str]]:
         payload_violations: set[str] = set()
         non_batch_calls: set[str] = set()
@@ -1363,12 +1445,23 @@ class Orchestrator:
                 if callable_name in validation_rules:
                     payload_arg = self._payload_argument_for_validation(child, callable_name)
                     payload_node = self._resolve_bound_value(payload_arg, bindings)
-                    payload_keys = self._extract_literal_dict_keys(payload_node, bindings)
+                    payload_keys = self._extract_literal_dict_keys(payload_node, bindings, class_map)
                     if payload_keys is not None:
                         missing_fields = [field for field in validation_rules[callable_name] if field not in payload_keys]
                         if missing_fields:
                             payload_violations.add(
                                 f"{callable_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
+                            )
+
+                if callable_name in field_value_rules:
+                    payload_arg = self._payload_argument_for_validation(child, callable_name)
+                    payload_node = self._resolve_bound_value(payload_arg, bindings)
+                    for field_name, allowed_values in field_value_rules[callable_name].items():
+                        observed_values = self._extract_literal_field_values(payload_node, bindings, field_name, class_map)
+                        invalid_values = [value for value in observed_values if value not in allowed_values]
+                        if invalid_values:
+                            payload_violations.add(
+                                f"{callable_name} field `{field_name}` uses unsupported values: {', '.join(invalid_values)} at line {child.lineno}"
                             )
 
                 if callable_name in batch_rules:
@@ -1438,6 +1531,7 @@ class Orchestrator:
         self,
         node: Optional[ast.AST],
         bindings: Dict[str, ast.AST],
+        class_map: Optional[Dict[str, Any]] = None,
     ) -> Optional[set[str]]:
         resolved = self._resolve_bound_value(node, bindings)
         if isinstance(resolved, ast.Dict):
@@ -1460,7 +1554,60 @@ class Orchestrator:
                         isinstance(key_node, ast.Constant)
                         and key_node.value == resolved.slice.value
                     ):
-                        return self._extract_literal_dict_keys(value_node, bindings)
+                        return self._extract_literal_dict_keys(value_node, bindings, class_map)
+        if isinstance(resolved, ast.Call):
+            for candidate_name in ("data", "payload", "request", "item"):
+                candidate_value = self._call_argument_value(resolved, candidate_name, class_map or {})
+                nested_keys = self._extract_literal_dict_keys(candidate_value, bindings, class_map)
+                if nested_keys is not None:
+                    return nested_keys
+        return None
+
+    def _extract_literal_field_values(
+        self,
+        node: Optional[ast.AST],
+        bindings: Dict[str, ast.AST],
+        field_name: str,
+        class_map: Dict[str, Any],
+    ) -> list[str]:
+        resolved = self._resolve_bound_value(node, bindings)
+        if isinstance(resolved, ast.Dict):
+            for key_node, value_node in zip(resolved.keys, resolved.values):
+                if isinstance(key_node, ast.Constant) and key_node.value == field_name:
+                    return self._extract_string_literals(value_node, bindings)
+            return []
+        if isinstance(resolved, ast.Call):
+            direct_value = self._call_argument_value(resolved, field_name, class_map)
+            if direct_value is not None:
+                return self._extract_string_literals(direct_value, bindings)
+            nested_payload = self._call_argument_value(resolved, "data", class_map)
+            if nested_payload is not None:
+                return self._extract_literal_field_values(nested_payload, bindings, field_name, class_map)
+        return []
+
+    def _extract_string_literals(self, node: Optional[ast.AST], bindings: Dict[str, ast.AST]) -> list[str]:
+        resolved = self._resolve_bound_value(node, bindings)
+        if isinstance(resolved, ast.Constant) and isinstance(resolved.value, str):
+            return [resolved.value]
+        return []
+
+    def _call_argument_value(
+        self,
+        node: ast.Call,
+        argument_name: str,
+        class_map: Dict[str, Any],
+    ) -> Optional[ast.AST]:
+        for keyword in node.keywords:
+            if keyword.arg == argument_name:
+                return keyword.value
+        if not isinstance(node.func, ast.Name):
+            return None
+        constructor_params = class_map.get(node.func.id, {}).get("constructor_params") or []
+        if argument_name not in constructor_params:
+            return None
+        argument_index = constructor_params.index(argument_name)
+        if argument_index < len(node.args):
+            return node.args[argument_index]
         return None
 
     def _extract_literal_list_items(

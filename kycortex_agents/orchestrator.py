@@ -1169,6 +1169,46 @@ class Orchestrator:
                     f"Task '{task.id}' is assigned to unknown agent '{task.assigned_to}'"
                 )
 
+    def _evaluate_workflow_acceptance(self, project: ProjectState) -> Dict[str, Any]:
+        policy = self.config.workflow_acceptance_policy
+        if policy == "required_tasks":
+            evaluated_tasks = [task for task in project.tasks if task.required_for_acceptance]
+            if not evaluated_tasks:
+                return {
+                    "policy": policy,
+                    "accepted": False,
+                    "reason": "no_required_tasks",
+                    "evaluated_task_ids": [],
+                    "required_task_ids": [],
+                    "completed_task_ids": [],
+                    "failed_task_ids": [],
+                    "skipped_task_ids": [],
+                    "pending_task_ids": [],
+                }
+        else:
+            evaluated_tasks = list(project.tasks)
+
+        completed_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.DONE.value]
+        failed_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.FAILED.value]
+        skipped_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.SKIPPED.value]
+        pending_task_ids = [
+            task.id
+            for task in evaluated_tasks
+            if task.status not in {TaskStatus.DONE.value, TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
+        ]
+        accepted = bool(evaluated_tasks) and len(completed_task_ids) == len(evaluated_tasks)
+        return {
+            "policy": policy,
+            "accepted": accepted,
+            "reason": "all_evaluated_tasks_done" if accepted else "evaluated_tasks_incomplete",
+            "evaluated_task_ids": [task.id for task in evaluated_tasks],
+            "required_task_ids": [task.id for task in project.tasks if task.required_for_acceptance],
+            "completed_task_ids": completed_task_ids,
+            "failed_task_ids": failed_task_ids,
+            "skipped_task_ids": skipped_task_ids,
+            "pending_task_ids": pending_task_ids,
+        }
+
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""
         project.execution_plan()
@@ -1180,19 +1220,22 @@ class Orchestrator:
         if resumed_task_ids:
             self._log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))
             project.save()
-        project.mark_workflow_running()
+        project.mark_workflow_running(acceptance_policy=self.config.workflow_acceptance_policy)
         while True:
             pending = project.pending_tasks()
             if not pending:
-                acceptance_criteria_met = all(task.status == TaskStatus.DONE.value for task in project.tasks)
+                acceptance_evaluation = self._evaluate_workflow_acceptance(project)
+                acceptance_criteria_met = bool(acceptance_evaluation["accepted"])
                 project.mark_workflow_finished(
                     "completed",
+                    acceptance_policy=self.config.workflow_acceptance_policy,
                     terminal_outcome=(
                         WorkflowOutcome.COMPLETED.value
                         if acceptance_criteria_met
                         else WorkflowOutcome.DEGRADED.value
                     ),
                     acceptance_criteria_met=acceptance_criteria_met,
+                    acceptance_evaluation=acceptance_evaluation,
                 )
                 project.save()
                 self._log_event("info", "workflow_completed", project_name=project.project_name, phase=project.phase)
@@ -1202,9 +1245,11 @@ class Orchestrator:
             except WorkflowDefinitionError:
                 project.mark_workflow_finished(
                     "failed",
+                    acceptance_policy=self.config.workflow_acceptance_policy,
                     terminal_outcome=WorkflowOutcome.FAILED.value,
                     failure_category=FailureCategory.WORKFLOW_DEFINITION.value,
                     acceptance_criteria_met=False,
+                    acceptance_evaluation=self._evaluate_workflow_acceptance(project),
                 )
                 project.save()
                 self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
@@ -1213,9 +1258,11 @@ class Orchestrator:
                 blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
                 project.mark_workflow_finished(
                     "failed",
+                    acceptance_policy=self.config.workflow_acceptance_policy,
                     terminal_outcome=WorkflowOutcome.FAILED.value,
                     failure_category=FailureCategory.WORKFLOW_BLOCKED.value,
                     acceptance_criteria_met=False,
+                    acceptance_evaluation=self._evaluate_workflow_acceptance(project),
                 )
                 project.save()
                 self._log_event(
@@ -1251,9 +1298,11 @@ class Orchestrator:
                         continue
                     project.mark_workflow_finished(
                         "failed",
+                        acceptance_policy=self.config.workflow_acceptance_policy,
                         terminal_outcome=WorkflowOutcome.FAILED.value,
                         failure_category=self._classify_task_failure(task, exc),
                         acceptance_criteria_met=False,
+                        acceptance_evaluation=self._evaluate_workflow_acceptance(project),
                     )
                     project.save()
                     self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)

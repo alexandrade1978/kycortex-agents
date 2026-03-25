@@ -36,6 +36,7 @@ class KYCortexConfig:
     timeout_seconds: float = 60.0
     workflow_failure_policy: str = "fail_fast"
     workflow_resume_policy: str = "interrupted_only"
+    workflow_acceptance_policy: str = "all_tasks"
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
@@ -83,6 +84,10 @@ class KYCortexConfig:
         if self.workflow_resume_policy not in {"interrupted_only", "resume_failed"}:
             raise ConfigValidationError(
                 "workflow_resume_policy must be 'interrupted_only' or 'resume_failed'"
+            )
+        if self.workflow_acceptance_policy not in {"all_tasks", "required_tasks"}:
+            raise ConfigValidationError(
+                "workflow_acceptance_policy must be 'all_tasks' or 'required_tasks'"
             )
 
     def validate_runtime(self):

@@ -76,3 +76,8 @@ def test_validate_runtime_accepts_ollama_without_api_key(tmp_path):
 def test_config_rejects_invalid_workflow_resume_policy(tmp_path):
     with pytest.raises(ConfigValidationError, match="workflow_resume_policy must be 'interrupted_only' or 'resume_failed'"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_resume_policy="always")
+
+
+def test_config_rejects_invalid_workflow_acceptance_policy(tmp_path):
+    with pytest.raises(ConfigValidationError, match="workflow_acceptance_policy must be 'all_tasks' or 'required_tasks'"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_acceptance_policy="optional_only")

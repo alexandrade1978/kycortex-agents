@@ -6,6 +6,24 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.3 - 2026-03-25
+
+### Added
+
+- Explicit workflow acceptance policy support with `all_tasks` and `required_tasks` modes.
+- Persisted `acceptance_policy` and `acceptance_evaluation` metadata in workflow state, snapshots, and workflow execution events.
+- Task-level `required_for_acceptance` markers so workflow templates can declare which tasks define terminal acceptance.
+
+### Changed
+
+- The orchestrator now evaluates workflow completion through explicit acceptance-policy logic instead of an implicit all-task-success heuristic.
+- Workflows using `required_tasks` now degrade safely when no required tasks are declared, preventing false successful completion.
+- Accepted workflows can now complete under the required-task policy even when optional tasks fail, while preserving explicit audit evidence in state.
+
+### Release Readiness Notes
+
+- Version `1.0.3` is now the released package baseline.
+
 ## 1.0.2 - 2026-03-25
 
 ### Added

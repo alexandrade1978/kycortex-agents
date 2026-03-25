@@ -28,6 +28,7 @@ class Task:
     description: str
     assigned_to: str
     dependencies: List[str] = field(default_factory=list)
+    required_for_acceptance: bool = False
     retry_limit: int = 0
     attempts: int = 0
     last_error: Optional[str] = None
@@ -56,9 +57,11 @@ class ProjectState:
     artifacts: List[Dict[str, Any] | str] = field(default_factory=list)
     execution_events: List[Dict[str, Any]] = field(default_factory=list)
     phase: str = "init"
+    acceptance_policy: Optional[str] = None
     terminal_outcome: Optional[str] = None
     failure_category: Optional[str] = None
     acceptance_criteria_met: bool = False
+    acceptance_evaluation: Dict[str, Any] = field(default_factory=dict)
     workflow_started_at: Optional[str] = None
     workflow_finished_at: Optional[str] = None
     workflow_last_resumed_at: Optional[str] = None
@@ -343,7 +346,7 @@ class ProjectState:
         self.artifacts.append(asdict(record))
         self._touch(record.created_at)
 
-    def mark_workflow_running(self):
+    def mark_workflow_running(self, *, acceptance_policy: Optional[str] = None):
         """Mark the workflow execution as active and emit a workflow-start event."""
 
         started_at = datetime.now(timezone.utc).isoformat()
@@ -351,25 +354,37 @@ class ProjectState:
             self.workflow_started_at = started_at
         self.workflow_finished_at = None
         self.phase = "execution"
+        if acceptance_policy is not None:
+            self.acceptance_policy = acceptance_policy
         self.terminal_outcome = None
         self.failure_category = None
         self.acceptance_criteria_met = False
-        self._record_execution_event(event="workflow_started", timestamp=started_at, status=self.phase)
+        self.acceptance_evaluation = {}
+        self._record_execution_event(
+            event="workflow_started",
+            timestamp=started_at,
+            status=self.phase,
+            details={"acceptance_policy": self.acceptance_policy},
+        )
         self._touch(started_at)
 
     def mark_workflow_finished(
         self,
         phase: str,
         *,
+        acceptance_policy: Optional[str] = None,
         terminal_outcome: Optional[str] = None,
         failure_category: Optional[str] = None,
         acceptance_criteria_met: Optional[bool] = None,
+        acceptance_evaluation: Optional[Dict[str, Any]] = None,
     ):
         """Mark the workflow finished under the supplied phase label."""
 
         finished_at = datetime.now(timezone.utc).isoformat()
         self.phase = phase
         self.workflow_finished_at = finished_at
+        if acceptance_policy is not None:
+            self.acceptance_policy = acceptance_policy
         resolved_outcome = terminal_outcome or (
             WorkflowOutcome.COMPLETED.value if phase == "completed" else WorkflowOutcome.FAILED.value
         )
@@ -380,15 +395,18 @@ class ProjectState:
             if acceptance_criteria_met is not None
             else resolved_outcome == WorkflowOutcome.COMPLETED.value
         )
+        self.acceptance_evaluation = dict(acceptance_evaluation or {})
         self._record_execution_event(
             event="workflow_finished",
             timestamp=finished_at,
             status=self.phase,
             details={
                 "workflow_duration_ms": self._duration_ms(self.workflow_started_at, finished_at),
+                "acceptance_policy": self.acceptance_policy,
                 "terminal_outcome": self.terminal_outcome,
                 "failure_category": self.failure_category,
                 "acceptance_criteria_met": self.acceptance_criteria_met,
+                "acceptance_evaluation": self.acceptance_evaluation,
             },
         )
         self._touch(finished_at)
@@ -637,6 +655,7 @@ class ProjectState:
                 details={
                     "attempts": task.attempts,
                     "retry_limit": task.retry_limit,
+                    "required_for_acceptance": task.required_for_acceptance,
                     "last_error": task.last_error,
                     "last_error_type": task.last_error_type,
                     "last_error_category": task.last_error_category,
@@ -662,9 +681,11 @@ class ProjectState:
             goal=self.goal,
             workflow_status=self._workflow_status(),
             phase=self.phase,
+            acceptance_policy=self.acceptance_policy,
             terminal_outcome=self.terminal_outcome,
             failure_category=self.failure_category,
             acceptance_criteria_met=self.acceptance_criteria_met,
+            acceptance_evaluation=dict(self.acceptance_evaluation),
             started_at=self.workflow_started_at,
             finished_at=self.workflow_finished_at,
             last_resumed_at=self.workflow_last_resumed_at,
@@ -736,6 +757,10 @@ class ProjectState:
         statuses = {task.status for task in self.tasks}
         if not self.tasks:
             return WorkflowStatus.INIT
+        if self.workflow_finished_at and self.terminal_outcome == WorkflowOutcome.COMPLETED.value:
+            return WorkflowStatus.COMPLETED
+        if self.workflow_finished_at and self.terminal_outcome == WorkflowOutcome.FAILED.value:
+            return WorkflowStatus.FAILED
         if TaskStatus.FAILED.value in statuses:
             return WorkflowStatus.FAILED
         if statuses.issubset({TaskStatus.DONE.value, TaskStatus.SKIPPED.value}):

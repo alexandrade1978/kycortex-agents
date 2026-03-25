@@ -787,16 +787,18 @@ def test_snapshot_includes_workflow_execution_metadata():
         project_name="Demo",
         goal="Build demo",
         execution_events=[
-            {"event": "workflow_started", "timestamp": "2026-03-22T10:00:00+00:00", "task_id": None, "status": "execution", "details": {}},
-            {"event": "workflow_finished", "timestamp": "2026-03-22T10:06:00+00:00", "task_id": None, "status": "completed", "details": {"workflow_duration_ms": 360000.0, "terminal_outcome": "completed", "failure_category": None, "acceptance_criteria_met": True}},
+            {"event": "workflow_started", "timestamp": "2026-03-22T10:00:00+00:00", "task_id": None, "status": "execution", "details": {"acceptance_policy": "required_tasks"}},
+            {"event": "workflow_finished", "timestamp": "2026-03-22T10:06:00+00:00", "task_id": None, "status": "completed", "details": {"workflow_duration_ms": 360000.0, "acceptance_policy": "required_tasks", "terminal_outcome": "completed", "failure_category": None, "acceptance_criteria_met": True, "acceptance_evaluation": {"policy": "required_tasks", "accepted": True, "required_task_ids": ["arch"], "completed_task_ids": ["arch"]}}},
         ],
         workflow_started_at="2026-03-22T10:00:00+00:00",
         workflow_finished_at="2026-03-22T10:06:00+00:00",
         workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
         updated_at="2026-03-22T10:06:00+00:00",
         phase="completed",
+        acceptance_policy="required_tasks",
         terminal_outcome="completed",
         acceptance_criteria_met=True,
+        acceptance_evaluation={"policy": "required_tasks", "accepted": True, "required_task_ids": ["arch"], "completed_task_ids": ["arch"]},
     )
 
     snapshot = project.snapshot()
@@ -804,11 +806,46 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.started_at == "2026-03-22T10:00:00+00:00"
     assert snapshot.finished_at == "2026-03-22T10:06:00+00:00"
     assert snapshot.last_resumed_at == "2026-03-22T10:04:00+00:00"
+    assert snapshot.acceptance_policy == "required_tasks"
     assert snapshot.terminal_outcome == "completed"
     assert snapshot.acceptance_criteria_met is True
+    assert snapshot.acceptance_evaluation["required_task_ids"] == ["arch"]
     assert snapshot.execution_events[0]["event"] == "workflow_started"
     assert snapshot.execution_events[1]["details"]["workflow_duration_ms"] == 360000.0
     assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
+
+
+def test_snapshot_reports_completed_when_acceptance_policy_completes_with_optional_failures():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        phase="completed",
+        acceptance_policy="required_tasks",
+        terminal_outcome=WorkflowOutcome.COMPLETED.value,
+        acceptance_criteria_met=True,
+        workflow_started_at="2026-03-22T10:00:00+00:00",
+        workflow_finished_at="2026-03-22T10:06:00+00:00",
+        tasks=[
+            Task(
+                id="code",
+                title="Implementation",
+                description="Implement",
+                assigned_to="code_engineer",
+                required_for_acceptance=True,
+                status=TaskStatus.DONE.value,
+            ),
+            Task(
+                id="docs",
+                title="Documentation",
+                description="Document",
+                assigned_to="docs_writer",
+                status=TaskStatus.FAILED.value,
+                output="boom",
+            ),
+        ],
+    )
+
+    assert project.snapshot().workflow_status == WorkflowStatus.COMPLETED
 
 
 def test_snapshot_reports_init_workflow_status_for_empty_and_pending_projects():

@@ -11,7 +11,7 @@ from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome, WorkflowStatus
 
 
 class RecordingAgent:
@@ -1509,6 +1509,81 @@ def test_execute_workflow_can_continue_after_terminal_failure(tmp_path):
     assert project.phase == "completed"
     assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value
     assert project.acceptance_criteria_met is False
+
+
+def test_execute_workflow_can_complete_under_required_task_acceptance_policy(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="continue",
+        workflow_acceptance_policy="required_tasks",
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            required_for_acceptance=True,
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Document the application",
+            assigned_to="docs_writer",
+        )
+    )
+
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "code_engineer": RecordingAgent("IMPLEMENTED CODE"),
+                "docs_writer": FailingAgent(),
+            }
+        ),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    assert project.get_task("code").status == TaskStatus.DONE.value
+    assert project.get_task("docs").status == TaskStatus.FAILED.value
+    assert project.phase == "completed"
+    assert project.acceptance_policy == "required_tasks"
+    assert project.terminal_outcome == WorkflowOutcome.COMPLETED.value
+    assert project.acceptance_criteria_met is True
+    assert project.acceptance_evaluation["required_task_ids"] == ["code"]
+    assert project.acceptance_evaluation["failed_task_ids"] == []
+    assert project.snapshot().workflow_status == WorkflowStatus.COMPLETED
+
+
+def test_execute_workflow_degrades_when_required_task_policy_has_no_required_tasks(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_acceptance_policy="required_tasks",
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Document the application",
+            assigned_to="docs_writer",
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"docs_writer": RecordingAgent("DOCS")}))
+
+    orchestrator.execute_workflow(project)
+
+    assert project.get_task("docs").status == TaskStatus.DONE.value
+    assert project.phase == "completed"
+    assert project.acceptance_policy == "required_tasks"
+    assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value
+    assert project.acceptance_criteria_met is False
+    assert project.acceptance_evaluation["reason"] == "no_required_tasks"
 
 
 def test_execute_workflow_can_resume_failed_workflow(tmp_path):

@@ -34,6 +34,7 @@ class Task:
     last_error: Optional[str] = None
     last_error_type: Optional[str] = None
     last_error_category: Optional[str] = None
+    repair_context: Dict[str, Any] = field(default_factory=dict)
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
@@ -200,6 +201,7 @@ class ProjectState:
                 t.last_error = None
                 t.last_error_type = None
                 t.last_error_category = None
+                t.repair_context = {}
                 t.last_provider_call = provider_call
                 t.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
@@ -275,10 +277,13 @@ class ProjectState:
                 )
                 if not should_resume or task.id in resumed_task_ids:
                     continue
+                was_failed_task = task.status == TaskStatus.FAILED.value
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after failed workflow execution"
                 task.last_error_type = None
                 task.last_error_category = None
+                if not was_failed_task:
+                    task.repair_context = {}
                 task.output = None
                 task.output_payload = None
                 task.skip_reason_type = None
@@ -309,6 +314,21 @@ class ProjectState:
         )
         self._touch(resumed_at)
         return resumed_task_ids
+
+    def _plan_task_repair(self, task_id: str, repair_context: Dict[str, Any]) -> None:
+        task = self.get_task(task_id)
+        if task is None:
+            return
+        planned_at = datetime.now(timezone.utc).isoformat()
+        task.repair_context = dict(repair_context)
+        self._record_execution_event(
+            event="task_repair_planned",
+            timestamp=planned_at,
+            task_id=task.id,
+            status=task.status,
+            details=dict(repair_context),
+        )
+        self._touch(planned_at)
 
     def _is_dependency_failed_skip(self, task: Task) -> bool:
         if task.skip_reason_type is not None:
@@ -618,6 +638,7 @@ class ProjectState:
         task.last_error = reason
         task.last_error_type = None
         task.last_error_category = None
+        task.repair_context = {}
         task.output = reason
         task.output_payload = None
         task.skip_reason_type = reason_type
@@ -684,6 +705,7 @@ class ProjectState:
                         "last_resumed_at": task.last_resumed_at,
                         "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
                         "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
+                        "repair_context": task.repair_context,
                         "history": task.history,
                     },
                 )
@@ -703,6 +725,7 @@ class ProjectState:
                     "last_error_type": task.last_error_type,
                     "last_error_category": task.last_error_category,
                     "last_provider_call": task.last_provider_call,
+                    "repair_context": task.repair_context,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,
                     "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),

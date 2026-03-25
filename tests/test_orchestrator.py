@@ -219,6 +219,55 @@ def test_run_task_exposes_generated_code_module_context_to_downstream_agents(tmp
     assert agent.last_context["module_run_command"] == ""
 
 
+def test_run_task_uses_repair_owner_and_failure_context_for_code_validation(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="repair",
+            title="Repair implementation",
+            description="Review the implementation",
+            assigned_to="code_reviewer",
+            status=TaskStatus.PENDING.value,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": "Generated code validation:\n- Syntax OK: no\n- Syntax error: '[' was never closed",
+                "failed_output": "def broken(:\n    pass",
+                "failed_artifact_content": "def broken(:\n    pass",
+            },
+        )
+    )
+
+    engineer = RecordingAgent("def repaired() -> int:\n    return 1")
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"code_engineer": engineer, "code_reviewer": FailingAgent()}),
+    )
+
+    result = orchestrator.run_task(project.tasks[1], project)
+
+    assert result == "def repaired() -> int:\n    return 1"
+    assert project.get_task("repair").status == TaskStatus.DONE.value
+    assert engineer.last_context["repair_context"]["repair_owner"] == "code_engineer"
+    assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
+    assert engineer.last_context["repair_validation_summary"].startswith("Generated code validation:")
+    assert "Repair objective:" in engineer.last_description
+    assert "Previous failure category: code_validation" in engineer.last_description
+
+
 def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -1675,8 +1724,291 @@ def test_execute_workflow_can_resume_failed_workflow(tmp_path):
     assert project.repair_cycle_count == 1
     assert project.repair_history[0]["reason"] == "resume_failed_tasks"
     assert project.repair_history[0]["failed_task_ids"] == ["arch"]
+    assert project.execution_events[-1]["event"] == "workflow_finished"
     assert "requeued" in [entry["event"] for entry in project.get_task("arch").history]
     assert project.get_task("arch").history[-1]["event"] == "completed"
+
+
+def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review generated code",
+            description="Review the generated implementation",
+            assigned_to="code_reviewer",
+            status=TaskStatus.FAILED.value,
+            output="Generated code validation failed",
+            last_error="Generated code validation failed: syntax error '[' was never closed",
+            last_error_type="AgentExecutionError",
+            last_error_category=FailureCategory.CODE_VALIDATION.value,
+            output_payload={
+                "summary": "broken code",
+                "raw_content": "def broken(:\n    pass",
+                "artifacts": [
+                    {
+                        "name": "review_code",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/review_code.py",
+                        "content": "def broken(:\n    pass",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {
+                    "validation": {
+                        "code_analysis": {
+                            "syntax_ok": False,
+                            "syntax_error": "'[' was never closed",
+                            "third_party_imports": [],
+                        }
+                    }
+                },
+            },
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    engineer = RecordingAgent("def repaired() -> int:\n    return 1")
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"architect": RecordingAgent("ARCHITECTURE DOC"), "code_engineer": engineer, "code_reviewer": FailingAgent()}),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    review_task = project.get_task("review")
+    assert review_task.status == TaskStatus.DONE.value
+    assert review_task.output == "def repaired() -> int:\n    return 1"
+    assert engineer.last_context["repair_context"]["original_assigned_to"] == "code_reviewer"
+    assert engineer.last_context["repair_context"]["failure_category"] == FailureCategory.CODE_VALIDATION.value
+    assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
+    assert any(event["event"] == "task_repair_planned" for event in project.execution_events)
+
+
+def test_build_agent_input_includes_test_repair_context(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": RecordingAgent("TESTS")}))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def add(a, b):\n    return a + b",
+            output_payload={
+                "summary": "def add(a, b):",
+                "raw_content": "def add(a, b):\n    return a + b",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def add(a, b):\n    return a + b",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": "Generated test validation:\n- Imported module symbols: add\n- Verdict: FAIL",
+                "failed_output": "from code_implementation import missing_symbol",
+                "failed_artifact_content": "from code_implementation import missing_symbol",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(project.get_task("tests"), project)
+
+    assert "Repair objective:" in agent_input.task_description
+    assert "Previous failure category: test_validation" in agent_input.task_description
+    assert agent_input.context["repair_context"]["repair_owner"] == "qa_tester"
+    assert agent_input.context["existing_tests"] == "from code_implementation import missing_symbol"
+    assert agent_input.context["test_validation_summary"].endswith("Verdict: FAIL")
+
+
+def test_build_context_includes_dependency_repair_manifest_and_summary(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"dependency_manager": RecordingAgent("numpy")}))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="deps",
+            title="Repair dependencies",
+            description="Repair requirements",
+            assigned_to="legal_advisor",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.DEPENDENCY_VALIDATION.value,
+                "repair_owner": "dependency_manager",
+                "instruction": "Repair the requirements manifest so every required third-party import is declared minimally and correctly.",
+                "validation_summary": "Dependency manifest validation:\n- Missing manifest entries: numpy\n- Verdict: FAIL",
+                "failed_output": "# No external runtime dependencies",
+                "failed_artifact_content": "# No external runtime dependencies",
+            },
+        )
+    )
+
+    context = orchestrator._build_context(project.get_task("deps"), project)
+
+    assert context["repair_context"]["repair_owner"] == "dependency_manager"
+    assert context["existing_dependency_manifest"] == "# No external runtime dependencies"
+    assert context["dependency_validation_summary"].startswith("Dependency manifest validation:")
+
+
+def test_repair_helper_fallbacks_cover_missing_validation_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="repair",
+        title="Repair task",
+        description="Repair",
+        assigned_to="architect",
+        output="provider timeout",
+        last_error="provider timeout",
+        output_payload="not-a-dict",
+    )
+
+    assert orchestrator._validation_payload(task) == {}
+    assert orchestrator._failed_artifact_content(task) == "provider timeout"
+    assert orchestrator._failed_artifact_content_for_category(task, FailureCategory.UNKNOWN.value) == "provider timeout"
+    assert orchestrator._build_repair_validation_summary(task, FailureCategory.UNKNOWN.value) == "provider timeout"
+    assert orchestrator._repair_owner_for_category(task, FailureCategory.UNKNOWN.value) == "architect"
+    assert "repair" in orchestrator._build_repair_instruction(task, "custom_failure")
+
+
+def test_build_repair_validation_summary_uses_dependency_validation_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="deps",
+        title="Dependencies",
+        description="Repair dependencies",
+        assigned_to="dependency_manager",
+        output_payload={
+            "summary": "requirements",
+            "raw_content": "# No external runtime dependencies",
+            "artifacts": [
+                {
+                    "name": "requirements",
+                    "artifact_type": ArtifactType.CONFIG.value,
+                    "path": "artifacts/requirements.txt",
+                    "content": "# No external runtime dependencies",
+                }
+            ],
+            "decisions": [],
+            "metadata": {
+                "validation": {
+                    "dependency_analysis": {
+                        "required_imports": ["numpy"],
+                        "declared_packages": [],
+                        "missing_manifest_entries": ["numpy"],
+                        "unused_manifest_entries": [],
+                        "is_valid": False,
+                    }
+                }
+            },
+        },
+    )
+
+    summary = orchestrator._build_repair_validation_summary(task, FailureCategory.DEPENDENCY_VALIDATION.value)
+
+    assert "Missing manifest entries: numpy" in summary
+    assert "Verdict: FAIL" in summary
+
+
+def test_failed_artifact_content_uses_raw_content_when_artifacts_are_missing(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="code",
+        title="Code",
+        description="Repair code",
+        assigned_to="code_engineer",
+        output_payload={
+            "summary": "broken code",
+            "raw_content": "def fallback() -> int:\n    return 1",
+            "artifacts": None,
+            "decisions": [],
+            "metadata": {"validation": {"unexpected": True}},
+        },
+    )
+
+    assert orchestrator._failed_artifact_content(task, ArtifactType.CODE) == "def fallback() -> int:\n    return 1"
+    assert orchestrator._validation_payload(task) == {"unexpected": True}
+
+
+def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Repair tests",
+        assigned_to="qa_tester",
+        output_payload={
+            "summary": "tests",
+            "raw_content": "from module import missing",
+            "artifacts": [],
+            "decisions": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {
+                        "syntax_ok": True,
+                        "imported_module_symbols": ["missing"],
+                        "missing_function_imports": ["add (line 4)"],
+                        "unknown_module_symbols": [],
+                        "invalid_member_references": [],
+                        "constructor_arity_mismatches": [],
+                        "undefined_fixtures": [],
+                        "imported_entrypoint_symbols": [],
+                        "unsafe_entrypoint_calls": [],
+                    },
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "1 failed in 0.01s",
+                    },
+                }
+            },
+        },
+    )
+
+    summary = orchestrator._build_repair_validation_summary(task, FailureCategory.TEST_VALIDATION.value)
+
+    assert "Missing function imports: add (line 4)" in summary
+    assert "Pytest execution: FAIL" in summary
+    assert summary.endswith("Verdict: FAIL")
 
 
 def test_execute_workflow_fails_when_repair_budget_is_exhausted(tmp_path):

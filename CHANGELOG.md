@@ -6,6 +6,23 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.6 - 2026-03-25
+
+### Added
+
+- Persisted task-level `repair_context` metadata so bounded repair attempts preserve failure evidence across save/load and workflow resume.
+- Failure-category-driven repair routing that can send resumed tasks to `code_engineer`, `qa_tester`, or `dependency_manager` based on the normalized validation failure.
+- Structured repair attempt descriptions and repair validation summaries injected into agent input context for resumed tasks.
+
+### Changed
+
+- `resume_failed` workflow recovery no longer behaves like a blind requeue: failed tasks now restart with explicit repair instructions, preserved failing artifact content, and validation evidence.
+- The orchestrator now distinguishes the original task owner from the effective repair owner, allowing corrective execution without rewriting the persisted workflow graph.
+
+### Release Readiness Notes
+
+- Version `1.0.6` is now the released package baseline.
+
 ## 1.0.5 - 2026-03-25
 
 ### Added
@@ -21,7 +38,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Release Readiness Notes
 
-- Version `1.0.5` is now the released package baseline.
+- Version `1.0.5` is now the previous package baseline.
 
 ## 1.0.4 - 2026-03-25
 

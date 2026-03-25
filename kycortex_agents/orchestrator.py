@@ -78,16 +78,17 @@ class Orchestrator:
 
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""
+        execution_agent_name = self._execution_agent_name(task)
         self._log_event(
             "info",
             "task_started",
             project_name=project.project_name,
             task_id=task.id,
             task_title=task.title,
-            assigned_to=task.assigned_to,
+            assigned_to=execution_agent_name,
             attempt=task.attempts + 1,
         )
-        agent = self.registry.get(task.assigned_to)
+        agent = self.registry.get(execution_agent_name)
         agent_input = self._build_agent_input(task, project)
         project.start_task(task.id)
         normalized_output: Optional[AgentOutput] = None
@@ -111,7 +112,7 @@ class Orchestrator:
                     project_name=project.project_name,
                     task_id=task.id,
                     task_title=task.title,
-                    assigned_to=task.assigned_to,
+                    assigned_to=execution_agent_name,
                     attempt=task.attempts,
                     error_type=type(exc).__name__,
                 )
@@ -123,7 +124,7 @@ class Orchestrator:
                     project_name=project.project_name,
                     task_id=task.id,
                     task_title=task.title,
-                    assigned_to=task.assigned_to,
+                    assigned_to=execution_agent_name,
                     attempt=task.attempts,
                     error_type=type(exc).__name__,
                     provider=provider_call.get("provider") if provider_call else None,
@@ -143,7 +144,7 @@ class Orchestrator:
             project_name=project.project_name,
             task_id=task.id,
             task_title=task.title,
-            assigned_to=task.assigned_to,
+            assigned_to=execution_agent_name,
             attempt=task.attempts,
             provider=provider_call.get("provider") if provider_call else None,
             model=provider_call.get("model") if provider_call else None,
@@ -236,7 +237,7 @@ class Orchestrator:
             raise AgentExecutionError(f"Generated test validation failed: {'; '.join(validation_issues)}")
 
     def _classify_task_failure(self, task: Task, exc: Exception) -> str:
-        normalized_role = AgentRegistry.normalize_key(task.assigned_to)
+        normalized_role = AgentRegistry.normalize_key(self._execution_agent_name(task))
         if isinstance(exc, WorkflowDefinitionError):
             return FailureCategory.WORKFLOW_DEFINITION.value
         if isinstance(exc, AgentExecutionError):
@@ -247,6 +248,13 @@ class Orchestrator:
             if normalized_role == "dependency_manager":
                 return FailureCategory.DEPENDENCY_VALIDATION.value
         return FailureCategory.TASK_EXECUTION.value
+
+    def _execution_agent_name(self, task: Task) -> str:
+        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+        repair_owner = repair_context.get("repair_owner")
+        if isinstance(repair_owner, str) and repair_owner.strip():
+            return repair_owner
+        return task.assigned_to
 
     def _artifact_content(self, output: AgentOutput, artifact_type: ArtifactType) -> str:
         for artifact in output.artifacts:
@@ -405,6 +413,7 @@ class Orchestrator:
 
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
         snapshot = project.snapshot()
+        execution_agent_name = self._execution_agent_name(task)
         ctx: Dict[str, Any] = {
             "goal": project.goal,
             "project_name": project.project_name,
@@ -414,6 +423,7 @@ class Orchestrator:
                 "title": task.title,
                 "description": task.description,
                 "assigned_to": task.assigned_to,
+                "execution_agent": execution_agent_name,
             },
             "snapshot": asdict(snapshot),
             "completed_tasks": {},
@@ -438,7 +448,135 @@ class Orchestrator:
                     ctx.update(self._dependency_artifact_context(prev_task, ctx))
                 if AgentRegistry.normalize_key(prev_task.assigned_to) == "qa_tester":
                     ctx.update(self._test_artifact_context(prev_task, ctx))
+        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+        if repair_context:
+            ctx["repair_context"] = dict(repair_context)
+            validation_summary = repair_context.get("validation_summary")
+            if isinstance(validation_summary, str) and validation_summary.strip():
+                ctx["repair_validation_summary"] = validation_summary
+            failed_artifact_content = repair_context.get("failed_artifact_content")
+            failed_output = repair_context.get("failed_output")
+            repair_content = failed_artifact_content if isinstance(failed_artifact_content, str) and failed_artifact_content.strip() else failed_output
+            normalized_execution_agent = AgentRegistry.normalize_key(execution_agent_name)
+            if normalized_execution_agent == "code_engineer" and isinstance(repair_content, str) and repair_content.strip():
+                ctx["existing_code"] = repair_content
+            if normalized_execution_agent == "qa_tester":
+                if isinstance(repair_content, str) and repair_content.strip():
+                    ctx["existing_tests"] = repair_content
+                if "test_validation_summary" not in ctx and isinstance(validation_summary, str) and validation_summary.strip():
+                    ctx["test_validation_summary"] = validation_summary
+            if normalized_execution_agent == "dependency_manager":
+                if isinstance(repair_content, str) and repair_content.strip():
+                    ctx["existing_dependency_manifest"] = repair_content
+                if "dependency_validation_summary" not in ctx and isinstance(validation_summary, str) and validation_summary.strip():
+                    ctx["dependency_validation_summary"] = validation_summary
         return ctx
+
+    def _build_repair_instruction(self, task: Task, failure_category: str) -> str:
+        instructions = {
+            FailureCategory.CODE_VALIDATION.value: "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+            FailureCategory.TEST_VALIDATION.value: "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+            FailureCategory.DEPENDENCY_VALIDATION.value: "Repair the requirements manifest so every required third-party import is declared minimally and correctly.",
+            FailureCategory.TASK_EXECUTION.value: "Retry the task using the previous runtime failure details and correct the specific execution issue.",
+            FailureCategory.UNKNOWN.value: "Retry the task using the previous failure details and produce a corrected result.",
+        }
+        return instructions.get(failure_category, f"Repair the previous failure for task '{task.id}' using the preserved evidence.")
+
+    def _repair_owner_for_category(self, task: Task, failure_category: str) -> str:
+        owner_by_category = {
+            FailureCategory.CODE_VALIDATION.value: "code_engineer",
+            FailureCategory.TEST_VALIDATION.value: "qa_tester",
+            FailureCategory.DEPENDENCY_VALIDATION.value: "dependency_manager",
+        }
+        return owner_by_category.get(failure_category, task.assigned_to)
+
+    def _validation_payload(self, task: Task) -> Dict[str, Any]:
+        if not isinstance(task.output_payload, dict):
+            return {}
+        metadata = task.output_payload.get("metadata")
+        if not isinstance(metadata, dict):
+            return {}
+        validation = metadata.get("validation")
+        return validation if isinstance(validation, dict) else {}
+
+    def _failed_artifact_content(self, task: Task, artifact_type: Optional[ArtifactType] = None) -> str:
+        if not isinstance(task.output_payload, dict):
+            return task.output or ""
+        artifacts = task.output_payload.get("artifacts")
+        if not isinstance(artifacts, list):
+            return task.output or task.output_payload.get("raw_content", "")
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            if artifact_type is not None and artifact.get("artifact_type") != artifact_type.value:
+                continue
+            content = artifact.get("content")
+            if isinstance(content, str) and content.strip():
+                return content
+        raw_content = task.output_payload.get("raw_content")
+        return raw_content if isinstance(raw_content, str) else (task.output or "")
+
+    def _build_code_validation_summary(self, code_analysis: Dict[str, Any], fallback_message: str) -> str:
+        lines = ["Generated code validation:"]
+        lines.append(f"- Syntax OK: {'yes' if code_analysis.get('syntax_ok', True) else 'no'}")
+        syntax_error = code_analysis.get('syntax_error')
+        if syntax_error:
+            lines.append(f"- Syntax error: {syntax_error}")
+        third_party_imports = code_analysis.get('third_party_imports') or []
+        lines.append(f"- Third-party imports: {', '.join(third_party_imports or ['none'])}")
+        if fallback_message:
+            lines.append(f"- Failure message: {fallback_message}")
+        return "\n".join(lines)
+
+    def _build_repair_validation_summary(self, task: Task, failure_category: str) -> str:
+        validation = self._validation_payload(task)
+        fallback_message = task.last_error or task.output or ""
+        if failure_category == FailureCategory.CODE_VALIDATION.value:
+            code_analysis = validation.get("code_analysis")
+            if isinstance(code_analysis, dict):
+                return self._build_code_validation_summary(code_analysis, fallback_message)
+        if failure_category == FailureCategory.TEST_VALIDATION.value:
+            test_analysis = validation.get("test_analysis")
+            test_execution = validation.get("test_execution")
+            if isinstance(test_analysis, dict):
+                return self._build_test_validation_summary(
+                    test_analysis,
+                    test_execution if isinstance(test_execution, dict) else None,
+                )
+        if failure_category == FailureCategory.DEPENDENCY_VALIDATION.value:
+            dependency_analysis = validation.get("dependency_analysis")
+            if isinstance(dependency_analysis, dict):
+                return self._build_dependency_validation_summary(dependency_analysis)
+        return fallback_message
+
+    def _failed_artifact_content_for_category(self, task: Task, failure_category: str) -> str:
+        if failure_category == FailureCategory.CODE_VALIDATION.value:
+            return self._failed_artifact_content(task, ArtifactType.CODE)
+        if failure_category == FailureCategory.TEST_VALIDATION.value:
+            return self._failed_artifact_content(task, ArtifactType.TEST)
+        if failure_category == FailureCategory.DEPENDENCY_VALIDATION.value:
+            return self._failed_artifact_content(task, ArtifactType.CONFIG)
+        return self._failed_artifact_content(task)
+
+    def _configure_repair_attempts(self, project: ProjectState, failed_task_ids: list[str], cycle: Dict[str, Any]) -> None:
+        for task in project.tasks:
+            if task.id not in failed_task_ids:
+                continue
+            failure_category = task.last_error_category or FailureCategory.UNKNOWN.value
+            repair_context = {
+                "cycle": cycle.get("cycle"),
+                "failure_category": failure_category,
+                "failure_message": task.last_error or task.output or "",
+                "failure_error_type": task.last_error_type,
+                "repair_owner": self._repair_owner_for_category(task, failure_category),
+                "original_assigned_to": task.assigned_to,
+                "instruction": self._build_repair_instruction(task, failure_category),
+                "validation_summary": self._build_repair_validation_summary(task, failure_category),
+                "failed_output": task.output or "",
+                "failed_artifact_content": self._failed_artifact_content_for_category(task, failure_category),
+                "provider_call": task.last_provider_call,
+            }
+            project._plan_task_repair(task.id, repair_context)
 
     def _planned_module_context(self, project: ProjectState) -> Dict[str, Any]:
         for existing_task in project.tasks:
@@ -1115,10 +1253,21 @@ class Orchestrator:
         return ""
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
+        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+        task_description = task.description
+        if repair_context:
+            repair_lines = [task.description, "", "Repair objective:", str(repair_context.get("instruction") or "Repair the previous failure."), "", f"Previous failure category: {repair_context.get('failure_category') or FailureCategory.UNKNOWN.value}"]
+            failure_message = repair_context.get("failure_message")
+            if isinstance(failure_message, str) and failure_message.strip():
+                repair_lines.append(f"Previous failure message: {failure_message}")
+            validation_summary = repair_context.get("validation_summary")
+            if isinstance(validation_summary, str) and validation_summary.strip():
+                repair_lines.extend(["", "Validation summary:", validation_summary])
+            task_description = "\n".join(repair_lines)
         return AgentInput(
             task_id=task.id,
             task_title=task.title,
-            task_description=task.description,
+            task_description=task_description,
             project_name=project.project_name,
             project_goal=project.goal,
             context=self._build_context(task, project),
@@ -1261,6 +1410,7 @@ class Orchestrator:
                     ),
                     failed_task_ids=failed_task_ids,
                 )
+                self._configure_repair_attempts(project, failed_task_ids, project.repair_history[-1])
             resumed_task_ids.extend(project.resume_failed_tasks())
         if resumed_task_ids:
             self._log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))

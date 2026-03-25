@@ -734,6 +734,54 @@ def test_resume_failed_tasks_resets_failed_and_dependency_skipped_tasks():
     assert project.get_task("review").history[-1]["event"] == "requeued"
 
 
+def test_save_and_load_preserve_task_repair_context(tmp_path):
+    state_path = tmp_path / "repair_context.json"
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": "code_validation",
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module.",
+            },
+        )
+    )
+
+    project.save()
+    loaded = ProjectState.load(str(state_path))
+
+    assert loaded.get_task("code").repair_context["cycle"] == 1
+    assert loaded.get_task("code").repair_context["repair_owner"] == "code_engineer"
+
+
+def test_snapshot_exposes_task_repair_context_details():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.PENDING.value,
+            repair_context={
+                "cycle": 2,
+                "failure_category": "test_validation",
+                "instruction": "Repair the generated pytest suite.",
+            },
+        )
+    )
+
+    result = project.snapshot().task_results["tests"]
+
+    assert result.details["repair_context"]["cycle"] == 2
+    assert result.details["repair_context"]["failure_category"] == "test_validation"
+
+
 def test_start_repair_cycle_updates_snapshot_and_execution_history():
     project = ProjectState(project_name="Demo", goal="Build demo", repair_max_cycles=2)
 

@@ -13,10 +13,12 @@ __all__ = [
     "ArtifactRecord",
     "ArtifactType",
     "DecisionRecord",
+    "FailureCategory",
     "FailureRecord",
     "ProjectSnapshot",
     "TaskResult",
     "TaskStatus",
+    "WorkflowOutcome",
     "WorkflowStatus",
     "utc_now_iso",
 ]
@@ -46,6 +48,27 @@ class WorkflowStatus(str, Enum):
     PAUSED = "paused"
     FAILED = "failed"
     COMPLETED = "completed"
+
+
+class WorkflowOutcome(str, Enum):
+    """Terminal outcomes for workflow executions under the production contract."""
+
+    COMPLETED = "completed"
+    FAILED = "failed"
+    DEGRADED = "degraded"
+    MANUAL_REVIEW_REQUIRED = "manual_review_required"
+
+
+class FailureCategory(str, Enum):
+    """Normalized failure categories for task and workflow failures."""
+
+    UNKNOWN = "unknown"
+    TASK_EXECUTION = "task_execution"
+    CODE_VALIDATION = "code_validation"
+    TEST_VALIDATION = "test_validation"
+    DEPENDENCY_VALIDATION = "dependency_validation"
+    WORKFLOW_BLOCKED = "workflow_blocked"
+    WORKFLOW_DEFINITION = "workflow_definition"
 
 
 class ArtifactType(str, Enum):
@@ -88,6 +111,7 @@ class FailureRecord:
 
     message: str
     error_type: str = "runtime_error"
+    category: str = FailureCategory.UNKNOWN.value
     retryable: bool = False
     created_at: str = field(default_factory=utc_now_iso)
     details: Dict[str, Any] = field(default_factory=dict)
@@ -139,6 +163,9 @@ class ProjectSnapshot:
     goal: str
     workflow_status: WorkflowStatus = WorkflowStatus.INIT
     phase: str = "init"
+    terminal_outcome: Optional[str] = None
+    failure_category: Optional[str] = None
+    acceptance_criteria_met: bool = False
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     last_resumed_at: Optional[str] = None

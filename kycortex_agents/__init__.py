@@ -29,14 +29,16 @@ from kycortex_agents.types import (
 	ArtifactRecord,
 	ArtifactType,
 	DecisionRecord,
+	FailureCategory,
 	FailureRecord,
 	ProjectSnapshot,
 	TaskResult,
 	TaskStatus,
+	WorkflowOutcome,
 	WorkflowStatus,
 )
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 __all__ = [
 	"AgentInput",
@@ -61,6 +63,7 @@ __all__ = [
 	"DecisionRecord",
 	"DocsWriterAgent",
 	"exceptions",
+	"FailureCategory",
 	"FailureRecord",
 	"JsonStateStore",
 	"KYCortexConfig",
@@ -83,6 +86,7 @@ __all__ = [
 	"TaskResult",
 	"TaskStatus",
 	"types",
+	"WorkflowOutcome",
 	"WorkflowStatus",
 	"WorkflowDefinitionError",
 	"workflows",

@@ -1,7 +1,11 @@
 import ast
+import importlib.util
 import logging
+import os
 import re
+import subprocess
 import sys
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
@@ -10,7 +14,15 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, TaskStatus
+from kycortex_agents.types import (
+    AgentInput,
+    AgentOutput,
+    ArtifactRecord,
+    ArtifactType,
+    FailureCategory,
+    TaskStatus,
+    WorkflowOutcome,
+)
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
@@ -25,6 +37,26 @@ _THIRD_PARTY_PACKAGE_ALIASES = {
 }
 
 _STDLIB_MODULES = set(getattr(sys, "stdlib_module_names", set()))
+_PYTEST_BUILTIN_FIXTURES = {
+    "cache",
+    "capfd",
+    "capfdbinary",
+    "caplog",
+    "capsys",
+    "capsysbinary",
+    "capteesys",
+    "doctest_namespace",
+    "monkeypatch",
+    "pytestconfig",
+    "record_property",
+    "record_testsuite_property",
+    "record_xml_attribute",
+    "recwarn",
+    "tmp_path",
+    "tmp_path_factory",
+    "tmpdir",
+    "tmpdir_factory",
+}
 
 
 class Orchestrator:
@@ -64,7 +96,14 @@ class Orchestrator:
             normalized_output = self._normalize_agent_result(output)
             self._validate_task_output(task, agent_input.context, normalized_output)
         except Exception as exc:
-            project.fail_task(task.id, exc, provider_call=self._provider_call_metadata(agent, normalized_output))
+            failure_category = self._classify_task_failure(task, exc)
+            project.fail_task(
+                task.id,
+                exc,
+                provider_call=self._provider_call_metadata(agent, normalized_output),
+                output=normalized_output,
+                error_category=failure_category,
+            )
             if project.should_retry_task(task.id):
                 self._log_event(
                     "warning",
@@ -113,17 +152,198 @@ class Orchestrator:
         return normalized_output.raw_content
 
     def _validate_task_output(self, task: Task, context: Dict[str, Any], output: AgentOutput) -> None:
-        if AgentRegistry.normalize_key(task.assigned_to) != "dependency_manager":
+        normalized_role = AgentRegistry.normalize_key(task.assigned_to)
+        if normalized_role == "code_engineer":
+            self._validate_code_output(output)
+            return
+        if normalized_role == "qa_tester":
+            self._validate_test_output(context, output)
+            return
+        if normalized_role != "dependency_manager":
             return
         raw_code_analysis = context.get("code_analysis")
         code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
         dependency_analysis = self._analyze_dependency_manifest(output.raw_content, code_analysis)
+        self._record_output_validation(output, "dependency_analysis", dependency_analysis)
         if dependency_analysis.get("is_valid"):
             return
         missing_entries = ", ".join(dependency_analysis.get("missing_manifest_entries") or []) or "unknown"
         raise AgentExecutionError(
             f"Dependency manifest validation failed: missing manifest entries for {missing_entries}"
         )
+
+    def _validate_code_output(self, output: AgentOutput) -> None:
+        code_artifact_content = self._artifact_content(output, ArtifactType.CODE)
+        code_content = code_artifact_content or output.raw_content
+        if not self._should_validate_code_content(code_content, has_typed_artifact=bool(code_artifact_content)):
+            return
+        code_analysis = self._analyze_python_module(code_content)
+        self._record_output_validation(output, "code_analysis", code_analysis)
+        if code_analysis.get("syntax_ok", True):
+            return
+        raise AgentExecutionError(
+            f"Generated code validation failed: syntax error {code_analysis.get('syntax_error') or 'unknown syntax error'}"
+        )
+
+    def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput) -> None:
+        raw_code_analysis = context.get("code_analysis")
+        code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
+        if code_analysis and not code_analysis.get("syntax_ok", True):
+            raise AgentExecutionError(
+                f"Generated test validation failed: code under test has syntax error {code_analysis.get('syntax_error') or 'unknown syntax error'}"
+            )
+
+        module_name = context.get("module_name")
+        module_filename = context.get("module_filename")
+        code_content = context.get("code")
+        if not isinstance(module_name, str) or not module_name.strip():
+            return
+        if not isinstance(module_filename, str) or not module_filename.strip():
+            module_filename = f"{module_name}.py"
+        if not isinstance(code_content, str) or not code_content.strip():
+            return
+
+        test_artifact_content = self._artifact_content(output, ArtifactType.TEST)
+        test_content = test_artifact_content or output.raw_content
+        if not self._should_validate_test_content(test_content, has_typed_artifact=bool(test_artifact_content)):
+            return
+        test_filename = self._artifact_filename(output, ArtifactType.TEST, default_filename="tests_tests.py")
+        test_analysis = self._analyze_test_module(test_content, module_name, code_analysis)
+        test_execution = self._execute_generated_tests(module_filename, code_content, test_filename, test_content)
+        self._record_output_validation(output, "test_analysis", test_analysis)
+        self._record_output_validation(output, "test_execution", test_execution)
+
+        validation_issues: list[str] = []
+        if not test_analysis.get("syntax_ok", True):
+            validation_issues.append(f"test syntax error {test_analysis.get('syntax_error') or 'unknown syntax error'}")
+        for issue_key, label in (
+            ("missing_function_imports", "missing function imports"),
+            ("unknown_module_symbols", "unknown module symbols"),
+            ("invalid_member_references", "invalid member references"),
+            ("constructor_arity_mismatches", "constructor arity mismatches"),
+            ("undefined_fixtures", "undefined test fixtures"),
+            ("imported_entrypoint_symbols", "imported entrypoint symbols"),
+            ("unsafe_entrypoint_calls", "unsafe entrypoint calls"),
+        ):
+            issues = test_analysis.get(issue_key) or []
+            if issues:
+                validation_issues.append(f"{label}: {', '.join(issues)}")
+
+        if test_execution.get("ran") and test_execution.get("returncode") not in (None, 0):
+            validation_issues.append(f"pytest failed: {test_execution.get('summary') or 'generated tests failed'}")
+
+        if validation_issues:
+            raise AgentExecutionError(f"Generated test validation failed: {'; '.join(validation_issues)}")
+
+    def _classify_task_failure(self, task: Task, exc: Exception) -> str:
+        normalized_role = AgentRegistry.normalize_key(task.assigned_to)
+        if isinstance(exc, WorkflowDefinitionError):
+            return FailureCategory.WORKFLOW_DEFINITION.value
+        if isinstance(exc, AgentExecutionError):
+            if normalized_role == "code_engineer":
+                return FailureCategory.CODE_VALIDATION.value
+            if normalized_role == "qa_tester":
+                return FailureCategory.TEST_VALIDATION.value
+            if normalized_role == "dependency_manager":
+                return FailureCategory.DEPENDENCY_VALIDATION.value
+        return FailureCategory.TASK_EXECUTION.value
+
+    def _artifact_content(self, output: AgentOutput, artifact_type: ArtifactType) -> str:
+        for artifact in output.artifacts:
+            if artifact.artifact_type != artifact_type:
+                continue
+            if isinstance(artifact.content, str) and artifact.content.strip():
+                return artifact.content
+        return ""
+
+    def _artifact_filename(self, output: AgentOutput, artifact_type: ArtifactType, default_filename: str) -> str:
+        for artifact in output.artifacts:
+            if artifact.artifact_type != artifact_type:
+                continue
+            if artifact.path:
+                return Path(artifact.path).name
+        return default_filename
+
+    def _record_output_validation(self, output: AgentOutput, key: str, value: Any) -> None:
+        validation = output.metadata.setdefault("validation", {})
+        if isinstance(validation, dict):
+            validation[key] = value
+
+    def _should_validate_code_content(self, content: str, has_typed_artifact: bool) -> bool:
+        if has_typed_artifact:
+            return True
+        stripped = content.strip()
+        if not stripped:
+            return False
+        return any(token in stripped for token in ("def ", "class ", "import ", "from ", "if __name__"))
+
+    def _should_validate_test_content(self, content: str, has_typed_artifact: bool) -> bool:
+        if has_typed_artifact:
+            return True
+        stripped = content.strip()
+        if not stripped:
+            return False
+        return any(token in stripped for token in ("def test_", "assert ", "import pytest", "pytest."))
+
+    def _execute_generated_tests(
+        self,
+        module_filename: str,
+        code_content: str,
+        test_filename: str,
+        test_content: str,
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "available": importlib.util.find_spec("pytest") is not None,
+            "ran": False,
+            "returncode": None,
+            "summary": "",
+        }
+        if not result["available"]:
+            result["summary"] = "pytest is not installed in the current environment"
+            return result
+        if not code_content.strip() or not test_content.strip():
+            result["summary"] = "generated code or tests were empty"
+            return result
+
+        with tempfile.TemporaryDirectory(prefix="kycortex-tests-") as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / module_filename).write_text(code_content, encoding="utf-8")
+            (tmp_path / test_filename).write_text(test_content, encoding="utf-8")
+            env = os.environ.copy()
+            env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+            try:
+                completed = subprocess.run(
+                    [sys.executable, "-m", "pytest", test_filename, "-q"],
+                    cwd=tmp_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=max(self.config.timeout_seconds, 1.0),
+                    env=env,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                result["ran"] = True
+                result["returncode"] = -1
+                result["summary"] = (
+                    f"pytest timed out after {self.config.timeout_seconds:g} seconds"
+                )
+                return result
+
+        result["ran"] = True
+        result["returncode"] = completed.returncode
+        result["stdout"] = completed.stdout.strip()
+        result["stderr"] = completed.stderr.strip()
+        result["summary"] = self._summarize_pytest_output(completed.stdout, completed.stderr, completed.returncode)
+        return result
+
+    def _summarize_pytest_output(self, stdout: str, stderr: str, returncode: int) -> str:
+        combined_lines = [line.strip() for line in f"{stdout}\n{stderr}".splitlines() if line.strip()]
+        if not combined_lines:
+            return f"pytest exited with code {returncode}"
+        for line in reversed(combined_lines):
+            if line.startswith("=") or line.startswith("FAILED") or line.startswith("ERROR") or "passed" in line:
+                return line
+        return combined_lines[-1][:240]
 
     def _provider_call_metadata(self, agent: Any, output: Optional[AgentOutput] = None) -> Optional[Dict[str, Any]]:
         if output is not None:
@@ -255,6 +475,8 @@ class Orchestrator:
                 "code_outline": self._build_code_outline(task.output or ""),
                 "code_analysis": code_analysis,
                 "code_public_api": self._build_code_public_api(code_analysis),
+                "code_test_targets": self._build_code_test_targets(code_analysis),
+                "code_behavior_contract": self._build_code_behavior_contract(task.output or ""),
                 "module_run_command": self._build_module_run_command(path_obj.name, code_analysis),
             }
         return {}
@@ -265,6 +487,8 @@ class Orchestrator:
         artifacts = task.output_payload.get("artifacts")
         if not isinstance(artifacts, list):
             return {}
+        metadata = task.output_payload.get("metadata")
+        validation = metadata.get("validation") if isinstance(metadata, dict) else None
         module_name = context.get("module_name")
         code_analysis = context.get("code_analysis")
         if not isinstance(module_name, str) or not module_name or not isinstance(code_analysis, dict):
@@ -277,11 +501,18 @@ class Orchestrator:
             artifact_path = artifact.get("path")
             if not isinstance(artifact_path, str) or not artifact_path.strip():
                 continue
-            test_analysis = self._analyze_test_module(task.output or "", module_name, code_analysis)
+            test_analysis = validation.get("test_analysis") if isinstance(validation, dict) else None
+            if not isinstance(test_analysis, dict):
+                test_analysis = self._analyze_test_module(task.output or "", module_name, code_analysis)
+            test_execution = validation.get("test_execution") if isinstance(validation, dict) else None
             return {
                 "tests_artifact_path": artifact_path,
                 "test_analysis": test_analysis,
-                "test_validation_summary": self._build_test_validation_summary(test_analysis),
+                "test_execution": test_execution if isinstance(test_execution, dict) else None,
+                "test_validation_summary": self._build_test_validation_summary(
+                    test_analysis,
+                    test_execution if isinstance(test_execution, dict) else None,
+                ),
             }
         return {}
 
@@ -524,6 +755,173 @@ class Orchestrator:
             return f"python {module_filename}"
         return ""
 
+    def _entrypoint_function_names(self, code_analysis: Dict[str, Any]) -> set[str]:
+        function_names = {item["name"] for item in code_analysis.get("functions") or []}
+        return {
+            name
+            for name in function_names
+            if name == "main" or name.startswith("cli_") or name.endswith("_cli") or name.endswith("_demo")
+        }
+
+    def _build_code_test_targets(self, code_analysis: Dict[str, Any]) -> str:
+        if not code_analysis.get("syntax_ok", True):
+            return "Test targets unavailable because module syntax is invalid."
+
+        entrypoint_names = self._entrypoint_function_names(code_analysis)
+        testable_functions = [
+            item["signature"]
+            for item in code_analysis.get("functions") or []
+            if item["name"] not in entrypoint_names
+        ]
+        classes = sorted((code_analysis.get("classes") or {}).keys())
+        lines = ["Test targets:"]
+        lines.append(f"- Functions to test: {', '.join(testable_functions or ['none'])}")
+        lines.append(f"- Classes to test: {', '.join(classes or ['none'])}")
+        lines.append(f"- Entry points to avoid in tests: {', '.join(sorted(entrypoint_names) or ['none'])}")
+        return "\n".join(lines)
+
+    def _build_code_behavior_contract(self, raw_content: str) -> str:
+        if not raw_content.strip():
+            return ""
+        try:
+            tree = ast.parse(raw_content)
+        except SyntaxError:
+            return ""
+
+        validation_rules: dict[str, list[str]] = {}
+        batch_rules: list[str] = []
+        function_map: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                function_nodes = [stmt for stmt in node.body if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                function_nodes = [node]
+            else:
+                continue
+
+            for function_node in function_nodes:
+                if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                function_map[function_node.name] = function_node
+                required_fields = self._extract_required_fields(function_node)
+                if required_fields:
+                    validation_rules[function_node.name] = required_fields
+
+        for function_name, function_node in function_map.items():
+            if function_name in validation_rules:
+                continue
+            propagated_fields = self._extract_indirect_required_fields(function_node, validation_rules)
+            if propagated_fields:
+                validation_rules[function_name] = propagated_fields
+
+        for function_node in function_map.values():
+            batch_rule = self._extract_batch_rule(function_node, validation_rules)
+            if batch_rule:
+                batch_rules.append(batch_rule)
+
+        if not validation_rules and not batch_rules:
+            return ""
+
+        lines = ["Behavior contract:"]
+        for function_name in sorted(validation_rules):
+            lines.append(
+                f"- {function_name} requires fields: {', '.join(validation_rules[function_name])}"
+            )
+        for rule in batch_rules:
+            lines.append(f"- {rule}")
+        return "\n".join(lines)
+
+    def _extract_required_fields(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+        for stmt in ast.walk(node):
+            if not isinstance(stmt, ast.Assign):
+                continue
+            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+                continue
+            if stmt.targets[0].id != "required_fields" or not isinstance(stmt.value, ast.List):
+                continue
+            fields: list[str] = []
+            for element in stmt.value.elts:
+                if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                    fields.append(element.value)
+            if fields:
+                return fields
+        return []
+
+    def _extract_indirect_required_fields(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        validation_rules: Dict[str, list[str]],
+    ) -> list[str]:
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
+                continue
+            callable_name = ""
+            if isinstance(child.func, ast.Name):
+                callable_name = child.func.id
+            elif isinstance(child.func, ast.Attribute):
+                callable_name = child.func.attr
+            if callable_name in validation_rules:
+                return list(validation_rules[callable_name])
+        return []
+
+    def _extract_batch_rule(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        validation_rules: Dict[str, list[str]],
+    ) -> str:
+        if "batch" not in node.name:
+            return ""
+        for child in ast.walk(node):
+            if not isinstance(child, ast.For) or not isinstance(child.target, ast.Name):
+                continue
+            iter_var = child.target.id
+            for nested in ast.walk(child):
+                if not isinstance(nested, ast.Call):
+                    continue
+                callable_name = ""
+                if isinstance(nested.func, ast.Name):
+                    callable_name = nested.func.id
+                elif isinstance(nested.func, ast.Attribute):
+                    callable_name = nested.func.attr
+                if callable_name != "intake_request":
+                    continue
+                required_fields = validation_rules.get(callable_name) or []
+                if len(nested.args) < 2:
+                    continue
+                payload_arg = nested.args[1]
+                request_id_arg = nested.args[0]
+                if isinstance(payload_arg, ast.Name) and payload_arg.id == iter_var:
+                    batch_fields = list(required_fields)
+                    if isinstance(request_id_arg, ast.Subscript) and isinstance(request_id_arg.slice, ast.Constant):
+                        request_key = request_id_arg.slice.value
+                        if isinstance(request_key, str):
+                            batch_fields = [request_key, *batch_fields]
+                    if batch_fields:
+                        return (
+                            f"{node.name} expects each batch item to include: {', '.join(dict.fromkeys(batch_fields))}"
+                        )
+                if (
+                    isinstance(payload_arg, ast.Subscript)
+                    and isinstance(payload_arg.value, ast.Name)
+                    and payload_arg.value.id == iter_var
+                    and isinstance(payload_arg.slice, ast.Constant)
+                    and isinstance(payload_arg.slice.value, str)
+                ):
+                    wrapper_key = payload_arg.slice.value
+                    batch_fields = list(required_fields)
+                    if isinstance(request_id_arg, ast.Subscript) and isinstance(request_id_arg.slice, ast.Constant):
+                        request_key = request_id_arg.slice.value
+                        if isinstance(request_key, str):
+                            return (
+                                f"{node.name} expects each batch item to include key `{request_key}` and nested `{wrapper_key}` fields: {', '.join(batch_fields)}"
+                            )
+                    if batch_fields:
+                        return (
+                            f"{node.name} expects nested `{wrapper_key}` fields: {', '.join(batch_fields)}"
+                        )
+        return ""
+
     def _analyze_test_module(self, raw_content: str, module_name: str, code_analysis: Dict[str, Any]) -> Dict[str, Any]:
         analysis: Dict[str, Any] = {
             "syntax_ok": True,
@@ -533,6 +931,9 @@ class Orchestrator:
             "unknown_module_symbols": [],
             "invalid_member_references": [],
             "constructor_arity_mismatches": [],
+            "undefined_fixtures": [],
+            "imported_entrypoint_symbols": [],
+            "unsafe_entrypoint_calls": [],
         }
         if not raw_content.strip():
             return analysis
@@ -546,21 +947,33 @@ class Orchestrator:
         module_symbols = set(code_analysis.get("symbols") or [])
         function_names = {item["name"] for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
+        entrypoint_names = self._entrypoint_function_names(code_analysis)
 
         imported_symbols: set[str] = set()
         called_names: list[tuple[str, int]] = []
         attribute_refs: list[tuple[str, str, int]] = []
         constructor_calls: list[tuple[str, int, int]] = []
+        defined_fixtures: set[str] = set()
+        referenced_fixtures: list[tuple[str, int]] = []
+        unsafe_entrypoint_calls: list[str] = []
 
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == module_name:
                 for alias in node.names:
                     imported_symbols.add(alias.asname or alias.name)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if self._is_pytest_fixture(node):
+                    defined_fixtures.add(node.name)
+                if node.name.startswith("test_"):
+                    for arg in node.args.args:
+                        referenced_fixtures.append((arg.arg, node.lineno))
             elif isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Name):
                     called_names.append((node.func.id, node.lineno))
                     if node.func.id in class_map:
                         constructor_calls.append((node.func.id, len(node.args) + len(node.keywords), node.lineno))
+                    if node.func.id in imported_symbols and node.func.id in entrypoint_names:
+                        unsafe_entrypoint_calls.append(f"{node.func.id}() (line {node.lineno})")
                 elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
                     attribute_refs.append((node.func.value.id, node.func.attr, node.lineno))
             elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
@@ -595,14 +1008,44 @@ class Orchestrator:
                     f"{class_name} expects {expected_count} args but test uses {actual_count} at line {lineno}"
                 )
 
+        undefined_fixtures = sorted(
+            {
+                f"{fixture_name} (line {lineno})"
+                for fixture_name, lineno in referenced_fixtures
+                if fixture_name not in defined_fixtures and fixture_name not in _PYTEST_BUILTIN_FIXTURES
+            }
+        )
+        imported_entrypoint_symbols = sorted(symbol for symbol in imported_symbols if symbol in entrypoint_names)
+
         analysis["imported_module_symbols"] = sorted(imported_symbols)
         analysis["missing_function_imports"] = missing_imports
         analysis["unknown_module_symbols"] = unknown_symbols
         analysis["invalid_member_references"] = sorted(set(invalid_member_refs))
         analysis["constructor_arity_mismatches"] = sorted(set(arity_mismatches))
+        analysis["undefined_fixtures"] = undefined_fixtures
+        analysis["imported_entrypoint_symbols"] = imported_entrypoint_symbols
+        analysis["unsafe_entrypoint_calls"] = sorted(set(unsafe_entrypoint_calls))
         return analysis
 
-    def _build_test_validation_summary(self, test_analysis: Dict[str, Any]) -> str:
+    def _is_pytest_fixture(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Name) and decorator.id == "fixture":
+                return True
+            if isinstance(decorator, ast.Attribute) and decorator.attr == "fixture":
+                return True
+            if isinstance(decorator, ast.Call):
+                func = decorator.func
+                if isinstance(func, ast.Name) and func.id == "fixture":
+                    return True
+                if isinstance(func, ast.Attribute) and func.attr == "fixture":
+                    return True
+        return False
+
+    def _build_test_validation_summary(
+        self,
+        test_analysis: Dict[str, Any],
+        test_execution: Optional[Dict[str, Any]] = None,
+    ) -> str:
         if not test_analysis.get("syntax_ok", True):
             return f"Test syntax error: {test_analysis.get('syntax_error') or 'unknown syntax error'}"
 
@@ -622,6 +1065,38 @@ class Orchestrator:
         lines.append(
             f"- Constructor arity mismatches: {', '.join(test_analysis.get('constructor_arity_mismatches') or ['none'])}"
         )
+        lines.append(
+            f"- Undefined test fixtures: {', '.join(test_analysis.get('undefined_fixtures') or ['none'])}"
+        )
+        lines.append(
+            f"- Imported entrypoint symbols: {', '.join(test_analysis.get('imported_entrypoint_symbols') or ['none'])}"
+        )
+        lines.append(
+            f"- Unsafe entrypoint calls: {', '.join(test_analysis.get('unsafe_entrypoint_calls') or ['none'])}"
+        )
+        if isinstance(test_execution, dict):
+            if not test_execution.get("available", True):
+                lines.append(f"- Pytest execution: unavailable ({test_execution.get('summary') or 'pytest unavailable'})")
+            elif test_execution.get("ran"):
+                lines.append(
+                    f"- Pytest execution: {'PASS' if test_execution.get('returncode') == 0 else 'FAIL'}"
+                )
+                lines.append(f"- Pytest summary: {test_execution.get('summary') or 'none'}")
+
+        has_static_issues = any(
+            test_analysis.get(key)
+            for key in (
+                "missing_function_imports",
+                "unknown_module_symbols",
+                "invalid_member_references",
+                "constructor_arity_mismatches",
+                "undefined_fixtures",
+                "imported_entrypoint_symbols",
+                "unsafe_entrypoint_calls",
+            )
+        )
+        execution_failed = isinstance(test_execution, dict) and test_execution.get("ran") and test_execution.get("returncode") not in (None, 0)
+        lines.append(f"- Verdict: {'FAIL' if has_static_issues or execution_failed else 'PASS'}")
         return "\n".join(lines)
 
     def _ast_name(self, node: ast.AST) -> str:
@@ -709,20 +1184,39 @@ class Orchestrator:
         while True:
             pending = project.pending_tasks()
             if not pending:
-                project.mark_workflow_finished("completed")
+                acceptance_criteria_met = all(task.status == TaskStatus.DONE.value for task in project.tasks)
+                project.mark_workflow_finished(
+                    "completed",
+                    terminal_outcome=(
+                        WorkflowOutcome.COMPLETED.value
+                        if acceptance_criteria_met
+                        else WorkflowOutcome.DEGRADED.value
+                    ),
+                    acceptance_criteria_met=acceptance_criteria_met,
+                )
                 project.save()
                 self._log_event("info", "workflow_completed", project_name=project.project_name, phase=project.phase)
                 break
             try:
                 runnable = project.runnable_tasks()
             except WorkflowDefinitionError:
-                project.mark_workflow_finished("failed")
+                project.mark_workflow_finished(
+                    "failed",
+                    terminal_outcome=WorkflowOutcome.FAILED.value,
+                    failure_category=FailureCategory.WORKFLOW_DEFINITION.value,
+                    acceptance_criteria_met=False,
+                )
                 project.save()
                 self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                 raise
             if not runnable:
                 blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
-                project.mark_workflow_finished("failed")
+                project.mark_workflow_finished(
+                    "failed",
+                    terminal_outcome=WorkflowOutcome.FAILED.value,
+                    failure_category=FailureCategory.WORKFLOW_BLOCKED.value,
+                    acceptance_criteria_met=False,
+                )
                 project.save()
                 self._log_event(
                     "error",
@@ -737,7 +1231,7 @@ class Orchestrator:
             for task in runnable:
                 try:
                     self.run_task(task, project)
-                except Exception:
+                except Exception as exc:
                     project.save()
                     if project.should_retry_task(task.id):
                         continue
@@ -755,7 +1249,12 @@ class Orchestrator:
                                 skipped_task_ids=list(skipped),
                             )
                         continue
-                    project.mark_workflow_finished("failed")
+                    project.mark_workflow_finished(
+                        "failed",
+                        terminal_outcome=WorkflowOutcome.FAILED.value,
+                        failure_category=self._classify_task_failure(task, exc),
+                        acceptance_criteria_met=False,
+                    )
                     project.save()
                     self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                     raise

@@ -6,7 +6,7 @@ import pytest
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.memory.state_store import resolve_state_store
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowStatus
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome, WorkflowStatus
 
 
 def test_save_and_load_project_state(tmp_path):
@@ -672,7 +672,40 @@ def test_snapshot_preserves_failure_record_for_failed_task_without_output():
     assert result.failure is not None
     assert result.failure.message == "provider timeout"
     assert result.failure.error_type == "TimeoutError"
+    assert result.failure.category == "unknown"
     assert result.failure.details["provider_call"]["provider"] == "openai"
+
+
+def test_snapshot_preserves_failure_category_and_terminal_outcome_fields():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        phase="failed",
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category="test_validation",
+        acceptance_criteria_met=False,
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            last_error="pytest failed",
+            last_error_type="AgentExecutionError",
+            last_error_category="test_validation",
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    snapshot = project.snapshot()
+
+    assert snapshot.terminal_outcome == WorkflowOutcome.FAILED.value
+    assert snapshot.failure_category == "test_validation"
+    assert snapshot.acceptance_criteria_met is False
+    assert snapshot.task_results["tests"].failure is not None
+    assert snapshot.task_results["tests"].failure.category == "test_validation"
 
 
 def test_snapshot_ignores_malformed_output_payload_entries():
@@ -755,13 +788,15 @@ def test_snapshot_includes_workflow_execution_metadata():
         goal="Build demo",
         execution_events=[
             {"event": "workflow_started", "timestamp": "2026-03-22T10:00:00+00:00", "task_id": None, "status": "execution", "details": {}},
-            {"event": "workflow_finished", "timestamp": "2026-03-22T10:06:00+00:00", "task_id": None, "status": "completed", "details": {"workflow_duration_ms": 360000.0}},
+            {"event": "workflow_finished", "timestamp": "2026-03-22T10:06:00+00:00", "task_id": None, "status": "completed", "details": {"workflow_duration_ms": 360000.0, "terminal_outcome": "completed", "failure_category": None, "acceptance_criteria_met": True}},
         ],
         workflow_started_at="2026-03-22T10:00:00+00:00",
         workflow_finished_at="2026-03-22T10:06:00+00:00",
         workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
         updated_at="2026-03-22T10:06:00+00:00",
         phase="completed",
+        terminal_outcome="completed",
+        acceptance_criteria_met=True,
     )
 
     snapshot = project.snapshot()
@@ -769,6 +804,8 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.started_at == "2026-03-22T10:00:00+00:00"
     assert snapshot.finished_at == "2026-03-22T10:06:00+00:00"
     assert snapshot.last_resumed_at == "2026-03-22T10:04:00+00:00"
+    assert snapshot.terminal_outcome == "completed"
+    assert snapshot.acceptance_criteria_met is True
     assert snapshot.execution_events[0]["event"] == "workflow_started"
     assert snapshot.execution_events[1]["details"]["workflow_duration_ms"] == 360000.0
     assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"

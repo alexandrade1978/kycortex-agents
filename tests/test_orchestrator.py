@@ -11,7 +11,7 @@ from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome
 
 
 class RecordingAgent:
@@ -468,6 +468,342 @@ def test_run_task_fails_dependency_manager_when_manifest_misses_required_imports
     assert project.tasks[1].output == "Dependency manifest validation failed: missing manifest entries for numpy"
 
 
+def test_run_task_fails_code_engineer_when_generated_code_has_syntax_error(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+        )
+    )
+
+    agent = RecordingAgent("def broken(:\n    return 1\n")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"code_engineer": agent}))
+
+    with pytest.raises(AgentExecutionError, match="Generated code validation failed: syntax error"):
+        orchestrator.run_task(project.tasks[0], project)
+
+    assert project.tasks[0].status == TaskStatus.FAILED.value
+    assert "Generated code validation failed: syntax error" in project.tasks[0].output
+    assert project.tasks[0].output_payload is not None
+    assert project.tasks[0].output_payload["raw_content"] == "def broken(:\n    return 1\n"
+    assert project.tasks[0].output_payload["metadata"]["validation"]["code_analysis"]["syntax_ok"] is False
+
+
+def test_run_task_fails_qa_tester_when_generated_tests_fail_pytest_execution(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def run():\n    return 1\n",
+            output_payload={
+                "summary": "def run():",
+                "raw_content": "def run():\n    return 1\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def run():\n    return 1\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import run\n\n"
+        "def test_run():\n"
+        "    assert run() == 2\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match="Generated test validation failed: pytest failed"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    assert project.tasks[1].status == TaskStatus.FAILED.value
+    assert "Generated test validation failed: pytest failed" in project.tasks[1].output
+    assert project.tasks[1].output_payload is not None
+    assert project.tasks[1].output_payload["raw_content"].startswith("from code_implementation import run")
+    assert project.tasks[1].output_payload["metadata"]["validation"]["test_execution"]["returncode"] != 0
+
+
+def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_fixtures(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def run():\n    return 1\n",
+            output_payload={
+                "summary": "def run():",
+                "raw_content": "def run():\n    return 1\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def run():\n    return 1\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import run\n\n"
+        "def test_run(sample_case):\n"
+        "    assert run() == 1\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"undefined test fixtures: sample_case \(line 3\)"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["undefined_fixtures"] == ["sample_case (line 3)"]
+
+
+def test_run_task_fails_qa_tester_when_generated_tests_call_entrypoints_directly(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "def cli_demo():\n"
+                "    return 'demo'\n\n"
+                "def main():\n"
+                "    return cli_demo()\n"
+            ),
+            output_payload={
+                "summary": "def cli_demo():",
+                "raw_content": (
+                    "def cli_demo():\n"
+                    "    return 'demo'\n\n"
+                    "def main():\n"
+                    "    return cli_demo()\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "def cli_demo():\n"
+                            "    return 'demo'\n\n"
+                            "def main():\n"
+                            "    return cli_demo()\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import main\n\n"
+        "def test_main():\n"
+        "    assert main() == 'demo'\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"unsafe entrypoint calls: main\(\) \(line 4\)"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["unsafe_entrypoint_calls"] == ["main() (line 4)"]
+
+
+def test_run_task_fails_qa_tester_when_generated_tests_import_entrypoints(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "def run():\n"
+                "    return 1\n\n"
+                "def main():\n"
+                "    return run()\n"
+            ),
+            output_payload={
+                "summary": "def run():",
+                "raw_content": (
+                    "def run():\n"
+                    "    return 1\n\n"
+                    "def main():\n"
+                    "    return run()\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "def run():\n"
+                            "    return 1\n\n"
+                            "def main():\n"
+                            "    return run()\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import run, main\n\n"
+        "def test_run():\n"
+        "    assert run() == 1\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"imported entrypoint symbols: main"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["imported_entrypoint_symbols"] == ["main"]
+
+
+def test_code_artifact_context_includes_behavior_contract(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "class Service:\n"
+                "    def intake_request(self, request_id, data):\n"
+                "        if not self.validate_request(data):\n"
+                "            raise ValueError('Invalid request data')\n"
+                "        return data\n\n"
+                "    def validate_request(self, data):\n"
+                "        required_fields = ['name', 'email', 'compliance_type']\n"
+                "        return all(field in data for field in required_fields)\n\n"
+                "    def process_batch(self, requests):\n"
+                "        for req in requests:\n"
+                "            self.intake_request(req['request_id'], req)\n"
+            ),
+            output_payload={
+                "summary": "class Service:",
+                "raw_content": (
+                    "class Service:\n"
+                    "    def intake_request(self, request_id, data):\n"
+                    "        if not self.validate_request(data):\n"
+                    "            raise ValueError('Invalid request data')\n"
+                    "        return data\n\n"
+                    "    def validate_request(self, data):\n"
+                    "        required_fields = ['name', 'email', 'compliance_type']\n"
+                    "        return all(field in data for field in required_fields)\n\n"
+                    "    def process_batch(self, requests):\n"
+                    "        for req in requests:\n"
+                    "            self.intake_request(req['request_id'], req)\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "class Service:\n"
+                            "    def intake_request(self, request_id, data):\n"
+                            "        if not self.validate_request(data):\n"
+                            "            raise ValueError('Invalid request data')\n"
+                            "        return data\n\n"
+                            "    def validate_request(self, data):\n"
+                            "        required_fields = ['name', 'email', 'compliance_type']\n"
+                            "        return all(field in data for field in required_fields)\n\n"
+                            "    def process_batch(self, requests):\n"
+                            "        for req in requests:\n"
+                            "            self.intake_request(req['request_id'], req)\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+
+    orchestrator = Orchestrator(config)
+    context = orchestrator._build_context(project.tasks[0], project)
+
+    assert "Behavior contract:" in context["code_behavior_contract"]
+    assert "Test targets:" in context["code_test_targets"]
+    assert "Entry points to avoid in tests: none" in context["code_test_targets"]
+    assert "validate_request requires fields: name, email, compliance_type" in context["code_behavior_contract"]
+    assert "process_batch expects each batch item to include: request_id, name, email, compliance_type" in context["code_behavior_contract"]
+
+
 @pytest.mark.parametrize(
     ("provider_name", "provider_factory"),
     [
@@ -907,11 +1243,14 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
     assert [task.status for task in project.tasks] == [TaskStatus.DONE.value, TaskStatus.DONE.value]
     assert project.tasks[1].output == "IMPLEMENTED CODE"
     assert project.phase == "completed"
+    assert project.terminal_outcome == WorkflowOutcome.COMPLETED.value
+    assert project.acceptance_criteria_met is True
     assert project.workflow_started_at is not None
     assert project.workflow_finished_at is not None
     assert project.execution_events[0]["event"] == "workflow_started"
     assert project.execution_events[-1]["event"] == "workflow_finished"
     assert project.execution_events[-1]["details"]["workflow_duration_ms"] is not None
+    assert project.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.COMPLETED.value
 
 
 def test_execute_workflow_raises_when_dependencies_cannot_be_satisfied(tmp_path):
@@ -1168,6 +1507,8 @@ def test_execute_workflow_can_continue_after_terminal_failure(tmp_path):
     assert project.get_task("code").status == TaskStatus.DONE.value
     assert project.get_task("review").status == TaskStatus.SKIPPED.value
     assert project.phase == "completed"
+    assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value
+    assert project.acceptance_criteria_met is False
 
 
 def test_execute_workflow_can_resume_failed_workflow(tmp_path):

@@ -6,6 +6,22 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.2 - 2026-03-25
+
+### Added
+
+- Explicit `WorkflowOutcome` and `FailureCategory` public types for terminal workflow semantics and normalized failure classification.
+- Persisted workflow-level `terminal_outcome`, `failure_category`, and `acceptance_criteria_met` metadata in project snapshots and execution events.
+
+### Changed
+
+- The orchestrator now classifies task failures by validation domain and persists those categories into failed task records.
+- Workflows that finish with skipped tasks under the `continue` failure policy now preserve the historical `completed` phase while exposing a `degraded` terminal outcome and `acceptance_criteria_met=False`.
+
+### Release Readiness Notes
+
+- Version `1.0.2` is now the released package baseline.
+
 ## 1.0.1 - 2026-03-25
 
 ### Added

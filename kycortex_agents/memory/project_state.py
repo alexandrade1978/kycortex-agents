@@ -10,10 +10,12 @@ from kycortex_agents.types import (
     ArtifactRecord,
     ArtifactType,
     DecisionRecord,
+    FailureCategory,
     FailureRecord,
     ProjectSnapshot,
     TaskResult,
     TaskStatus,
+    WorkflowOutcome,
     WorkflowStatus,
 )
 
@@ -30,6 +32,7 @@ class Task:
     attempts: int = 0
     last_error: Optional[str] = None
     last_error_type: Optional[str] = None
+    last_error_category: Optional[str] = None
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
@@ -53,6 +56,9 @@ class ProjectState:
     artifacts: List[Dict[str, Any] | str] = field(default_factory=list)
     execution_events: List[Dict[str, Any]] = field(default_factory=list)
     phase: str = "init"
+    terminal_outcome: Optional[str] = None
+    failure_category: Optional[str] = None
+    acceptance_criteria_met: bool = False
     workflow_started_at: Optional[str] = None
     workflow_finished_at: Optional[str] = None
     workflow_last_resumed_at: Optional[str] = None
@@ -96,6 +102,7 @@ class ProjectState:
                 task.attempts += 1
                 task.last_error = None
                 task.last_error_type = None
+                task.last_error_category = None
                 if task.started_at is None:
                     task.started_at = started_at
                 task.last_attempt_started_at = started_at
@@ -110,7 +117,14 @@ class ProjectState:
                 self._touch(started_at)
                 return
 
-    def fail_task(self, task_id: str, error: str | Exception, provider_call: Optional[Dict[str, Any]] = None):
+    def fail_task(
+        self,
+        task_id: str,
+        error: str | Exception,
+        provider_call: Optional[Dict[str, Any]] = None,
+        output: Optional[str | AgentOutput] = None,
+        error_category: Optional[str] = None,
+    ):
         """Record a task failure, re-queueing it when retry budget remains."""
 
         for task in self.tasks:
@@ -119,6 +133,7 @@ class ProjectState:
                 error_type = type(error).__name__ if isinstance(error, Exception) else "runtime_error"
                 task.last_error = error_message
                 task.last_error_type = error_type
+                task.last_error_category = error_category or FailureCategory.TASK_EXECUTION.value
                 task.last_provider_call = provider_call
                 if task.attempts <= task.retry_limit:
                     task.status = TaskStatus.PENDING.value
@@ -132,6 +147,7 @@ class ProjectState:
                             "attempts": task.attempts,
                             "retry_limit": task.retry_limit,
                             "error_type": task.last_error_type,
+                            "error_category": task.last_error_category,
                             "provider_call": provider_call,
                             "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, datetime.now(timezone.utc).isoformat()),
                         },
@@ -140,7 +156,10 @@ class ProjectState:
                     return
                 task.status = TaskStatus.FAILED.value
                 task.output = error_message
-                task.output_payload = None
+                if isinstance(output, AgentOutput) and output.raw_content.strip():
+                    task.output_payload = asdict(output)
+                else:
+                    task.output_payload = None
                 task.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(task, "failed", task.completed_at, error_message=error_message)
                 self._record_execution_event(
@@ -152,6 +171,7 @@ class ProjectState:
                         "attempts": task.attempts,
                         "error_message": error_message,
                         "error_type": error_type,
+                        "error_category": task.last_error_category,
                         "provider_call": provider_call,
                         "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     },
@@ -173,6 +193,7 @@ class ProjectState:
                     t.output_payload = None
                 t.last_error = None
                 t.last_error_type = None
+                t.last_error_category = None
                 t.last_provider_call = provider_call
                 t.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
@@ -203,6 +224,7 @@ class ProjectState:
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after interrupted execution"
                 task.last_error_type = None
+                task.last_error_category = None
                 task.last_provider_call = None
                 task.completed_at = None
                 self._record_task_event(task, "resumed", resumed_at, error_message=task.last_error)
@@ -250,6 +272,7 @@ class ProjectState:
                 task.status = TaskStatus.PENDING.value
                 task.last_error = "Task resumed after failed workflow execution"
                 task.last_error_type = None
+                task.last_error_category = None
                 task.output = None
                 task.output_payload = None
                 task.skip_reason_type = None
@@ -328,20 +351,45 @@ class ProjectState:
             self.workflow_started_at = started_at
         self.workflow_finished_at = None
         self.phase = "execution"
+        self.terminal_outcome = None
+        self.failure_category = None
+        self.acceptance_criteria_met = False
         self._record_execution_event(event="workflow_started", timestamp=started_at, status=self.phase)
         self._touch(started_at)
 
-    def mark_workflow_finished(self, phase: str):
+    def mark_workflow_finished(
+        self,
+        phase: str,
+        *,
+        terminal_outcome: Optional[str] = None,
+        failure_category: Optional[str] = None,
+        acceptance_criteria_met: Optional[bool] = None,
+    ):
         """Mark the workflow finished under the supplied phase label."""
 
         finished_at = datetime.now(timezone.utc).isoformat()
         self.phase = phase
         self.workflow_finished_at = finished_at
+        resolved_outcome = terminal_outcome or (
+            WorkflowOutcome.COMPLETED.value if phase == "completed" else WorkflowOutcome.FAILED.value
+        )
+        self.terminal_outcome = resolved_outcome
+        self.failure_category = failure_category
+        self.acceptance_criteria_met = (
+            acceptance_criteria_met
+            if acceptance_criteria_met is not None
+            else resolved_outcome == WorkflowOutcome.COMPLETED.value
+        )
         self._record_execution_event(
             event="workflow_finished",
             timestamp=finished_at,
             status=self.phase,
-            details={"workflow_duration_ms": self._duration_ms(self.workflow_started_at, finished_at)},
+            details={
+                "workflow_duration_ms": self._duration_ms(self.workflow_started_at, finished_at),
+                "terminal_outcome": self.terminal_outcome,
+                "failure_category": self.failure_category,
+                "acceptance_criteria_met": self.acceptance_criteria_met,
+            },
         )
         self._touch(finished_at)
 
@@ -508,6 +556,7 @@ class ProjectState:
         task.status = TaskStatus.SKIPPED.value
         task.last_error = reason
         task.last_error_type = None
+        task.last_error_category = None
         task.output = reason
         task.output_payload = None
         task.skip_reason_type = reason_type
@@ -561,11 +610,13 @@ class ProjectState:
                 failure = FailureRecord(
                     message=task.output or task.last_error or "Task failed without output",
                     error_type=task.last_error_type or "runtime_error",
+                    category=task.last_error_category or FailureCategory.UNKNOWN.value,
                     retryable=task.attempts <= task.retry_limit,
                     details={
                         "attempts": task.attempts,
                         "retry_limit": task.retry_limit,
                         "error_type": task.last_error_type,
+                        "error_category": task.last_error_category,
                         "provider_call": task.last_provider_call,
                         "started_at": task.started_at,
                         "last_attempt_started_at": task.last_attempt_started_at,
@@ -588,6 +639,7 @@ class ProjectState:
                     "retry_limit": task.retry_limit,
                     "last_error": task.last_error,
                     "last_error_type": task.last_error_type,
+                    "last_error_category": task.last_error_category,
                     "last_provider_call": task.last_provider_call,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,
@@ -610,6 +662,9 @@ class ProjectState:
             goal=self.goal,
             workflow_status=self._workflow_status(),
             phase=self.phase,
+            terminal_outcome=self.terminal_outcome,
+            failure_category=self.failure_category,
+            acceptance_criteria_met=self.acceptance_criteria_met,
             started_at=self.workflow_started_at,
             finished_at=self.workflow_finished_at,
             last_resumed_at=self.workflow_last_resumed_at,

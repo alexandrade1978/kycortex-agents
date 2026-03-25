@@ -118,10 +118,12 @@ def test_public_contract_modules_define_explicit_exports():
         "ArtifactRecord",
         "ArtifactType",
         "DecisionRecord",
+        "FailureCategory",
         "FailureRecord",
         "ProjectSnapshot",
         "TaskResult",
         "TaskStatus",
+        "WorkflowOutcome",
         "WorkflowStatus",
         "utc_now_iso",
     ]

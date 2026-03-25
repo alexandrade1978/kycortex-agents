@@ -151,7 +151,7 @@ for _name in ("mkdir", "makedirs", "remove", "removedirs", "rmdir", "unlink"):
         setattr(os, _name, _guarded_single_path)
 
 
-for _name in ("rename", "replace"):
+for _name in ("link", "rename", "replace", "symlink"):
     if hasattr(os, _name):
         _real = getattr(os, _name)
 

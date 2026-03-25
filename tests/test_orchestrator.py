@@ -384,6 +384,27 @@ def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_p
     assert not escaped_dir.exists()
 
 
+def test_execute_generated_tests_blocks_symlink_creation_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_link = (tmp_path / "escaped_link").resolve()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def create_symlink(target_path, link_path):\n"
+        "    os.symlink(target_path, link_path)\n",
+        "tests_generated.py",
+        "from code_under_test import create_symlink\n\n"
+        f"def test_symlink_creation_is_blocked():\n"
+        f"    create_symlink('inside.txt', {str(escaped_link)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+    assert not escaped_link.exists()
+
+
 def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -430,6 +451,31 @@ def test_execute_generated_tests_allows_directory_creation_when_sandbox_disabled
     assert result["returncode"] == 0
     assert result["sandbox"]["enabled"] is False
     assert created_dir.exists()
+
+
+def test_execute_generated_tests_allows_symlink_creation_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    created_link = tmp_path / "created_link"
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def create_symlink(target_path, link_path):\n"
+        "    os.symlink(target_path, link_path)\n"
+        "    return os.path.islink(link_path)\n",
+        "tests_generated.py",
+        "from code_under_test import create_symlink\n\n"
+        f"def test_symlink_creation_runs_when_sandbox_is_disabled():\n"
+        f"    assert create_symlink('inside.txt', {str(created_link)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+    assert created_link.is_symlink()
 
 
 def test_execute_generated_tests_allows_os_spawn_calls_when_sandbox_disabled(tmp_path):

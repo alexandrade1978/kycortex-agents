@@ -207,6 +207,11 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Generated workflow and provider-matrix outputs
+output/
+output_*/
+multi_agent_ollama_output/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

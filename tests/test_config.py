@@ -137,6 +137,36 @@ def test_config_rejects_negative_provider_elapsed_budget(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_max_elapsed_seconds_per_call=-0.1)
 
 
+def test_config_rejects_duplicate_provider_fallback_order_entries(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_fallback_order must not contain duplicates"):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_fallback_order=("anthropic", "anthropic"),
+            provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        )
+
+
+def test_config_rejects_primary_provider_in_fallback_order(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_fallback_order must not include the primary llm_provider"):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            llm_provider="openai",
+            provider_fallback_order=("openai",),
+            provider_fallback_models={"openai": "gpt-4o"},
+        )
+
+
+def test_config_requires_explicit_models_for_all_fallback_providers(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_fallback_models must define a model for each fallback provider: anthropic",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_fallback_order=("anthropic",),
+        )
+
+
 def test_config_rejects_negative_provider_retry_max_backoff(tmp_path):
     with pytest.raises(ConfigValidationError, match="provider_retry_max_backoff_seconds must be zero or greater when provided"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_max_backoff_seconds=-0.1)

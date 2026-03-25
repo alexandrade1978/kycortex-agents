@@ -280,3 +280,63 @@ def test_execute_does_not_retry_deterministic_provider_request_failures():
     assert len(metadata["attempt_history"]) == 1
     assert metadata["attempt_history"][0]["retryable"] is False
     assert metadata["attempt_history"][0]["error_type"] == "AgentExecutionError"
+
+
+def test_execute_falls_back_to_secondary_provider_after_transient_primary_failure(monkeypatch):
+    primary_config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        api_key="token",
+        llm_model="gpt-4o",
+        provider_max_attempts=1,
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+    primary_provider = OpenAIProvider(
+        primary_config,
+        client=build_openai_client(error=RuntimeError("openai down")),
+    )
+    fallback_provider = AnthropicProvider(
+        KYCortexConfig(
+            output_dir="./output_test",
+            llm_provider="anthropic",
+            api_key="token",
+            llm_model="claude-3-5-sonnet",
+        ),
+        client=build_anthropic_client(
+            response=SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="FALLBACK RESULT")],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=8),
+            )
+        ),
+    )
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        assert runtime_config.llm_model == "claude-3-5-sonnet"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+    agent = ProviderBackedAgent(primary_provider, primary_config)
+
+    result = agent.execute(build_agent_input())
+
+    metadata = result.metadata["provider_call"]
+    assert result.raw_content == "FALLBACK RESULT"
+    assert metadata["provider"] == "anthropic"
+    assert metadata["model"] == "claude-3-5-sonnet"
+    assert metadata["success"] is True
+    assert metadata["fallback_used"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_transient",
+            "error_type": "ProviderTransientError",
+            "error_message": "OpenAI provider failed to call the model API",
+            "attempts_used": 1,
+        }
+    ]
+    assert metadata["attempts_used"] == 2
+    assert metadata["usage"]["total_tokens"] == 20

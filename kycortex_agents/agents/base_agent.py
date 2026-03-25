@@ -28,50 +28,62 @@ class BaseAgent(ABC):
         self.role = role
         self.config = config
         self._provider: Optional[BaseLLMProvider] = None
+        self._provider_cache: dict[tuple[str, str], BaseLLMProvider] = {}
         self._last_provider_call_metadata: Optional[dict[str, Any]] = None
         self._provider_call_count = 0
-        self._provider_transient_failure_streak = 0
-        self._provider_circuit_open_until = 0.0
+        self._provider_transient_failure_streaks: dict[str, int] = {}
+        self._provider_circuit_open_untils: dict[str, float] = {}
 
     def _get_provider(self) -> BaseLLMProvider:
-        if self._provider is None:
+        return self._get_provider_for(self.config.llm_provider, self.config.llm_model)
+
+    def _get_provider_for(self, provider_name: str, model_name: str) -> BaseLLMProvider:
+        provider_key = (provider_name, model_name)
+        if provider_name == self.config.llm_provider and model_name == self.config.llm_model:
+            if self._provider is not None:
+                self._provider_cache[provider_key] = self._provider
+                return self._provider
+            if provider_key in self._provider_cache:
+                self._provider = self._provider_cache[provider_key]
+                return self._provider
             self._provider = create_provider(self.config)
-        return self._provider
+            self._provider_cache[provider_key] = self._provider
+            return self._provider
+        cached_provider = self._provider_cache.get(provider_key)
+        if cached_provider is not None:
+            return cached_provider
+        provider = create_provider(self.config.provider_runtime_config(provider_name))
+        self._provider_cache[provider_key] = provider
+        return provider
 
     def chat(self, system_prompt: str, user_message: str) -> str:
-        provider = self._get_provider()
         started_at = perf_counter()
-        current_time = started_at
-        if self._is_provider_circuit_open(current_time):
-            remaining_seconds = round(max(self._provider_circuit_open_until - current_time, 0.0), 6)
-            message = f"{self.name}: provider circuit breaker is open for {remaining_seconds:g} more seconds"
-            self._last_provider_call_metadata = {
-                "provider": self.config.llm_provider,
-                "model": self.config.llm_model,
-                "success": False,
-                "duration_ms": round((perf_counter() - started_at) * 1000, 3),
-                "error_type": "AgentExecutionError",
-                "error_message": message.removeprefix(f"{self.name}: "),
-                "retryable": False,
-                "attempts_used": 0,
-                "max_attempts": self.config.provider_max_attempts,
-                "attempt_history": [],
-                **self._provider_elapsed_budget_metadata(started_at, current_time),
-                **self._provider_circuit_metadata(current_time),
-            }
-            raise AgentExecutionError(message)
+        provider_plan = self._provider_execution_plan()
         max_attempts = self.config.provider_max_attempts
         attempt_history: list[dict[str, Any]] = []
-        for attempt in range(1, max_attempts + 1):
+        fallback_history: list[dict[str, Any]] = []
+        for provider_index, (provider_name, model_name) in enumerate(provider_plan):
+            provider = self._get_provider_for(provider_name, model_name)
             current_time = perf_counter()
-            if self._is_provider_elapsed_budget_exhausted(started_at, current_time):
-                message = (
-                    f"{self.name}: provider elapsed budget exhausted after "
-                    f"{current_time - started_at:g} seconds"
+            if self._is_provider_circuit_open(provider_name, current_time):
+                remaining_seconds = round(
+                    max(self._provider_circuit_open_untils.get(provider_name, 0.0) - current_time, 0.0),
+                    6,
                 )
+                if provider_index < len(provider_plan) - 1:
+                    fallback_history.append(
+                        {
+                            "provider": provider_name,
+                            "model": model_name,
+                            "status": "skipped_open_circuit",
+                            "remaining_cooldown_seconds": remaining_seconds,
+                        }
+                    )
+                    continue
+                message = f"{self.name}: provider circuit breaker is open for {remaining_seconds:g} more seconds"
                 self._last_provider_call_metadata = {
-                    "provider": self.config.llm_provider,
-                    "model": self.config.llm_model,
+                    "provider": provider_name,
+                    "model": model_name,
                     "success": False,
                     "duration_ms": round((current_time - started_at) * 1000, 3),
                     "error_type": "AgentExecutionError",
@@ -82,167 +94,220 @@ class BaseAgent(ABC):
                     "attempt_history": list(attempt_history),
                     **self._provider_call_budget_metadata(),
                     **self._provider_elapsed_budget_metadata(started_at, current_time),
-                    **self._provider_circuit_metadata(current_time),
+                    **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                    **self._provider_circuit_metadata(provider_name, current_time),
                 }
                 raise AgentExecutionError(message)
-            if self._is_provider_call_budget_exhausted():
-                message = (
-                    f"{self.name}: provider call budget exhausted after "
-                    f"{self._provider_call_count} calls"
-                )
-                self._last_provider_call_metadata = {
-                    "provider": self.config.llm_provider,
-                    "model": self.config.llm_model,
-                    "success": False,
-                    "duration_ms": round((perf_counter() - started_at) * 1000, 3),
-                    "error_type": "AgentExecutionError",
-                    "error_message": message.removeprefix(f"{self.name}: "),
-                    "retryable": False,
-                    "attempts_used": len(attempt_history),
-                    "max_attempts": max_attempts,
-                    "attempt_history": list(attempt_history),
-                    **self._provider_call_budget_metadata(),
-                    **self._provider_elapsed_budget_metadata(started_at, current_time),
-                    **self._provider_circuit_metadata(current_time),
-                }
-                raise AgentExecutionError(message)
-            try:
-                self._provider_call_count += 1
-                response = provider.generate(system_prompt, user_message)
-                self._reset_provider_circuit_breaker()
-                attempt_history.append(
-                    {
-                        "attempt": attempt,
-                        "success": True,
-                        "retryable": False,
-                        "backoff_seconds": 0.0,
-                    }
-                )
-                break
-            except ProviderTransientError as exc:
-                uncapped_backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
-                max_backoff_seconds = self.config.provider_retry_max_backoff_seconds
-                base_backoff_seconds = uncapped_backoff_seconds
-                if max_backoff_seconds is not None:
-                    base_backoff_seconds = min(base_backoff_seconds, max_backoff_seconds)
-                jitter_seconds = 0.0
-                if base_backoff_seconds > 0 and self.config.provider_retry_jitter_ratio > 0:
-                    jitter_seconds = random.uniform(
-                        0.0,
-                        base_backoff_seconds * self.config.provider_retry_jitter_ratio,
-                    )
-                total_backoff_seconds = base_backoff_seconds + jitter_seconds
-                attempt_history.append(
-                    {
-                        "attempt": attempt,
-                        "success": False,
-                        "retryable": True,
-                        "error_type": type(exc).__name__,
-                        "error_message": str(exc),
-                        "uncapped_backoff_seconds": round(uncapped_backoff_seconds, 6),
-                        "base_backoff_seconds": round(base_backoff_seconds, 6),
-                        "jitter_seconds": round(jitter_seconds, 6),
-                        "backoff_seconds": round(total_backoff_seconds, 6),
-                    }
-                )
-                self._last_provider_call_metadata = {
-                    "provider": self.config.llm_provider,
-                    "model": self.config.llm_model,
-                    "success": False,
-                    "duration_ms": round((perf_counter() - started_at) * 1000, 3),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "retryable": True,
-                    "attempts_used": attempt,
-                    "max_attempts": max_attempts,
-                    "attempt_history": list(attempt_history),
-                    **self._provider_call_budget_metadata(),
-                    **self._provider_elapsed_budget_metadata(started_at, perf_counter()),
-                }
-                if attempt >= max_attempts:
-                    self._record_provider_transient_failure(perf_counter())
-                    self._last_provider_call_metadata.update(self._provider_circuit_metadata(perf_counter()))
-                    raise AgentExecutionError(f"{self.name}: {exc}") from exc
-                remaining_elapsed_budget = self._provider_elapsed_budget_remaining_seconds(
-                    started_at,
-                    perf_counter(),
-                )
-                if remaining_elapsed_budget is not None and total_backoff_seconds >= remaining_elapsed_budget:
-                    current_time = perf_counter()
+            for attempt in range(1, max_attempts + 1):
+                current_time = perf_counter()
+                if self._is_provider_elapsed_budget_exhausted(started_at, current_time):
                     message = (
                         f"{self.name}: provider elapsed budget exhausted after "
                         f"{current_time - started_at:g} seconds"
                     )
                     self._last_provider_call_metadata = {
-                        "provider": self.config.llm_provider,
-                        "model": self.config.llm_model,
+                        "provider": provider_name,
+                        "model": model_name,
                         "success": False,
                         "duration_ms": round((current_time - started_at) * 1000, 3),
                         "error_type": "AgentExecutionError",
                         "error_message": message.removeprefix(f"{self.name}: "),
                         "retryable": False,
-                        "attempts_used": attempt,
+                        "attempts_used": len(attempt_history),
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
                         **self._provider_call_budget_metadata(),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
-                        **self._provider_circuit_metadata(current_time),
+                        **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_circuit_metadata(provider_name, current_time),
                     }
-                    raise AgentExecutionError(message) from exc
-                if total_backoff_seconds > 0:
-                    sleep(total_backoff_seconds)
-            except Exception as exc:
-                self._reset_provider_circuit_breaker()
-                attempt_history.append(
-                    {
-                        "attempt": attempt,
+                    raise AgentExecutionError(message)
+                if self._is_provider_call_budget_exhausted():
+                    message = (
+                        f"{self.name}: provider call budget exhausted after "
+                        f"{self._provider_call_count} calls"
+                    )
+                    self._last_provider_call_metadata = {
+                        "provider": provider_name,
+                        "model": model_name,
                         "success": False,
+                        "duration_ms": round((current_time - started_at) * 1000, 3),
+                        "error_type": "AgentExecutionError",
+                        "error_message": message.removeprefix(f"{self.name}: "),
                         "retryable": False,
+                        "attempts_used": len(attempt_history),
+                        "max_attempts": max_attempts,
+                        "attempt_history": list(attempt_history),
+                        **self._provider_call_budget_metadata(),
+                        **self._provider_elapsed_budget_metadata(started_at, current_time),
+                        **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_circuit_metadata(provider_name, current_time),
+                    }
+                    raise AgentExecutionError(message)
+                try:
+                    self._provider_call_count += 1
+                    response = provider.generate(system_prompt, user_message)
+                    self._reset_provider_circuit_breaker(provider_name)
+                    attempt_history.append(
+                        {
+                            "attempt": len(attempt_history) + 1,
+                            "success": True,
+                            "retryable": False,
+                            "backoff_seconds": 0.0,
+                        }
+                    )
+                    completed_at = perf_counter()
+                    self._last_provider_call_metadata = {
+                        "provider": provider_name,
+                        "model": model_name,
+                        "success": True,
+                        "duration_ms": round((completed_at - started_at) * 1000, 3),
+                        "error_type": None,
+                        "attempts_used": len(attempt_history),
+                        "max_attempts": max_attempts,
+                        "attempt_history": list(attempt_history),
+                        **self._provider_call_budget_metadata(),
+                        **self._provider_elapsed_budget_metadata(started_at, completed_at),
+                        **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_circuit_metadata(provider_name, completed_at),
+                    }
+                    provider_metadata = provider.get_last_call_metadata()
+                    if provider_metadata is not None:
+                        self._last_provider_call_metadata.update(provider_metadata)
+                    return response
+                except ProviderTransientError as exc:
+                    uncapped_backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
+                    max_backoff_seconds = self.config.provider_retry_max_backoff_seconds
+                    base_backoff_seconds = uncapped_backoff_seconds
+                    if max_backoff_seconds is not None:
+                        base_backoff_seconds = min(base_backoff_seconds, max_backoff_seconds)
+                    jitter_seconds = 0.0
+                    if base_backoff_seconds > 0 and self.config.provider_retry_jitter_ratio > 0:
+                        jitter_seconds = random.uniform(
+                            0.0,
+                            base_backoff_seconds * self.config.provider_retry_jitter_ratio,
+                        )
+                    total_backoff_seconds = base_backoff_seconds + jitter_seconds
+                    attempt_history.append(
+                        {
+                            "attempt": len(attempt_history) + 1,
+                            "success": False,
+                            "retryable": True,
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                            "uncapped_backoff_seconds": round(uncapped_backoff_seconds, 6),
+                            "base_backoff_seconds": round(base_backoff_seconds, 6),
+                            "jitter_seconds": round(jitter_seconds, 6),
+                            "backoff_seconds": round(total_backoff_seconds, 6),
+                        }
+                    )
+                    current_time = perf_counter()
+                    self._last_provider_call_metadata = {
+                        "provider": provider_name,
+                        "model": model_name,
+                        "success": False,
+                        "duration_ms": round((current_time - started_at) * 1000, 3),
                         "error_type": type(exc).__name__,
                         "error_message": str(exc),
-                        "backoff_seconds": 0.0,
+                        "retryable": True,
+                        "attempts_used": len(attempt_history),
+                        "max_attempts": max_attempts,
+                        "attempt_history": list(attempt_history),
+                        **self._provider_call_budget_metadata(),
+                        **self._provider_elapsed_budget_metadata(started_at, current_time),
+                        **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                     }
-                )
-                self._last_provider_call_metadata = {
-                    "provider": self.config.llm_provider,
-                    "model": self.config.llm_model,
-                    "success": False,
-                    "duration_ms": round((perf_counter() - started_at) * 1000, 3),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "retryable": False,
-                    "attempts_used": attempt,
-                    "max_attempts": max_attempts,
-                    "attempt_history": list(attempt_history),
-                    **self._provider_call_budget_metadata(),
-                    **self._provider_elapsed_budget_metadata(started_at, perf_counter()),
-                    **self._provider_circuit_metadata(perf_counter()),
-                }
-                if isinstance(exc, AgentExecutionError):
-                    raise AgentExecutionError(f"{self.name}: {exc}") from exc
-                raise AgentExecutionError(f"{self.name} failed to call the model provider") from exc
-        self._last_provider_call_metadata = {
-            "provider": self.config.llm_provider,
-            "model": self.config.llm_model,
-            "success": True,
-            "duration_ms": round((perf_counter() - started_at) * 1000, 3),
-            "error_type": None,
-            "attempts_used": attempt,
-            "max_attempts": max_attempts,
-            "attempt_history": list(attempt_history),
-            **self._provider_call_budget_metadata(),
-            **self._provider_elapsed_budget_metadata(started_at, perf_counter()),
-            **self._provider_circuit_metadata(perf_counter()),
-        }
-        provider_metadata = provider.get_last_call_metadata()
-        if provider_metadata is not None:
-            self._last_provider_call_metadata.update(provider_metadata)
-        return response
+                    if attempt >= max_attempts:
+                        self._record_provider_transient_failure(provider_name, current_time)
+                        self._last_provider_call_metadata.update(self._provider_circuit_metadata(provider_name, current_time))
+                        if provider_index < len(provider_plan) - 1:
+                            fallback_history.append(
+                                {
+                                    "provider": provider_name,
+                                    "model": model_name,
+                                    "status": "failed_transient",
+                                    "error_type": type(exc).__name__,
+                                    "error_message": str(exc),
+                                    "attempts_used": attempt,
+                                }
+                            )
+                            break
+                        raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                    remaining_elapsed_budget = self._provider_elapsed_budget_remaining_seconds(
+                        started_at,
+                        current_time,
+                    )
+                    if remaining_elapsed_budget is not None and total_backoff_seconds >= remaining_elapsed_budget:
+                        message = (
+                            f"{self.name}: provider elapsed budget exhausted after "
+                            f"{current_time - started_at:g} seconds"
+                        )
+                        self._last_provider_call_metadata = {
+                            "provider": provider_name,
+                            "model": model_name,
+                            "success": False,
+                            "duration_ms": round((current_time - started_at) * 1000, 3),
+                            "error_type": "AgentExecutionError",
+                            "error_message": message.removeprefix(f"{self.name}: "),
+                            "retryable": False,
+                            "attempts_used": len(attempt_history),
+                            "max_attempts": max_attempts,
+                            "attempt_history": list(attempt_history),
+                            **self._provider_call_budget_metadata(),
+                            **self._provider_elapsed_budget_metadata(started_at, current_time),
+                            **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                            **self._provider_circuit_metadata(provider_name, current_time),
+                        }
+                        raise AgentExecutionError(message) from exc
+                    if total_backoff_seconds > 0:
+                        sleep(total_backoff_seconds)
+                except Exception as exc:
+                    current_time = perf_counter()
+                    self._reset_provider_circuit_breaker(provider_name)
+                    attempt_history.append(
+                        {
+                            "attempt": len(attempt_history) + 1,
+                            "success": False,
+                            "retryable": False,
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                            "backoff_seconds": 0.0,
+                        }
+                    )
+                    self._last_provider_call_metadata = {
+                        "provider": provider_name,
+                        "model": model_name,
+                        "success": False,
+                        "duration_ms": round((current_time - started_at) * 1000, 3),
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                        "retryable": False,
+                        "attempts_used": len(attempt_history),
+                        "max_attempts": max_attempts,
+                        "attempt_history": list(attempt_history),
+                        **self._provider_call_budget_metadata(),
+                        **self._provider_elapsed_budget_metadata(started_at, current_time),
+                        **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_circuit_metadata(provider_name, current_time),
+                    }
+                    if isinstance(exc, AgentExecutionError):
+                        raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                    raise AgentExecutionError(f"{self.name} failed to call the model provider") from exc
+        raise AgentExecutionError(f"{self.name} failed to call the model provider")
 
-    def _is_provider_circuit_open(self, current_time: float) -> bool:
+    def _provider_execution_plan(self) -> list[tuple[str, str]]:
+        return [
+            (self.config.llm_provider, self.config.llm_model),
+            *[
+                (provider_name, self.config.provider_fallback_models[provider_name])
+                for provider_name in self.config.provider_fallback_order
+            ],
+        ]
+
+    def _is_provider_circuit_open(self, provider_name: str, current_time: float) -> bool:
         if self.config.provider_circuit_breaker_threshold <= 0:
             return False
-        return current_time < self._provider_circuit_open_until
+        return current_time < self._provider_circuit_open_untils.get(provider_name, 0.0)
 
     def _is_provider_call_budget_exhausted(self) -> bool:
         if self.config.provider_max_calls_per_agent <= 0:
@@ -266,34 +331,54 @@ class BaseAgent(ABC):
             0.0,
         )
 
-    def _record_provider_transient_failure(self, current_time: float) -> None:
+    def _record_provider_transient_failure(self, provider_name: str, current_time: float) -> None:
         if self.config.provider_circuit_breaker_threshold <= 0:
-            self._provider_transient_failure_streak = 0
-            self._provider_circuit_open_until = 0.0
+            self._provider_transient_failure_streaks[provider_name] = 0
+            self._provider_circuit_open_untils[provider_name] = 0.0
             return
-        self._provider_transient_failure_streak += 1
-        if self._provider_transient_failure_streak >= self.config.provider_circuit_breaker_threshold:
-            self._provider_circuit_open_until = (
+        current_streak = self._provider_transient_failure_streaks.get(provider_name, 0) + 1
+        self._provider_transient_failure_streaks[provider_name] = current_streak
+        if current_streak >= self.config.provider_circuit_breaker_threshold:
+            self._provider_circuit_open_untils[provider_name] = (
                 current_time + self.config.provider_circuit_breaker_cooldown_seconds
             )
 
-    def _reset_provider_circuit_breaker(self) -> None:
-        self._provider_transient_failure_streak = 0
-        self._provider_circuit_open_until = 0.0
+    def _reset_provider_circuit_breaker(self, provider_name: str) -> None:
+        self._provider_transient_failure_streaks[provider_name] = 0
+        self._provider_circuit_open_untils[provider_name] = 0.0
 
-    def _provider_circuit_metadata(self, current_time: float) -> dict[str, Any]:
+    def _provider_circuit_metadata(self, provider_name: str, current_time: float) -> dict[str, Any]:
         remaining_seconds = 0.0
-        if self._is_provider_circuit_open(current_time):
-            remaining_seconds = max(self._provider_circuit_open_until - current_time, 0.0)
+        if self._is_provider_circuit_open(provider_name, current_time):
+            remaining_seconds = max(
+                self._provider_circuit_open_untils.get(provider_name, 0.0) - current_time,
+                0.0,
+            )
         return {
-            "circuit_breaker_open": self._is_provider_circuit_open(current_time),
-            "circuit_breaker_failure_streak": self._provider_transient_failure_streak,
+            "circuit_breaker_open": self._is_provider_circuit_open(provider_name, current_time),
+            "circuit_breaker_failure_streak": self._provider_transient_failure_streaks.get(provider_name, 0),
             "circuit_breaker_threshold": self.config.provider_circuit_breaker_threshold,
             "circuit_breaker_cooldown_seconds": round(
                 self.config.provider_circuit_breaker_cooldown_seconds,
                 6,
             ),
             "circuit_breaker_remaining_seconds": round(remaining_seconds, 6),
+        }
+
+    def _provider_fallback_metadata(
+        self,
+        provider_name: str,
+        model_name: str,
+        fallback_history: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "fallback_used": provider_name != self.config.llm_provider,
+            "fallback_history": list(fallback_history),
+            "fallback_count": len(fallback_history),
+            "primary_provider": self.config.llm_provider,
+            "primary_model": self.config.llm_model,
+            "active_provider": provider_name,
+            "active_model": model_name,
         }
 
     def _provider_call_budget_metadata(self) -> dict[str, Any]:

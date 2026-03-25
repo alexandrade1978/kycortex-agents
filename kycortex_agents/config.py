@@ -1,7 +1,7 @@
 """Public runtime configuration model and provider environment-variable mappings."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from kycortex_agents.exceptions import ConfigValidationError
@@ -45,6 +45,8 @@ class KYCortexConfig:
     provider_retry_jitter_ratio: float = 0.0
     provider_max_calls_per_agent: int = 0
     provider_max_elapsed_seconds_per_call: float = 0.0
+    provider_fallback_order: tuple[str, ...] = ()
+    provider_fallback_models: dict[str, str] = field(default_factory=dict)
     provider_circuit_breaker_threshold: int = 0
     provider_circuit_breaker_cooldown_seconds: float = 0.0
     execution_sandbox_enabled: bool = True
@@ -61,6 +63,16 @@ class KYCortexConfig:
         """Normalize defaults, resolve provider settings, validate config, and create output storage."""
 
         self.llm_provider = self.llm_provider.strip().lower()
+        self.provider_fallback_order = tuple(
+            provider_name.strip().lower()
+            for provider_name in self.provider_fallback_order
+            if provider_name.strip()
+        )
+        self.provider_fallback_models = {
+            provider_name.strip().lower(): model_name.strip()
+            for provider_name, model_name in self.provider_fallback_models.items()
+            if provider_name.strip()
+        }
         if self.api_key is None:
             self.api_key = self._resolve_api_key()
         if self.base_url is None:
@@ -122,6 +134,40 @@ class KYCortexConfig:
             raise ConfigValidationError("provider_max_calls_per_agent must be zero or greater")
         if self.provider_max_elapsed_seconds_per_call < 0:
             raise ConfigValidationError("provider_max_elapsed_seconds_per_call must be zero or greater")
+        if len(set(self.provider_fallback_order)) != len(self.provider_fallback_order):
+            raise ConfigValidationError("provider_fallback_order must not contain duplicates")
+        for provider_name in self.provider_fallback_order:
+            if provider_name not in PROVIDER_ENV_VARS:
+                raise ConfigValidationError(
+                    f"provider_fallback_order contains unsupported provider: {provider_name}"
+                )
+            if provider_name == self.llm_provider:
+                raise ConfigValidationError(
+                    "provider_fallback_order must not include the primary llm_provider"
+                )
+        for provider_name, model_name in self.provider_fallback_models.items():
+            if provider_name not in PROVIDER_ENV_VARS:
+                raise ConfigValidationError(
+                    f"provider_fallback_models contains unsupported provider: {provider_name}"
+                )
+            if provider_name not in self.provider_fallback_order:
+                raise ConfigValidationError(
+                    "provider_fallback_models keys must also appear in provider_fallback_order"
+                )
+            if not model_name:
+                raise ConfigValidationError(
+                    f"provider_fallback_models must define a non-empty model for provider: {provider_name}"
+                )
+        missing_fallback_models = [
+            provider_name
+            for provider_name in self.provider_fallback_order
+            if provider_name not in self.provider_fallback_models
+        ]
+        if missing_fallback_models:
+            missing_list = ", ".join(missing_fallback_models)
+            raise ConfigValidationError(
+                f"provider_fallback_models must define a model for each fallback provider: {missing_list}"
+            )
         if self.provider_circuit_breaker_threshold < 0:
             raise ConfigValidationError("provider_circuit_breaker_threshold must be zero or greater")
         if self.provider_circuit_breaker_cooldown_seconds < 0:
@@ -171,6 +217,22 @@ class KYCortexConfig:
             max_memory_mb=self.execution_sandbox_max_memory_mb,
             temp_root=self.execution_sandbox_temp_root,
             disable_pytest_plugin_autoload=True,
+        )
+
+    def provider_runtime_config(self, provider_name: str) -> "KYCortexConfig":
+        """Return a provider-specific runtime config derived from the current policy surface."""
+
+        normalized_provider_name = provider_name.strip().lower()
+        if normalized_provider_name == self.llm_provider:
+            return self
+        return replace(
+            self,
+            llm_provider=normalized_provider_name,
+            llm_model=self.provider_fallback_models[normalized_provider_name],
+            api_key=None,
+            base_url=None,
+            provider_fallback_order=(),
+            provider_fallback_models={},
         )
 
 DEFAULT_CONFIG = KYCortexConfig()

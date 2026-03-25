@@ -6,9 +6,15 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
+
+try:
+    import resource
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    resource = None  # type: ignore[assignment]
 
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
@@ -19,6 +25,7 @@ from kycortex_agents.types import (
     AgentOutput,
     ArtifactRecord,
     ArtifactType,
+    ExecutionSandboxPolicy,
     FailureCategory,
     TaskStatus,
     WorkflowOutcome,
@@ -58,6 +65,136 @@ _PYTEST_BUILTIN_FIXTURES = {
     "tmpdir_factory",
 }
 
+_SANDBOX_SITECUSTOMIZE = """
+import asyncio
+import builtins
+import os
+import pathlib
+import socket
+import subprocess
+import tempfile
+
+
+_REAL_OPEN = builtins.open
+_REAL_OS_OPEN = os.open
+_SANDBOX_ROOT = pathlib.Path(os.environ.get("KYCORTEX_SANDBOX_ROOT", os.getcwd())).resolve()
+
+
+def _is_write_mode(mode):
+    if isinstance(mode, int):
+        write_flags = (
+            os.O_WRONLY
+            | os.O_RDWR
+            | os.O_APPEND
+            | os.O_CREAT
+            | os.O_TRUNC
+        )
+        return bool(mode & write_flags)
+    normalized_mode = str(mode or "r")
+    return any(flag in normalized_mode for flag in ("w", "a", "+", "x"))
+
+
+def _is_within_sandbox(path_value):
+    if isinstance(path_value, int):
+        return True
+    try:
+        candidate = pathlib.Path(path_value).resolve()
+    except Exception:
+        return False
+    try:
+        candidate.relative_to(_SANDBOX_ROOT)
+        return True
+    except ValueError:
+        return False
+
+
+def _blocked(*args, **kwargs):
+    raise RuntimeError("sandbox policy blocked this operation")
+
+
+def _blocked_filesystem_write(*args, **kwargs):
+    raise RuntimeError("sandbox policy blocked filesystem write outside sandbox root")
+
+
+def _ensure_mutation_within_sandbox(*path_values):
+    for path_value in path_values:
+        if not _is_within_sandbox(path_value):
+            _blocked_filesystem_write()
+
+
+def _guarded_open(file, mode="r", *args, **kwargs):
+    if _is_write_mode(mode) and not _is_within_sandbox(file):
+        raise RuntimeError("sandbox policy blocked filesystem write outside sandbox root")
+    return _REAL_OPEN(file, mode, *args, **kwargs)
+
+
+def _guarded_os_open(path, flags, mode=0o777, *args, **kwargs):
+    if _is_write_mode(flags) and not _is_within_sandbox(path):
+        raise RuntimeError("sandbox policy blocked filesystem write outside sandbox root")
+    return _REAL_OS_OPEN(path, flags, mode, *args, **kwargs)
+
+
+builtins.open = _guarded_open
+os.open = _guarded_os_open
+tempfile.tempdir = str(_SANDBOX_ROOT)
+
+
+for _name in ("mkdir", "makedirs", "remove", "removedirs", "rmdir", "unlink"):
+    if hasattr(os, _name):
+        _real = getattr(os, _name)
+
+        def _guarded_single_path(*args, __real=_real, **kwargs):
+            if args:
+                _ensure_mutation_within_sandbox(args[0])
+            return __real(*args, **kwargs)
+
+        setattr(os, _name, _guarded_single_path)
+
+
+for _name in ("rename", "replace"):
+    if hasattr(os, _name):
+        _real = getattr(os, _name)
+
+        def _guarded_two_path(*args, __real=_real, **kwargs):
+            if len(args) >= 2:
+                _ensure_mutation_within_sandbox(args[0], args[1])
+            return __real(*args, **kwargs)
+
+        setattr(os, _name, _guarded_two_path)
+
+
+if os.environ.get("KYCORTEX_SANDBOX_ALLOW_NETWORK") != "1":
+    socket.socket = _blocked
+    socket.create_connection = _blocked
+
+
+if os.environ.get("KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES") != "1":
+    subprocess.Popen = _blocked
+    subprocess.run = _blocked
+    subprocess.call = _blocked
+    subprocess.check_call = _blocked
+    subprocess.check_output = _blocked
+    os.system = _blocked
+    for _name in (
+        "fork",
+        "forkpty",
+        "posix_spawn",
+        "posix_spawnp",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+    ):
+        if hasattr(os, _name):
+            setattr(os, _name, _blocked)
+    asyncio.create_subprocess_exec = _blocked
+    asyncio.create_subprocess_shell = _blocked
+"""
+
 
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
@@ -96,6 +233,13 @@ class Orchestrator:
             output = self._execute_agent(agent, agent_input)
             normalized_output = self._normalize_agent_result(output)
             self._validate_task_output(task, agent_input.context, normalized_output)
+            self._persist_artifacts(normalized_output.artifacts)
+            for decision in normalized_output.decisions:
+                project.add_decision_record(decision)
+            for artifact in normalized_output.artifacts:
+                project.add_artifact_record(artifact)
+            provider_call = self._provider_call_metadata(agent, normalized_output)
+            project.complete_task(task.id, normalized_output, provider_call=provider_call)
         except Exception as exc:
             failure_category = self._classify_task_failure(task, exc)
             project.fail_task(
@@ -131,13 +275,6 @@ class Orchestrator:
                     model=provider_call.get("model") if provider_call else None,
                 )
             raise
-        self._persist_artifacts(normalized_output.artifacts)
-        for decision in normalized_output.decisions:
-            project.add_decision_record(decision)
-        for artifact in normalized_output.artifacts:
-            project.add_artifact_record(artifact)
-        provider_call = self._provider_call_metadata(agent, normalized_output)
-        project.complete_task(task.id, normalized_output, provider_call=provider_call)
         self._log_event(
             "info",
             "task_completed",
@@ -321,19 +458,41 @@ class Orchestrator:
             result["summary"] = "generated code or tests were empty"
             return result
 
-        with tempfile.TemporaryDirectory(prefix="kycortex-tests-") as tmp_dir:
+        sandbox_policy = self.config.execution_sandbox_policy()
+        with tempfile.TemporaryDirectory(
+            prefix="kycortex-tests-",
+            dir=sandbox_policy.temp_root,
+        ) as tmp_dir:
             tmp_path = Path(tmp_dir)
-            (tmp_path / module_filename).write_text(code_content, encoding="utf-8")
-            (tmp_path / test_filename).write_text(test_content, encoding="utf-8")
-            env = self._build_generated_test_env()
+            safe_module_filename = self._sanitize_generated_filename(module_filename, "generated_module.py")
+            safe_test_filename = self._sanitize_generated_filename(test_filename, "generated_tests.py")
+            pytest_config_path = tmp_path / "pytest.ini"
+            pytest_log_path = tmp_path / "pytest.log"
+            (tmp_path / safe_module_filename).write_text(code_content, encoding="utf-8")
+            (tmp_path / safe_test_filename).write_text(test_content, encoding="utf-8")
+            pytest_config_path.write_text("[pytest]\n", encoding="utf-8")
+            env = self._build_generated_test_env(tmp_path, sandbox_policy)
             try:
                 completed = subprocess.run(
-                    [sys.executable, "-m", "pytest", test_filename, "-q"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        "-c",
+                        str(pytest_config_path),
+                        "--rootdir",
+                        str(tmp_path),
+                        "-o",
+                        f"log_file={pytest_log_path}",
+                        safe_test_filename,
+                        "-q",
+                    ],
                     cwd=tmp_path,
                     capture_output=True,
                     text=True,
                     timeout=max(self.config.timeout_seconds, 1.0),
                     env=env,
+                    preexec_fn=self._sandbox_preexec_fn(sandbox_policy),
                     check=False,
                 )
             except subprocess.TimeoutExpired:
@@ -349,16 +508,72 @@ class Orchestrator:
         result["stdout"] = completed.stdout.strip()
         result["stderr"] = completed.stderr.strip()
         result["summary"] = self._summarize_pytest_output(completed.stdout, completed.stderr, completed.returncode)
+        result["sandbox"] = {
+            "enabled": sandbox_policy.enabled,
+            "allow_network": sandbox_policy.allow_network,
+            "allow_subprocesses": sandbox_policy.allow_subprocesses,
+            "max_cpu_seconds": sandbox_policy.max_cpu_seconds,
+            "max_memory_mb": sandbox_policy.max_memory_mb,
+        }
         return result
 
-    def _build_generated_test_env(self) -> Dict[str, str]:
-        env = os.environ.copy()
+    def _build_generated_test_env(
+        self,
+        tmp_path: Path,
+        sandbox_policy: ExecutionSandboxPolicy,
+    ) -> Dict[str, str]:
+        if sandbox_policy.enabled:
+            env = {key: value for key, value in sandbox_policy.sanitized_env.items() if value}
+        else:
+            env = os.environ.copy()
+        env["PATH"] = os.environ.get("PATH", "")
+        env["PYTHONPATH"] = str(tmp_path)
         env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        env.setdefault("PYTHONNOUSERSITE", "1")
+        if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
+            env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
         for key in list(env):
             if key.startswith("COV_CORE_"):
                 env.pop(key, None)
         env.pop("COVERAGE_PROCESS_START", None)
+        if sandbox_policy.enabled:
+            env.setdefault("TMPDIR", str(tmp_path))
+            env["KYCORTEX_SANDBOX_ALLOW_NETWORK"] = "1" if sandbox_policy.allow_network else "0"
+            env["KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES"] = "1" if sandbox_policy.allow_subprocesses else "0"
+            env["KYCORTEX_SANDBOX_ROOT"] = str(tmp_path)
+            (tmp_path / "sitecustomize.py").write_text(
+                textwrap.dedent(_SANDBOX_SITECUSTOMIZE).strip() + "\n",
+                encoding="utf-8",
+            )
+        else:
+            env.pop("TMPDIR", None)
+            env.pop("KYCORTEX_SANDBOX_ALLOW_NETWORK", None)
+            env.pop("KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES", None)
+            env.pop("KYCORTEX_SANDBOX_ROOT", None)
         return env
+
+    def _sanitize_generated_filename(self, filename: str, default_filename: str) -> str:
+        candidate = Path(filename).name if isinstance(filename, str) else ""
+        sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", candidate).strip("._")
+        if not sanitized:
+            sanitized = default_filename
+        if "." not in sanitized and "." in default_filename:
+            sanitized = f"{sanitized}{Path(default_filename).suffix}"
+        return sanitized
+
+    def _sandbox_preexec_fn(self, sandbox_policy: ExecutionSandboxPolicy):
+        if not sandbox_policy.enabled or os.name != "posix" or resource is None:
+            return None
+
+        def _apply_limits() -> None:
+            cpu_seconds = max(int(sandbox_policy.max_cpu_seconds), 1)
+            memory_bytes = max(sandbox_policy.max_memory_mb, 1) * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
+            resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+            resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))
+
+        return _apply_limits
 
     def _summarize_pytest_output(self, stdout: str, stderr: str, returncode: int) -> str:
         combined_lines = [line.strip() for line in f"{stdout}\n{stderr}".splitlines() if line.strip()]
@@ -392,12 +607,32 @@ class Orchestrator:
             artifact.path = self._artifact_record_path(target_path)
 
     def _resolve_artifact_output_path(self, artifact: ArtifactRecord) -> Path:
-        configured_path = Path(artifact.path) if artifact.path else None
-        if configured_path is not None and configured_path.is_absolute():
-            return configured_path
         output_root = Path(self.config.output_dir).resolve()
-        relative_path = configured_path if configured_path is not None else Path(self._default_artifact_path(artifact))
+        relative_path = self._sanitize_artifact_relative_path(
+            artifact.path if artifact.path else self._default_artifact_path(artifact)
+        )
         return output_root / relative_path
+
+    def _sanitize_artifact_relative_path(self, artifact_path: str) -> Path:
+        candidate = Path(artifact_path)
+        if candidate.is_absolute():
+            raise AgentExecutionError("Artifact persistence failed: absolute artifact paths are not allowed")
+
+        sanitized_parts: list[str] = []
+        for part in candidate.parts:
+            if part in ("", "."):
+                continue
+            if part == "..":
+                raise AgentExecutionError("Artifact persistence failed: parent-directory traversal is not allowed")
+            cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", part).strip()
+            if not cleaned or cleaned in (".", ".."):
+                raise AgentExecutionError("Artifact persistence failed: artifact path contains an invalid segment")
+            sanitized_parts.append(cleaned)
+
+        if not sanitized_parts:
+            raise AgentExecutionError("Artifact persistence failed: artifact path must not be empty")
+
+        return Path(*sanitized_parts)
 
     def _artifact_record_path(self, target_path: Path) -> str:
         output_root = Path(self.config.output_dir).resolve()

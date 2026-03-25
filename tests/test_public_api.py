@@ -115,6 +115,7 @@ def test_public_contract_modules_define_explicit_exports():
     assert types_module.__all__ == [
         "AgentInput",
         "AgentOutput",
+        "ExecutionSandboxPolicy",
         "ArtifactRecord",
         "ArtifactType",
         "DecisionRecord",

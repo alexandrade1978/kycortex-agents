@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from kycortex_agents.exceptions import ConfigValidationError
+from kycortex_agents.types import ExecutionSandboxPolicy
 
 
 PROVIDER_ENV_VARS = {
@@ -38,6 +39,12 @@ class KYCortexConfig:
     workflow_resume_policy: str = "interrupted_only"
     workflow_acceptance_policy: str = "all_tasks"
     workflow_max_repair_cycles: int = 1
+    execution_sandbox_enabled: bool = True
+    execution_sandbox_allow_network: bool = False
+    execution_sandbox_allow_subprocesses: bool = False
+    execution_sandbox_max_cpu_seconds: float = 30.0
+    execution_sandbox_max_memory_mb: int = 512
+    execution_sandbox_temp_root: Optional[str] = None
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
@@ -92,6 +99,15 @@ class KYCortexConfig:
             )
         if self.workflow_max_repair_cycles < 0:
             raise ConfigValidationError("workflow_max_repair_cycles must be zero or greater")
+        if self.execution_sandbox_max_cpu_seconds <= 0:
+            raise ConfigValidationError("execution_sandbox_max_cpu_seconds must be greater than zero")
+        if self.execution_sandbox_max_memory_mb <= 0:
+            raise ConfigValidationError("execution_sandbox_max_memory_mb must be greater than zero")
+        if (
+            self.execution_sandbox_temp_root is not None
+            and not self.execution_sandbox_temp_root.strip()
+        ):
+            raise ConfigValidationError("execution_sandbox_temp_root must not be empty when provided")
 
     def validate_runtime(self):
         """Validate provider-specific runtime requirements such as credentials and base URLs."""
@@ -109,5 +125,18 @@ class KYCortexConfig:
             raise ConfigValidationError(
                 f"Missing API key for provider '{self.llm_provider}'. Set {env_var} or pass api_key explicitly."
             )
+
+    def execution_sandbox_policy(self) -> ExecutionSandboxPolicy:
+        """Return the normalized sandbox policy for generated-artifact execution."""
+
+        return ExecutionSandboxPolicy(
+            enabled=self.execution_sandbox_enabled,
+            allow_network=self.execution_sandbox_allow_network,
+            allow_subprocesses=self.execution_sandbox_allow_subprocesses,
+            max_cpu_seconds=self.execution_sandbox_max_cpu_seconds,
+            max_memory_mb=self.execution_sandbox_max_memory_mb,
+            temp_root=self.execution_sandbox_temp_root,
+            disable_pytest_plugin_autoload=True,
+        )
 
 DEFAULT_CONFIG = KYCortexConfig()

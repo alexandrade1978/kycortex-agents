@@ -282,6 +282,197 @@ def test_run_task_uses_repair_owner_and_failure_context_for_code_validation(tmp_
     assert "Previous failure category: code_validation" in engineer.last_description
 
 
+def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import subprocess\n\n"
+        "def spawn_child():\n"
+        "    subprocess.run(['echo', 'hi'], check=False)\n",
+        "tests_generated.py",
+        "from code_under_test import spawn_child\n\n"
+        "def test_spawn_child_is_blocked():\n"
+        "    spawn_child()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+    assert result["sandbox"]["allow_subprocesses"] is False
+
+
+def test_execute_generated_tests_blocks_os_spawn_calls_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\nimport sys\n\n"
+        "def spawn_child():\n"
+        "    os.spawnv(os.P_WAIT, sys.executable, [sys.executable, '-c', 'print(123)'])\n",
+        "tests_generated.py",
+        "from code_under_test import spawn_child\n\n"
+        "def test_spawnv_is_blocked():\n"
+        "    spawn_child()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+    assert result["sandbox"]["allow_subprocesses"] is False
+
+
+def test_execute_generated_tests_blocks_network_calls_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import socket\n\n"
+        "def open_socket():\n"
+        "    socket.create_connection(('example.com', 80), timeout=1)\n",
+        "tests_generated.py",
+        "from code_under_test import open_socket\n\n"
+        "def test_network_is_blocked():\n"
+        "    open_socket()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+    assert result["sandbox"]["allow_network"] is False
+
+
+def test_execute_generated_tests_blocks_filesystem_writes_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_path = (tmp_path / "escaped.txt").resolve()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "def write_outside_sandbox(target_path):\n"
+        "    with open(target_path, 'w', encoding='utf-8') as handle:\n"
+        "        handle.write('escaped')\n",
+        "tests_generated.py",
+        "from code_under_test import write_outside_sandbox\n\n"
+        f"def test_filesystem_write_is_blocked():\n"
+        f"    write_outside_sandbox({str(escaped_path)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+    assert not escaped_path.exists()
+
+
+def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_dir").resolve()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def create_directory(target_path):\n"
+        "    os.mkdir(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import create_directory\n\n"
+        f"def test_directory_creation_is_blocked():\n"
+        f"    create_directory({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+    assert not escaped_dir.exists()
+
+
+def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import subprocess\n\n"
+        "def spawn_child():\n"
+        "    completed = subprocess.run(['echo', 'hi'], capture_output=True, text=True, check=False)\n"
+        "    return completed.stdout.strip()\n",
+        "tests_generated.py",
+        "from code_under_test import spawn_child\n\n"
+        "def test_spawn_child_runs_when_sandbox_is_disabled():\n"
+        "    assert spawn_child() == 'hi'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_directory_creation_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    created_dir = tmp_path / "created_dir"
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def create_directory(target_path):\n"
+        "    os.mkdir(target_path)\n"
+        "    return os.path.isdir(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import create_directory\n\n"
+        f"def test_directory_creation_runs_when_sandbox_is_disabled():\n"
+        f"    assert create_directory({str(created_dir)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+    assert created_dir.exists()
+
+
+def test_execute_generated_tests_allows_os_spawn_calls_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\nimport sys\n\n"
+        "def spawn_child():\n"
+        "    return os.spawnv(os.P_WAIT, sys.executable, [sys.executable, '-c', 'raise SystemExit(0)'])\n",
+        "tests_generated.py",
+        "from code_under_test import spawn_child\n\n"
+        "def test_spawnv_runs_when_sandbox_is_disabled():\n"
+        "    assert spawn_child() == 0\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_build_generated_test_env_omits_sandbox_hooks_when_disabled(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_enabled=False)
+    orchestrator = Orchestrator(config)
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "KYCORTEX_SANDBOX_ALLOW_NETWORK" not in env
+    assert "KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES" not in env
+    assert "KYCORTEX_SANDBOX_ROOT" not in env
+    assert not (tmp_path / "sitecustomize.py").exists()
+
+
+def test_sanitize_generated_filename_strips_path_traversal():
+    orchestrator = Orchestrator(KYCortexConfig(output_dir="./output_test"))
+
+    assert orchestrator._sanitize_generated_filename("../../tests_generated.py", "generated_tests.py") == "tests_generated.py"
+    assert orchestrator._sanitize_generated_filename("", "generated_tests.py") == "generated_tests.py"
+
+
 def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -1480,6 +1671,78 @@ def test_run_task_writes_structured_artifact_content_to_relative_output_path(tmp
     orchestrator.run_task(project.tasks[0], project)
 
     assert (tmp_path / "output" / "artifacts" / "architecture.md").read_text(encoding="utf-8") == "# Architecture\n\nSystem design"
+
+
+def test_run_task_rejects_artifact_path_traversal(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    class TraversalArtifactAgent:
+        def execute(self, agent_input) -> AgentOutput:
+            return AgentOutput(
+                summary="Architecture summary",
+                raw_content="ARCHITECTURE DOC",
+                artifacts=[
+                    ArtifactRecord(
+                        name="architecture_doc",
+                        artifact_type=ArtifactType.DOCUMENT,
+                        path="../escaped.md",
+                        content="# escaped",
+                    )
+                ],
+            )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": TraversalArtifactAgent()}))
+
+    with pytest.raises(AgentExecutionError, match="parent-directory traversal is not allowed"):
+        orchestrator.run_task(project.tasks[0], project)
+
+    assert project.tasks[0].status == TaskStatus.FAILED.value
+    assert not (tmp_path / "escaped.md").exists()
+
+
+def test_run_task_rejects_absolute_artifact_path(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    class AbsoluteArtifactAgent:
+        def execute(self, agent_input) -> AgentOutput:
+            return AgentOutput(
+                summary="Architecture summary",
+                raw_content="ARCHITECTURE DOC",
+                artifacts=[
+                    ArtifactRecord(
+                        name="architecture_doc",
+                        artifact_type=ArtifactType.DOCUMENT,
+                        path=str((tmp_path / "absolute.md").resolve()),
+                        content="# escaped",
+                    )
+                ],
+            )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": AbsoluteArtifactAgent()}))
+
+    with pytest.raises(AgentExecutionError, match="absolute artifact paths are not allowed"):
+        orchestrator.run_task(project.tasks[0], project)
+
+    assert project.tasks[0].status == TaskStatus.FAILED.value
+    assert not (tmp_path / "absolute.md").exists()
 
 
 def test_run_task_persists_provider_call_metadata_from_base_agent(tmp_path):

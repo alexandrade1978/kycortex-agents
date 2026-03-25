@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 __all__ = [
     "AgentInput",
     "AgentOutput",
+    "ExecutionSandboxPolicy",
     "ArtifactRecord",
     "ArtifactType",
     "DecisionRecord",
@@ -81,6 +82,20 @@ class ArtifactType(str, Enum):
     TEST = "test"
     CONFIG = "config"
     OTHER = "other"
+
+
+@dataclass
+class ExecutionSandboxPolicy:
+    """Runtime policy describing how generated artifacts are isolated during execution."""
+
+    enabled: bool = True
+    allow_network: bool = False
+    allow_subprocesses: bool = False
+    max_cpu_seconds: float = 30.0
+    max_memory_mb: int = 512
+    temp_root: Optional[str] = None
+    disable_pytest_plugin_autoload: bool = True
+    sanitized_env: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

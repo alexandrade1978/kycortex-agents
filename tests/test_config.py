@@ -118,3 +118,34 @@ def test_validate_runtime_rejects_ollama_without_base_url(tmp_path):
 
     with pytest.raises(ConfigValidationError, match="Missing base URL for provider 'ollama'"):
         config.validate_runtime()
+
+
+def test_config_rejects_invalid_execution_sandbox_cpu_limit(tmp_path):
+    with pytest.raises(ConfigValidationError, match="execution_sandbox_max_cpu_seconds must be greater than zero"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_max_cpu_seconds=0)
+
+
+def test_config_rejects_invalid_execution_sandbox_memory_limit(tmp_path):
+    with pytest.raises(ConfigValidationError, match="execution_sandbox_max_memory_mb must be greater than zero"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_max_memory_mb=0)
+
+
+def test_config_builds_execution_sandbox_policy(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=True,
+        execution_sandbox_allow_network=False,
+        execution_sandbox_allow_subprocesses=False,
+        execution_sandbox_max_cpu_seconds=12,
+        execution_sandbox_max_memory_mb=256,
+        execution_sandbox_temp_root=str(tmp_path),
+    )
+
+    policy = config.execution_sandbox_policy()
+
+    assert policy.enabled is True
+    assert policy.allow_network is False
+    assert policy.allow_subprocesses is False
+    assert policy.max_cpu_seconds == 12
+    assert policy.max_memory_mb == 256
+    assert policy.temp_root == str(tmp_path)

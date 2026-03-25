@@ -137,6 +137,11 @@ def test_config_rejects_negative_provider_elapsed_budget(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_max_elapsed_seconds_per_call=-0.1)
 
 
+def test_config_rejects_non_positive_provider_cancellation_check_interval(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_cancellation_check_interval_seconds must be greater than zero"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), provider_cancellation_check_interval_seconds=0.0)
+
+
 def test_config_rejects_duplicate_provider_fallback_order_entries(tmp_path):
     with pytest.raises(ConfigValidationError, match="provider_fallback_order must not contain duplicates"):
         KYCortexConfig(

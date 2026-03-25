@@ -65,6 +65,8 @@ def test_chat_returns_response_content():
     assert metadata["provider_remaining_calls"] is None
     assert metadata["provider_max_elapsed_seconds_per_call"] == 0.0
     assert metadata["provider_remaining_elapsed_seconds"] is None
+    assert metadata["provider_cancellation_requested"] is False
+    assert metadata["provider_cancellation_reason"] is None
 
 
 def test_chat_raises_on_provider_error():
@@ -315,7 +317,8 @@ def test_chat_applies_retry_jitter_to_sleep(monkeypatch):
 
     metadata = agent.get_last_provider_call_metadata()
     assert result == "ok"
-    assert sleep_calls == [1.25]
+    assert round(sum(sleep_calls), 6) == 1.25
+    assert max(sleep_calls) <= agent.config.provider_cancellation_check_interval_seconds
     assert metadata is not None
     assert metadata["attempt_history"][0]["uncapped_backoff_seconds"] == 1.0
     assert metadata["attempt_history"][0]["base_backoff_seconds"] == 1.0
@@ -453,6 +456,69 @@ def test_chat_does_not_sleep_past_elapsed_budget(monkeypatch):
     assert sleep_calls == []
 
 
+def test_chat_fails_fast_when_provider_cancellation_is_requested_before_first_attempt():
+    provider = DummyProvider(response="ok")
+    agent = DummyAgent(provider)
+    agent.request_provider_cancellation("operator requested stop")
+
+    with pytest.raises(AgentExecutionError, match=r"Dummy: provider call cancelled \(operator requested stop\)"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["attempts_used"] == 0
+    assert metadata["provider_cancellation_requested"] is True
+    assert metadata["provider_cancellation_reason"] == "operator requested stop"
+    assert provider.calls == []
+
+
+def test_chat_cancels_during_retry_backoff(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    provider = AlwaysTransientProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 2
+    agent.config.provider_retry_backoff_seconds = 0.2
+    agent.config.provider_cancellation_check_interval_seconds = 0.1
+    sleep_calls: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+        agent.request_provider_cancellation("operator requested stop")
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", fake_sleep)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
+
+    with pytest.raises(AgentExecutionError, match=r"Dummy: provider call cancelled \(operator requested stop\)"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["attempts_used"] == 1
+    assert metadata["provider_cancellation_requested"] is True
+    assert metadata["provider_cancellation_reason"] == "operator requested stop"
+    assert metadata["attempt_history"] == [
+        {
+            "attempt": 1,
+            "success": False,
+            "retryable": True,
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "uncapped_backoff_seconds": 0.2,
+            "base_backoff_seconds": 0.2,
+            "jitter_seconds": 0.0,
+            "backoff_seconds": 0.2,
+        }
+    ]
+    assert sleep_calls == [0.1]
+    assert provider.calls == [("system", "message")]
+
+
 def test_chat_caps_retry_backoff_before_jitter(monkeypatch):
     class CappedBackoffProvider(DummyProvider):
         def __init__(self):
@@ -480,7 +546,8 @@ def test_chat_caps_retry_backoff_before_jitter(monkeypatch):
 
     metadata = agent.get_last_provider_call_metadata()
     assert result == "ok"
-    assert sleep_calls == [1.75]
+    assert round(sum(sleep_calls), 6) == 1.75
+    assert max(sleep_calls) <= agent.config.provider_cancellation_check_interval_seconds
     assert metadata is not None
     assert metadata["attempt_history"][0]["uncapped_backoff_seconds"] == 5.0
     assert metadata["attempt_history"][0]["base_backoff_seconds"] == 1.5

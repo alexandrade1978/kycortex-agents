@@ -47,6 +47,7 @@ class KYCortexConfig:
     provider_max_elapsed_seconds_per_call: float = 0.0
     provider_fallback_order: tuple[str, ...] = ()
     provider_fallback_models: dict[str, str] = field(default_factory=dict)
+    provider_cancellation_check_interval_seconds: float = 0.1
     provider_circuit_breaker_threshold: int = 0
     provider_circuit_breaker_cooldown_seconds: float = 0.0
     execution_sandbox_enabled: bool = True
@@ -134,6 +135,10 @@ class KYCortexConfig:
             raise ConfigValidationError("provider_max_calls_per_agent must be zero or greater")
         if self.provider_max_elapsed_seconds_per_call < 0:
             raise ConfigValidationError("provider_max_elapsed_seconds_per_call must be zero or greater")
+        if self.provider_cancellation_check_interval_seconds <= 0:
+            raise ConfigValidationError(
+                "provider_cancellation_check_interval_seconds must be greater than zero"
+            )
         if len(set(self.provider_fallback_order)) != len(self.provider_fallback_order):
             raise ConfigValidationError("provider_fallback_order must not contain duplicates")
         for provider_name in self.provider_fallback_order:

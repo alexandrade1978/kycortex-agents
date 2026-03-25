@@ -33,6 +33,8 @@ class BaseAgent(ABC):
         self._provider_call_count = 0
         self._provider_transient_failure_streaks: dict[str, int] = {}
         self._provider_circuit_open_untils: dict[str, float] = {}
+        self._provider_cancellation_requested = False
+        self._provider_cancellation_reason: Optional[str] = None
 
     def _get_provider(self) -> BaseLLMProvider:
         return self._get_provider_for(self.config.llm_provider, self.config.llm_model)
@@ -65,6 +67,15 @@ class BaseAgent(ABC):
         for provider_index, (provider_name, model_name) in enumerate(provider_plan):
             provider = self._get_provider_for(provider_name, model_name)
             current_time = perf_counter()
+            self._raise_if_provider_cancellation_requested(
+                provider_name,
+                model_name,
+                started_at,
+                current_time,
+                attempt_history,
+                max_attempts,
+                fallback_history,
+            )
             if self._is_provider_circuit_open(provider_name, current_time):
                 remaining_seconds = round(
                     max(self._provider_circuit_open_untils.get(provider_name, 0.0) - current_time, 0.0),
@@ -95,11 +106,21 @@ class BaseAgent(ABC):
                     **self._provider_call_budget_metadata(),
                     **self._provider_elapsed_budget_metadata(started_at, current_time),
                     **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                    **self._provider_cancellation_metadata(),
                     **self._provider_circuit_metadata(provider_name, current_time),
                 }
                 raise AgentExecutionError(message)
             for attempt in range(1, max_attempts + 1):
                 current_time = perf_counter()
+                self._raise_if_provider_cancellation_requested(
+                    provider_name,
+                    model_name,
+                    started_at,
+                    current_time,
+                    attempt_history,
+                    max_attempts,
+                    fallback_history,
+                )
                 if self._is_provider_elapsed_budget_exhausted(started_at, current_time):
                     message = (
                         f"{self.name}: provider elapsed budget exhausted after "
@@ -169,6 +190,7 @@ class BaseAgent(ABC):
                         **self._provider_call_budget_metadata(),
                         **self._provider_elapsed_budget_metadata(started_at, completed_at),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_cancellation_metadata(),
                         **self._provider_circuit_metadata(provider_name, completed_at),
                     }
                     provider_metadata = provider.get_last_call_metadata()
@@ -216,6 +238,7 @@ class BaseAgent(ABC):
                         **self._provider_call_budget_metadata(),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_cancellation_metadata(),
                     }
                     if attempt >= max_attempts:
                         self._record_provider_transient_failure(provider_name, current_time)
@@ -256,11 +279,20 @@ class BaseAgent(ABC):
                             **self._provider_call_budget_metadata(),
                             **self._provider_elapsed_budget_metadata(started_at, current_time),
                             **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                            **self._provider_cancellation_metadata(),
                             **self._provider_circuit_metadata(provider_name, current_time),
                         }
                         raise AgentExecutionError(message) from exc
                     if total_backoff_seconds > 0:
-                        sleep(total_backoff_seconds)
+                        self._sleep_with_cancellation(
+                            total_backoff_seconds,
+                            provider_name,
+                            model_name,
+                            started_at,
+                            attempt_history,
+                            max_attempts,
+                            fallback_history,
+                        )
                 except Exception as exc:
                     current_time = perf_counter()
                     self._reset_provider_circuit_breaker(provider_name)
@@ -288,6 +320,7 @@ class BaseAgent(ABC):
                         **self._provider_call_budget_metadata(),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_cancellation_metadata(),
                         **self._provider_circuit_metadata(provider_name, current_time),
                     }
                     if isinstance(exc, AgentExecutionError):
@@ -381,6 +414,12 @@ class BaseAgent(ABC):
             "active_model": model_name,
         }
 
+    def _provider_cancellation_metadata(self) -> dict[str, Any]:
+        return {
+            "provider_cancellation_requested": self._provider_cancellation_requested,
+            "provider_cancellation_reason": self._provider_cancellation_reason,
+        }
+
     def _provider_call_budget_metadata(self) -> dict[str, Any]:
         remaining_calls: Optional[int] = None
         if self.config.provider_max_calls_per_agent > 0:
@@ -415,6 +454,76 @@ class BaseAgent(ABC):
                 )
             ),
         }
+
+    def request_provider_cancellation(self, reason: Optional[str] = None) -> None:
+        self._provider_cancellation_requested = True
+        self._provider_cancellation_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "cancellation requested"
+
+    def clear_provider_cancellation(self) -> None:
+        self._provider_cancellation_requested = False
+        self._provider_cancellation_reason = None
+
+    def _raise_if_provider_cancellation_requested(
+        self,
+        provider_name: str,
+        model_name: str,
+        started_at: float,
+        current_time: float,
+        attempt_history: list[dict[str, Any]],
+        max_attempts: int,
+        fallback_history: list[dict[str, Any]],
+    ) -> None:
+        if not self._provider_cancellation_requested:
+            return
+        reason = self._provider_cancellation_reason or "cancellation requested"
+        message = f"{self.name}: provider call cancelled ({reason})"
+        self._last_provider_call_metadata = {
+            "provider": provider_name,
+            "model": model_name,
+            "success": False,
+            "duration_ms": round((current_time - started_at) * 1000, 3),
+            "error_type": "AgentExecutionError",
+            "error_message": message.removeprefix(f"{self.name}: "),
+            "retryable": False,
+            "attempts_used": len(attempt_history),
+            "max_attempts": max_attempts,
+            "attempt_history": list(attempt_history),
+            **self._provider_call_budget_metadata(),
+            **self._provider_elapsed_budget_metadata(started_at, current_time),
+            **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+            **self._provider_cancellation_metadata(),
+            **self._provider_circuit_metadata(provider_name, current_time),
+        }
+        raise AgentExecutionError(message)
+
+    def _sleep_with_cancellation(
+        self,
+        total_backoff_seconds: float,
+        provider_name: str,
+        model_name: str,
+        started_at: float,
+        attempt_history: list[dict[str, Any]],
+        max_attempts: int,
+        fallback_history: list[dict[str, Any]],
+    ) -> None:
+        remaining_seconds = total_backoff_seconds
+        while remaining_seconds > 0:
+            chunk_seconds = min(
+                remaining_seconds,
+                self.config.provider_cancellation_check_interval_seconds,
+            )
+            sleep(chunk_seconds)
+            remaining_seconds = max(remaining_seconds - chunk_seconds, 0.0)
+            current_time = perf_counter()
+            self._raise_if_provider_cancellation_requested(
+                provider_name,
+                model_name,
+                started_at,
+                current_time,
+                attempt_history,
+                max_attempts,
+                fallback_history,
+            )
 
     def run_with_input(self, agent_input: AgentInput) -> str | AgentOutput:
         return self.run(agent_input.task_description, agent_input.context)

@@ -35,6 +35,7 @@ from kycortex_agents import (
     OllamaProvider,
     Orchestrator,
     ProjectState,
+    ProviderTransientError,
     QATesterAgent,
     SqliteStateStore,
     StatePersistenceError,
@@ -75,6 +76,7 @@ def test_public_api_exports_core_symbols():
     assert SqliteStateStore is not None
     assert DEFAULT_CONFIG is not None
     assert StatePersistenceError is not None
+    assert ProviderTransientError is not None
     assert WorkflowDefinitionError is not None
 
 
@@ -109,6 +111,7 @@ def test_public_contract_modules_define_explicit_exports():
         "ConfigValidationError",
         "KYCortexError",
         "ProviderConfigurationError",
+        "ProviderTransientError",
         "StatePersistenceError",
         "WorkflowDefinitionError",
     ]

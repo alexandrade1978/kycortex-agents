@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.base import BaseLLMProvider
 
 
@@ -48,7 +48,7 @@ class OpenAIProvider(BaseLLMProvider):
             )
         except Exception as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError("OpenAI provider failed to call the model API") from exc
+            raise ProviderTransientError("OpenAI provider failed to call the model API") from exc
         self._last_call_metadata = self._extract_metadata(response)
         return self._extract_content(response)
 

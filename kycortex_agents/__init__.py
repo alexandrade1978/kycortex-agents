@@ -17,6 +17,7 @@ from kycortex_agents.exceptions import (
 	ConfigValidationError,
 	KYCortexError,
 	ProviderConfigurationError,
+	ProviderTransientError,
 	StatePersistenceError,
 	WorkflowDefinitionError,
 )
@@ -78,6 +79,7 @@ __all__ = [
 	"ProjectState",
 	"providers",
 	"ProviderConfigurationError",
+	"ProviderTransientError",
 	"QATesterAgent",
 	"resolve_state_store",
 	"SqliteStateStore",

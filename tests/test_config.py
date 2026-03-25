@@ -112,6 +112,16 @@ def test_config_rejects_negative_workflow_max_repair_cycles(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_max_repair_cycles=-1)
 
 
+def test_config_rejects_invalid_provider_max_attempts(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_max_attempts must be greater than zero"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), provider_max_attempts=0)
+
+
+def test_config_rejects_negative_provider_retry_backoff(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_retry_backoff_seconds must be zero or greater"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_backoff_seconds=-0.1)
+
+
 def test_validate_runtime_rejects_ollama_without_base_url(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
     config.base_url = ""

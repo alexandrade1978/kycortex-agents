@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 import re
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any, Optional
 
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.providers.factory import create_provider
 from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType
@@ -37,26 +37,51 @@ class BaseAgent(ABC):
     def chat(self, system_prompt: str, user_message: str) -> str:
         provider = self._get_provider()
         started_at = perf_counter()
-        try:
-            response = provider.generate(system_prompt, user_message)
-        except Exception as exc:
-            self._last_provider_call_metadata = {
-                "provider": self.config.llm_provider,
-                "model": self.config.llm_model,
-                "success": False,
-                "duration_ms": round((perf_counter() - started_at) * 1000, 3),
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-            }
-            if isinstance(exc, AgentExecutionError):
-                raise AgentExecutionError(f"{self.name}: {exc}") from exc
-            raise AgentExecutionError(f"{self.name} failed to call the model provider") from exc
+        max_attempts = self.config.provider_max_attempts
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = provider.generate(system_prompt, user_message)
+                break
+            except ProviderTransientError as exc:
+                self._last_provider_call_metadata = {
+                    "provider": self.config.llm_provider,
+                    "model": self.config.llm_model,
+                    "success": False,
+                    "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "retryable": True,
+                    "attempts_used": attempt,
+                    "max_attempts": max_attempts,
+                }
+                if attempt >= max_attempts:
+                    raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
+                if backoff_seconds > 0:
+                    sleep(backoff_seconds)
+            except Exception as exc:
+                self._last_provider_call_metadata = {
+                    "provider": self.config.llm_provider,
+                    "model": self.config.llm_model,
+                    "success": False,
+                    "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "retryable": False,
+                    "attempts_used": attempt,
+                    "max_attempts": max_attempts,
+                }
+                if isinstance(exc, AgentExecutionError):
+                    raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                raise AgentExecutionError(f"{self.name} failed to call the model provider") from exc
         self._last_provider_call_metadata = {
             "provider": self.config.llm_provider,
             "model": self.config.llm_model,
             "success": True,
             "duration_ms": round((perf_counter() - started_at) * 1000, 3),
             "error_type": None,
+            "attempts_used": attempt,
+            "max_attempts": max_attempts,
         }
         provider_metadata = provider.get_last_call_metadata()
         if provider_metadata is not None:

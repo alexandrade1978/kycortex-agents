@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.base import BaseLLMProvider
 
 
@@ -42,17 +42,17 @@ class OllamaProvider(BaseLLMProvider):
                 response.read()
         except HTTPError as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError(
+            raise ProviderTransientError(
                 f"Ollama health check failed at {self.config.base_url} with HTTP {exc.code}"
             ) from exc
         except (TimeoutError, socket.timeout) as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError(
+            raise ProviderTransientError(
                 f"Ollama server is not responding at {self.config.base_url} (health check timed out after {timeout_seconds:g} seconds)"
             ) from exc
         except (URLError, OSError) as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError(
+            raise ProviderTransientError(
                 f"Ollama server is not responding at {self.config.base_url}"
             ) from exc
 
@@ -87,17 +87,17 @@ class OllamaProvider(BaseLLMProvider):
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError(
+            raise ProviderTransientError(
                 f"Ollama API request failed with HTTP {exc.code} while calling model '{self.config.llm_model}'"
             ) from exc
         except (TimeoutError, socket.timeout) as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError(
+            raise ProviderTransientError(
                 f"Ollama request to model '{self.config.llm_model}' timed out after {self.config.timeout_seconds:g} seconds"
             ) from exc
         except (URLError, OSError) as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError(
+            raise ProviderTransientError(
                 f"Ollama server is not responding at {self.config.base_url}"
             ) from exc
         except json.JSONDecodeError as exc:

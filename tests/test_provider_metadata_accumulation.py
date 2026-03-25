@@ -184,7 +184,8 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert failed.status == TaskStatus.FAILED.value
     assert failed.last_provider_call["provider"] == "openai"
     assert failed.last_provider_call["success"] is False
-    assert failed.last_provider_call["error_type"] == "AgentExecutionError"
+    assert failed.last_provider_call["error_type"] == "ProviderTransientError"
+    assert failed.last_provider_call["retryable"] is True
     assert failed.last_provider_call["error_message"] == "OpenAI provider failed to call the model API"
     assert snapshot.task_results["arch"].failure.details["provider_call"]["model"] == "gpt-4o"
     assert completed.last_provider_call["usage"]["total_tokens"] == 13

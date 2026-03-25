@@ -4,7 +4,7 @@ import pytest
 
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
@@ -200,6 +200,42 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_n
     assert metadata["provider"] == provider_name
     assert metadata["model"] == config.llm_model
     assert metadata["success"] is False
-    assert metadata["error_type"] == "AgentExecutionError"
+    assert metadata["error_type"] == "ProviderTransientError"
+    assert metadata["retryable"] is True
+    assert metadata["attempts_used"] == 1
+    assert metadata["max_attempts"] == 1
     assert expected_message in metadata["error_message"]
     assert metadata["duration_ms"] >= 0
+
+
+def test_execute_records_retry_attempt_metadata_for_transient_provider_recovery(monkeypatch):
+    class FlakyProvider:
+        def __init__(self):
+            self.config = KYCortexConfig(
+                output_dir="./output_test",
+                llm_provider="openai",
+                api_key="token",
+                provider_max_attempts=2,
+                provider_retry_backoff_seconds=0.0,
+            )
+            self.calls = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls += 1
+            if self.calls == 1:
+                raise ProviderTransientError("temporary provider outage")
+            return "RECOVERED RESULT"
+
+        def get_last_call_metadata(self):
+            return {"usage": {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5}}
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda _: None)
+    provider = FlakyProvider()
+    agent = ProviderBackedAgent(provider, provider.config)
+
+    result = agent.execute(build_agent_input())
+
+    assert result.metadata["provider_call"]["success"] is True
+    assert result.metadata["provider_call"]["attempts_used"] == 2
+    assert result.metadata["provider_call"]["max_attempts"] == 2
+    assert result.metadata["provider_call"]["usage"]["total_tokens"] == 5

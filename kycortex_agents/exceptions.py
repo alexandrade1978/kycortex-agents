@@ -3,6 +3,7 @@ __all__ = [
     "ConfigValidationError",
     "KYCortexError",
     "ProviderConfigurationError",
+    "ProviderTransientError",
     "StatePersistenceError",
     "WorkflowDefinitionError",
 ]
@@ -18,6 +19,10 @@ class AgentExecutionError(KYCortexError):
 
 class ProviderConfigurationError(KYCortexError):
     """Raised when the configured LLM provider is not supported."""
+
+
+class ProviderTransientError(AgentExecutionError):
+    """Raised when a provider call fails transiently and may succeed on retry."""
 
 
 class ConfigValidationError(KYCortexError):

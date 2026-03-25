@@ -2,7 +2,7 @@ import pytest
 
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.types import AgentInput, AgentOutput, ArtifactType
 
@@ -171,6 +171,60 @@ def test_chat_captures_failed_provider_call_metadata():
     assert metadata["error_type"] == "RuntimeError"
     assert metadata["error_message"] == "provider down"
     assert metadata["duration_ms"] >= 0
+
+
+def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
+    class FlakyProvider(DummyProvider):
+        def __init__(self):
+            super().__init__(response="ok")
+            self.attempts = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            self.attempts += 1
+            if self.attempts == 1:
+                raise ProviderTransientError("provider temporarily unavailable")
+            return "ok"
+
+    provider = FlakyProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 2
+    agent.config.provider_retry_backoff_seconds = 0.0
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda _: None)
+
+    result = agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert result == "ok"
+    assert provider.calls == [("system", "message"), ("system", "message")]
+    assert metadata is not None
+    assert metadata["success"] is True
+    assert metadata["attempts_used"] == 2
+    assert metadata["max_attempts"] == 2
+
+
+def test_chat_exhausts_transient_provider_retries(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    provider = AlwaysTransientProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 2
+    agent.config.provider_retry_backoff_seconds = 0.0
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda _: None)
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is True
+    assert metadata["attempts_used"] == 2
+    assert metadata["max_attempts"] == 2
+    assert metadata["error_type"] == "ProviderTransientError"
 
 
 @pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])

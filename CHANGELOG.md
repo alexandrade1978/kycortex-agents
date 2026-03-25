@@ -6,6 +6,18 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.10 - 2026-03-25
+
+### Fixed
+
+- Fixed Python 3.10 compatibility for `examples/example_provider_matrix_validation.py` by removing the positional `argparse` `choices` dependency that rejected an empty provider list during `parse_args([])`.
+- Added explicit post-parse provider normalization and validation through `resolve_requested_providers()` so the CLI still defaults to all supported providers and reports unsupported providers with a clear error.
+- Added regression coverage for the default-provider path and unsupported-provider rejection in the provider-matrix example CLI.
+
+### Release Readiness Notes
+
+- Version `1.0.10` is now the released package baseline.
+
 ## 1.0.9 - 2026-03-25
 
 ### Fixed
@@ -16,7 +28,8 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Release Readiness Notes
 
-- Version `1.0.9` is now the released package baseline.
+- Version `1.0.9` is now the previous package baseline.
+- `Release #11` for `v1.0.9` succeeded, but `CI #23` still failed in `Full Test Suite (3.10)` before the Python 3.10 parser compatibility fix shipped.
 
 ## 1.0.8 - 2026-03-25
 

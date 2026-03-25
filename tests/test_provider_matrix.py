@@ -245,6 +245,23 @@ def test_provider_matrix_parser_defaults_to_all_supported_providers():
     args = module.build_parser().parse_args([])
 
     assert args.providers == []
+    assert module.resolve_requested_providers(args.providers) == ["anthropic", "ollama", "openai"]
+
+
+def test_provider_matrix_parser_rejects_unsupported_provider():
+    module = _load_example_module(
+        "example_provider_matrix_validation_parser_invalid_provider_test",
+        "examples/example_provider_matrix_validation.py",
+    )
+
+    try:
+        module.resolve_requested_providers(["invalid-provider"])
+    except SystemExit as exc:
+        assert str(exc) == (
+            "Unsupported providers: invalid-provider. Supported providers: anthropic, ollama, openai."
+        )
+    else:  # pragma: no cover - defensive guard
+        raise AssertionError("Expected unsupported provider to raise SystemExit")
 
 
 def test_execute_empirical_validation_workflow_consumes_bounded_repair_cycle(monkeypatch, tmp_path):

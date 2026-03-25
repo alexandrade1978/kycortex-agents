@@ -20,9 +20,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "providers",
         nargs="*",
-        choices=sorted(DEFAULT_PROVIDER_MODELS),
         default=None,
-        help="Providers to validate. Defaults to all supported providers.",
+        metavar="provider",
+        help=(
+            "Providers to validate. Defaults to all supported providers: "
+            + ", ".join(sorted(DEFAULT_PROVIDER_MODELS))
+            + "."
+        ),
     )
     parser.add_argument(
         "--output-root",
@@ -53,6 +57,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional custom path for the aggregated matrix summary JSON.",
     )
     return parser
+
+
+def resolve_requested_providers(providers: list[str] | None) -> list[str]:
+    requested = providers or sorted(DEFAULT_PROVIDER_MODELS)
+    normalized = [provider.strip().lower() for provider in requested]
+    unsupported = sorted({provider for provider in normalized if provider not in DEFAULT_PROVIDER_MODELS})
+    if unsupported:
+        supported = ", ".join(sorted(DEFAULT_PROVIDER_MODELS))
+        unsupported_list = ", ".join(unsupported)
+        raise SystemExit(f"Unsupported providers: {unsupported_list}. Supported providers: {supported}.")
+    return normalized
 
 
 def run_provider(
@@ -106,7 +121,7 @@ def run_provider(
 def main() -> None:
     args = build_parser().parse_args()
     output_root = args.output_root
-    providers = args.providers or sorted(DEFAULT_PROVIDER_MODELS)
+    providers = resolve_requested_providers(args.providers)
 
     results = [
         run_provider(

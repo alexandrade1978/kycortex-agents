@@ -8,8 +8,8 @@ from kycortex_agents.types import AgentInput, AgentOutput, ArtifactType
 
 
 class DummyAgent(BaseAgent):
-    def __init__(self, provider):
-        super().__init__("Dummy", "Testing", KYCortexConfig(output_dir="./output_test"))
+    def __init__(self, provider, config=None):
+        super().__init__("Dummy", "Testing", config or KYCortexConfig(output_dir="./output_test"))
         self._provider = provider
         self.events = []
 
@@ -61,8 +61,11 @@ def test_chat_returns_response_content():
     metadata = agent.get_last_provider_call_metadata()
     assert metadata is not None
     assert metadata["provider_call_count"] == 1
+    assert metadata["provider_call_counts_by_provider"] == {"openai": 1}
     assert metadata["provider_max_calls_per_agent"] == 0
+    assert metadata["provider_max_calls_per_provider"] == {}
     assert metadata["provider_remaining_calls"] is None
+    assert metadata["provider_remaining_calls_by_provider"] == {}
     assert metadata["provider_max_elapsed_seconds_per_call"] == 0.0
     assert metadata["provider_remaining_elapsed_seconds"] is None
     assert metadata["provider_cancellation_requested"] is False
@@ -390,6 +393,75 @@ def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkey
     ]
 
 
+def test_chat_fails_fast_when_provider_specific_call_budget_is_exhausted():
+    provider = DummyProvider(response="ok")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_max_calls_per_provider={"openai": 1},
+    )
+    agent = DummyAgent(provider, config)
+
+    first_result = agent.chat("system", "message")
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted for openai after 1 calls"):
+        agent.chat("system", "second-message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert first_result == "ok"
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is False
+    assert metadata["attempts_used"] == 0
+    assert metadata["provider_call_count"] == 1
+    assert metadata["provider_call_counts_by_provider"] == {"openai": 1}
+    assert metadata["provider_max_calls_per_provider"] == {"openai": 1}
+    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+    assert metadata["attempt_history"] == []
+    assert provider.calls == [("system", "message")]
+
+
+def test_chat_provider_specific_budget_blocks_additional_retry_attempts_after_first_failure(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    provider = AlwaysTransientProvider()
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_max_attempts=2,
+        provider_retry_backoff_seconds=0.0,
+        provider_max_calls_per_provider={"openai": 1},
+    )
+    agent = DummyAgent(provider, config)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted for openai after 1 calls"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is False
+    assert metadata["attempts_used"] == 1
+    assert metadata["provider_call_count"] == 1
+    assert metadata["provider_call_counts_by_provider"] == {"openai": 1}
+    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+    assert metadata["attempt_history"] == [
+        {
+            "attempt": 1,
+            "success": False,
+            "retryable": True,
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "uncapped_backoff_seconds": 0.0,
+            "base_backoff_seconds": 0.0,
+            "jitter_seconds": 0.0,
+            "backoff_seconds": 0.0,
+        }
+    ]
+
+
 def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attempt(monkeypatch):
     class AlwaysTransientProvider(DummyProvider):
         def generate(self, system_prompt: str, user_message: str) -> str:
@@ -641,6 +713,47 @@ def test_chat_resets_circuit_breaker_after_successful_call(monkeypatch):
     assert metadata["circuit_breaker_remaining_seconds"] == 0.0
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
+
+
+def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monkeypatch):
+    primary_provider = DummyProvider(response="PRIMARY RESULT")
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_max_calls_per_provider={"openai": 1},
+    )
+    agent = DummyAgent(primary_provider, config)
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+
+    first_result = agent.chat("system", "message")
+    second_result = agent.chat("system", "second-message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert first_result == "PRIMARY RESULT"
+    assert second_result == "FALLBACK RESULT"
+    assert metadata is not None
+    assert metadata["provider"] == "anthropic"
+    assert metadata["fallback_used"] is True
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "skipped_call_budget_exhausted",
+            "provider_call_count": 1,
+            "provider_max_calls": 1,
+        }
+    ]
+    assert metadata["provider_call_counts_by_provider"] == {"openai": 1, "anthropic": 1}
+    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+    assert primary_provider.calls == [("system", "message")]
+    assert fallback_provider.calls == [("system", "second-message")]
 
 
 @pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])

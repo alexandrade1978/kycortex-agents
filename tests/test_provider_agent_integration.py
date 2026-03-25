@@ -343,3 +343,67 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
     assert metadata["provider_health"]["openai"]["status"] == "degraded"
     assert metadata["provider_health"]["openai"]["last_failure_retryable"] is True
     assert metadata["provider_health"]["anthropic"]["status"] == "healthy"
+
+
+def test_execute_falls_back_to_secondary_provider_after_primary_provider_budget_exhaustion(monkeypatch):
+    primary_config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        api_key="token",
+        llm_model="gpt-4o",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_max_calls_per_provider={"openai": 1},
+    )
+    primary_provider = OpenAIProvider(
+        primary_config,
+        client=build_openai_client(
+            response=SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="PRIMARY RESULT"))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            )
+        ),
+    )
+    fallback_provider = AnthropicProvider(
+        KYCortexConfig(
+            output_dir="./output_test",
+            llm_provider="anthropic",
+            api_key="token",
+            llm_model="claude-3-5-sonnet",
+        ),
+        client=build_anthropic_client(
+            response=SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="FALLBACK RESULT")],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=8),
+            )
+        ),
+    )
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        assert runtime_config.llm_model == "claude-3-5-sonnet"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+    agent = ProviderBackedAgent(primary_provider, primary_config)
+
+    first_result = agent.execute(build_agent_input())
+    second_result = agent.execute(build_agent_input())
+
+    metadata = second_result.metadata["provider_call"]
+    assert first_result.raw_content == "PRIMARY RESULT"
+    assert second_result.raw_content == "FALLBACK RESULT"
+    assert metadata["provider"] == "anthropic"
+    assert metadata["fallback_used"] is True
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "skipped_call_budget_exhausted",
+            "provider_call_count": 1,
+            "provider_max_calls": 1,
+        }
+    ]
+    assert metadata["provider_call_counts_by_provider"] == {"openai": 1, "anthropic": 1}
+    assert metadata["provider_max_calls_per_provider"] == {"openai": 1}
+    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}

@@ -132,6 +132,28 @@ def test_config_rejects_negative_provider_call_budget(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_max_calls_per_agent=-1)
 
 
+def test_config_rejects_negative_provider_specific_call_budget(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_max_calls_per_provider values must be zero or greater",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_max_calls_per_provider={"openai": -1},
+        )
+
+
+def test_config_rejects_unsupported_provider_specific_call_budget_key(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_max_calls_per_provider contains unsupported provider: custom",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_max_calls_per_provider={"custom": 1},
+        )
+
+
 def test_config_rejects_negative_provider_elapsed_budget(tmp_path):
     with pytest.raises(ConfigValidationError, match="provider_max_elapsed_seconds_per_call must be zero or greater"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_max_elapsed_seconds_per_call=-0.1)

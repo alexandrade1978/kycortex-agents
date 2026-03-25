@@ -31,6 +31,7 @@ class BaseAgent(ABC):
         self._provider_cache: dict[tuple[str, str], BaseLLMProvider] = {}
         self._last_provider_call_metadata: Optional[dict[str, Any]] = None
         self._provider_call_count = 0
+        self._provider_call_counts: dict[str, int] = {}
         self._provider_transient_failure_streaks: dict[str, int] = {}
         self._provider_circuit_open_untils: dict[str, float] = {}
         self._provider_last_outcomes: dict[str, str] = {}
@@ -117,6 +118,43 @@ class BaseAgent(ABC):
                     **self._provider_health_metadata(current_time, provider_plan),
                 }
                 raise AgentExecutionError(message)
+            if self._is_provider_specific_call_budget_exhausted(provider_name):
+                provider_call_count = self._provider_call_counts.get(provider_name, 0)
+                provider_max_calls = self.config.provider_max_calls_per_provider.get(provider_name, 0)
+                if provider_index < len(provider_plan) - 1:
+                    fallback_history.append(
+                        {
+                            "provider": provider_name,
+                            "model": model_name,
+                            "status": "skipped_call_budget_exhausted",
+                            "provider_call_count": provider_call_count,
+                            "provider_max_calls": provider_max_calls,
+                        }
+                    )
+                    continue
+                message = (
+                    f"{self.name}: provider call budget exhausted for {provider_name} "
+                    f"after {provider_call_count} calls"
+                )
+                self._last_provider_call_metadata = {
+                    "provider": provider_name,
+                    "model": model_name,
+                    "success": False,
+                    "duration_ms": round((current_time - started_at) * 1000, 3),
+                    "error_type": "AgentExecutionError",
+                    "error_message": message.removeprefix(f"{self.name}: "),
+                    "retryable": False,
+                    "attempts_used": len(attempt_history),
+                    "max_attempts": max_attempts,
+                    "attempt_history": list(attempt_history),
+                    **self._provider_call_budget_metadata(),
+                    **self._provider_elapsed_budget_metadata(started_at, current_time),
+                    **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                    **self._provider_cancellation_metadata(),
+                    **self._provider_circuit_metadata(provider_name, current_time),
+                    **self._provider_health_metadata(current_time, provider_plan),
+                }
+                raise AgentExecutionError(message)
             for attempt in range(1, max_attempts + 1):
                 current_time = perf_counter()
                 self._raise_if_provider_cancellation_requested(
@@ -176,8 +214,47 @@ class BaseAgent(ABC):
                         **self._provider_health_metadata(current_time, provider_plan),
                     }
                     raise AgentExecutionError(message)
+                if self._is_provider_specific_call_budget_exhausted(provider_name):
+                    provider_call_count = self._provider_call_counts.get(provider_name, 0)
+                    provider_max_calls = self.config.provider_max_calls_per_provider.get(provider_name, 0)
+                    if provider_index < len(provider_plan) - 1:
+                        fallback_history.append(
+                            {
+                                "provider": provider_name,
+                                "model": model_name,
+                                "status": "failed_call_budget_exhausted",
+                                "provider_call_count": provider_call_count,
+                                "provider_max_calls": provider_max_calls,
+                                "attempts_used": len(attempt_history),
+                            }
+                        )
+                        break
+                    message = (
+                        f"{self.name}: provider call budget exhausted for {provider_name} "
+                        f"after {provider_call_count} calls"
+                    )
+                    self._last_provider_call_metadata = {
+                        "provider": provider_name,
+                        "model": model_name,
+                        "success": False,
+                        "duration_ms": round((current_time - started_at) * 1000, 3),
+                        "error_type": "AgentExecutionError",
+                        "error_message": message.removeprefix(f"{self.name}: "),
+                        "retryable": False,
+                        "attempts_used": len(attempt_history),
+                        "max_attempts": max_attempts,
+                        "attempt_history": list(attempt_history),
+                        **self._provider_call_budget_metadata(),
+                        **self._provider_elapsed_budget_metadata(started_at, current_time),
+                        **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_cancellation_metadata(),
+                        **self._provider_circuit_metadata(provider_name, current_time),
+                        **self._provider_health_metadata(current_time, provider_plan),
+                    }
+                    raise AgentExecutionError(message)
                 try:
                     self._provider_call_count += 1
+                    self._provider_call_counts[provider_name] = self._provider_call_counts.get(provider_name, 0) + 1
                     response = provider.generate(system_prompt, user_message)
                     self._reset_provider_circuit_breaker(provider_name)
                     self._record_provider_success(provider_name, current_time)
@@ -378,6 +455,12 @@ class BaseAgent(ABC):
             return False
         return self._provider_call_count >= self.config.provider_max_calls_per_agent
 
+    def _is_provider_specific_call_budget_exhausted(self, provider_name: str) -> bool:
+        provider_max_calls = self.config.provider_max_calls_per_provider.get(provider_name, 0)
+        if provider_max_calls <= 0:
+            return False
+        return self._provider_call_counts.get(provider_name, 0) >= provider_max_calls
+
     def _is_provider_elapsed_budget_exhausted(self, started_at: float, current_time: float) -> bool:
         if self.config.provider_max_elapsed_seconds_per_call <= 0:
             return False
@@ -498,10 +581,17 @@ class BaseAgent(ABC):
                 self.config.provider_max_calls_per_agent - self._provider_call_count,
                 0,
             )
+        remaining_calls_by_provider = {
+            provider_name: max(max_calls - self._provider_call_counts.get(provider_name, 0), 0)
+            for provider_name, max_calls in self.config.provider_max_calls_per_provider.items()
+        }
         return {
             "provider_call_count": self._provider_call_count,
+            "provider_call_counts_by_provider": dict(self._provider_call_counts),
             "provider_max_calls_per_agent": self.config.provider_max_calls_per_agent,
+            "provider_max_calls_per_provider": dict(self.config.provider_max_calls_per_provider),
             "provider_remaining_calls": remaining_calls,
+            "provider_remaining_calls_by_provider": remaining_calls_by_provider,
         }
 
     def _provider_elapsed_budget_metadata(

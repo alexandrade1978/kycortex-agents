@@ -44,6 +44,7 @@ class KYCortexConfig:
     provider_retry_max_backoff_seconds: Optional[float] = None
     provider_retry_jitter_ratio: float = 0.0
     provider_max_calls_per_agent: int = 0
+    provider_max_calls_per_provider: dict[str, int] = field(default_factory=dict)
     provider_max_elapsed_seconds_per_call: float = 0.0
     provider_fallback_order: tuple[str, ...] = ()
     provider_fallback_models: dict[str, str] = field(default_factory=dict)
@@ -72,6 +73,11 @@ class KYCortexConfig:
         self.provider_fallback_models = {
             provider_name.strip().lower(): model_name.strip()
             for provider_name, model_name in self.provider_fallback_models.items()
+            if provider_name.strip()
+        }
+        self.provider_max_calls_per_provider = {
+            provider_name.strip().lower(): max_calls
+            for provider_name, max_calls in self.provider_max_calls_per_provider.items()
             if provider_name.strip()
         }
         if self.api_key is None:
@@ -133,6 +139,15 @@ class KYCortexConfig:
             raise ConfigValidationError("provider_retry_jitter_ratio must be between 0 and 1")
         if self.provider_max_calls_per_agent < 0:
             raise ConfigValidationError("provider_max_calls_per_agent must be zero or greater")
+        for provider_name, max_calls in self.provider_max_calls_per_provider.items():
+            if provider_name not in PROVIDER_ENV_VARS:
+                raise ConfigValidationError(
+                    f"provider_max_calls_per_provider contains unsupported provider: {provider_name}"
+                )
+            if max_calls < 0:
+                raise ConfigValidationError(
+                    "provider_max_calls_per_provider values must be zero or greater"
+                )
         if self.provider_max_elapsed_seconds_per_call < 0:
             raise ConfigValidationError("provider_max_elapsed_seconds_per_call must be zero or greater")
         if self.provider_cancellation_check_interval_seconds <= 0:

@@ -58,6 +58,11 @@ def test_chat_returns_response_content():
 
     assert result == "ok"
     assert provider.calls == [("system", "message")]
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["provider_call_count"] == 1
+    assert metadata["provider_max_calls_per_agent"] == 0
+    assert metadata["provider_remaining_calls"] is None
 
 
 def test_chat_raises_on_provider_error():
@@ -314,6 +319,67 @@ def test_chat_applies_retry_jitter_to_sleep(monkeypatch):
     assert metadata["attempt_history"][0]["base_backoff_seconds"] == 1.0
     assert metadata["attempt_history"][0]["jitter_seconds"] == 0.25
     assert metadata["attempt_history"][0]["backoff_seconds"] == 1.25
+
+
+def test_chat_fails_fast_when_provider_call_budget_is_exhausted():
+    provider = DummyProvider(response="ok")
+    agent = DummyAgent(provider)
+    agent.config.provider_max_calls_per_agent = 1
+
+    first_result = agent.chat("system", "message")
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted after 1 calls"):
+        agent.chat("system", "second-message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert first_result == "ok"
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is False
+    assert metadata["attempts_used"] == 0
+    assert metadata["provider_call_count"] == 1
+    assert metadata["provider_max_calls_per_agent"] == 1
+    assert metadata["provider_remaining_calls"] == 0
+    assert metadata["attempt_history"] == []
+    assert provider.calls == [("system", "message")]
+
+
+def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    provider = AlwaysTransientProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 2
+    agent.config.provider_retry_backoff_seconds = 0.0
+    agent.config.provider_max_calls_per_agent = 1
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted after 1 calls"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is False
+    assert metadata["attempts_used"] == 1
+    assert metadata["provider_call_count"] == 1
+    assert metadata["provider_remaining_calls"] == 0
+    assert metadata["attempt_history"] == [
+        {
+            "attempt": 1,
+            "success": False,
+            "retryable": True,
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "uncapped_backoff_seconds": 0.0,
+            "base_backoff_seconds": 0.0,
+            "jitter_seconds": 0.0,
+            "backoff_seconds": 0.0,
+        }
+    ]
 
 
 def test_chat_caps_retry_backoff_before_jitter(monkeypatch):

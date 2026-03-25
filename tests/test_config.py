@@ -127,6 +127,11 @@ def test_config_rejects_invalid_provider_retry_jitter_ratio(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_jitter_ratio=1.5)
 
 
+def test_config_rejects_negative_provider_call_budget(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_max_calls_per_agent must be zero or greater"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), provider_max_calls_per_agent=-1)
+
+
 def test_config_rejects_negative_provider_retry_max_backoff(tmp_path):
     with pytest.raises(ConfigValidationError, match="provider_retry_max_backoff_seconds must be zero or greater when provided"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_max_backoff_seconds=-0.1)

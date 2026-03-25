@@ -43,6 +43,7 @@ class KYCortexConfig:
     provider_retry_backoff_seconds: float = 0.0
     provider_retry_max_backoff_seconds: Optional[float] = None
     provider_retry_jitter_ratio: float = 0.0
+    provider_max_calls_per_agent: int = 0
     provider_circuit_breaker_threshold: int = 0
     provider_circuit_breaker_cooldown_seconds: float = 0.0
     execution_sandbox_enabled: bool = True
@@ -116,6 +117,8 @@ class KYCortexConfig:
             raise ConfigValidationError("provider_retry_max_backoff_seconds must be zero or greater when provided")
         if not 0 <= self.provider_retry_jitter_ratio <= 1:
             raise ConfigValidationError("provider_retry_jitter_ratio must be between 0 and 1")
+        if self.provider_max_calls_per_agent < 0:
+            raise ConfigValidationError("provider_max_calls_per_agent must be zero or greater")
         if self.provider_circuit_breaker_threshold < 0:
             raise ConfigValidationError("provider_circuit_breaker_threshold must be zero or greater")
         if self.provider_circuit_breaker_cooldown_seconds < 0:

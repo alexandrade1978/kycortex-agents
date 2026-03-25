@@ -92,6 +92,47 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     assert summary["task_status_counts"] == {"done": 2}
 
 
+def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
+    from kycortex_agents.provider_matrix import summarize_workflow_run
+
+    project = ProjectState(
+        project_name="Demo",
+        goal="Validate provider summary output",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.phase = "failed"
+    project.terminal_outcome = "failed"
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Run tests",
+            assigned_to="qa_tester",
+            status="failed",
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests__repair_1",
+            title="Tests Repair",
+            description="Repair tests",
+            assigned_to="qa_tester",
+            status="failed",
+            repair_origin_task_id="tests",
+            repair_attempt=1,
+        )
+    )
+
+    summary = summarize_workflow_run(
+        project,
+        provider="openai",
+        model="gpt-4o-mini",
+        output_dir=str(tmp_path / "output"),
+    )
+
+    assert summary["failed_task_ids"] == ["tests"]
+
+
 def test_provider_matrix_resolve_model_handles_override_and_ollama_probe(monkeypatch):
     from kycortex_agents.provider_matrix import resolve_model
 
@@ -111,6 +152,42 @@ def test_provider_matrix_resolve_model_handles_override_and_ollama_probe(monkeyp
     monkeypatch.setattr("kycortex_agents.provider_matrix.urlopen", lambda *args, **kwargs: Response())
 
     assert resolve_model("ollama", None) == "llama3.2:latest"
+
+
+def test_provider_matrix_resolve_model_prefers_default_when_installed(monkeypatch):
+    from kycortex_agents.provider_matrix import resolve_model
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps({"models": [{"name": "llama3"}, {"name": "llama3.2:latest"}]}).encode("utf-8")
+
+    monkeypatch.setattr("kycortex_agents.provider_matrix.urlopen", lambda *args, **kwargs: Response())
+
+    assert resolve_model("ollama", None) == "llama3"
+
+
+def test_provider_matrix_resolve_model_falls_back_when_probe_returns_no_models(monkeypatch):
+    from kycortex_agents.provider_matrix import resolve_model
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps({"models": []}).encode("utf-8")
+
+    monkeypatch.setattr("kycortex_agents.provider_matrix.urlopen", lambda *args, **kwargs: Response())
+
+    assert resolve_model("ollama", None) == "llama3"
 
 
 def test_provider_matrix_resolve_model_falls_back_to_default_when_ollama_probe_fails(monkeypatch):

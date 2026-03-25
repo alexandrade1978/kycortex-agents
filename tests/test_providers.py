@@ -1,3 +1,4 @@
+import sys
 from types import SimpleNamespace
 from urllib.error import HTTPError
 
@@ -185,6 +186,41 @@ def test_openai_provider_wraps_api_error(tmp_path):
         provider.generate("system", "message")
 
 
+def test_openai_provider_builds_client_from_installed_sdk(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), api_key="token")
+
+    class FakeOpenAI:
+        def __init__(self, api_key):
+            self.api_key = api_key
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+
+    provider = OpenAIProvider(config)
+    client = provider._get_client()
+
+    assert isinstance(client, FakeOpenAI)
+    assert client.api_key == "token"
+
+
+def test_openai_provider_rejects_invalid_and_empty_payloads(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    invalid_provider = OpenAIProvider(config, client=build_client(response=SimpleNamespace(choices=[])))
+
+    with pytest.raises(AgentExecutionError, match="invalid response payload"):
+        invalid_provider.generate("system", "message")
+
+    empty_provider = OpenAIProvider(config, client=build_client(response=build_response("")))
+
+    with pytest.raises(AgentExecutionError, match="empty response"):
+        empty_provider.generate("system", "message")
+
+
+def test_openai_provider_metadata_is_none_before_calls(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+
+    assert OpenAIProvider(config, client=build_client(response=build_response("ok"))).get_last_call_metadata() is None
+
+
 def test_anthropic_provider_returns_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
     response = SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")])
@@ -229,6 +265,44 @@ def test_anthropic_provider_wraps_api_error(tmp_path):
         provider.generate("system", "message")
 
 
+def test_anthropic_provider_builds_client_from_installed_sdk(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token")
+
+    class FakeAnthropic:
+        def __init__(self, api_key):
+            self.api_key = api_key
+
+    monkeypatch.setitem(sys.modules, "anthropic", SimpleNamespace(Anthropic=FakeAnthropic))
+
+    provider = AnthropicProvider(config)
+    client = provider._get_client()
+
+    assert isinstance(client, FakeAnthropic)
+    assert client.api_key == "token"
+
+
+def test_anthropic_provider_rejects_invalid_and_empty_payloads(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    invalid_provider = AnthropicProvider(config, client=build_anthropic_client(response=SimpleNamespace()))
+
+    with pytest.raises(AgentExecutionError, match="invalid response payload"):
+        invalid_provider.generate("system", "message")
+
+    empty_provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(response=SimpleNamespace(content=[SimpleNamespace(type="tool_use", text="")]))
+    )
+
+    with pytest.raises(AgentExecutionError, match="empty response"):
+        empty_provider.generate("system", "message")
+
+
+def test_anthropic_provider_metadata_is_none_before_calls(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+
+    assert AnthropicProvider(config, client=build_anthropic_client(response=SimpleNamespace())).get_last_call_metadata() is None
+
+
 def test_ollama_provider_returns_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
     provider = OllamaProvider(
@@ -266,6 +340,17 @@ def test_ollama_provider_rejects_unreachable_server(tmp_path):
     )
 
     with pytest.raises(AgentExecutionError, match=r"Ollama server is not responding at http://localhost:11434"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_surfaces_health_check_http_error(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(error=build_http_error("http://localhost:11434/api/tags", 503, "Unavailable")),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"health check failed at http://localhost:11434 with HTTP 503"):
         provider.generate("system", "message")
 
 
@@ -324,6 +409,34 @@ def test_ollama_provider_rejects_invalid_json_response(tmp_path):
 
     with pytest.raises(AgentExecutionError, match=r"invalid JSON response"):
         provider.generate("system", "message")
+
+
+def test_ollama_provider_rejects_empty_response_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload=['{"models": []}', '{"response": ""}']),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"empty response"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_rejects_generation_connection_failure_after_preflight(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload=['{"models": []}'], error=[None, OSError("down")]),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"Ollama server is not responding at http://localhost:11434"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_metadata_is_none_before_calls(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+
+    assert OllamaProvider(config, request_opener=build_ollama_opener(payload=['{"models": []}'])).get_last_call_metadata() is None
 
 
 def test_base_provider_default_metadata_is_none():

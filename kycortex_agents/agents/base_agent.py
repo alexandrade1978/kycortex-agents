@@ -41,7 +41,7 @@ class BaseAgent(ABC):
     def chat(self, system_prompt: str, user_message: str) -> str:
         provider = self._get_provider()
         started_at = perf_counter()
-        current_time = perf_counter()
+        current_time = started_at
         if self._is_provider_circuit_open(current_time):
             remaining_seconds = round(max(self._provider_circuit_open_until - current_time, 0.0), 6)
             message = f"{self.name}: provider circuit breaker is open for {remaining_seconds:g} more seconds"
@@ -56,12 +56,35 @@ class BaseAgent(ABC):
                 "attempts_used": 0,
                 "max_attempts": self.config.provider_max_attempts,
                 "attempt_history": [],
+                **self._provider_elapsed_budget_metadata(started_at, current_time),
                 **self._provider_circuit_metadata(current_time),
             }
             raise AgentExecutionError(message)
         max_attempts = self.config.provider_max_attempts
         attempt_history: list[dict[str, Any]] = []
         for attempt in range(1, max_attempts + 1):
+            current_time = perf_counter()
+            if self._is_provider_elapsed_budget_exhausted(started_at, current_time):
+                message = (
+                    f"{self.name}: provider elapsed budget exhausted after "
+                    f"{current_time - started_at:g} seconds"
+                )
+                self._last_provider_call_metadata = {
+                    "provider": self.config.llm_provider,
+                    "model": self.config.llm_model,
+                    "success": False,
+                    "duration_ms": round((current_time - started_at) * 1000, 3),
+                    "error_type": "AgentExecutionError",
+                    "error_message": message.removeprefix(f"{self.name}: "),
+                    "retryable": False,
+                    "attempts_used": len(attempt_history),
+                    "max_attempts": max_attempts,
+                    "attempt_history": list(attempt_history),
+                    **self._provider_call_budget_metadata(),
+                    **self._provider_elapsed_budget_metadata(started_at, current_time),
+                    **self._provider_circuit_metadata(current_time),
+                }
+                raise AgentExecutionError(message)
             if self._is_provider_call_budget_exhausted():
                 message = (
                     f"{self.name}: provider call budget exhausted after "
@@ -79,7 +102,8 @@ class BaseAgent(ABC):
                     "max_attempts": max_attempts,
                     "attempt_history": list(attempt_history),
                     **self._provider_call_budget_metadata(),
-                    **self._provider_circuit_metadata(perf_counter()),
+                    **self._provider_elapsed_budget_metadata(started_at, current_time),
+                    **self._provider_circuit_metadata(current_time),
                 }
                 raise AgentExecutionError(message)
             try:
@@ -133,11 +157,38 @@ class BaseAgent(ABC):
                     "max_attempts": max_attempts,
                     "attempt_history": list(attempt_history),
                     **self._provider_call_budget_metadata(),
+                    **self._provider_elapsed_budget_metadata(started_at, perf_counter()),
                 }
                 if attempt >= max_attempts:
                     self._record_provider_transient_failure(perf_counter())
                     self._last_provider_call_metadata.update(self._provider_circuit_metadata(perf_counter()))
                     raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                remaining_elapsed_budget = self._provider_elapsed_budget_remaining_seconds(
+                    started_at,
+                    perf_counter(),
+                )
+                if remaining_elapsed_budget is not None and total_backoff_seconds >= remaining_elapsed_budget:
+                    current_time = perf_counter()
+                    message = (
+                        f"{self.name}: provider elapsed budget exhausted after "
+                        f"{current_time - started_at:g} seconds"
+                    )
+                    self._last_provider_call_metadata = {
+                        "provider": self.config.llm_provider,
+                        "model": self.config.llm_model,
+                        "success": False,
+                        "duration_ms": round((current_time - started_at) * 1000, 3),
+                        "error_type": "AgentExecutionError",
+                        "error_message": message.removeprefix(f"{self.name}: "),
+                        "retryable": False,
+                        "attempts_used": attempt,
+                        "max_attempts": max_attempts,
+                        "attempt_history": list(attempt_history),
+                        **self._provider_call_budget_metadata(),
+                        **self._provider_elapsed_budget_metadata(started_at, current_time),
+                        **self._provider_circuit_metadata(current_time),
+                    }
+                    raise AgentExecutionError(message) from exc
                 if total_backoff_seconds > 0:
                     sleep(total_backoff_seconds)
             except Exception as exc:
@@ -164,6 +215,7 @@ class BaseAgent(ABC):
                     "max_attempts": max_attempts,
                     "attempt_history": list(attempt_history),
                     **self._provider_call_budget_metadata(),
+                    **self._provider_elapsed_budget_metadata(started_at, perf_counter()),
                     **self._provider_circuit_metadata(perf_counter()),
                 }
                 if isinstance(exc, AgentExecutionError):
@@ -179,6 +231,7 @@ class BaseAgent(ABC):
             "max_attempts": max_attempts,
             "attempt_history": list(attempt_history),
             **self._provider_call_budget_metadata(),
+            **self._provider_elapsed_budget_metadata(started_at, perf_counter()),
             **self._provider_circuit_metadata(perf_counter()),
         }
         provider_metadata = provider.get_last_call_metadata()
@@ -195,6 +248,23 @@ class BaseAgent(ABC):
         if self.config.provider_max_calls_per_agent <= 0:
             return False
         return self._provider_call_count >= self.config.provider_max_calls_per_agent
+
+    def _is_provider_elapsed_budget_exhausted(self, started_at: float, current_time: float) -> bool:
+        if self.config.provider_max_elapsed_seconds_per_call <= 0:
+            return False
+        return (current_time - started_at) >= self.config.provider_max_elapsed_seconds_per_call
+
+    def _provider_elapsed_budget_remaining_seconds(
+        self,
+        started_at: float,
+        current_time: float,
+    ) -> Optional[float]:
+        if self.config.provider_max_elapsed_seconds_per_call <= 0:
+            return None
+        return max(
+            self.config.provider_max_elapsed_seconds_per_call - (current_time - started_at),
+            0.0,
+        )
 
     def _record_provider_transient_failure(self, current_time: float) -> None:
         if self.config.provider_circuit_breaker_threshold <= 0:
@@ -237,6 +307,28 @@ class BaseAgent(ABC):
             "provider_call_count": self._provider_call_count,
             "provider_max_calls_per_agent": self.config.provider_max_calls_per_agent,
             "provider_remaining_calls": remaining_calls,
+        }
+
+    def _provider_elapsed_budget_metadata(
+        self,
+        started_at: float,
+        current_time: float,
+    ) -> dict[str, Any]:
+        elapsed_seconds = max(current_time - started_at, 0.0)
+        return {
+            "provider_elapsed_seconds": round(elapsed_seconds, 6),
+            "provider_max_elapsed_seconds_per_call": round(
+                self.config.provider_max_elapsed_seconds_per_call,
+                6,
+            ),
+            "provider_remaining_elapsed_seconds": (
+                None
+                if self.config.provider_max_elapsed_seconds_per_call <= 0
+                else round(
+                    self._provider_elapsed_budget_remaining_seconds(started_at, current_time) or 0.0,
+                    6,
+                )
+            ),
         }
 
     def run_with_input(self, agent_input: AgentInput) -> str | AgentOutput:

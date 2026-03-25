@@ -63,6 +63,8 @@ def test_chat_returns_response_content():
     assert metadata["provider_call_count"] == 1
     assert metadata["provider_max_calls_per_agent"] == 0
     assert metadata["provider_remaining_calls"] is None
+    assert metadata["provider_max_elapsed_seconds_per_call"] == 0.0
+    assert metadata["provider_remaining_elapsed_seconds"] is None
 
 
 def test_chat_raises_on_provider_error():
@@ -382,6 +384,75 @@ def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkey
     ]
 
 
+def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attempt(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    provider = AlwaysTransientProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 3
+    agent.config.provider_retry_backoff_seconds = 0.0
+    agent.config.provider_max_elapsed_seconds_per_call = 0.5
+    timestamps = iter([100.0, 100.0, 100.2, 100.2, 100.6, 100.6])
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps))
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider elapsed budget exhausted after 0.6 seconds"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is False
+    assert metadata["attempts_used"] == 1
+    assert metadata["provider_elapsed_seconds"] == 0.6
+    assert metadata["provider_max_elapsed_seconds_per_call"] == 0.5
+    assert metadata["provider_remaining_elapsed_seconds"] == 0.0
+    assert metadata["attempt_history"] == [
+        {
+            "attempt": 1,
+            "success": False,
+            "retryable": True,
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "uncapped_backoff_seconds": 0.0,
+            "base_backoff_seconds": 0.0,
+            "jitter_seconds": 0.0,
+            "backoff_seconds": 0.0,
+        }
+    ]
+
+
+def test_chat_does_not_sleep_past_elapsed_budget(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    provider = AlwaysTransientProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 3
+    agent.config.provider_retry_backoff_seconds = 1.0
+    agent.config.provider_max_elapsed_seconds_per_call = 0.5
+    sleep_calls: list[float] = []
+    timestamps = iter([100.0, 100.0, 100.2, 100.2, 100.2, 100.2, 100.2])
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps))
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda seconds: sleep_calls.append(seconds))
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider elapsed budget exhausted after 0.2 seconds"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["attempts_used"] == 1
+    assert metadata["provider_elapsed_seconds"] == 0.2
+    assert metadata["provider_remaining_elapsed_seconds"] == 0.3
+    assert sleep_calls == []
+
+
 def test_chat_caps_retry_backoff_before_jitter(monkeypatch):
     class CappedBackoffProvider(DummyProvider):
         def __init__(self):
@@ -480,8 +551,8 @@ def test_chat_resets_circuit_breaker_after_successful_call(monkeypatch):
     agent.config.provider_circuit_breaker_threshold = 2
     agent.config.provider_circuit_breaker_cooldown_seconds = 10.0
 
-    timestamps = iter([100.0, 100.0, 100.0, 100.0, 100.0, 111.0, 111.0, 111.0, 111.0])
-    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps))
+    timestamps = iter([100.0, 100.0, 100.0, 100.0, 100.0, 111.0, 111.0, 111.0, 111.0, 111.0])
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps, 111.0))
 
     with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
         agent.chat("system", "message")

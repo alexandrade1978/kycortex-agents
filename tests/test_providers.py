@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from urllib.error import HTTPError
 
 import pytest
 
@@ -60,12 +61,22 @@ class FakeHTTPResponse:
 
 
 def build_ollama_opener(payload=None, error=None):
+    calls = 0
+
     def open_request(request, timeout=None):
-        if error is not None:
-            raise error
-        return FakeHTTPResponse(payload)
+        nonlocal calls
+        current_payload = payload[min(calls, len(payload) - 1)] if isinstance(payload, list) else payload
+        current_error = error[min(calls, len(error) - 1)] if isinstance(error, list) else error
+        calls += 1
+        if current_error is not None:
+            raise current_error
+        return FakeHTTPResponse(current_payload)
 
     return open_request
+
+
+def build_http_error(url: str, code: int, reason: str) -> HTTPError:
+    return HTTPError(url=url, code=code, msg=reason, hdrs=None, fp=None)
 
 
 def test_create_provider_returns_openai_provider(tmp_path):
@@ -221,7 +232,7 @@ def test_ollama_provider_returns_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
     provider = OllamaProvider(
         config,
-        request_opener=build_ollama_opener(payload='{"response": "ok"}'),
+        request_opener=build_ollama_opener(payload=['{"models": []}', '{"response": "ok"}']),
     )
 
     result = provider.generate("system", "message")
@@ -234,7 +245,7 @@ def test_ollama_provider_captures_usage_metadata(tmp_path):
     provider = OllamaProvider(
         config,
         request_opener=build_ollama_opener(
-            payload='{"response": "ok", "prompt_eval_count": 14, "eval_count": 9, "total_duration": 125000000, "load_duration": 25000000}'
+            payload=['{"models": []}', '{"response": "ok", "prompt_eval_count": 14, "eval_count": 9, "total_duration": 125000000, "load_duration": 25000000}']
         ),
     )
 
@@ -246,12 +257,69 @@ def test_ollama_provider_captures_usage_metadata(tmp_path):
     }
 
 
-def test_ollama_provider_wraps_api_error(tmp_path):
+def test_ollama_provider_rejects_unreachable_server(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
     provider = OllamaProvider(
         config,
         request_opener=build_ollama_opener(error=OSError("down")),
     )
 
-    with pytest.raises(AgentExecutionError, match="failed to call the model API"):
+    with pytest.raises(AgentExecutionError, match=r"Ollama server is not responding at http://localhost:11434"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_surfaces_health_check_timeout(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="llama3",
+        timeout_seconds=300.0,
+    )
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(error=TimeoutError("timed out")),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"health check timed out after 5 seconds"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_surfaces_generation_timeout_after_successful_preflight(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="llama3",
+        timeout_seconds=42.0,
+    )
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload=['{"models": []}'], error=[None, TimeoutError("timed out")]),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"timed out after 42 seconds"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_surfaces_http_error_with_status_code(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(
+            payload=['{"models": []}'],
+            error=[None, build_http_error("http://localhost:11434/api/generate", 500, "Internal Server Error")],
+        ),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"HTTP 500"):
+        provider.generate("system", "message")
+
+
+def test_ollama_provider_rejects_invalid_json_response(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload=['{"models": []}', 'not-json']),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"invalid JSON response"):
         provider.generate("system", "message")

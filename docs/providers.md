@@ -74,7 +74,7 @@ from kycortex_agents.providers import create_provider
 
 config = KYCortexConfig(
     llm_provider="anthropic",
-    llm_model="claude-3-5-sonnet-latest",
+    llm_model="claude-haiku-4-5-20251001",
     api_key="your-anthropic-key",
 )
 

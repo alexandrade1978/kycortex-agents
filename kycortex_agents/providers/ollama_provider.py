@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from typing import Any, Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -26,6 +27,35 @@ class OllamaProvider(BaseLLMProvider):
         base_url = (self.config.base_url or "").rstrip("/")
         return f"{base_url}/api/generate"
 
+    def _health_endpoint(self) -> str:
+        base_url = (self.config.base_url or "").rstrip("/")
+        return f"{base_url}/api/tags"
+
+    def _health_check_timeout(self) -> float:
+        return min(self.config.timeout_seconds, 5.0)
+
+    def _ensure_server_reachable(self) -> None:
+        timeout_seconds = self._health_check_timeout()
+        request = Request(self._health_endpoint(), method="GET")
+        try:
+            with self._request_opener(request, timeout=timeout_seconds) as response:
+                response.read()
+        except HTTPError as exc:
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama health check failed at {self.config.base_url} with HTTP {exc.code}"
+            ) from exc
+        except (TimeoutError, socket.timeout) as exc:
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama server is not responding at {self.config.base_url} (health check timed out after {timeout_seconds:g} seconds)"
+            ) from exc
+        except (URLError, OSError) as exc:
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama server is not responding at {self.config.base_url}"
+            ) from exc
+
     def _build_payload(self, system_prompt: str, user_message: str) -> dict[str, Any]:
         return {
             "model": self.config.llm_model,
@@ -44,6 +74,7 @@ class OllamaProvider(BaseLLMProvider):
         return content
 
     def generate(self, system_prompt: str, user_message: str) -> str:
+        self._ensure_server_reachable()
         body = json.dumps(self._build_payload(system_prompt, user_message)).encode("utf-8")
         request = Request(
             self._endpoint(),
@@ -54,9 +85,26 @@ class OllamaProvider(BaseLLMProvider):
         try:
             with self._request_opener(request, timeout=self.config.timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        except HTTPError as exc:
             self._last_call_metadata = None
-            raise AgentExecutionError("Ollama provider failed to call the model API") from exc
+            raise AgentExecutionError(
+                f"Ollama API request failed with HTTP {exc.code} while calling model '{self.config.llm_model}'"
+            ) from exc
+        except (TimeoutError, socket.timeout) as exc:
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama request to model '{self.config.llm_model}' timed out after {self.config.timeout_seconds:g} seconds"
+            ) from exc
+        except (URLError, OSError) as exc:
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama server is not responding at {self.config.base_url}"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama API returned an invalid JSON response for model '{self.config.llm_model}'"
+            ) from exc
         self._last_call_metadata = self._extract_metadata(payload)
         return self._extract_content(payload)
 

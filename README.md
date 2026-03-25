@@ -2,16 +2,18 @@
 
 **Multi-agent orchestration framework for building AI products**
 
-KYCortex is an open-source framework that simulates an entire AI software house with specialized agents (Architect, Code Engineer, Code Reviewer, QA Tester, Docs Writer, Legal Advisor) coordinated by an Orchestrator to build complete software products.
+KYCortex is an open-source framework that simulates an entire AI software house with specialized agents (Architect, Code Engineer, Dependency Manager, Code Reviewer, QA Tester, Docs Writer, Legal Advisor) coordinated by an Orchestrator to build complete software products.
 
 ## Features
 
 - **Orchestrator**: Coordinates all agents, manages workflow state, and ensures tasks are completed in order
 - **Multi-provider runtime**: Supports OpenAI, Anthropic, and Ollama through a shared provider interface
 - **Workflow resilience**: Supports task dependencies, topological ordering, configurable failure policies, and resumable execution after interruptions or failed runs
+- **Deterministic validation context**: Derives API, test, and dependency-manifest checks from generated artifacts so downstream agents can review against concrete signals instead of prompt text alone
 - **Specialized Agents**:
   - **Architect**: Designs software architecture and module structure
   - **Code Engineer**: Writes production-quality Python code
+    - **Dependency Manager**: Produces runtime dependency manifests such as requirements.txt for generated projects
   - **Code Reviewer**: Reviews code for quality, security, and best practices
   - **QA Tester**: Generates pytest test suites
   - **Docs Writer**: Creates README, API docs, tutorials
@@ -86,7 +88,7 @@ Anthropic example:
 ```python
 config = KYCortexConfig(
     llm_provider="anthropic",
-    llm_model="claude-3-5-sonnet-latest",
+    llm_model="claude-haiku-4-5-20251001",
     temperature=0.2,
     project_name="my-project",
     output_dir="./output"
@@ -151,6 +153,7 @@ kycortex_agents/
 ├── agents/         # Specialized agents and registry
 │   ├── architect.py
 │   ├── code_engineer.py
+│   ├── dependency_manager.py
 │   ├── code_reviewer.py
 │   ├── qa_tester.py
 │   ├── docs_writer.py

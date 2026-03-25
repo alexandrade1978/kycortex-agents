@@ -4,6 +4,7 @@ from kycortex_agents.agents.architect import ArchitectAgent
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.code_engineer import CodeEngineerAgent
 from kycortex_agents.agents.code_reviewer import CodeReviewerAgent
+from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.docs_writer import DocsWriterAgent
 from kycortex_agents.agents.legal_advisor import LegalAdvisorAgent
 from kycortex_agents.agents.qa_tester import QATesterAgent
@@ -16,6 +17,7 @@ __all__ = [
 	"build_default_registry",
 	"CodeEngineerAgent",
 	"CodeReviewerAgent",
+	"DependencyManagerAgent",
 	"DocsWriterAgent",
 	"LegalAdvisorAgent",
 	"QATesterAgent",

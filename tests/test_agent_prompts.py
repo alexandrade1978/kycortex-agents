@@ -3,6 +3,7 @@ import pytest
 from kycortex_agents.agents.architect import ArchitectAgent
 from kycortex_agents.agents.code_engineer import CodeEngineerAgent
 from kycortex_agents.agents.code_reviewer import CodeReviewerAgent
+from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.docs_writer import DocsWriterAgent
 from kycortex_agents.agents.legal_advisor import LegalAdvisorAgent
 from kycortex_agents.agents.qa_tester import QATesterAgent
@@ -35,6 +36,10 @@ class CaptureCodeReviewerAgent(ChatCaptureMixin, CodeReviewerAgent):
     pass
 
 
+class CaptureDependencyManagerAgent(ChatCaptureMixin, DependencyManagerAgent):
+    pass
+
+
 class CaptureQATesterAgent(ChatCaptureMixin, QATesterAgent):
     pass
 
@@ -59,6 +64,7 @@ def test_architect_agent_uses_typed_input_fields(tmp_path):
         task_description="Design the system",
         project_name="Demo",
         project_goal="Build demo",
+        context={"planned_module_filename": "code_implementation.py"},
         constraints=["Python 3.12", "No GPL dependencies"],
     )
 
@@ -68,6 +74,26 @@ def test_architect_agent_uses_typed_input_fields(tmp_path):
     assert "Project Name: Demo" in agent.last_user_message
     assert "Project Goal: Build demo" in agent.last_user_message
     assert "Python 3.12, No GPL dependencies" in agent.last_user_message
+    assert "Target module: code_implementation.py" in agent.last_user_message
+    assert "Respect the task scope exactly" in agent.last_user_message
+
+
+def test_architect_agent_run_uses_context_goal_and_target_module(tmp_path):
+    agent = CaptureArchitectAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Design a single module",
+        {
+            "goal": "Build demo",
+            "constraints": "Python 3.12",
+            "planned_module_filename": "single_module.py",
+        },
+    )
+
+    assert result == "ok"
+    assert "Project Goal: Build demo" in agent.last_user_message
+    assert "Constraints: Python 3.12" in agent.last_user_message
+    assert "Target module: single_module.py" in agent.last_user_message
 
 
 def test_code_engineer_requires_architecture_context(tmp_path):
@@ -93,7 +119,12 @@ def test_code_reviewer_uses_typed_code_context(tmp_path):
         task_description="Review implementation",
         project_name="Demo",
         project_goal="Build demo",
-        context={"code": "print('hello')"},
+        context={
+            "code": "print('hello')",
+            "tests": "def test_it():\n    assert True",
+            "module_name": "demo_mod",
+            "dependency_validation_summary": "Dependency manifest validation:\n- Missing manifest entries: none",
+        },
     )
 
     result = agent.run_with_input(agent_input)
@@ -101,6 +132,53 @@ def test_code_reviewer_uses_typed_code_context(tmp_path):
     assert result == "ok"
     assert "Project: Demo" in agent.last_user_message
     assert "print('hello')" in agent.last_user_message
+    assert "Module name: demo_mod" in agent.last_user_message
+    assert "Generated tests:" in agent.last_user_message
+    assert "Test validation summary:" in agent.last_user_message
+    assert "Dependency validation summary:" in agent.last_user_message
+
+
+def test_code_engineer_run_uses_context_module_details(tmp_path):
+    agent = CaptureCodeEngineerAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Implement feature",
+        {
+            "architecture": "Layered design",
+            "existing_code": "def old():\n    return 1",
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+        },
+    )
+
+    assert result == "ok"
+    assert "Architecture:\nLayered design" in agent.last_user_message
+    assert "Target module: service_module.py" in agent.last_user_message
+    assert "The file will be saved as `service_module.py` and imported as `service_module`." in agent.last_user_message
+    assert "def old():" in agent.last_user_message
+
+
+def test_code_reviewer_run_uses_context_module_validation_fields(tmp_path):
+    agent = CaptureCodeReviewerAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Review implementation",
+        {
+            "code": "def run():\n    return 1",
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_public_api": "Functions:\n- run()\nClasses:\n- none",
+            "tests": "from service_module import run",
+            "test_validation_summary": "Generated test validation:\n- Missing function imports: none",
+            "dependency_validation_summary": "Dependency manifest validation:\n- Missing manifest entries: none",
+        },
+    )
+
+    assert result == "ok"
+    assert "Module name: service_module" in agent.last_user_message
+    assert "Module file: service_module.py" in agent.last_user_message
+    assert "Functions:\n- run()" in agent.last_user_message
+    assert "Generated tests:" in agent.last_user_message
 
 
 def test_qa_tester_uses_module_name_when_provided(tmp_path):
@@ -111,13 +189,25 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
         task_description="Write tests",
         project_name="Demo",
         project_goal="Build demo",
-        context={"code": "def add(a, b): return a + b", "module_name": "math_utils"},
+        context={
+            "code": "def add(a, b): return a + b",
+            "module_name": "math_utils",
+            "module_filename": "math_utils.py",
+            "code_summary": "def add(a, b): return a + b",
+            "code_outline": "def add(a, b):",
+            "code_public_api": "Functions:\n- add(a, b)\nClasses:\n- none",
+        },
     )
 
     result = agent.run_with_input(agent_input)
 
     assert result == "ok"
     assert "Module name: math_utils" in agent.last_user_message
+    assert "Public API outline:" in agent.last_user_message
+    assert "Public API contract:" in agent.last_user_message
+    assert "def add(a, b):" in agent.last_user_message
+    assert "Import from `math_utils`" in agent.last_user_message
+    assert "Import every called production function explicitly" in agent.last_user_message
 
 
 def test_docs_writer_falls_back_to_code_for_summary(tmp_path):
@@ -128,7 +218,7 @@ def test_docs_writer_falls_back_to_code_for_summary(tmp_path):
         task_description="Write documentation",
         project_name="Demo",
         project_goal="Build demo",
-        context={"architecture": "Layered design", "code": "def main(): pass"},
+        context={"architecture": "Layered design", "code": "def main(): pass", "module_name": "demo_mod"},
     )
 
     result = agent.run_with_input(agent_input)
@@ -136,6 +226,83 @@ def test_docs_writer_falls_back_to_code_for_summary(tmp_path):
     assert result == "ok"
     assert "Goal: Build demo" in agent.last_user_message
     assert "Code summary: def main(): pass" in agent.last_user_message
+    assert "Actual module: demo_mod.py" in agent.last_user_message
+    assert "Exact run command: No CLI entrypoint detected" in agent.last_user_message
+    assert "Dependency manifest: Not provided" in agent.last_user_message
+    assert "Dependency validation summary:" in agent.last_user_message
+
+
+def test_docs_writer_run_uses_context_for_actual_module_and_run_command(tmp_path):
+    agent = CaptureDocsWriterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Write docs",
+        {
+            "project_name": "Demo",
+            "architecture": "Layered design",
+            "code_summary": "Core API",
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "dependency_manifest": "requests>=2.31.0",
+            "dependency_manifest_path": "artifacts/requirements.txt",
+            "dependency_validation_summary": "Dependency manifest validation:\n- Missing manifest entries: none",
+            "code_public_api": "Functions:\n- run()\nClasses:\n- none",
+            "module_run_command": "python service_module.py",
+            "test_validation_summary": "Generated test validation:\n- Missing function imports: none",
+            "code": "def run():\n    return 1",
+        },
+    )
+
+    assert result == "ok"
+    assert "Actual module: service_module.py" in agent.last_user_message
+    assert "Exact run command: python service_module.py" in agent.last_user_message
+    assert "Dependency manifest: artifacts/requirements.txt" in agent.last_user_message
+    assert "requests>=2.31.0" in agent.last_user_message
+
+
+def test_dependency_manager_uses_code_context_and_requirements_prompt(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+    agent_input = AgentInput(
+        task_id="deps",
+        task_title="Dependencies",
+        task_description="Infer runtime dependencies",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={
+            "code": "import numpy as np\n\ndef run():\n    return np.array([1])",
+            "module_name": "demo_mod",
+            "module_filename": "demo_mod.py",
+            "code_summary": "import numpy as np",
+            "code_public_api": "Functions:\n- run()\nClasses:\n- none",
+        },
+    )
+
+    result = agent.run_with_input(agent_input)
+
+    assert result.raw_content == "ok"
+    assert "Module: demo_mod.py" in agent.last_user_message
+    assert "requirements.txt" in agent.last_user_message
+    assert "Do not include development-only tools such as pytest" in agent.last_user_message
+
+
+def test_dependency_manager_run_uses_context_module_details(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Infer runtime dependencies",
+        {
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "import requests",
+            "code_public_api": "Functions:\n- run()\nClasses:\n- none",
+            "code": "import requests\n\ndef run():\n    return requests.Session()",
+        },
+    )
+
+    assert result == "ok"
+    assert "Module: service_module.py" in agent.last_user_message
+    assert "Code summary: import requests" in agent.last_user_message
+    assert "Infer the minimal runtime requirements.txt" in agent.last_user_message
 
 
 def test_legal_advisor_formats_dependencies_from_typed_context(tmp_path):
@@ -160,12 +327,34 @@ def test_legal_advisor_formats_dependencies_from_typed_context(tmp_path):
     assert "- anthropic" in agent.last_user_message
 
 
+def test_qa_tester_run_uses_context_module_contract(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Write tests",
+        {
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Core API",
+            "code_outline": "def run():",
+            "code_public_api": "Functions:\n- run()\nClasses:\n- none",
+        },
+    )
+
+    assert result == "ok"
+    assert "Module name: service_module" in agent.last_user_message
+    assert "Module file: service_module.py" in agent.last_user_message
+    assert "Public API contract:" in agent.last_user_message
+    assert "Import from `service_module`" in agent.last_user_message
+
+
 @pytest.mark.parametrize(
     ("agent_class", "context", "expected_type", "expected_name"),
     [
         (CaptureArchitectAgent, {}, ArtifactType.DOCUMENT, "arch_architecture"),
         (CaptureCodeEngineerAgent, {"architecture": "Layered design"}, ArtifactType.CODE, "code_implementation"),
         (CaptureCodeReviewerAgent, {"code": "print('hello')"}, ArtifactType.DOCUMENT, "review_review"),
+        (CaptureDependencyManagerAgent, {"code": "print('hello')"}, ArtifactType.CONFIG, "deps_requirements"),
         (CaptureQATesterAgent, {"code": "def add(a, b): return a + b"}, ArtifactType.TEST, "test_tests"),
         (CaptureDocsWriterAgent, {}, ArtifactType.DOCUMENT, "docs_documentation"),
         (CaptureLegalAdvisorAgent, {}, ArtifactType.DOCUMENT, "legal_legal_analysis"),

@@ -55,10 +55,16 @@ class FakeHTTPResponse:
 
 
 def build_ollama_opener(payload=None, error=None):
+    calls = 0
+
     def open_request(request, timeout=None):
-        if error is not None:
-            raise error
-        return FakeHTTPResponse(payload)
+        nonlocal calls
+        current_payload = payload[min(calls, len(payload) - 1)] if isinstance(payload, list) else payload
+        current_error = error[min(calls, len(error) - 1)] if isinstance(error, list) else error
+        calls += 1
+        if current_error is not None:
+            raise current_error
+        return FakeHTTPResponse(current_payload)
 
     return open_request
 
@@ -153,7 +159,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
 
 
 @pytest.mark.parametrize(
-    ("provider_name", "provider"),
+    ("provider_name", "provider", "expected_message"),
     [
         (
             "openai",
@@ -161,6 +167,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
                 KYCortexConfig(output_dir="./output_test", llm_provider="openai", api_key="token", llm_model="gpt-4o"),
                 client=build_openai_client(error=RuntimeError("openai down")),
             ),
+            "failed to call the model API",
         ),
         (
             "anthropic",
@@ -168,6 +175,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
                 KYCortexConfig(output_dir="./output_test", llm_provider="anthropic", api_key="token", llm_model="claude-3-5-sonnet"),
                 client=build_anthropic_client(error=RuntimeError("anthropic down")),
             ),
+            "failed to call the model API",
         ),
         (
             "ollama",
@@ -175,14 +183,15 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
                 KYCortexConfig(output_dir="./output_test", llm_provider="ollama", llm_model="llama3", base_url="http://localhost:11434"),
                 request_opener=build_ollama_opener(error=OSError("ollama down")),
             ),
+            "Ollama server is not responding",
         ),
     ],
 )
-def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_name, provider):
+def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_name, provider, expected_message):
     config = provider.config
     agent = ProviderBackedAgent(provider, config)
 
-    with pytest.raises(AgentExecutionError, match="IntegrationAgent: .*failed to call the model API"):
+    with pytest.raises(AgentExecutionError, match=rf"IntegrationAgent: .*{expected_message}"):
         agent.execute(build_agent_input())
 
     metadata = agent.get_last_provider_call_metadata()
@@ -192,4 +201,5 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_n
     assert metadata["model"] == config.llm_model
     assert metadata["success"] is False
     assert metadata["error_type"] == "AgentExecutionError"
+    assert expected_message in metadata["error_message"]
     assert metadata["duration_ms"] >= 0

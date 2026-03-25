@@ -6,6 +6,7 @@ from kycortex_agents.agents.architect import ArchitectAgent
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.code_engineer import CodeEngineerAgent
 from kycortex_agents.agents.code_reviewer import CodeReviewerAgent
+from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.docs_writer import DocsWriterAgent
 from kycortex_agents.agents.legal_advisor import LegalAdvisorAgent
 from kycortex_agents.agents.qa_tester import QATesterAgent
@@ -58,6 +59,7 @@ def build_default_registry(config: KYCortexConfig) -> AgentRegistry:
         {
             "architect": ArchitectAgent(config),
             "code_engineer": CodeEngineerAgent(config),
+            "dependency_manager": DependencyManagerAgent(config),
             "code_reviewer": CodeReviewerAgent(config),
             "qa_tester": QATesterAgent(config),
             "docs_writer": DocsWriterAgent(config),

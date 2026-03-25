@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import re
 from time import perf_counter
 from typing import Any, Optional
 
@@ -45,6 +46,7 @@ class BaseAgent(ABC):
                 "success": False,
                 "duration_ms": round((perf_counter() - started_at) * 1000, 3),
                 "error_type": type(exc).__name__,
+                "error_message": str(exc),
             }
             if isinstance(exc, AgentExecutionError):
                 raise AgentExecutionError(f"{self.name}: {exc}") from exc
@@ -100,6 +102,7 @@ class BaseAgent(ABC):
 
     def after_execute(self, agent_input: AgentInput, output: AgentOutput) -> AgentOutput:
         """Hook invoked after normalization to finalize the public AgentOutput."""
+        output = self._normalize_output_for_artifact_type(output)
         self.validate_output(output)
         output.metadata.setdefault("agent_name", self.name)
         output.metadata.setdefault("agent_role", self.role)
@@ -110,6 +113,41 @@ class BaseAgent(ABC):
         if not output.artifacts:
             output.artifacts.append(self._build_default_artifact(agent_input, output))
         return output
+
+    def _normalize_output_for_artifact_type(self, output: AgentOutput) -> AgentOutput:
+        if self.output_artifact_type not in {ArtifactType.CODE, ArtifactType.TEST}:
+            return output
+        normalized_raw_content = self._extract_code_content(output.raw_content)
+        if normalized_raw_content == output.raw_content:
+            return output
+        output.raw_content = normalized_raw_content
+        output.summary = self._summarize_output(normalized_raw_content)
+        return output
+
+    def _extract_code_content(self, raw_content: str) -> str:
+        code_blocks = re.findall(r"```(?:[A-Za-z0-9_+-]+)?\n(.*?)```", raw_content, flags=re.DOTALL)
+        if not code_blocks:
+            return self._extract_code_like_lines(raw_content)
+        normalized_blocks = [block.strip() for block in code_blocks if block.strip()]
+        if not normalized_blocks:
+            return self._extract_code_like_lines(raw_content)
+        return "\n\n".join(normalized_blocks)
+
+    def _extract_code_like_lines(self, raw_content: str) -> str:
+        lines = raw_content.strip().splitlines()
+        start_index: Optional[int] = None
+        code_start_pattern = re.compile(
+            r"^(from\s+\S+\s+import\s+.+|import\s+\S+|class\s+\w+|def\s+\w+|async\s+def\s+\w+|@\w+|if\s+__name__\s*==\s*['\"]__main__['\"]\s*:|[A-Za-z_][A-Za-z0-9_]*\s*=)"
+        )
+        for index, line in enumerate(lines):
+            stripped = line.strip()
+            if code_start_pattern.match(stripped):
+                start_index = index
+                break
+        if start_index is None:
+            return raw_content
+        candidate = "\n".join(lines[start_index:]).strip()
+        return candidate or raw_content
 
     def validate_output(self, output: AgentOutput) -> None:
         """Validate the public AgentOutput contract before state is persisted."""

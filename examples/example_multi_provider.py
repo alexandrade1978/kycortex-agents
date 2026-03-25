@@ -37,7 +37,7 @@ def build_provider_configs() -> dict[str, KYCortexConfig]:
         ),
         "anthropic": KYCortexConfig(
             llm_provider="anthropic",
-            llm_model="claude-3-5-sonnet-latest",
+            llm_model="claude-haiku-4-5-20251001",
             api_key="your-anthropic-key",
             project_name="multi-provider-anthropic",
             output_dir="./output_multi_provider/anthropic",

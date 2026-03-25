@@ -476,6 +476,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
 def test_changelog_documents_current_release_scope():
     changelog_path = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
     changelog = changelog_path.read_text(encoding="utf-8")
+    version = kycortex_agents.__version__
 
     assert "# Changelog" in changelog
     assert "## Unreleased" in changelog
@@ -493,7 +494,7 @@ def test_changelog_documents_current_release_scope():
     assert "make release-metadata-check" in changelog
     assert "GitHub release automation" in changelog
     assert "Python 3.10 CI hardening" in changelog
-    assert "Version `1.0.0` is now the released package baseline." in changelog
+    assert f"Version `{version}` is now the released package baseline." in changelog
     assert "shipped `1.0.0` baseline" in changelog
     assert "commercial licensing path" in changelog
 
@@ -563,12 +564,13 @@ def test_release_guide_documents_repository_release_gate_procedure():
 def test_release_status_documents_current_repository_release_readiness_state():
     release_status_path = Path(__file__).resolve().parents[1] / "RELEASE_STATUS.md"
     release_status = release_status_path.read_text(encoding="utf-8")
+    version = kycortex_agents.__version__
 
     assert "# Release Status" in release_status
     assert "## Current State" in release_status
-    assert "Package version in `pyproject.toml`: `1.0.0`" in release_status
-    assert "Latest released version: `1.0.0`" in release_status
-    assert "Release tag for this version: `v1.0.0`" in release_status
+    assert f"Package version in `pyproject.toml`: `{version}`" in release_status
+    assert f"Latest released version: `{version}`" in release_status
+    assert f"Release tag for this version: `v{version}`" in release_status
     assert "## Repository Release Gates" in release_status
     assert "python scripts/release_check.py" in release_status
     assert "make release-check" in release_status

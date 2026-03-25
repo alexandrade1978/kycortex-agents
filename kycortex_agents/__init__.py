@@ -6,6 +6,7 @@ from kycortex_agents.agents import (
 	ArchitectAgent,
 	CodeEngineerAgent,
 	CodeReviewerAgent,
+	DependencyManagerAgent,
 	DocsWriterAgent,
 	LegalAdvisorAgent,
 	QATesterAgent,
@@ -35,7 +36,7 @@ from kycortex_agents.types import (
 	WorkflowStatus,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 __all__ = [
 	"AgentInput",
@@ -52,6 +53,7 @@ __all__ = [
 	"build_default_registry",
 	"CodeEngineerAgent",
 	"CodeReviewerAgent",
+	"DependencyManagerAgent",
 	"config",
 	"ConfigValidationError",
 	"create_provider",

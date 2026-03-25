@@ -1,12 +1,12 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex after the 1.0.0 baseline was prepared.
+This file tracks the current repository-owned release state for KYCortex after the 1.0.1 maintenance release was prepared.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.0`
-- Latest released version: `1.0.0`
-- Release tag for this version: `v1.0.0`
+- Package version in `pyproject.toml`: `1.0.1`
+- Latest released version: `1.0.1`
+- Release tag for this version: `v1.0.1`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -30,13 +30,13 @@ This file tracks the current repository-owned release state for KYCortex after t
 
 ## Latest Published Release Verification
 
-- GitHub Actions release workflow for `v1.0.0` completed successfully.
-- The published GitHub release is marked as the latest release for the repository.
-- Attached assets include `kycortex_agents-1.0.0-py3-none-any.whl` and `kycortex_agents-1.0.0.tar.gz`.
+- `v1.0.1` is the current release tag associated with this repository state.
+- Validate the GitHub Actions release workflow for `v1.0.1` after the pushed tag completes.
+- Expected attached assets remain `kycortex_agents-1.0.1-py3-none-any.whl` and `kycortex_agents-1.0.1.tar.gz`.
 
 ## Release Outcome
 
-The 1.0.0 release state is now captured directly in the package metadata, changelog, migration notes, release guide, and release-check workflow.
+The 1.0.1 release state is now captured directly in the package metadata, changelog, migration notes, release guide, and release-check workflow.
 
 The repository's public licensing guidance now documents the AGPL open-source distribution together with a separate commercial licensing path.
 

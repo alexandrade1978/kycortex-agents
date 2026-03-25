@@ -6,6 +6,28 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.1 - 2026-03-25
+
+### Added
+
+- A first-class `DependencyManagerAgent` that emits normalized `requirements.txt` artifacts for generated projects.
+- Deterministic orchestrator context derivation for generated module APIs, test validation, and dependency-manifest validation.
+- A low-cost provider smoke example for OpenAI, Anthropic, and Ollama under `examples/example_provider_smoke.py`.
+- Cross-provider orchestrator regressions proving dependency-manifest enforcement across OpenAI, Anthropic, and Ollama adapters.
+
+### Changed
+
+- Agent prompts now constrain architecture, code, tests, review, and documentation generation to the actual single-module artifact produced by the workflow.
+- Code and test artifacts are now normalized to raw source output when providers return markdown fences or leading prose.
+- Ollama failures now surface explicit health-check, timeout, HTTP, and invalid-JSON diagnostics instead of a generic provider-call error.
+- Anthropic examples and documentation now use the live-valid low-cost model `claude-haiku-4-5-20251001`.
+
+### Release Readiness Notes
+
+- Version `1.0.1` is now the released package baseline.
+
+## 1.0.0 - 2026-03-25
+
 ### Added
 
 - A repository-owned `COMMERCIAL_LICENSE.md` guide describing the dual-license model and the commercial licensing contact path.
@@ -20,8 +42,6 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 - A repository-owned `RELEASE.md` guide describing the final release gate, version-tag flow, and post-tag verification steps.
 - A repository-owned `RELEASE_STATUS.md` snapshot describing the current release-readiness state and the remaining manual release decision.
 - A repository-owned `scripts/release_metadata_check.py` validator and `make release-metadata-check` target for version and release-document alignment checks before tagging.
-
-### Changed
 
 - Public licensing guidance now documents the AGPL open-source distribution together with a separate commercial licensing path, while package metadata remains aligned to the open-source distribution.
 - Public package imports are now centered on the stable top-level `kycortex_agents` surface and the public `workflows` module.

@@ -26,6 +26,7 @@ from kycortex_agents import (
     BaseAgent,
     CodeEngineerAgent,
     CodeReviewerAgent,
+    DependencyManagerAgent,
     DEFAULT_CONFIG,
     DocsWriterAgent,
     KYCortexConfig,
@@ -81,6 +82,7 @@ def test_public_api_exports_core_agent_types():
     assert ArchitectAgent is not None
     assert CodeEngineerAgent is not None
     assert CodeReviewerAgent is not None
+    assert DependencyManagerAgent is not None
     assert DocsWriterAgent is not None
     assert LegalAdvisorAgent is not None
     assert QATesterAgent is not None
@@ -367,7 +369,7 @@ def test_multi_provider_example_documents_supported_provider_switching():
     assert 'llm_provider="anthropic"' in example
     assert 'llm_provider="ollama"' in example
     assert 'llm_model="gpt-4o-mini"' in example
-    assert 'llm_model="claude-3-5-sonnet-latest"' in example
+    assert 'llm_model="claude-haiku-4-5-20251001"' in example
     assert 'llm_model="llama3"' in example
     assert 'base_url="http://localhost:11434"' in example
     assert 'dependencies=["arch"]' in example

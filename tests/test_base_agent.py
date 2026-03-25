@@ -4,7 +4,7 @@ from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.providers.base import BaseLLMProvider
-from kycortex_agents.types import AgentInput, AgentOutput
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactType
 
 
 class DummyAgent(BaseAgent):
@@ -40,6 +40,14 @@ class DummyProvider(BaseLLMProvider):
 
     def get_last_call_metadata(self):
         return self.metadata
+
+
+class CodeDummyAgent(DummyAgent):
+    output_artifact_type = ArtifactType.CODE
+
+
+class PytestDummyAgent(DummyAgent):
+    output_artifact_type = ArtifactType.TEST
 
 
 def test_chat_returns_response_content():
@@ -161,4 +169,45 @@ def test_chat_captures_failed_provider_call_metadata():
     assert metadata["model"] == "gpt-4o"
     assert metadata["success"] is False
     assert metadata["error_type"] == "RuntimeError"
+    assert metadata["error_message"] == "provider down"
     assert metadata["duration_ms"] >= 0
+
+
+@pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])
+def test_execute_extracts_code_from_markdown_fences_for_code_artifacts(agent_class):
+    provider = DummyProvider(response="Implementation draft\n```python\nprint('hello')\n```\nExtra explanation")
+    agent = agent_class(provider)
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+
+    result = agent.execute(agent_input)
+
+    assert result.raw_content == "print('hello')"
+    assert result.summary == "print('hello')"
+    assert result.artifacts[0].content == "print('hello')"
+
+
+@pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])
+def test_execute_strips_leading_prose_from_code_artifacts_without_fences(agent_class):
+    provider = DummyProvider(response="Here is the implementation you requested:\n\nimport logging\n\ndef hello() -> str:\n    return 'hi'")
+    agent = agent_class(provider)
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+
+    result = agent.execute(agent_input)
+
+    assert result.raw_content == "import logging\n\ndef hello() -> str:\n    return 'hi'"
+    assert result.summary == "import logging"
+    assert result.artifacts[0].content == "import logging\n\ndef hello() -> str:\n    return 'hi'"

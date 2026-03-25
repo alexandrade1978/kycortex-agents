@@ -59,4 +59,5 @@ def test_build_default_registry_contains_core_agents(tmp_path):
 
     assert registry.has("architect")
     assert registry.has("code_engineer")
+    assert registry.has("dependency_manager")
     assert registry.has("code_reviewer")

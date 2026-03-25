@@ -1,10 +1,16 @@
+from types import SimpleNamespace
+
 import pytest
 
+from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
+from kycortex_agents.providers.anthropic_provider import AnthropicProvider
+from kycortex_agents.providers.ollama_provider import OllamaProvider
+from kycortex_agents.providers.openai_provider import OpenAIProvider
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus
 
 
@@ -65,6 +71,53 @@ class StructuredAgent:
         )
 
 
+class FakeHTTPResponse:
+    def __init__(self, payload: str):
+        self._payload = payload
+
+    def read(self):
+        return self._payload.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def build_openai_client(response=None, error=None):
+    def create(**kwargs):
+        if error is not None:
+            raise error
+        return response
+
+    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+
+
+def build_anthropic_client(response=None, error=None):
+    def create(**kwargs):
+        if error is not None:
+            raise error
+        return response
+
+    return SimpleNamespace(messages=SimpleNamespace(create=create))
+
+
+def build_ollama_opener(payload=None, error=None):
+    calls = 0
+
+    def open_request(request, timeout=None):
+        nonlocal calls
+        current_payload = payload[min(calls, len(payload) - 1)] if isinstance(payload, list) else payload
+        current_error = error[min(calls, len(error) - 1)] if isinstance(error, list) else error
+        calls += 1
+        if current_error is not None:
+            raise current_error
+        return FakeHTTPResponse(current_payload)
+
+    return open_request
+
+
 def test_run_task_exposes_semantic_context(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -101,6 +154,472 @@ def test_run_task_exposes_semantic_context(tmp_path):
     assert agent.last_context["completed_tasks"]["arch"] == "ARCHITECTURE DOC"
     assert agent.last_context["task"]["id"] == "code"
     assert agent.last_context["snapshot"]["project_name"] == "Demo"
+    assert agent.last_context["module_name"] == "code_implementation"
+    assert agent.last_context["module_filename"] == "code_implementation.py"
+
+
+def test_run_task_exposes_generated_code_module_context_to_downstream_agents(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def main():\n    return 1",
+            output_payload={
+                "summary": "def main():",
+                "raw_content": "def main():\n    return 1",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def main():\n    return 1",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent("TESTS")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    orchestrator.run_task(project.tasks[1], project)
+
+    assert agent.last_context["code"] == "def main():\n    return 1"
+    assert agent.last_context["module_name"] == "code_implementation"
+    assert agent.last_context["module_filename"] == "code_implementation.py"
+    assert agent.last_context["code_artifact_path"] == "artifacts/code_implementation.py"
+    assert agent.last_context["code_summary"] == "def main():"
+    assert agent.last_context["code_outline"] == "def main():"
+    assert "Functions:" in agent.last_context["code_public_api"]
+    assert "main()" in agent.last_context["code_public_api"]
+    assert agent.last_context["module_run_command"] == ""
+
+
+def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from enum import Enum\n"
+                "class Color(Enum):\n"
+                "    RED = 1\n\n"
+                "class Thing:\n"
+                "    name: str\n\n"
+                "def run(value):\n"
+                "    return value\n"
+            ),
+            output_payload={
+                "summary": "from enum import Enum",
+                "raw_content": (
+                    "from enum import Enum\n"
+                    "class Color(Enum):\n"
+                    "    RED = 1\n\n"
+                    "class Thing:\n"
+                    "    name: str\n\n"
+                    "def run(value):\n"
+                    "    return value\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "from enum import Enum\n"
+                            "class Color(Enum):\n"
+                            "    RED = 1\n\n"
+                            "class Thing:\n"
+                            "    name: str\n\n"
+                            "def run(value):\n"
+                            "    return value\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from code_implementation import Color, Thing\n\n"
+                "def test_run():\n"
+                "    assert run(1) == 1\n\n"
+                "def test_enum_member():\n"
+                "    assert Color.Red.name == 'RED'\n\n"
+                "def test_ctor():\n"
+                "    Thing()\n"
+            ),
+            output_payload={
+                "summary": "from code_implementation import Color, Thing",
+                "raw_content": (
+                    "from code_implementation import Color, Thing\n\n"
+                    "def test_run():\n"
+                    "    assert run(1) == 1\n\n"
+                    "def test_enum_member():\n"
+                    "    assert Color.Red.name == 'RED'\n\n"
+                    "def test_ctor():\n"
+                    "    Thing()\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "tests_tests",
+                        "artifact_type": ArtifactType.TEST.value,
+                        "path": "artifacts/tests_tests.py",
+                        "content": (
+                            "from code_implementation import Color, Thing\n\n"
+                            "def test_run():\n"
+                            "    assert run(1) == 1\n\n"
+                            "def test_enum_member():\n"
+                            "    assert Color.Red.name == 'RED'\n\n"
+                            "def test_ctor():\n"
+                            "    Thing()\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the implementation",
+            assigned_to="code_reviewer",
+            dependencies=["tests"],
+        )
+    )
+
+    agent = RecordingAgent("REVIEW")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"code_reviewer": agent}))
+
+    orchestrator.run_task(project.tasks[2], project)
+
+    assert "Generated test validation:" in agent.last_context["test_validation_summary"]
+    assert "run (line 4)" in agent.last_context["test_validation_summary"]
+    assert "Color.Red (line 7)" in agent.last_context["test_validation_summary"]
+    assert "Thing expects 1 args but test uses 0 at line 10" in agent.last_context["test_validation_summary"]
+
+
+def test_run_task_exposes_dependency_manifest_validation_to_downstream_agents(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "import json\n"
+                "import numpy as np\n\n"
+                "def run():\n"
+                "    return np.array([1]).tolist()\n"
+            ),
+            output_payload={
+                "summary": "import json",
+                "raw_content": (
+                    "import json\n"
+                    "import numpy as np\n\n"
+                    "def run():\n"
+                    "    return np.array([1]).tolist()\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "import json\n"
+                            "import numpy as np\n\n"
+                            "def run():\n"
+                            "    return np.array([1]).tolist()\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="deps",
+            title="Dependencies",
+            description="Infer dependencies",
+            assigned_to="dependency_manager",
+            status=TaskStatus.DONE.value,
+            output="# No external runtime dependencies",
+            output_payload={
+                "summary": "# No external runtime dependencies",
+                "raw_content": "# No external runtime dependencies",
+                "artifacts": [
+                    {
+                        "name": "deps_requirements",
+                        "artifact_type": ArtifactType.CONFIG.value,
+                        "path": "artifacts/requirements.txt",
+                        "content": "# No external runtime dependencies",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the implementation",
+            assigned_to="code_reviewer",
+            dependencies=["deps"],
+        )
+    )
+
+    agent = RecordingAgent("REVIEW")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"code_reviewer": agent}))
+
+    orchestrator.run_task(project.tasks[2], project)
+
+    assert agent.last_context["dependency_manifest"] == "# No external runtime dependencies"
+    assert agent.last_context["dependency_manifest_path"] == "artifacts/requirements.txt"
+    assert agent.last_context["dependency_analysis"]["required_imports"] == ["numpy"]
+    assert agent.last_context["dependency_analysis"]["missing_manifest_entries"] == ["numpy"]
+    assert "Dependency manifest validation:" in agent.last_context["dependency_validation_summary"]
+    assert "Missing manifest entries: numpy" in agent.last_context["dependency_validation_summary"]
+    assert "Verdict: FAIL" in agent.last_context["dependency_validation_summary"]
+
+
+def test_run_task_fails_dependency_manager_when_manifest_misses_required_imports(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="import numpy as np\n\ndef run():\n    return np.array([1])\n",
+            output_payload={
+                "summary": "import numpy as np",
+                "raw_content": "import numpy as np\n\ndef run():\n    return np.array([1])\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "import numpy as np\n\ndef run():\n    return np.array([1])\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="deps",
+            title="Dependencies",
+            description="Infer dependencies",
+            assigned_to="dependency_manager",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent("# No external runtime dependencies")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"dependency_manager": agent}))
+
+    with pytest.raises(AgentExecutionError, match="missing manifest entries for numpy"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    assert project.tasks[1].status == TaskStatus.FAILED.value
+    assert project.tasks[1].output == "Dependency manifest validation failed: missing manifest entries for numpy"
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "provider_factory"),
+    [
+        (
+            "openai",
+            lambda tmp_path: OpenAIProvider(
+                KYCortexConfig(
+                    output_dir=str(tmp_path / "output_openai"),
+                    llm_provider="openai",
+                    api_key="token",
+                    llm_model="gpt-4o-mini",
+                ),
+                client=build_openai_client(
+                    response=SimpleNamespace(
+                        choices=[SimpleNamespace(message=SimpleNamespace(content="# No external runtime dependencies"))],
+                        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+                    )
+                ),
+            ),
+        ),
+        (
+            "anthropic",
+            lambda tmp_path: AnthropicProvider(
+                KYCortexConfig(
+                    output_dir=str(tmp_path / "output_anthropic"),
+                    llm_provider="anthropic",
+                    api_key="token",
+                    llm_model="claude-3-5-sonnet-latest",
+                ),
+                client=build_anthropic_client(
+                    response=SimpleNamespace(
+                        content=[SimpleNamespace(type="text", text="# No external runtime dependencies")],
+                        usage=SimpleNamespace(input_tokens=12, output_tokens=8),
+                    )
+                ),
+            ),
+        ),
+        (
+            "ollama",
+            lambda tmp_path: OllamaProvider(
+                KYCortexConfig(
+                    output_dir=str(tmp_path / "output_ollama"),
+                    llm_provider="ollama",
+                    llm_model="llama3",
+                    base_url="http://localhost:11434",
+                ),
+                request_opener=build_ollama_opener(
+                    payload=[
+                        '{"models": []}',
+                        '{"response": "# No external runtime dependencies", "prompt_eval_count": 10, "eval_count": 5}',
+                    ]
+                ),
+            ),
+        ),
+    ],
+)
+def test_run_task_fails_dependency_manager_across_supported_providers(tmp_path, provider_name, provider_factory):
+    provider = provider_factory(tmp_path)
+    config = provider.config
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="import numpy as np\n\ndef run():\n    return np.array([1])\n",
+            output_payload={
+                "summary": "import numpy as np",
+                "raw_content": "import numpy as np\n\ndef run():\n    return np.array([1])\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "import numpy as np\n\ndef run():\n    return np.array([1])\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="deps",
+            title="Dependencies",
+            description="Infer dependencies",
+            assigned_to="dependency_manager",
+            dependencies=["code"],
+        )
+    )
+
+    agent = DependencyManagerAgent(config)
+    agent._provider = provider
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"dependency_manager": agent}))
+
+    with pytest.raises(AgentExecutionError, match="missing manifest entries for numpy"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    assert project.tasks[1].status == TaskStatus.FAILED.value
+    assert project.tasks[1].output == "Dependency manifest validation failed: missing manifest entries for numpy"
+    assert project.tasks[1].last_provider_call is not None
+    assert project.tasks[1].last_provider_call["provider"] == provider_name
+    assert project.tasks[1].last_provider_call["success"] is True
+
+
+def test_run_task_allows_dependency_manager_when_alias_matches_declared_package(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="import yaml\n\ndef run():\n    return yaml.safe_load('x: 1')\n",
+            output_payload={
+                "summary": "import yaml",
+                "raw_content": "import yaml\n\ndef run():\n    return yaml.safe_load('x: 1')\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "import yaml\n\ndef run():\n    return yaml.safe_load('x: 1')\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="deps",
+            title="Dependencies",
+            description="Infer dependencies",
+            assigned_to="dependency_manager",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent("PyYAML>=6.0")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"dependency_manager": agent}))
+
+    result = orchestrator.run_task(project.tasks[1], project)
+
+    assert result == "PyYAML>=6.0"
+    assert project.tasks[1].status == TaskStatus.DONE.value
 
 
 def test_run_task_marks_failure_and_reraises(tmp_path):

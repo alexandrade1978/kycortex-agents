@@ -50,6 +50,7 @@ def build_inspector_project(role: str, output: str, task_title: str = "Inspector
     [
         ("architect", "Architecture", "ARCHITECTURE DOC", "architecture"),
         ("code_engineer", "Implementation", "print('hello')", "code"),
+        ("dependency_manager", "Dependencies", "requests>=2.0", "dependencies"),
         ("code_reviewer", "Review", "PASS: reviewed", "review"),
         ("qa_tester", "Tests", "def test_example():\n    assert True", "tests"),
         ("docs_writer", "Documentation", "README content", "documentation"),
@@ -156,6 +157,7 @@ def test_orchestrator_context_includes_snapshot_decisions_and_artifacts_for_down
         ("Architecture Decision", "architecture", "ARCHITECTURE DOC"),
         ("Review Findings", "review", "PASS: reviewed"),
         ("Integration Tests", "tests", "def test_example():\n    assert True"),
+        ("Dependency Requirements", "dependencies", "requests>=2.0"),
         ("Docs Refresh", "documentation", "README content"),
         ("License Audit", "legal", "Legal analysis"),
     ],
@@ -226,5 +228,6 @@ def test_orchestrator_context_omits_semantic_alias_when_role_and_title_are_unkno
     assert "architecture" not in context
     assert "review" not in context
     assert "tests" not in context
+    assert "dependencies" not in context
     assert "documentation" not in context
     assert "legal" not in context

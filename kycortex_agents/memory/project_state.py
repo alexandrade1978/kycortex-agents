@@ -35,6 +35,8 @@ class Task:
     last_error_type: Optional[str] = None
     last_error_category: Optional[str] = None
     repair_context: Dict[str, Any] = field(default_factory=dict)
+    repair_origin_task_id: Optional[str] = None
+    repair_attempt: int = 0
     status: str = TaskStatus.PENDING.value
     output: Optional[str] = None
     output_payload: Optional[Dict[str, Any]] = None
@@ -121,6 +123,7 @@ class ProjectState:
                     status=task.status,
                     details={"attempts": task.attempts, "assigned_to": task.assigned_to},
                 )
+                self._sync_repair_origin_start(task, started_at)
                 self._touch(started_at)
                 return
 
@@ -159,6 +162,15 @@ class ProjectState:
                             "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, datetime.now(timezone.utc).isoformat()),
                         },
                     )
+                    self._sync_repair_origin_failure(
+                        task,
+                        error_message=error_message,
+                        error_type=error_type,
+                        provider_call=provider_call,
+                        output=output,
+                        completed_at=None,
+                        final_failure=False,
+                    )
                     self._touch()
                     return
                 task.status = TaskStatus.FAILED.value
@@ -183,6 +195,15 @@ class ProjectState:
                         "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     },
                 )
+                self._sync_repair_origin_failure(
+                    task,
+                    error_message=error_message,
+                    error_type=error_type,
+                    provider_call=provider_call,
+                    output=output,
+                    completed_at=task.completed_at,
+                    final_failure=True,
+                )
                 self._touch(task.completed_at)
                 return
 
@@ -201,7 +222,8 @@ class ProjectState:
                 t.last_error = None
                 t.last_error_type = None
                 t.last_error_category = None
-                t.repair_context = {}
+                if t.repair_origin_task_id is None:
+                    t.repair_context = {}
                 t.last_provider_call = provider_call
                 t.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
@@ -218,6 +240,7 @@ class ProjectState:
                         "task_duration_ms": self._duration_ms(t.started_at, t.completed_at),
                     },
                 )
+                self._sync_repair_origin_completion(t, provider_call)
                 self._touch(t.completed_at)
 
     def resume_interrupted_tasks(self) -> List[str]:
@@ -256,11 +279,23 @@ class ProjectState:
             self._touch(resumed_at)
         return resumed_task_ids
 
-    def resume_failed_tasks(self) -> List[str]:
+    def resume_failed_tasks(
+        self,
+        *,
+        include_failed_tasks: bool = True,
+        failed_task_ids: Optional[List[str]] = None,
+        additional_task_ids: Optional[List[str]] = None,
+    ) -> List[str]:
         """Re-queue failed tasks and dependency-skipped descendants for another run."""
 
-        failed_task_ids = [task.id for task in self.tasks if task.status == TaskStatus.FAILED.value]
+        failed_task_ids = list(failed_task_ids or [task.id for task in self.tasks if task.status == TaskStatus.FAILED.value])
         if not failed_task_ids:
+            if additional_task_ids:
+                resumed_at = datetime.now(timezone.utc).isoformat()
+                self._record_workflow_resumed(
+                    resumed_at,
+                    [task_id for task_id in additional_task_ids if isinstance(task_id, str) and task_id],
+                )
             return []
 
         resumed_at = datetime.now(timezone.utc).isoformat()
@@ -270,7 +305,11 @@ class ProjectState:
         while True:
             changed = False
             for task in self.tasks:
-                should_resume = task.status == TaskStatus.FAILED.value or (
+                should_resume = (
+                    include_failed_tasks
+                    and task.status == TaskStatus.FAILED.value
+                    and task.id in failed_task_ids
+                ) or (
                     task.status == TaskStatus.SKIPPED.value
                     and self._is_dependency_failed_skip(task)
                     and any(dep in resumable_dependency_ids for dep in task.dependencies)
@@ -304,16 +343,20 @@ class ProjectState:
             if not changed:
                 break
 
+        resumed_ids = resumed_task_ids + [task_id for task_id in additional_task_ids or [] if task_id not in resumed_task_ids]
+        self._record_workflow_resumed(resumed_at, resumed_ids)
+        return resumed_task_ids
+
+    def _record_workflow_resumed(self, resumed_at: str, task_ids: List[str]) -> None:
         self.workflow_last_resumed_at = resumed_at
         self.workflow_finished_at = None
         self._record_execution_event(
             event="workflow_resumed",
             timestamp=resumed_at,
             status=self.phase,
-            details={"reason": "failed_workflow", "task_ids": resumed_task_ids},
+            details={"reason": "failed_workflow", "task_ids": task_ids},
         )
         self._touch(resumed_at)
-        return resumed_task_ids
 
     def _plan_task_repair(self, task_id: str, repair_context: Dict[str, Any]) -> None:
         task = self.get_task(task_id)
@@ -329,6 +372,158 @@ class ProjectState:
             details=dict(repair_context),
         )
         self._touch(planned_at)
+
+    def _create_repair_task(self, task_id: str, repair_owner: str, repair_context: Dict[str, Any]) -> Optional[Task]:
+        source_task = self.get_task(task_id)
+        if source_task is None:
+            return None
+        repair_attempt = int(repair_context.get("cycle") or 0)
+        repair_task_id = f"{task_id}__repair_{repair_attempt}"
+        existing = self.get_task(repair_task_id)
+        if existing is not None:
+            return existing
+        created_at = datetime.now(timezone.utc).isoformat()
+        repair_task = Task(
+            id=repair_task_id,
+            title=f"Repair {source_task.title}",
+            description=source_task.description,
+            assigned_to=repair_owner,
+            dependencies=list(source_task.dependencies),
+            required_for_acceptance=False,
+            retry_limit=source_task.retry_limit,
+            repair_context=dict(repair_context),
+            repair_origin_task_id=source_task.id,
+            repair_attempt=repair_attempt,
+            created_at=created_at,
+        )
+        self.tasks.append(repair_task)
+        source_task.last_resumed_at = created_at
+        self._record_task_event(
+            source_task,
+            "requeued",
+            created_at,
+            error_message="Task resumed after failed workflow execution",
+        )
+        self._record_execution_event(
+            event="task_repair_created",
+            timestamp=created_at,
+            task_id=repair_task.id,
+            status=repair_task.status,
+            details={
+                "repair_origin_task_id": source_task.id,
+                "repair_attempt": repair_attempt,
+                "assigned_to": repair_owner,
+            },
+        )
+        self._record_execution_event(
+            event="task_requeued",
+            timestamp=created_at,
+            task_id=source_task.id,
+            status=source_task.status,
+            details={"reason": "Task resumed after failed workflow execution", "repair_task_id": repair_task.id},
+        )
+        self._touch(created_at)
+        return repair_task
+
+    def _sync_repair_origin_start(self, task: Task, started_at: str) -> None:
+        if not task.repair_origin_task_id:
+            return
+        origin = self.get_task(task.repair_origin_task_id)
+        if origin is None:
+            return
+        origin.attempts += 1
+        if origin.started_at is None:
+            origin.started_at = started_at
+        origin.last_attempt_started_at = started_at
+        origin.last_resumed_at = started_at
+        self._record_task_event(
+            origin,
+            "repair_started",
+            started_at,
+            error_message=f"Repair attempt {task.repair_attempt} started via {task.id}",
+        )
+        self._record_execution_event(
+            event="task_repair_started",
+            timestamp=started_at,
+            task_id=origin.id,
+            status=origin.status,
+            details={"repair_task_id": task.id, "repair_attempt": task.repair_attempt, "assigned_to": task.assigned_to},
+        )
+
+    def _sync_repair_origin_failure(
+        self,
+        task: Task,
+        *,
+        error_message: str,
+        error_type: str,
+        provider_call: Optional[Dict[str, Any]],
+        output: Optional[str | AgentOutput],
+        completed_at: Optional[str],
+        final_failure: bool,
+    ) -> None:
+        if not task.repair_origin_task_id:
+            return
+        origin = self.get_task(task.repair_origin_task_id)
+        if origin is None:
+            return
+        origin.status = TaskStatus.FAILED.value
+        origin.last_error = error_message
+        origin.last_error_type = error_type
+        origin.last_error_category = task.last_error_category
+        origin.last_provider_call = provider_call
+        if final_failure:
+            origin.output = error_message
+            if isinstance(output, AgentOutput) and output.raw_content.strip():
+                origin.output_payload = asdict(output)
+            origin.completed_at = completed_at
+        self._record_task_event(
+            origin,
+            "repair_failed" if final_failure else "repair_retry_scheduled",
+            completed_at,
+            error_message=error_message,
+        )
+        self._record_execution_event(
+            event="task_repair_failed" if final_failure else "task_repair_retry_scheduled",
+            timestamp=completed_at,
+            task_id=origin.id,
+            status=origin.status,
+            details={
+                "repair_task_id": task.id,
+                "repair_attempt": task.repair_attempt,
+                "error_type": error_type,
+                "error_category": task.last_error_category,
+            },
+        )
+
+    def _sync_repair_origin_completion(self, task: Task, provider_call: Optional[Dict[str, Any]]) -> None:
+        if not task.repair_origin_task_id:
+            return
+        origin = self.get_task(task.repair_origin_task_id)
+        if origin is None:
+            return
+        origin.status = TaskStatus.DONE.value
+        origin.output = task.output
+        origin.output_payload = task.output_payload
+        origin.last_error = None
+        origin.last_error_type = None
+        origin.last_error_category = None
+        origin.repair_context = {}
+        origin.last_provider_call = provider_call
+        origin.completed_at = task.completed_at
+        origin.last_resumed_at = task.completed_at
+        self._record_task_event(
+            origin,
+            "repaired",
+            task.completed_at,
+            error_message=f"Repair task {task.id} completed successfully",
+        )
+        self._record_execution_event(
+            event="task_repaired",
+            timestamp=task.completed_at,
+            task_id=origin.id,
+            status=origin.status,
+            details={"repair_task_id": task.id, "repair_attempt": task.repair_attempt, "assigned_to": task.assigned_to},
+        )
 
     def _is_dependency_failed_skip(self, task: Task) -> bool:
         if task.skip_reason_type is not None:
@@ -706,6 +901,8 @@ class ProjectState:
                         "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
                         "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                         "repair_context": task.repair_context,
+                        "repair_origin_task_id": task.repair_origin_task_id,
+                        "repair_attempt": task.repair_attempt,
                         "history": task.history,
                     },
                 )
@@ -726,6 +923,8 @@ class ProjectState:
                     "last_error_category": task.last_error_category,
                     "last_provider_call": task.last_provider_call,
                     "repair_context": task.repair_context,
+                    "repair_origin_task_id": task.repair_origin_task_id,
+                    "repair_attempt": task.repair_attempt,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,
                     "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),

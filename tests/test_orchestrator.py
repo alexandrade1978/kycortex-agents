@@ -1721,12 +1721,14 @@ def test_execute_workflow_can_resume_failed_workflow(tmp_path):
 
     assert project.get_task("arch").status == TaskStatus.DONE.value
     assert project.get_task("review").status == TaskStatus.DONE.value
+    assert project.get_task("arch__repair_1").status == TaskStatus.DONE.value
+    assert project.get_task("arch__repair_1").repair_origin_task_id == "arch"
     assert project.repair_cycle_count == 1
     assert project.repair_history[0]["reason"] == "resume_failed_tasks"
     assert project.repair_history[0]["failed_task_ids"] == ["arch"]
     assert project.execution_events[-1]["event"] == "workflow_finished"
     assert "requeued" in [entry["event"] for entry in project.get_task("arch").history]
-    assert project.get_task("arch").history[-1]["event"] == "completed"
+    assert project.get_task("arch").history[-1]["event"] == "repaired"
 
 
 def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
@@ -1793,12 +1795,57 @@ def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
     orchestrator.execute_workflow(project)
 
     review_task = project.get_task("review")
+    repair_task = project.get_task("review__repair_1")
     assert review_task.status == TaskStatus.DONE.value
     assert review_task.output == "def repaired() -> int:\n    return 1"
+    assert repair_task.status == TaskStatus.DONE.value
+    assert repair_task.repair_origin_task_id == "review"
     assert engineer.last_context["repair_context"]["original_assigned_to"] == "code_reviewer"
     assert engineer.last_context["repair_context"]["failure_category"] == FailureCategory.CODE_VALIDATION.value
     assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
     assert any(event["event"] == "task_repair_planned" for event in project.execution_events)
+    assert any(event["event"] == "task_repair_created" for event in project.execution_events)
+
+
+def test_execute_workflow_does_not_spawn_duplicate_repair_task_when_pending_child_exists(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+            output="boom",
+            attempts=1,
+        )
+    )
+    project.add_task(
+        Task(
+            id="arch__repair_1",
+            title="Repair Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            dependencies=[],
+            repair_context={"cycle": 1, "instruction": "Repair the architecture."},
+            repair_origin_task_id="arch",
+            repair_attempt=1,
+            status=TaskStatus.PENDING.value,
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ARCHITECTURE DOC")}))
+
+    orchestrator.execute_workflow(project)
+
+    assert len([task for task in project.tasks if task.repair_origin_task_id == "arch"]) == 1
+    assert project.get_task("arch").status == TaskStatus.DONE.value
 
 
 def test_build_agent_input_includes_test_repair_context(tmp_path):

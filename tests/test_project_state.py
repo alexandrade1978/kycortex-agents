@@ -734,6 +734,215 @@ def test_resume_failed_tasks_resets_failed_and_dependency_skipped_tasks():
     assert project.get_task("review").history[-1]["event"] == "requeued"
 
 
+def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+            output="boom",
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review",
+            assigned_to="code_reviewer",
+            dependencies=["arch"],
+            status=TaskStatus.SKIPPED.value,
+            output="Skipped because dependency 'arch' failed",
+            completed_at="2026-03-22T10:06:30+00:00",
+        )
+    )
+
+    resumed = project.resume_failed_tasks(include_failed_tasks=False, failed_task_ids=["arch"], additional_task_ids=["arch__repair_1"])
+
+    assert resumed == ["review"]
+    assert project.get_task("arch").status == TaskStatus.FAILED.value
+    assert project.get_task("review").status == TaskStatus.PENDING.value
+    assert project.execution_events[-1]["event"] == "workflow_resumed"
+    assert project.execution_events[-1]["details"]["task_ids"] == ["review", "arch__repair_1"]
+
+
+def test_create_repair_task_records_lineage_and_requeue_audit():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.FAILED.value,
+            output="broken code",
+        )
+    )
+
+    repair_task = project._create_repair_task(
+        "code",
+        "code_engineer",
+        {"cycle": 1, "instruction": "Repair the code."},
+    )
+
+    assert repair_task is not None
+    assert repair_task.id == "code__repair_1"
+    assert repair_task.repair_origin_task_id == "code"
+    assert repair_task.repair_attempt == 1
+    assert repair_task.assigned_to == "code_engineer"
+    assert project.get_task("code").history[-1]["event"] == "requeued"
+    assert any(event["event"] == "task_repair_created" for event in project.execution_events)
+
+
+def test_complete_task_syncs_repair_result_back_to_origin():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.FAILED.value,
+            output="broken code",
+            attempts=1,
+        )
+    )
+    repair_task = project._create_repair_task(
+        "code",
+        "code_engineer",
+        {"cycle": 1, "instruction": "Repair the code."},
+    )
+
+    project.start_task(repair_task.id)
+    project.complete_task(repair_task.id, "def repaired() -> int:\n    return 1")
+
+    origin = project.get_task("code")
+    assert origin.status == TaskStatus.DONE.value
+    assert origin.output == "def repaired() -> int:\n    return 1"
+    assert origin.attempts == 2
+    assert origin.history[-1]["event"] == "repaired"
+    assert any(event["event"] == "task_repaired" for event in project.execution_events)
+
+
+def test_fail_task_syncs_repair_failure_back_to_origin():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            output="broken tests",
+            attempts=1,
+        )
+    )
+    repair_task = project._create_repair_task(
+        "tests",
+        "qa_tester",
+        {"cycle": 1, "instruction": "Repair the tests."},
+    )
+
+    project.start_task(repair_task.id)
+    project.fail_task(repair_task.id, RuntimeError("pytest failed"), error_category="test_validation")
+
+    origin = project.get_task("tests")
+    assert origin.status == TaskStatus.FAILED.value
+    assert origin.last_error == "pytest failed"
+    assert origin.last_error_category == "test_validation"
+    assert origin.attempts == 2
+    assert origin.history[-1]["event"] == "repair_failed"
+
+
+def test_fail_task_syncs_structured_repair_failure_payload_back_to_origin():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+            status=TaskStatus.FAILED.value,
+            output="broken docs",
+            attempts=1,
+        )
+    )
+    repair_task = project._create_repair_task(
+        "docs",
+        "docs_writer",
+        {"cycle": 1, "instruction": "Repair the docs."},
+    )
+
+    project.start_task(repair_task.id)
+    project.fail_task(
+        repair_task.id,
+        RuntimeError("markdown broken"),
+        output=AgentOutput(summary="docs", raw_content="# repaired docs"),
+        error_category="task_execution",
+    )
+
+    origin = project.get_task("docs")
+    assert origin.output == "markdown broken"
+    assert origin.output_payload is not None
+    assert origin.output_payload["raw_content"] == "# repaired docs"
+
+
+def test_resume_failed_tasks_records_workflow_resumed_for_additional_ids_without_failed_tasks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    resumed = project.resume_failed_tasks(include_failed_tasks=False, failed_task_ids=[], additional_task_ids=["code__repair_1"])
+
+    assert resumed == []
+    assert project.workflow_last_resumed_at is not None
+    assert project.execution_events[-1]["event"] == "workflow_resumed"
+    assert project.execution_events[-1]["details"]["task_ids"] == ["code__repair_1"]
+
+
+def test_plan_task_repair_and_repair_helpers_ignore_missing_origin():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    project._plan_task_repair("missing", {"cycle": 1})
+    missing = project._create_repair_task("missing", "code_engineer", {"cycle": 1})
+    project._sync_repair_origin_start(Task(id="repair", title="Repair", description="Repair", assigned_to="code_engineer", repair_origin_task_id="missing"), "2026-03-22T10:00:00+00:00")
+    project._sync_repair_origin_failure(
+        Task(id="repair", title="Repair", description="Repair", assigned_to="code_engineer", repair_origin_task_id="missing"),
+        error_message="boom",
+        error_type="RuntimeError",
+        provider_call=None,
+        output=None,
+        completed_at="2026-03-22T10:01:00+00:00",
+        final_failure=True,
+    )
+    project._sync_repair_origin_completion(
+        Task(id="repair", title="Repair", description="Repair", assigned_to="code_engineer", repair_origin_task_id="missing"),
+        None,
+    )
+
+    assert missing is None
+    assert project.execution_events == []
+
+
+def test_create_repair_task_returns_existing_child_when_present():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.FAILED.value,
+        )
+    )
+    first = project._create_repair_task("code", "code_engineer", {"cycle": 1})
+    second = project._create_repair_task("code", "code_engineer", {"cycle": 1})
+
+    assert first is second
+    assert len([task for task in project.tasks if task.repair_origin_task_id == "code"]) == 1
+
+
 def test_save_and_load_preserve_task_repair_context(tmp_path):
     state_path = tmp_path / "repair_context.json"
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))

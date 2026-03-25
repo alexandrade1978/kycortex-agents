@@ -6,6 +6,23 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.7 - 2026-03-25
+
+### Added
+
+- First-class persisted corrective child tasks for bounded repair cycles, including `repair_origin_task_id` and `repair_attempt` lineage.
+- Mirroring of corrective-task execution back into the original logical workflow task so task history, attempts, and final outputs remain audit-friendly without breaking the stable task graph contract.
+- Persistence and resume coverage proving corrective tasks survive save/load and continue correctly after workflow reload.
+
+### Changed
+
+- `resume_failed` now materializes corrective repair tasks instead of only reassigning the original failed task in place.
+- Dependency-skipped descendants can be re-queued while the failed logical task remains the workflow truth record and waits for its corrective child to finish.
+
+### Release Readiness Notes
+
+- Version `1.0.7` is now the released package baseline.
+
 ## 1.0.6 - 2026-03-25
 
 ### Added
@@ -21,7 +38,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Release Readiness Notes
 
-- Version `1.0.6` is now the released package baseline.
+- Version `1.0.6` is now the previous package baseline.
 
 ## 1.0.5 - 2026-03-25
 

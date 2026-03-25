@@ -578,6 +578,34 @@ class Orchestrator:
             }
             project._plan_task_repair(task.id, repair_context)
 
+    def _repair_task_ids_for_cycle(self, project: ProjectState, failed_task_ids: list[str]) -> list[str]:
+        repair_task_ids: list[str] = []
+        for task_id in failed_task_ids:
+            task = project.get_task(task_id)
+            if task is None:
+                continue
+            repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+            repair_owner = self._execution_agent_name(task)
+            repair_task = project._create_repair_task(task_id, repair_owner, repair_context)
+            if repair_task is not None:
+                repair_task_ids.append(repair_task.id)
+        return repair_task_ids
+
+    def _failed_task_ids_for_repair(self, project: ProjectState) -> list[str]:
+        active_repair_origins = {
+            task.repair_origin_task_id
+            for task in project.tasks
+            if task.repair_origin_task_id
+            and task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}
+        }
+        return [
+            task.id
+            for task in project.tasks
+            if task.status == TaskStatus.FAILED.value
+            and not task.repair_origin_task_id
+            and task.id not in active_repair_origins
+        ]
+
     def _planned_module_context(self, project: ProjectState) -> Dict[str, Any]:
         for existing_task in project.tasks:
             if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
@@ -1373,7 +1401,7 @@ class Orchestrator:
         project.repair_max_cycles = self.config.workflow_max_repair_cycles
         self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         resumed_task_ids = project.resume_interrupted_tasks()
-        failed_task_ids = [task.id for task in project.tasks if task.status == TaskStatus.FAILED.value]
+        failed_task_ids = self._failed_task_ids_for_repair(project)
         if self.config.workflow_resume_policy == "resume_failed":
             if failed_task_ids:
                 if not project.can_start_repair_cycle():
@@ -1411,7 +1439,15 @@ class Orchestrator:
                     failed_task_ids=failed_task_ids,
                 )
                 self._configure_repair_attempts(project, failed_task_ids, project.repair_history[-1])
-            resumed_task_ids.extend(project.resume_failed_tasks())
+                repair_task_ids = self._repair_task_ids_for_cycle(project, failed_task_ids)
+                resumed_task_ids.extend(repair_task_ids)
+                resumed_task_ids.extend(
+                    project.resume_failed_tasks(
+                        include_failed_tasks=False,
+                        failed_task_ids=failed_task_ids,
+                        additional_task_ids=repair_task_ids,
+                    )
+                )
         if resumed_task_ids:
             self._log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))
             project.save()

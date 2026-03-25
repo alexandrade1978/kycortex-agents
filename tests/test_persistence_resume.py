@@ -142,10 +142,13 @@ def test_persisted_failed_workflow_resumes_after_reload(tmp_path, state_filename
 
     resumed_arch = failed.get_task("arch")
     resumed_review = failed.get_task("review")
+    repair_task = failed.get_task("arch__repair_1")
 
     assert resumed_arch.status == TaskStatus.DONE.value
     assert resumed_arch.output == "ARCHITECTURE DOC"
     assert "requeued" in [entry["event"] for entry in resumed_arch.history]
+    assert repair_task.status == TaskStatus.DONE.value
+    assert repair_task.repair_origin_task_id == "arch"
     assert resumed_review.status == TaskStatus.DONE.value
     assert resumed_review.output == "REVIEWED"
     assert failed.workflow_last_resumed_at is not None

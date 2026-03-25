@@ -134,7 +134,16 @@ def test_workflow_policy_combinations_control_persisted_second_run_behavior(
         with pytest.raises(expect_second_run_exception):
             orchestrator.execute_workflow(reloaded)
 
-    assert {task.id: task.status for task in reloaded.tasks} == expected_statuses_after_second_run
+    actual_statuses_after_second_run = {task.id: task.status for task in reloaded.tasks}
+    for task_id, status in expected_statuses_after_second_run.items():
+        assert actual_statuses_after_second_run[task_id] == status
+
+    if resume_policy == "resume_failed":
+        repair_task_ids = [task.id for task in reloaded.tasks if task.repair_origin_task_id]
+        assert repair_task_ids
+        assert all(actual_statuses_after_second_run[task_id] == TaskStatus.DONE.value for task_id in repair_task_ids)
+    else:
+        assert all(not task.repair_origin_task_id for task in reloaded.tasks)
 
     if resume_policy == "resume_failed":
         assert reloaded.workflow_last_resumed_at is not None

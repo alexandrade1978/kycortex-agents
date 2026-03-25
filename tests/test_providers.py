@@ -5,12 +5,18 @@ from urllib.error import HTTPError
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError, ProviderConfigurationError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderConfigurationError, ProviderTransientError
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.providers.factory import create_provider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
+
+
+class FakeAPIError(Exception):
+    def __init__(self, message: str, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def build_response(content):
@@ -182,8 +188,28 @@ def test_openai_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(error=RuntimeError("down")))
 
-    with pytest.raises(AgentExecutionError, match="failed to call the model API"):
+    with pytest.raises(ProviderTransientError, match="failed to call the model API"):
         provider.generate("system", "message")
+
+
+def test_openai_provider_treats_client_4xx_errors_as_deterministic(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = OpenAIProvider(config, client=build_client(error=FakeAPIError("bad request", 400)))
+
+    with pytest.raises(AgentExecutionError, match="rejected the model API request") as exc_info:
+        provider.generate("system", "message")
+
+    assert exc_info.type is AgentExecutionError
+
+
+def test_openai_provider_treats_rate_limits_as_transient(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = OpenAIProvider(config, client=build_client(error=FakeAPIError("rate limited", 429)))
+
+    with pytest.raises(ProviderTransientError, match="failed to call the model API") as exc_info:
+        provider.generate("system", "message")
+
+    assert exc_info.type is ProviderTransientError
 
 
 def test_openai_provider_builds_client_from_installed_sdk(tmp_path, monkeypatch):
@@ -261,8 +287,28 @@ def test_anthropic_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
     provider = AnthropicProvider(config, client=build_anthropic_client(error=RuntimeError("down")))
 
-    with pytest.raises(AgentExecutionError, match="failed to call the model API"):
+    with pytest.raises(ProviderTransientError, match="failed to call the model API"):
         provider.generate("system", "message")
+
+
+def test_anthropic_provider_treats_client_4xx_errors_as_deterministic(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(config, client=build_anthropic_client(error=FakeAPIError("bad request", 400)))
+
+    with pytest.raises(AgentExecutionError, match="rejected the model API request") as exc_info:
+        provider.generate("system", "message")
+
+    assert exc_info.type is AgentExecutionError
+
+
+def test_anthropic_provider_treats_server_5xx_errors_as_transient(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(config, client=build_anthropic_client(error=FakeAPIError("upstream down", 503)))
+
+    with pytest.raises(ProviderTransientError, match="failed to call the model API") as exc_info:
+        provider.generate("system", "message")
+
+    assert exc_info.type is ProviderTransientError
 
 
 def test_anthropic_provider_builds_client_from_installed_sdk(tmp_path, monkeypatch):
@@ -350,8 +396,23 @@ def test_ollama_provider_surfaces_health_check_http_error(tmp_path):
         request_opener=build_ollama_opener(error=build_http_error("http://localhost:11434/api/tags", 503, "Unavailable")),
     )
 
-    with pytest.raises(AgentExecutionError, match=r"health check failed at http://localhost:11434 with HTTP 503"):
+    with pytest.raises(ProviderTransientError, match=r"health check failed at http://localhost:11434 with HTTP 503") as exc_info:
         provider.generate("system", "message")
+
+    assert exc_info.type is ProviderTransientError
+
+
+def test_ollama_provider_treats_health_check_4xx_errors_as_deterministic(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(error=build_http_error("http://localhost:11434/api/tags", 404, "Not Found")),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"health check failed at http://localhost:11434 with HTTP 404") as exc_info:
+        provider.generate("system", "message")
+
+    assert exc_info.type is AgentExecutionError
 
 
 def test_ollama_provider_surfaces_health_check_timeout(tmp_path):
@@ -396,8 +457,26 @@ def test_ollama_provider_surfaces_http_error_with_status_code(tmp_path):
         ),
     )
 
-    with pytest.raises(AgentExecutionError, match=r"HTTP 500"):
+    with pytest.raises(ProviderTransientError, match=r"HTTP 500") as exc_info:
         provider.generate("system", "message")
+
+    assert exc_info.type is ProviderTransientError
+
+
+def test_ollama_provider_treats_generation_4xx_errors_as_deterministic(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(
+            payload=['{"models": []}'],
+            error=[None, build_http_error("http://localhost:11434/api/generate", 400, "Bad Request")],
+        ),
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"HTTP 400") as exc_info:
+        provider.generate("system", "message")
+
+    assert exc_info.type is AgentExecutionError
 
 
 def test_ollama_provider_rejects_invalid_json_response(tmp_path):
@@ -429,8 +508,10 @@ def test_ollama_provider_rejects_generation_connection_failure_after_preflight(t
         request_opener=build_ollama_opener(payload=['{"models": []}'], error=[None, OSError("down")]),
     )
 
-    with pytest.raises(AgentExecutionError, match=r"Ollama server is not responding at http://localhost:11434"):
+    with pytest.raises(ProviderTransientError, match=r"Ollama server is not responding at http://localhost:11434") as exc_info:
         provider.generate("system", "message")
+
+    assert exc_info.type is ProviderTransientError
 
 
 def test_ollama_provider_metadata_is_none_before_calls(tmp_path):

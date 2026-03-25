@@ -11,6 +11,12 @@ from kycortex_agents.providers.openai_provider import OpenAIProvider
 from kycortex_agents.types import AgentInput
 
 
+class FakeAPIError(Exception):
+    def __init__(self, message: str, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 def build_agent_input() -> AgentInput:
     return AgentInput(
         task_id="arch",
@@ -243,3 +249,34 @@ def test_execute_records_retry_attempt_metadata_for_transient_provider_recovery(
     assert result.metadata["provider_call"]["max_attempts"] == 2
     assert len(result.metadata["provider_call"]["attempt_history"]) == 2
     assert result.metadata["provider_call"]["usage"]["total_tokens"] == 5
+
+
+def test_execute_does_not_retry_deterministic_provider_request_failures():
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        api_key="token",
+        llm_model="gpt-4o",
+        provider_max_attempts=3,
+        provider_retry_backoff_seconds=1.0,
+    )
+    provider = OpenAIProvider(
+        config,
+        client=build_openai_client(error=FakeAPIError("bad request", 400)),
+    )
+    agent = ProviderBackedAgent(provider, config)
+
+    with pytest.raises(AgentExecutionError, match=r"IntegrationAgent: OpenAI provider rejected the model API request"):
+        agent.execute(build_agent_input())
+
+    metadata = agent.get_last_provider_call_metadata()
+
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is False
+    assert metadata["error_type"] == "AgentExecutionError"
+    assert metadata["attempts_used"] == 1
+    assert metadata["max_attempts"] == 3
+    assert len(metadata["attempt_history"]) == 1
+    assert metadata["attempt_history"][0]["retryable"] is False
+    assert metadata["attempt_history"][0]["error_type"] == "AgentExecutionError"

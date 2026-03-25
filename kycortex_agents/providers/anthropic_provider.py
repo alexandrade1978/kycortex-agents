@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
+from kycortex_agents.providers._error_classifier import is_transient_provider_exception
 from kycortex_agents.providers.base import BaseLLMProvider
 
 
@@ -47,7 +48,9 @@ class AnthropicProvider(BaseLLMProvider):
             )
         except Exception as exc:
             self._last_call_metadata = None
-            raise ProviderTransientError("Anthropic provider failed to call the model API") from exc
+            if is_transient_provider_exception(exc):
+                raise ProviderTransientError("Anthropic provider failed to call the model API") from exc
+            raise AgentExecutionError("Anthropic provider rejected the model API request") from exc
         self._last_call_metadata = self._extract_metadata(response)
         return self._extract_content(response)
 

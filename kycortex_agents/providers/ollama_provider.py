@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
+from kycortex_agents.providers._error_classifier import is_retryable_http_status
 from kycortex_agents.providers.base import BaseLLMProvider
 
 
@@ -42,7 +43,8 @@ class OllamaProvider(BaseLLMProvider):
                 response.read()
         except HTTPError as exc:
             self._last_call_metadata = None
-            raise ProviderTransientError(
+            error_type = ProviderTransientError if is_retryable_http_status(exc.code) else AgentExecutionError
+            raise error_type(
                 f"Ollama health check failed at {self.config.base_url} with HTTP {exc.code}"
             ) from exc
         except (TimeoutError, socket.timeout) as exc:
@@ -87,7 +89,8 @@ class OllamaProvider(BaseLLMProvider):
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             self._last_call_metadata = None
-            raise ProviderTransientError(
+            error_type = ProviderTransientError if is_retryable_http_status(exc.code) else AgentExecutionError
+            raise error_type(
                 f"Ollama API request failed with HTTP {exc.code} while calling model '{self.config.llm_model}'"
             ) from exc
         except (TimeoutError, socket.timeout) as exc:

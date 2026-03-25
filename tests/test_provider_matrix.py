@@ -124,6 +124,17 @@ def test_provider_matrix_resolve_model_falls_back_to_default_when_ollama_probe_f
     assert resolve_model("ollama", None) == "llama3"
 
 
+def test_provider_matrix_resolve_model_falls_back_to_default_when_ollama_probe_raises_oserror(monkeypatch):
+    from kycortex_agents.provider_matrix import resolve_model
+
+    monkeypatch.setattr(
+        "kycortex_agents.provider_matrix.urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ConnectionRefusedError("offline")),
+    )
+
+    assert resolve_model("ollama", None) == "llama3"
+
+
 def test_provider_matrix_availability_uses_env_vars_and_ollama_probe(monkeypatch):
     from kycortex_agents.provider_matrix import get_provider_availability
 
@@ -142,6 +153,18 @@ def test_provider_matrix_availability_uses_env_vars_and_ollama_probe(monkeypatch
     assert get_provider_availability("openai")["available"] is False
     assert get_provider_availability("anthropic")["available"] is False
     assert get_provider_availability("ollama", urlopen_fn=lambda *args, **kwargs: Response())["available"] is True
+
+
+def test_provider_matrix_availability_respects_explicit_empty_environ():
+    from kycortex_agents.provider_matrix import get_provider_availability
+
+    availability = get_provider_availability("openai", environ={})
+
+    assert availability == {
+        "provider": "openai",
+        "available": False,
+        "reason": "missing OPENAI_API_KEY",
+    }
 
 
 def test_provider_matrix_availability_reports_unknown_provider_and_ollama_failure():

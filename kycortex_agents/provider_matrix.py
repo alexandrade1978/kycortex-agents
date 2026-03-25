@@ -35,7 +35,7 @@ def resolve_model(provider: str, model_override: str | None) -> str:
     try:
         with urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError):
         return default_model
 
     installed_models = [item.get("name", "") for item in payload.get("models", []) if item.get("name")]
@@ -58,7 +58,7 @@ def get_provider_availability(
     if provider not in DEFAULT_PROVIDER_MODELS:
         raise ValueError(f"Unsupported provider: {provider}")
 
-    resolved_environ = environ or os.environ
+    resolved_environ = environ if environ is not None else os.environ
     if provider in PROVIDER_CREDENTIAL_ENV_VARS:
         env_var = PROVIDER_CREDENTIAL_ENV_VARS[provider]
         available = bool(resolved_environ.get(env_var))

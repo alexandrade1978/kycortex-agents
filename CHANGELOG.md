@@ -6,6 +6,18 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.9 - 2026-03-25
+
+### Fixed
+
+- Hardened Ollama model-resolution fallback so raw socket and connection failures now fall back to the default model just like `URLError`-wrapped probe failures.
+- Fixed provider-availability environment selection so an explicitly supplied empty environment mapping is respected instead of silently falling back to the process environment.
+- Added regression coverage for raw `OSError` probe failures and explicit empty-environment availability checks.
+
+### Release Readiness Notes
+
+- Version `1.0.9` is now the released package baseline.
+
 ## 1.0.8 - 2026-03-25
 
 ### Added
@@ -21,7 +33,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Release Readiness Notes
 
-- Version `1.0.8` is now the released package baseline.
+- Version `1.0.8` is now the previous package baseline.
 
 ## 1.0.7 - 2026-03-25
 

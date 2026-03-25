@@ -6,6 +6,23 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.5 - 2026-03-25
+
+### Added
+
+- Explicit `workflow_max_repair_cycles` configuration with validation and a backward-compatible default repair budget for `resume_failed` workflows.
+- Persisted repair-cycle accounting in workflow state and snapshots, including audit history and remaining repair budget metadata.
+- Orchestrator regressions covering successful bounded repair resumption and deterministic failure when the workflow repair budget is exhausted.
+
+### Changed
+
+- `resume_failed` workflow recovery now consumes an explicit workflow-level repair budget instead of allowing unbounded rerun attempts.
+- Exhausted repair budgets now terminate workflows with the normalized failure category `repair_budget_exhausted` and persisted acceptance evidence.
+
+### Release Readiness Notes
+
+- Version `1.0.5` is now the released package baseline.
+
 ## 1.0.4 - 2026-03-25
 
 ### Added
@@ -21,7 +38,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Release Readiness Notes
 
-- Version `1.0.4` is now the released package baseline.
+- Version `1.0.4` is now the previous package baseline.
 
 ## 1.0.3 - 2026-03-25
 

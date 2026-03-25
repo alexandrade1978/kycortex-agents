@@ -37,6 +37,7 @@ class KYCortexConfig:
     workflow_failure_policy: str = "fail_fast"
     workflow_resume_policy: str = "interrupted_only"
     workflow_acceptance_policy: str = "all_tasks"
+    workflow_max_repair_cycles: int = 1
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
@@ -89,6 +90,8 @@ class KYCortexConfig:
             raise ConfigValidationError(
                 "workflow_acceptance_policy must be 'all_tasks' or 'required_tasks'"
             )
+        if self.workflow_max_repair_cycles < 0:
+            raise ConfigValidationError("workflow_max_repair_cycles must be zero or greater")
 
     def validate_runtime(self):
         """Validate provider-specific runtime requirements such as credentials and base URLs."""

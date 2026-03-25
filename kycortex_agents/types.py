@@ -69,6 +69,7 @@ class FailureCategory(str, Enum):
     DEPENDENCY_VALIDATION = "dependency_validation"
     WORKFLOW_BLOCKED = "workflow_blocked"
     WORKFLOW_DEFINITION = "workflow_definition"
+    REPAIR_BUDGET_EXHAUSTED = "repair_budget_exhausted"
 
 
 class ArtifactType(str, Enum):
@@ -171,6 +172,10 @@ class ProjectSnapshot:
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     last_resumed_at: Optional[str] = None
+    repair_cycle_count: int = 0
+    repair_max_cycles: int = 0
+    repair_budget_remaining: int = 0
+    repair_history: List[Dict[str, Any]] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
     decisions: List[DecisionRecord] = field(default_factory=list)
     artifacts: List[ArtifactRecord] = field(default_factory=list)

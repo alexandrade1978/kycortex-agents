@@ -12,7 +12,7 @@ from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome, WorkflowStatus
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, FailureCategory, TaskStatus, WorkflowOutcome, WorkflowStatus
 
 
 class RecordingAgent:
@@ -1631,6 +1631,7 @@ def test_execute_workflow_can_resume_failed_workflow(tmp_path):
         output_dir=str(tmp_path / "output"),
         workflow_failure_policy="fail_fast",
         workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
     )
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
@@ -1671,5 +1672,44 @@ def test_execute_workflow_can_resume_failed_workflow(tmp_path):
 
     assert project.get_task("arch").status == TaskStatus.DONE.value
     assert project.get_task("review").status == TaskStatus.DONE.value
+    assert project.repair_cycle_count == 1
+    assert project.repair_history[0]["reason"] == "resume_failed_tasks"
+    assert project.repair_history[0]["failed_task_ids"] == ["arch"]
     assert "requeued" in [entry["event"] for entry in project.get_task("arch").history]
     assert project.get_task("arch").history[-1]["event"] == "completed"
+
+
+def test_execute_workflow_fails_when_repair_budget_is_exhausted(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    architect = FlakyAgent(failures_before_success=2, success_response="ARCHITECTURE DOC")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": architect}))
+
+    with pytest.raises(RuntimeError, match="boom-1"):
+        orchestrator.execute_workflow(project)
+
+    with pytest.raises(RuntimeError, match="boom-2"):
+        orchestrator.execute_workflow(project)
+
+    with pytest.raises(AgentExecutionError, match="Workflow repair budget exhausted before resuming failed tasks"):
+        orchestrator.execute_workflow(project)
+
+    assert project.repair_cycle_count == 1
+    assert project.phase == "failed"
+    assert project.failure_category == FailureCategory.REPAIR_BUDGET_EXHAUSTED.value
+    assert project.acceptance_criteria_met is False
+    assert project.repair_history[0]["failed_task_ids"] == ["arch"]

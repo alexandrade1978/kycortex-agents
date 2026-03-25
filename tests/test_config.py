@@ -107,6 +107,11 @@ def test_config_rejects_invalid_workflow_acceptance_policy(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_acceptance_policy="optional_only")
 
 
+def test_config_rejects_negative_workflow_max_repair_cycles(tmp_path):
+    with pytest.raises(ConfigValidationError, match="workflow_max_repair_cycles must be zero or greater"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_max_repair_cycles=-1)
+
+
 def test_validate_runtime_rejects_ollama_without_base_url(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
     config.base_url = ""

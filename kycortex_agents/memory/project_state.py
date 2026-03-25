@@ -65,6 +65,9 @@ class ProjectState:
     workflow_started_at: Optional[str] = None
     workflow_finished_at: Optional[str] = None
     workflow_last_resumed_at: Optional[str] = None
+    repair_cycle_count: int = 0
+    repair_max_cycles: int = 0
+    repair_history: List[Dict[str, Any]] = field(default_factory=list)
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     state_file: str = "project_state.json"
 
@@ -320,6 +323,40 @@ class ProjectState:
             return False
         return task.status == TaskStatus.PENDING.value and task.attempts > 0 and task.attempts <= task.retry_limit
 
+    def can_start_repair_cycle(self) -> bool:
+        """Return whether the workflow still has repair-cycle budget remaining."""
+
+        return self.repair_cycle_count < self.repair_max_cycles
+
+    def start_repair_cycle(
+        self,
+        *,
+        reason: str,
+        failure_category: Optional[str] = None,
+        failed_task_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Record the start of a bounded repair cycle and persist its audit metadata."""
+
+        started_at = datetime.now(timezone.utc).isoformat()
+        self.repair_cycle_count += 1
+        entry = {
+            "cycle": self.repair_cycle_count,
+            "started_at": started_at,
+            "reason": reason,
+            "failure_category": failure_category,
+            "failed_task_ids": list(failed_task_ids or []),
+            "budget_remaining": max(self.repair_max_cycles - self.repair_cycle_count, 0),
+        }
+        self.repair_history.append(entry)
+        self._record_execution_event(
+            event="workflow_repair_cycle_started",
+            timestamp=started_at,
+            status=self.phase,
+            details=entry,
+        )
+        self._touch(started_at)
+        return entry
+
     def add_decision(self, topic: str, decision: str, rationale: str):
         """Append a lightweight project-level decision entry with a fresh timestamp."""
 
@@ -346,7 +383,7 @@ class ProjectState:
         self.artifacts.append(asdict(record))
         self._touch(record.created_at)
 
-    def mark_workflow_running(self, *, acceptance_policy: Optional[str] = None):
+    def mark_workflow_running(self, *, acceptance_policy: Optional[str] = None, repair_max_cycles: Optional[int] = None):
         """Mark the workflow execution as active and emit a workflow-start event."""
 
         started_at = datetime.now(timezone.utc).isoformat()
@@ -356,6 +393,8 @@ class ProjectState:
         self.phase = "execution"
         if acceptance_policy is not None:
             self.acceptance_policy = acceptance_policy
+        if repair_max_cycles is not None:
+            self.repair_max_cycles = repair_max_cycles
         self.terminal_outcome = None
         self.failure_category = None
         self.acceptance_criteria_met = False
@@ -364,7 +403,11 @@ class ProjectState:
             event="workflow_started",
             timestamp=started_at,
             status=self.phase,
-            details={"acceptance_policy": self.acceptance_policy},
+            details={
+                "acceptance_policy": self.acceptance_policy,
+                "repair_cycle_count": self.repair_cycle_count,
+                "repair_max_cycles": self.repair_max_cycles,
+            },
         )
         self._touch(started_at)
 
@@ -689,6 +732,10 @@ class ProjectState:
             started_at=self.workflow_started_at,
             finished_at=self.workflow_finished_at,
             last_resumed_at=self.workflow_last_resumed_at,
+            repair_cycle_count=self.repair_cycle_count,
+            repair_max_cycles=self.repair_max_cycles,
+            repair_budget_remaining=max(self.repair_max_cycles - self.repair_cycle_count, 0),
+            repair_history=list(self.repair_history),
             task_results=self.task_results(),
             decisions=[
                 DecisionRecord(

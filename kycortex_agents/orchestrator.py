@@ -1221,14 +1221,54 @@ class Orchestrator:
         """Execute the full workflow until completion or an unrecoverable failure."""
         project.execution_plan()
         self._validate_agent_resolution(project)
+        project.repair_max_cycles = self.config.workflow_max_repair_cycles
         self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         resumed_task_ids = project.resume_interrupted_tasks()
+        failed_task_ids = [task.id for task in project.tasks if task.status == TaskStatus.FAILED.value]
         if self.config.workflow_resume_policy == "resume_failed":
+            if failed_task_ids:
+                if not project.can_start_repair_cycle():
+                    acceptance_evaluation = self._evaluate_workflow_acceptance(project)
+                    project.mark_workflow_finished(
+                        "failed",
+                        acceptance_policy=self.config.workflow_acceptance_policy,
+                        terminal_outcome=WorkflowOutcome.FAILED.value,
+                        failure_category=FailureCategory.REPAIR_BUDGET_EXHAUSTED.value,
+                        acceptance_criteria_met=False,
+                        acceptance_evaluation=acceptance_evaluation,
+                    )
+                    project.save()
+                    self._log_event(
+                        "error",
+                        "workflow_repair_budget_exhausted",
+                        project_name=project.project_name,
+                        failed_task_ids=list(failed_task_ids),
+                        repair_cycle_count=project.repair_cycle_count,
+                        repair_max_cycles=project.repair_max_cycles,
+                    )
+                    raise AgentExecutionError(
+                        "Workflow repair budget exhausted before resuming failed tasks"
+                    )
+                failure_categories = {
+                    task.last_error_category or FailureCategory.UNKNOWN.value
+                    for task in project.tasks
+                    if task.id in failed_task_ids
+                }
+                project.start_repair_cycle(
+                    reason="resume_failed_tasks",
+                    failure_category=(
+                        next(iter(failure_categories)) if len(failure_categories) == 1 else FailureCategory.UNKNOWN.value
+                    ),
+                    failed_task_ids=failed_task_ids,
+                )
             resumed_task_ids.extend(project.resume_failed_tasks())
         if resumed_task_ids:
             self._log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))
             project.save()
-        project.mark_workflow_running(acceptance_policy=self.config.workflow_acceptance_policy)
+        project.mark_workflow_running(
+            acceptance_policy=self.config.workflow_acceptance_policy,
+            repair_max_cycles=self.config.workflow_max_repair_cycles,
+        )
         while True:
             pending = project.pending_tasks()
             if not pending:

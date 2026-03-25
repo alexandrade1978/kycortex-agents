@@ -734,6 +734,27 @@ def test_resume_failed_tasks_resets_failed_and_dependency_skipped_tasks():
     assert project.get_task("review").history[-1]["event"] == "requeued"
 
 
+def test_start_repair_cycle_updates_snapshot_and_execution_history():
+    project = ProjectState(project_name="Demo", goal="Build demo", repair_max_cycles=2)
+
+    entry = project.start_repair_cycle(
+        reason="resume_failed_tasks",
+        failure_category="test_validation",
+        failed_task_ids=["tests"],
+    )
+    snapshot = project.snapshot()
+
+    assert entry["cycle"] == 1
+    assert entry["failure_category"] == "test_validation"
+    assert entry["failed_task_ids"] == ["tests"]
+    assert entry["budget_remaining"] == 1
+    assert snapshot.repair_cycle_count == 1
+    assert snapshot.repair_max_cycles == 2
+    assert snapshot.repair_budget_remaining == 1
+    assert snapshot.repair_history == [entry]
+    assert project.execution_events[-1]["event"] == "workflow_repair_cycle_started"
+
+
 def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_details():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

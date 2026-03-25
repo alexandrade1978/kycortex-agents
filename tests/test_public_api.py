@@ -224,6 +224,8 @@ def test_project_state_public_api_defines_docstrings():
     assert project_state_module.ProjectState.resume_interrupted_tasks.__doc__ == "Re-queue tasks left running by an interrupted workflow execution."
     assert project_state_module.ProjectState.resume_failed_tasks.__doc__ == "Re-queue failed tasks and dependency-skipped descendants for another run."
     assert project_state_module.ProjectState.should_retry_task.__doc__ == "Return whether a pending task is currently in its retry window."
+    assert project_state_module.ProjectState.can_start_repair_cycle.__doc__ == "Return whether the workflow still has repair-cycle budget remaining."
+    assert project_state_module.ProjectState.start_repair_cycle.__doc__ == "Record the start of a bounded repair cycle and persist its audit metadata."
     assert project_state_module.ProjectState.add_decision.__doc__ == "Append a lightweight project-level decision entry with a fresh timestamp."
     assert project_state_module.ProjectState.add_decision_record.__doc__ == "Append a structured decision record to the project history."
     assert project_state_module.ProjectState.add_artifact_record.__doc__ == "Append a structured artifact record to the project artifact list."

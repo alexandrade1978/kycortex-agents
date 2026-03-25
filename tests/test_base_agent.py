@@ -351,6 +351,86 @@ def test_chat_caps_retry_backoff_before_jitter(monkeypatch):
     assert metadata["attempt_history"][0]["backoff_seconds"] == 1.75
 
 
+def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    provider = AlwaysTransientProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 1
+    agent.config.provider_circuit_breaker_threshold = 2
+    agent.config.provider_circuit_breaker_cooldown_seconds = 10.0
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: 100.0)
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message")
+
+    first_metadata = agent.get_last_provider_call_metadata()
+    assert first_metadata is not None
+    assert first_metadata["circuit_breaker_open"] is False
+    assert first_metadata["circuit_breaker_failure_streak"] == 1
+    assert first_metadata["circuit_breaker_remaining_seconds"] == 0.0
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message")
+
+    second_metadata = agent.get_last_provider_call_metadata()
+    assert second_metadata is not None
+    assert second_metadata["circuit_breaker_open"] is True
+    assert second_metadata["circuit_breaker_failure_streak"] == 2
+    assert second_metadata["circuit_breaker_remaining_seconds"] == 10.0
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider circuit breaker is open for 10 more seconds"):
+        agent.chat("system", "message")
+
+    open_metadata = agent.get_last_provider_call_metadata()
+    assert open_metadata is not None
+    assert open_metadata["retryable"] is False
+    assert open_metadata["attempts_used"] == 0
+    assert open_metadata["attempt_history"] == []
+    assert open_metadata["circuit_breaker_open"] is True
+    assert open_metadata["circuit_breaker_failure_streak"] == 2
+    assert provider.calls == [("system", "message"), ("system", "message")]
+
+
+def test_chat_resets_circuit_breaker_after_successful_call(monkeypatch):
+    class RecoveringProvider(DummyProvider):
+        def __init__(self):
+            super().__init__(response="ok")
+            self.attempts = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            self.attempts += 1
+            if self.attempts == 1:
+                raise ProviderTransientError("provider temporarily unavailable")
+            return "ok"
+
+    provider = RecoveringProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 1
+    agent.config.provider_circuit_breaker_threshold = 2
+    agent.config.provider_circuit_breaker_cooldown_seconds = 10.0
+
+    timestamps = iter([100.0, 100.0, 100.0, 100.0, 100.0, 111.0, 111.0, 111.0, 111.0])
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps))
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message")
+
+    result = agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert result == "ok"
+    assert metadata is not None
+    assert metadata["success"] is True
+    assert metadata["circuit_breaker_open"] is False
+    assert metadata["circuit_breaker_failure_streak"] == 0
+    assert metadata["circuit_breaker_remaining_seconds"] == 0.0
+
+
 @pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])
 def test_execute_extracts_code_from_markdown_fences_for_code_artifacts(agent_class):
     provider = DummyProvider(response="Implementation draft\n```python\nprint('hello')\n```\nExtra explanation")

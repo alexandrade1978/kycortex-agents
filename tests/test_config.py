@@ -132,6 +132,28 @@ def test_config_rejects_negative_provider_retry_max_backoff(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_max_backoff_seconds=-0.1)
 
 
+def test_config_rejects_negative_provider_circuit_breaker_threshold(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_circuit_breaker_threshold must be zero or greater"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), provider_circuit_breaker_threshold=-1)
+
+
+def test_config_rejects_negative_provider_circuit_breaker_cooldown(tmp_path):
+    with pytest.raises(ConfigValidationError, match="provider_circuit_breaker_cooldown_seconds must be zero or greater"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), provider_circuit_breaker_cooldown_seconds=-0.1)
+
+
+def test_config_rejects_non_positive_circuit_breaker_cooldown_when_threshold_enabled(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_circuit_breaker_cooldown_seconds must be greater than zero when provider_circuit_breaker_threshold is enabled",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_circuit_breaker_threshold=2,
+            provider_circuit_breaker_cooldown_seconds=0.0,
+        )
+
+
 def test_validate_runtime_rejects_ollama_without_base_url(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama")
     config.base_url = ""

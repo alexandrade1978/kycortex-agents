@@ -29,6 +29,8 @@ class BaseAgent(ABC):
         self.config = config
         self._provider: Optional[BaseLLMProvider] = None
         self._last_provider_call_metadata: Optional[dict[str, Any]] = None
+        self._provider_transient_failure_streak = 0
+        self._provider_circuit_open_until = 0.0
 
     def _get_provider(self) -> BaseLLMProvider:
         if self._provider is None:
@@ -38,11 +40,30 @@ class BaseAgent(ABC):
     def chat(self, system_prompt: str, user_message: str) -> str:
         provider = self._get_provider()
         started_at = perf_counter()
+        current_time = perf_counter()
+        if self._is_provider_circuit_open(current_time):
+            remaining_seconds = round(max(self._provider_circuit_open_until - current_time, 0.0), 6)
+            message = f"{self.name}: provider circuit breaker is open for {remaining_seconds:g} more seconds"
+            self._last_provider_call_metadata = {
+                "provider": self.config.llm_provider,
+                "model": self.config.llm_model,
+                "success": False,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+                "error_type": "AgentExecutionError",
+                "error_message": message.removeprefix(f"{self.name}: "),
+                "retryable": False,
+                "attempts_used": 0,
+                "max_attempts": self.config.provider_max_attempts,
+                "attempt_history": [],
+                **self._provider_circuit_metadata(current_time),
+            }
+            raise AgentExecutionError(message)
         max_attempts = self.config.provider_max_attempts
         attempt_history: list[dict[str, Any]] = []
         for attempt in range(1, max_attempts + 1):
             try:
                 response = provider.generate(system_prompt, user_message)
+                self._reset_provider_circuit_breaker()
                 attempt_history.append(
                     {
                         "attempt": attempt,
@@ -91,10 +112,13 @@ class BaseAgent(ABC):
                     "attempt_history": list(attempt_history),
                 }
                 if attempt >= max_attempts:
+                    self._record_provider_transient_failure(perf_counter())
+                    self._last_provider_call_metadata.update(self._provider_circuit_metadata(perf_counter()))
                     raise AgentExecutionError(f"{self.name}: {exc}") from exc
                 if total_backoff_seconds > 0:
                     sleep(total_backoff_seconds)
             except Exception as exc:
+                self._reset_provider_circuit_breaker()
                 attempt_history.append(
                     {
                         "attempt": attempt,
@@ -116,6 +140,7 @@ class BaseAgent(ABC):
                     "attempts_used": attempt,
                     "max_attempts": max_attempts,
                     "attempt_history": list(attempt_history),
+                    **self._provider_circuit_metadata(perf_counter()),
                 }
                 if isinstance(exc, AgentExecutionError):
                     raise AgentExecutionError(f"{self.name}: {exc}") from exc
@@ -129,11 +154,47 @@ class BaseAgent(ABC):
             "attempts_used": attempt,
             "max_attempts": max_attempts,
             "attempt_history": list(attempt_history),
+            **self._provider_circuit_metadata(perf_counter()),
         }
         provider_metadata = provider.get_last_call_metadata()
         if provider_metadata is not None:
             self._last_provider_call_metadata.update(provider_metadata)
         return response
+
+    def _is_provider_circuit_open(self, current_time: float) -> bool:
+        if self.config.provider_circuit_breaker_threshold <= 0:
+            return False
+        return current_time < self._provider_circuit_open_until
+
+    def _record_provider_transient_failure(self, current_time: float) -> None:
+        if self.config.provider_circuit_breaker_threshold <= 0:
+            self._provider_transient_failure_streak = 0
+            self._provider_circuit_open_until = 0.0
+            return
+        self._provider_transient_failure_streak += 1
+        if self._provider_transient_failure_streak >= self.config.provider_circuit_breaker_threshold:
+            self._provider_circuit_open_until = (
+                current_time + self.config.provider_circuit_breaker_cooldown_seconds
+            )
+
+    def _reset_provider_circuit_breaker(self) -> None:
+        self._provider_transient_failure_streak = 0
+        self._provider_circuit_open_until = 0.0
+
+    def _provider_circuit_metadata(self, current_time: float) -> dict[str, Any]:
+        remaining_seconds = 0.0
+        if self._is_provider_circuit_open(current_time):
+            remaining_seconds = max(self._provider_circuit_open_until - current_time, 0.0)
+        return {
+            "circuit_breaker_open": self._is_provider_circuit_open(current_time),
+            "circuit_breaker_failure_streak": self._provider_transient_failure_streak,
+            "circuit_breaker_threshold": self.config.provider_circuit_breaker_threshold,
+            "circuit_breaker_cooldown_seconds": round(
+                self.config.provider_circuit_breaker_cooldown_seconds,
+                6,
+            ),
+            "circuit_breaker_remaining_seconds": round(remaining_seconds, 6),
+        }
 
     def run_with_input(self, agent_input: AgentInput) -> str | AgentOutput:
         return self.run(agent_input.task_description, agent_input.context)

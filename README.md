@@ -61,7 +61,7 @@ orch = Orchestrator(config)
 orch.execute_workflow(project)
 ```
 
-See `examples/` for complete examples.
+See `examples/` for complete examples, including `example_provider_matrix_validation.py` for resume-enabled empirical provider validation across the supported runtimes.
 
 ## Configuration
 

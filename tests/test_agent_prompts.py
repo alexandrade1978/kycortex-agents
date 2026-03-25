@@ -156,6 +156,10 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "Target module: service_module.py" in agent.last_user_message
     assert "The file will be saved as `service_module.py` and imported as `service_module`." in agent.last_user_message
     assert "def old():" in agent.last_user_message
+    assert "Keep the module under 260 lines." in agent.last_user_message
+    assert "every constructor call matches the constructor you defined" in agent.last_user_message
+    assert "every opened string, bracket, parenthesis, and docstring is closed" in agent.last_user_message
+    assert "Do not stop mid-function, mid-string, or mid-docstring." in agent.last_system_prompt
 
 
 def test_code_reviewer_run_uses_context_module_validation_fields(tmp_path):
@@ -196,6 +200,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
             "code_summary": "def add(a, b): return a + b",
             "code_outline": "def add(a, b):",
             "code_public_api": "Functions:\n- add(a, b)\nClasses:\n- none",
+            "code_test_targets": "Test targets:\n- Functions to test: add(a, b)\n- Classes to test: none\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- add accepts numeric operands",
         },
     )
 
@@ -205,9 +211,22 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Module name: math_utils" in agent.last_user_message
     assert "Public API outline:" in agent.last_user_message
     assert "Public API contract:" in agent.last_user_message
+    assert "Test targets:" in agent.last_user_message
+    assert "Functions to test: add(a, b)" in agent.last_user_message
+    assert "Behavior contract:" in agent.last_user_message
+    assert "add accepts numeric operands" in agent.last_user_message
     assert "def add(a, b):" in agent.last_user_message
     assert "Import from `math_utils`" in agent.last_user_message
     assert "Import every called production function explicitly" in agent.last_user_message
+    assert "every imported production symbol exists in the API contract" in agent.last_user_message
+    assert "every imported production symbol also appears in the listed test targets" in agent.last_user_message
+    assert "every class instantiation uses only documented constructor arguments" in agent.last_user_message
+    assert "every happy-path payload satisfies the listed behavior contract and validation rules" in agent.last_user_message
+    assert "Write complete pytest code only; do not stop mid-test, mid-string, or mid-fixture." in agent.last_system_prompt
+    assert "every non-built-in fixture used by a test is defined in the same file" in agent.last_user_message
+    assert "no test imports entrypoints listed under \"Entry points to avoid in tests\"" in agent.last_user_message
+    assert "no test calls main or CLI/demo entrypoints directly unless argv/input is explicitly controlled in the test" in agent.last_user_message
+    assert "Do not reference pytest fixtures unless you define them in the same file" in agent.last_system_prompt
 
 
 def test_docs_writer_falls_back_to_code_for_summary(tmp_path):

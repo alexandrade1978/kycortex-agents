@@ -6,6 +6,23 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.8 - 2026-03-25
+
+### Added
+
+- A new internal provider-matrix validation helper module plus `examples/example_provider_matrix_validation.py` for reproducible empirical full-workflow reruns across OpenAI, Anthropic, and Ollama.
+- Structured JSON workflow summaries for empirical provider runs, including `repair_cycle_count`, `repair_history`, `repair_task_ids`, and compact task-level failure metadata.
+- Focused regression coverage for provider availability probing, empirical rerun control flow, workflow-summary persistence, and the new example entrypoints.
+
+### Changed
+
+- `examples/example_full_provider_workflow.py` now defaults to the bounded-repair validation mode (`workflow_failure_policy="continue"`, `workflow_resume_policy="resume_failed"`, `workflow_max_repair_cycles=1`) and automatically consumes the configured repair budget.
+- Real provider-matrix validation now confirms the same bounded corrective-lineage semantics across all supported providers instead of relying on Ollama-only full-workflow evidence.
+
+### Release Readiness Notes
+
+- Version `1.0.8` is now the released package baseline.
+
 ## 1.0.7 - 2026-03-25
 
 ### Added
@@ -21,7 +38,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Release Readiness Notes
 
-- Version `1.0.7` is now the released package baseline.
+- Version `1.0.7` is now the previous package baseline.
 
 ## 1.0.6 - 2026-03-25
 

@@ -202,6 +202,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "examples/example_custom_agent.py",
         "examples/example_failure_recovery.py",
         "examples/example_multi_provider.py",
+        "examples/example_provider_matrix_validation.py",
         "examples/example_resume_workflow.py",
         "examples/example_simple_project.py",
         "examples/example_snapshot_inspection.py",
@@ -434,6 +435,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "examples/example_resume_workflow.py" in docs_readme
     assert "examples/example_custom_agent.py" in docs_readme
     assert "examples/example_multi_provider.py" in docs_readme
+    assert "examples/example_provider_matrix_validation.py" in docs_readme
     assert "examples/example_test_mode.py" in docs_readme
     assert "examples/example_complex_workflow.py" in docs_readme
     assert "examples/example_failure_recovery.py" in docs_readme

@@ -405,6 +405,27 @@ def test_execute_generated_tests_blocks_symlink_creation_outside_sandbox(tmp_pat
     assert not escaped_link.exists()
 
 
+def test_execute_generated_tests_blocks_metadata_mutation_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_file.txt").resolve()
+    escaped_file.write_text("data", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def mutate_permissions(target_path):\n"
+        "    os.chmod(target_path, 0o600)\n",
+        "tests_generated.py",
+        "from code_under_test import mutate_permissions\n\n"
+        f"def test_metadata_mutation_is_blocked():\n"
+        f"    mutate_permissions({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -476,6 +497,31 @@ def test_execute_generated_tests_allows_symlink_creation_when_sandbox_disabled(t
     assert result["returncode"] == 0
     assert result["sandbox"]["enabled"] is False
     assert created_link.is_symlink()
+
+
+def test_execute_generated_tests_allows_metadata_mutation_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "chmod_target.txt"
+    target_file.write_text("data", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\nimport stat\n\n"
+        "def mutate_permissions(target_path):\n"
+        "    os.chmod(target_path, 0o600)\n"
+        "    return stat.S_IMODE(os.stat(target_path).st_mode)\n",
+        "tests_generated.py",
+        "from code_under_test import mutate_permissions\n\n"
+        f"def test_metadata_mutation_runs_when_sandbox_is_disabled():\n"
+        f"    assert mutate_permissions({str(target_file)!r}) == 0o600\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
 
 
 def test_execute_generated_tests_allows_os_spawn_calls_when_sandbox_disabled(tmp_path):

@@ -139,7 +139,20 @@ os.open = _guarded_os_open
 tempfile.tempdir = str(_SANDBOX_ROOT)
 
 
-for _name in ("mkdir", "makedirs", "remove", "removedirs", "rmdir", "unlink"):
+for _name in (
+    "chmod",
+    "chown",
+    "lchown",
+    "makedirs",
+    "mkdir",
+    "mkfifo",
+    "mknod",
+    "remove",
+    "removedirs",
+    "rmdir",
+    "unlink",
+    "utime",
+):
     if hasattr(os, _name):
         _real = getattr(os, _name)
 

@@ -340,3 +340,6 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
     ]
     assert metadata["attempts_used"] == 2
     assert metadata["usage"]["total_tokens"] == 20
+    assert metadata["provider_health"]["openai"]["status"] == "degraded"
+    assert metadata["provider_health"]["openai"]["last_failure_retryable"] is True
+    assert metadata["provider_health"]["anthropic"]["status"] == "healthy"

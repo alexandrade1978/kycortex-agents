@@ -33,6 +33,12 @@ class BaseAgent(ABC):
         self._provider_call_count = 0
         self._provider_transient_failure_streaks: dict[str, int] = {}
         self._provider_circuit_open_untils: dict[str, float] = {}
+        self._provider_last_outcomes: dict[str, str] = {}
+        self._provider_last_failure_at: dict[str, float] = {}
+        self._provider_last_success_at: dict[str, float] = {}
+        self._provider_last_error_types: dict[str, str] = {}
+        self._provider_last_error_messages: dict[str, str] = {}
+        self._provider_last_retryable_failures: dict[str, bool] = {}
         self._provider_cancellation_requested = False
         self._provider_cancellation_reason: Optional[str] = None
 
@@ -108,6 +114,7 @@ class BaseAgent(ABC):
                     **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                     **self._provider_cancellation_metadata(),
                     **self._provider_circuit_metadata(provider_name, current_time),
+                    **self._provider_health_metadata(current_time, provider_plan),
                 }
                 raise AgentExecutionError(message)
             for attempt in range(1, max_attempts + 1):
@@ -140,7 +147,9 @@ class BaseAgent(ABC):
                         **self._provider_call_budget_metadata(),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_cancellation_metadata(),
                         **self._provider_circuit_metadata(provider_name, current_time),
+                        **self._provider_health_metadata(current_time, provider_plan),
                     }
                     raise AgentExecutionError(message)
                 if self._is_provider_call_budget_exhausted():
@@ -162,13 +171,16 @@ class BaseAgent(ABC):
                         **self._provider_call_budget_metadata(),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                        **self._provider_cancellation_metadata(),
                         **self._provider_circuit_metadata(provider_name, current_time),
+                        **self._provider_health_metadata(current_time, provider_plan),
                     }
                     raise AgentExecutionError(message)
                 try:
                     self._provider_call_count += 1
                     response = provider.generate(system_prompt, user_message)
                     self._reset_provider_circuit_breaker(provider_name)
+                    self._record_provider_success(provider_name, current_time)
                     attempt_history.append(
                         {
                             "attempt": len(attempt_history) + 1,
@@ -192,6 +204,7 @@ class BaseAgent(ABC):
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
                         **self._provider_circuit_metadata(provider_name, completed_at),
+                        **self._provider_health_metadata(completed_at, provider_plan),
                     }
                     provider_metadata = provider.get_last_call_metadata()
                     if provider_metadata is not None:
@@ -239,10 +252,19 @@ class BaseAgent(ABC):
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
+                        **self._provider_health_metadata(current_time, provider_plan),
                     }
                     if attempt >= max_attempts:
+                        self._record_provider_failure(
+                            provider_name,
+                            current_time,
+                            type(exc).__name__,
+                            str(exc),
+                            retryable=True,
+                        )
                         self._record_provider_transient_failure(provider_name, current_time)
                         self._last_provider_call_metadata.update(self._provider_circuit_metadata(provider_name, current_time))
+                        self._last_provider_call_metadata.update(self._provider_health_metadata(current_time, provider_plan))
                         if provider_index < len(provider_plan) - 1:
                             fallback_history.append(
                                 {
@@ -281,6 +303,7 @@ class BaseAgent(ABC):
                             **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                             **self._provider_cancellation_metadata(),
                             **self._provider_circuit_metadata(provider_name, current_time),
+                            **self._provider_health_metadata(current_time, provider_plan),
                         }
                         raise AgentExecutionError(message) from exc
                     if total_backoff_seconds > 0:
@@ -296,6 +319,13 @@ class BaseAgent(ABC):
                 except Exception as exc:
                     current_time = perf_counter()
                     self._reset_provider_circuit_breaker(provider_name)
+                    self._record_provider_failure(
+                        provider_name,
+                        current_time,
+                        type(exc).__name__,
+                        str(exc),
+                        retryable=False,
+                    )
                     attempt_history.append(
                         {
                             "attempt": len(attempt_history) + 1,
@@ -322,6 +352,7 @@ class BaseAgent(ABC):
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
                         **self._provider_circuit_metadata(provider_name, current_time),
+                        **self._provider_health_metadata(current_time, provider_plan),
                     }
                     if isinstance(exc, AgentExecutionError):
                         raise AgentExecutionError(f"{self.name}: {exc}") from exc
@@ -414,6 +445,46 @@ class BaseAgent(ABC):
             "active_model": model_name,
         }
 
+    def _provider_health_metadata(
+        self,
+        current_time: float,
+        provider_plan: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        provider_health: dict[str, dict[str, Any]] = {}
+        for provider_name, model_name in provider_plan:
+            circuit_open = self._is_provider_circuit_open(provider_name, current_time)
+            last_outcome = self._provider_last_outcomes.get(provider_name)
+            status = "idle"
+            if circuit_open:
+                status = "open_circuit"
+            elif last_outcome == "success":
+                status = "healthy"
+            elif last_outcome == "failure":
+                status = (
+                    "degraded"
+                    if self._provider_last_retryable_failures.get(provider_name, False)
+                    else "failing"
+                )
+            last_success_at = self._provider_last_success_at.get(provider_name)
+            last_failure_at = self._provider_last_failure_at.get(provider_name)
+            provider_health[provider_name] = {
+                "model": model_name,
+                "status": status,
+                "circuit_breaker_open": circuit_open,
+                "transient_failure_streak": self._provider_transient_failure_streaks.get(provider_name, 0),
+                "last_outcome": last_outcome,
+                "last_success_age_seconds": None
+                if last_success_at is None
+                else round(max(current_time - last_success_at, 0.0), 6),
+                "last_failure_age_seconds": None
+                if last_failure_at is None
+                else round(max(current_time - last_failure_at, 0.0), 6),
+                "last_error_type": self._provider_last_error_types.get(provider_name),
+                "last_error_message": self._provider_last_error_messages.get(provider_name),
+                "last_failure_retryable": self._provider_last_retryable_failures.get(provider_name),
+            }
+        return {"provider_health": provider_health}
+
     def _provider_cancellation_metadata(self) -> dict[str, Any]:
         return {
             "provider_cancellation_requested": self._provider_cancellation_requested,
@@ -454,6 +525,26 @@ class BaseAgent(ABC):
                 )
             ),
         }
+
+    def _record_provider_success(self, provider_name: str, current_time: float) -> None:
+        self._provider_last_outcomes[provider_name] = "success"
+        self._provider_last_success_at[provider_name] = current_time
+        self._provider_last_retryable_failures[provider_name] = False
+
+    def _record_provider_failure(
+        self,
+        provider_name: str,
+        current_time: float,
+        error_type: str,
+        error_message: str,
+        *,
+        retryable: bool,
+    ) -> None:
+        self._provider_last_outcomes[provider_name] = "failure"
+        self._provider_last_failure_at[provider_name] = current_time
+        self._provider_last_error_types[provider_name] = error_type
+        self._provider_last_error_messages[provider_name] = error_message
+        self._provider_last_retryable_failures[provider_name] = retryable
 
     def request_provider_cancellation(self, reason: Optional[str] = None) -> None:
         self._provider_cancellation_requested = True

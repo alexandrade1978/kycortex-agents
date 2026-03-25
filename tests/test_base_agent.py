@@ -67,6 +67,9 @@ def test_chat_returns_response_content():
     assert metadata["provider_remaining_elapsed_seconds"] is None
     assert metadata["provider_cancellation_requested"] is False
     assert metadata["provider_cancellation_reason"] is None
+    assert metadata["provider_health"]["openai"]["status"] == "healthy"
+    assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
+    assert metadata["provider_health"]["openai"]["last_failure_age_seconds"] is None
 
 
 def test_chat_raises_on_provider_error():
@@ -585,6 +588,9 @@ def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatc
     assert second_metadata["circuit_breaker_open"] is True
     assert second_metadata["circuit_breaker_failure_streak"] == 2
     assert second_metadata["circuit_breaker_remaining_seconds"] == 10.0
+    assert second_metadata["provider_health"]["openai"]["status"] == "open_circuit"
+    assert second_metadata["provider_health"]["openai"]["last_outcome"] == "failure"
+    assert second_metadata["provider_health"]["openai"]["last_failure_retryable"] is True
 
     with pytest.raises(AgentExecutionError, match="Dummy: provider circuit breaker is open for 10 more seconds"):
         agent.chat("system", "message")
@@ -633,6 +639,8 @@ def test_chat_resets_circuit_breaker_after_successful_call(monkeypatch):
     assert metadata["circuit_breaker_open"] is False
     assert metadata["circuit_breaker_failure_streak"] == 0
     assert metadata["circuit_breaker_remaining_seconds"] == 0.0
+    assert metadata["provider_health"]["openai"]["status"] == "healthy"
+    assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
 
 
 @pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])

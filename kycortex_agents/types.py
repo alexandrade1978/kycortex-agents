@@ -65,6 +65,8 @@ class FailureCategory(str, Enum):
 
     UNKNOWN = "unknown"
     TASK_EXECUTION = "task_execution"
+    PROVIDER_TRANSIENT = "provider_transient"
+    SANDBOX_SECURITY_VIOLATION = "sandbox_security_violation"
     CODE_VALIDATION = "code_validation"
     TEST_VALIDATION = "test_validation"
     DEPENDENCY_VALIDATION = "dependency_validation"

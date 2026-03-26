@@ -10,7 +10,7 @@ import kycortex_agents.orchestrator as orchestrator_module
 from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
@@ -306,6 +306,39 @@ def test_run_task_uses_repair_owner_and_failure_context_for_code_validation(tmp_
     assert engineer.last_context["repair_validation_summary"].startswith("Generated code validation:")
     assert "Repair objective:" in engineer.last_description
     assert "Previous failure category: code_validation" in engineer.last_description
+
+
+def test_classify_task_failure_returns_provider_transient_for_provider_errors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description="Design the architecture",
+        assigned_to="architect",
+    )
+
+    category = orchestrator._classify_task_failure(task, ProviderTransientError("provider temporarily unavailable"))
+
+    assert category == FailureCategory.PROVIDER_TRANSIENT.value
+
+
+def test_classify_task_failure_returns_sandbox_violation_for_blocked_operations(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+    )
+
+    category = orchestrator._classify_task_failure(
+        task,
+        RuntimeError("sandbox policy blocked filesystem write outside sandbox root"),
+    )
+
+    assert category == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
 
 
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
@@ -4752,6 +4785,71 @@ def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
     assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
     assert any(event["event"] == "task_repair_planned" for event in project.execution_events)
     assert any(event["event"] == "task_repair_created" for event in project.execution_events)
+
+
+def test_execute_workflow_resume_failed_hard_stops_for_non_repairable_failed_tasks(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            output="sandbox policy blocked filesystem write outside sandbox root",
+            last_error="sandbox policy blocked filesystem write outside sandbox root",
+            last_error_type="RuntimeError",
+            last_error_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": RecordingAgent("TESTS")}))
+
+    with pytest.raises(AgentExecutionError, match="cannot resume automatically"):
+        orchestrator.execute_workflow(project)
+
+    assert project.phase == "failed"
+    assert project.failure_category == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+    assert project.get_task("tests__repair_1") is None
+    assert project.repair_cycle_count == 0
+
+
+def test_execute_workflow_fails_fast_for_provider_transient_without_repair_task(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    class ProviderFlakyAgent:
+        def run(self, task_description: str, context: dict) -> str:
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": ProviderFlakyAgent()}))
+
+    with pytest.raises(ProviderTransientError, match="provider temporarily unavailable"):
+        orchestrator.execute_workflow(project)
+
+    assert project.phase == "failed"
+    assert project.failure_category == FailureCategory.PROVIDER_TRANSIENT.value
+    assert project.get_task("arch__repair_1") is None
 
 
 def test_execute_workflow_can_chain_new_failed_task_within_active_repair_cycle(tmp_path):

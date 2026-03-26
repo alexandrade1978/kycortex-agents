@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
 
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import (
     AgentInput,
@@ -865,6 +865,10 @@ class Orchestrator:
         normalized_role = AgentRegistry.normalize_key(self._execution_agent_name(task))
         if isinstance(exc, WorkflowDefinitionError):
             return FailureCategory.WORKFLOW_DEFINITION.value
+        if isinstance(exc, ProviderTransientError):
+            return FailureCategory.PROVIDER_TRANSIENT.value
+        if self._is_sandbox_security_violation(exc):
+            return FailureCategory.SANDBOX_SECURITY_VIOLATION.value
         if isinstance(exc, AgentExecutionError):
             if normalized_role == "code_engineer":
                 return FailureCategory.CODE_VALIDATION.value
@@ -873,6 +877,19 @@ class Orchestrator:
             if normalized_role == "dependency_manager":
                 return FailureCategory.DEPENDENCY_VALIDATION.value
         return FailureCategory.TASK_EXECUTION.value
+
+    def _is_sandbox_security_violation(self, exc: Exception) -> bool:
+        message = str(exc).lower()
+        return "sandbox policy blocked" in message
+
+    def _is_repairable_failure(self, failure_category: str) -> bool:
+        return failure_category in {
+            FailureCategory.UNKNOWN.value,
+            FailureCategory.TASK_EXECUTION.value,
+            FailureCategory.CODE_VALIDATION.value,
+            FailureCategory.TEST_VALIDATION.value,
+            FailureCategory.DEPENDENCY_VALIDATION.value,
+        }
 
     def _execution_agent_name(self, task: Task) -> str:
         repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
@@ -2701,6 +2718,33 @@ class Orchestrator:
         failed_task_ids = self._failed_task_ids_for_repair(project)
         if self.config.workflow_resume_policy == "resume_failed":
             if failed_task_ids:
+                failure_categories = {
+                    task.last_error_category or FailureCategory.UNKNOWN.value
+                    for task in project.tasks
+                    if task.id in failed_task_ids
+                }
+                non_repairable_categories = {
+                    category for category in failure_categories if not self._is_repairable_failure(category)
+                }
+                if non_repairable_categories:
+                    resolved_category = (
+                        next(iter(non_repairable_categories))
+                        if len(non_repairable_categories) == 1
+                        else FailureCategory.UNKNOWN.value
+                    )
+                    acceptance_evaluation = self._evaluate_workflow_acceptance(project)
+                    project.mark_workflow_finished(
+                        "failed",
+                        acceptance_policy=self.config.workflow_acceptance_policy,
+                        terminal_outcome=WorkflowOutcome.FAILED.value,
+                        failure_category=resolved_category,
+                        acceptance_criteria_met=False,
+                        acceptance_evaluation=acceptance_evaluation,
+                    )
+                    project.save()
+                    raise AgentExecutionError(
+                        "Workflow contains non-repairable failed tasks and cannot resume automatically"
+                    )
                 if not project.can_start_repair_cycle():
                     acceptance_evaluation = self._evaluate_workflow_acceptance(project)
                     project.mark_workflow_finished(
@@ -2723,11 +2767,6 @@ class Orchestrator:
                     raise AgentExecutionError(
                         "Workflow repair budget exhausted before resuming failed tasks"
                     )
-                failure_categories = {
-                    task.last_error_category or FailureCategory.UNKNOWN.value
-                    for task in project.tasks
-                    if task.id in failed_task_ids
-                }
                 project.start_repair_cycle(
                     reason="resume_failed_tasks",
                     failure_category=(
@@ -2810,9 +2849,22 @@ class Orchestrator:
                 try:
                     self.run_task(task, project)
                 except Exception as exc:
+                    failure_category = self._classify_task_failure(task, exc)
                     if project.should_retry_task(task.id):
                         project.save()
                         continue
+                    if not self._is_repairable_failure(failure_category):
+                        project.mark_workflow_finished(
+                            "failed",
+                            acceptance_policy=self.config.workflow_acceptance_policy,
+                            terminal_outcome=WorkflowOutcome.FAILED.value,
+                            failure_category=failure_category,
+                            acceptance_criteria_met=False,
+                            acceptance_evaluation=self._evaluate_workflow_acceptance(project),
+                        )
+                        project.save()
+                        self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
+                        raise
                     if self._queue_active_cycle_repair(project, task):
                         project.save()
                         continue
@@ -2835,7 +2887,7 @@ class Orchestrator:
                         "failed",
                         acceptance_policy=self.config.workflow_acceptance_policy,
                         terminal_outcome=WorkflowOutcome.FAILED.value,
-                        failure_category=self._classify_task_failure(task, exc),
+                        failure_category=failure_category,
                         acceptance_criteria_met=False,
                         acceptance_evaluation=self._evaluate_workflow_acceptance(project),
                     )

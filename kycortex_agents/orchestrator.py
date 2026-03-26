@@ -366,6 +366,29 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
 
             setattr(_path_class, _name, _guarded_path_read)
 
+    for _name in ("readlink",):
+        if hasattr(_path_class, _name):
+            _real = getattr(_path_class, _name)
+
+            def _guarded_path_metadata_single(*args, __real=_real, **kwargs):
+                if args:
+                    _ensure_metadata_read_within_policy(args[0])
+                return __real(*args, **kwargs)
+
+            setattr(_path_class, _name, _guarded_path_metadata_single)
+
+    for _name in ("samefile",):
+        if hasattr(_path_class, _name):
+            _real = getattr(_path_class, _name)
+
+            def _guarded_path_metadata_pair(*args, __real=_real, **kwargs):
+                if len(args) >= 2:
+                    _ensure_metadata_read_within_policy(args[0])
+                    _ensure_metadata_read_within_policy(args[1])
+                return __real(*args, **kwargs)
+
+            setattr(_path_class, _name, _guarded_path_metadata_pair)
+
     for _name in ("glob", "iterdir", "rglob", "walk"):
         if hasattr(_path_class, _name):
             _real = getattr(_path_class, _name)

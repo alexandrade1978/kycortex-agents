@@ -1273,6 +1273,9 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "        'home': str(Path.home()),\n"
         "        'sandbox_root': os.environ.get('KYCORTEX_SANDBOX_ROOT', ''),\n"
         "        'path': os.environ.get('PATH', ''),\n"
+        "        'user': os.environ.get('USER', ''),\n"
+        "        'logname': os.environ.get('LOGNAME', ''),\n"
+        "        'username': os.environ.get('USERNAME', ''),\n"
         "        'lang': os.environ.get('LANG', ''),\n"
         "        'lc_all': os.environ.get('LC_ALL', ''),\n"
         "        'language': os.environ.get('LANGUAGE', ''),\n"
@@ -1293,6 +1296,9 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "    paths = runtime_paths()\n"
         "    assert paths['home'] == paths['sandbox_root']\n"
         "    assert paths['path'] == paths['sandbox_root']\n"
+        "    assert paths['user'] == 'sandbox_user'\n"
+        "    assert paths['logname'] == 'sandbox_user'\n"
+        "    assert paths['username'] == 'sandbox_user'\n"
         "    assert paths['lang'] == 'C.UTF-8'\n"
         "    assert paths['lc_all'] == 'C.UTF-8'\n"
         "    assert paths['language'] == 'en'\n"
@@ -1367,6 +1373,9 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
         "PATH": "/host/bin",
         "HOME": "/host/home",
         "TMPDIR": "/host/tmp",
+        "USER": "host_user",
+        "LOGNAME": "host_logname",
+        "USERNAME": "host_username",
         "LANG": "pt_BR.UTF-8",
         "LC_ALL": "pt_BR.UTF-8",
         "LANGUAGE": "pt_BR",
@@ -1381,6 +1390,9 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
     assert env["PATH"] == str(tmp_path)
     assert env["HOME"] == str(tmp_path)
     assert env["TMPDIR"] == str(tmp_path)
+    assert env["USER"] == "sandbox_user"
+    assert env["LOGNAME"] == "sandbox_user"
+    assert env["USERNAME"] == "sandbox_user"
     assert env["LANG"] == "C.UTF-8"
     assert env["LC_ALL"] == "C.UTF-8"
     assert env["LANGUAGE"] == "en"

@@ -867,6 +867,9 @@ class Orchestrator:
             env["TEMPDIR"] = str(tmp_path)
             env["HOME"] = str(tmp_path)
             env["USERPROFILE"] = str(tmp_path)
+            env["USER"] = "sandbox_user"
+            env["LOGNAME"] = "sandbox_user"
+            env["USERNAME"] = "sandbox_user"
             env["LANG"] = "C.UTF-8"
             env["LC_ALL"] = "C.UTF-8"
             env["LANGUAGE"] = "en"

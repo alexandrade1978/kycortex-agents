@@ -381,7 +381,29 @@ def test_execute_generated_tests_blocks_file_reads_outside_sandbox(tmp_path):
     )
 
     assert result["returncode"] != 0
-    assert "sandbox policy blocked file access outside sandbox root" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_directory_enumeration_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_listing").resolve()
+    escaped_dir.mkdir()
+    (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def list_directory(target_path):\n"
+        "    return os.listdir(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import list_directory\n\n"
+        f"def test_directory_enumeration_is_blocked():\n"
+        f"    list_directory({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
 def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_path):
@@ -578,6 +600,31 @@ def test_execute_generated_tests_allows_file_reads_when_sandbox_disabled(tmp_pat
         "from code_under_test import read_file\n\n"
         f"def test_file_read_runs_when_sandbox_is_disabled():\n"
         f"    assert read_file({str(target_file)!r}) == 'secret'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_directory_enumeration_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_dir = tmp_path / "listing_target"
+    target_dir.mkdir()
+    (target_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def list_directory(target_path):\n"
+        "    return sorted(os.listdir(target_path))\n",
+        "tests_generated.py",
+        "from code_under_test import list_directory\n\n"
+        f"def test_directory_enumeration_runs_when_sandbox_is_disabled():\n"
+        f"    assert list_directory({str(target_dir)!r}) == ['secret.txt']\n",
     )
 
     assert result["returncode"] == 0

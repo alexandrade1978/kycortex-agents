@@ -175,6 +175,11 @@ def _blocked_filesystem_read(*args, **kwargs):
     raise RuntimeError("sandbox policy blocked file access outside sandbox root")
 
 
+def _ensure_read_within_policy(path_value):
+    if not (_is_within_sandbox(path_value) or _is_runtime_safe_path(path_value)):
+        _blocked_filesystem_read()
+
+
 def _ensure_mutation_within_sandbox(*path_values):
     for path_value in path_values:
         if not _is_within_sandbox(path_value):
@@ -209,6 +214,7 @@ for _name in (
     "chmod",
     "chown",
     "lchown",
+    "listdir",
     "makedirs",
     "mkdir",
     "mkfifo",
@@ -224,10 +230,25 @@ for _name in (
 
         def _guarded_single_path(*args, __real=_real, **kwargs):
             if args:
-                _ensure_mutation_within_sandbox(args[0])
+                if __real is os.listdir:
+                    _ensure_read_within_policy(args[0])
+                else:
+                    _ensure_mutation_within_sandbox(args[0])
             return __real(*args, **kwargs)
 
         setattr(os, _name, _guarded_single_path)
+
+
+for _name in ("scandir",):
+    if hasattr(os, _name):
+        _real = getattr(os, _name)
+
+        def _guarded_scandir(*args, __real=_real, **kwargs):
+            if args:
+                _ensure_read_within_policy(args[0])
+            return __real(*args, **kwargs)
+
+        setattr(os, _name, _guarded_scandir)
 
 
 for _name in ("link", "rename", "replace", "symlink"):

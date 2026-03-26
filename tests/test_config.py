@@ -4,6 +4,15 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import ConfigValidationError
 
 
+def test_config_accepts_valid_provider_specific_call_budget(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        provider_max_calls_per_provider={"openai": 2},
+    )
+
+    assert config.provider_max_calls_per_provider == {"openai": 2}
+
+
 def test_config_normalizes_provider_and_reads_env(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "env-token")
 
@@ -135,6 +144,16 @@ def test_validate_runtime_accepts_ollama_without_api_key(tmp_path):
     config.validate_runtime()
 
 
+
+def test_validate_runtime_accepts_supported_provider_with_explicit_api_key(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token",
+    )
+
+    config.validate_runtime()
+
 def test_config_rejects_invalid_workflow_resume_policy(tmp_path):
     with pytest.raises(ConfigValidationError, match="workflow_resume_policy must be 'interrupted_only' or 'resume_failed'"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_resume_policy="always")
@@ -197,6 +216,17 @@ def test_config_rejects_unsupported_provider_specific_call_budget_key(tmp_path):
         )
 
 
+def test_provider_runtime_config_returns_self_for_primary_provider_without_timeout_override(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token",
+        timeout_seconds=22.0,
+    )
+
+    assert config.provider_runtime_config(" openai ") is config
+
+
 def test_config_rejects_negative_provider_elapsed_budget(tmp_path):
     with pytest.raises(ConfigValidationError, match="provider_max_elapsed_seconds_per_call must be zero or greater"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_max_elapsed_seconds_per_call=-0.1)
@@ -213,6 +243,18 @@ def test_config_rejects_duplicate_provider_fallback_order_entries(tmp_path):
             output_dir=str(tmp_path / "output"),
             provider_fallback_order=("anthropic", "anthropic"),
             provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        )
+
+
+def test_config_rejects_unsupported_provider_in_fallback_order(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_fallback_order contains unsupported provider: custom",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_fallback_order=("custom",),
+            provider_fallback_models={"custom": "custom-model"},
         )
 
 
@@ -234,6 +276,41 @@ def test_config_requires_explicit_models_for_all_fallback_providers(tmp_path):
         KYCortexConfig(
             output_dir=str(tmp_path / "output"),
             provider_fallback_order=("anthropic",),
+        )
+
+
+def test_config_rejects_unsupported_provider_in_fallback_models(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_fallback_models contains unsupported provider: custom",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_fallback_models={"custom": "custom-model"},
+        )
+
+
+def test_config_rejects_fallback_model_key_missing_from_fallback_order(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_fallback_models keys must also appear in provider_fallback_order",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_fallback_order=("anthropic",),
+            provider_fallback_models={"ollama": "llama3"},
+        )
+
+
+def test_config_rejects_empty_fallback_model_name(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_fallback_models must define a non-empty model for provider: anthropic",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_fallback_order=("anthropic",),
+            provider_fallback_models={"anthropic": "   "},
         )
 
 
@@ -301,3 +378,14 @@ def test_config_builds_execution_sandbox_policy(tmp_path):
     assert policy.max_cpu_seconds == 12
     assert policy.max_memory_mb == 256
     assert policy.temp_root == str(tmp_path)
+
+
+def test_config_rejects_blank_execution_sandbox_temp_root(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="execution_sandbox_temp_root must not be empty when provided",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            execution_sandbox_temp_root="   ",
+        )

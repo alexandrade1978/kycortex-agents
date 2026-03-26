@@ -176,6 +176,34 @@ for _name in ("link", "rename", "replace", "symlink"):
         setattr(os, _name, _guarded_two_path)
 
 
+for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
+    _path_class = getattr(pathlib, _path_class_name, None)
+    if _path_class is None:
+        continue
+
+    for _name in ("chmod", "mkdir", "rmdir", "unlink"):
+        if hasattr(_path_class, _name):
+            _real = getattr(_path_class, _name)
+
+            def _guarded_path_single(*args, __real=_real, **kwargs):
+                if args:
+                    _ensure_mutation_within_sandbox(args[0])
+                return __real(*args, **kwargs)
+
+            setattr(_path_class, _name, _guarded_path_single)
+
+    for _name in ("hardlink_to", "rename", "replace", "symlink_to"):
+        if hasattr(_path_class, _name):
+            _real = getattr(_path_class, _name)
+
+            def _guarded_path_double(*args, __real=_real, **kwargs):
+                if len(args) >= 2:
+                    _ensure_mutation_within_sandbox(args[0], args[1])
+                return __real(*args, **kwargs)
+
+            setattr(_path_class, _name, _guarded_path_double)
+
+
 if os.environ.get("KYCORTEX_SANDBOX_ALLOW_NETWORK") != "1":
     socket.socket = _blocked
     socket.create_connection = _blocked

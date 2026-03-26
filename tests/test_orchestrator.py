@@ -426,6 +426,28 @@ def test_execute_generated_tests_blocks_metadata_mutation_outside_sandbox(tmp_pa
     assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_pathlib_mutation_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_pathlib.txt").resolve()
+    escaped_file.write_text("data", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def remove_file(target_path):\n"
+        "    pathlib.Path(target_path).unlink()\n",
+        "tests_generated.py",
+        "from code_under_test import remove_file\n\n"
+        f"def test_pathlib_unlink_is_blocked():\n"
+        f"    remove_file({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+    assert escaped_file.exists()
+
+
 def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -447,6 +469,32 @@ def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_p
 
     assert result["returncode"] == 0
     assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_pathlib_mutation_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "pathlib_target.txt"
+    target_file.write_text("data", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def remove_file(target_path):\n"
+        "    pathlib.Path(target_path).unlink()\n"
+        "    return not pathlib.Path(target_path).exists()\n",
+        "tests_generated.py",
+        "from code_under_test import remove_file\n\n"
+        f"def test_pathlib_unlink_runs_when_sandbox_is_disabled():\n"
+        f"    assert remove_file({str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+    assert not target_file.exists()
 
 
 def test_execute_generated_tests_allows_directory_creation_when_sandbox_disabled(tmp_path):

@@ -1,3 +1,4 @@
+import os
 import pathlib
 import subprocess
 import sys
@@ -801,6 +802,68 @@ def test_execute_generated_tests_blocks_path_type_helpers_outside_sandbox(tmp_pa
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_os_path_isjunction_outside_sandbox_when_supported(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_os_path_isjunction").resolve()
+    escaped_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def is_junction_point(target_path):\n"
+        "    if not hasattr(os.path, 'isjunction'):\n"
+        "        return 'unsupported'\n"
+        "    return os.path.isjunction(target_path)\n",
+        "tests_generated.py",
+        "import os\nimport pytest\n"
+        "from code_under_test import is_junction_point\n\n"
+        "def test_os_path_isjunction_is_blocked_when_supported():\n"
+        "    if not hasattr(os.path, 'isjunction'):\n"
+        "        pytest.skip('os.path.isjunction unavailable')\n"
+        f"    is_junction_point({str(escaped_dir)!r})\n",
+    )
+
+    if hasattr(os.path, "isjunction"):
+        assert result["returncode"] != 0
+        assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+    else:
+        assert result["returncode"] == 0
+        assert "1 skipped" in result["stdout"]
+
+
+def test_execute_generated_tests_blocks_path_is_junction_outside_sandbox_when_supported(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_path_is_junction").resolve()
+    escaped_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def is_junction_point(target_path):\n"
+        "    target = Path(target_path)\n"
+        "    if not hasattr(target, 'is_junction'):\n"
+        "        return 'unsupported'\n"
+        "    return target.is_junction()\n",
+        "tests_generated.py",
+        "import pytest\n"
+        "from pathlib import Path\n"
+        "from code_under_test import is_junction_point\n\n"
+        "def test_path_is_junction_is_blocked_when_supported():\n"
+        "    if not hasattr(Path('.'), 'is_junction'):\n"
+        "        pytest.skip('Path.is_junction unavailable')\n"
+        f"    is_junction_point({str(escaped_dir)!r})\n",
+    )
+
+    if hasattr(pathlib.Path("."), "is_junction"):
+        assert result["returncode"] != 0
+        assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+    else:
+        assert result["returncode"] == 0
+        assert "1 skipped" in result["stdout"]
+
+
 def test_execute_generated_tests_blocks_os_stat_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1507,6 +1570,44 @@ def test_execute_generated_tests_allows_path_type_helpers_when_sandbox_disabled(
 
     assert result["returncode"] == 0
     assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_junction_helpers_when_sandbox_disabled_when_supported(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_dir = tmp_path / "junction_helper_target"
+    target_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n"
+        "from pathlib import Path\n\n"
+        "def read_junction_flags(target_path):\n"
+        "    target = Path(target_path)\n"
+        "    if not hasattr(os.path, 'isjunction') or not hasattr(target, 'is_junction'):\n"
+        "        return 'unsupported'\n"
+        "    return (os.path.isjunction(target_path), target.is_junction())\n",
+        "tests_generated.py",
+        "import os\nimport pytest\n"
+        "from pathlib import Path\n"
+        "from code_under_test import read_junction_flags\n\n"
+        "def test_junction_helpers_run_when_supported_and_sandbox_is_disabled():\n"
+        "    if not hasattr(os.path, 'isjunction') or not hasattr(Path('.'), 'is_junction'):\n"
+        "        pytest.skip('junction helpers unavailable')\n"
+        f"    os_junction, path_junction = read_junction_flags({str(target_dir)!r})\n"
+        "    assert os_junction is False\n"
+        "    assert path_junction is False\n",
+    )
+
+    if hasattr(os.path, "isjunction") and hasattr(pathlib.Path("."), "is_junction"):
+        assert result["returncode"] == 0
+        assert result["sandbox"]["enabled"] is False
+    else:
+        assert result["returncode"] == 0
+        assert "1 skipped" in result["stdout"]
 
 
 def test_execute_generated_tests_allows_os_stat_when_sandbox_disabled(tmp_path):

@@ -326,8 +326,8 @@ def test_github_actions_ci_workflow_covers_repository_validation_baseline():
     assert "workflow_dispatch:" in ci_workflow
     assert "branches:" in ci_workflow
     assert "- main" in ci_workflow
-    assert "actions/checkout@v4" in ci_workflow
-    assert "actions/setup-python@v5" in ci_workflow
+    assert "actions/checkout@v5" in ci_workflow
+    assert "actions/setup-python@v6" in ci_workflow
     assert 'python-version: ["3.10", "3.12"]' in ci_workflow
     assert 'python-version: "3.12"' in ci_workflow
     assert "name: Focused Regressions (${{ matrix.python-version }})" in ci_workflow
@@ -350,8 +350,8 @@ def test_github_actions_release_workflow_covers_tagged_release_automation():
     assert "workflow_dispatch:" in release_workflow
     assert "tags:" in release_workflow
     assert '- "v*"' in release_workflow
-    assert "actions/checkout@v4" in release_workflow
-    assert "actions/setup-python@v5" in release_workflow
+    assert "actions/checkout@v5" in release_workflow
+    assert "actions/setup-python@v6" in release_workflow
     assert 'python -m pip install -e ".[test]"' in release_workflow
     assert "python -m ruff check ." in release_workflow
     assert "python -m mypy" in release_workflow

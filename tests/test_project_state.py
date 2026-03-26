@@ -1293,6 +1293,132 @@ def test_snapshot_reports_running_workflow_status_when_any_task_is_running():
     assert project.snapshot().workflow_status == WorkflowStatus.RUNNING
 
 
+def test_load_rejects_invalid_top_level_project_state_payload(tmp_path):
+    state_path = tmp_path / "invalid-project-state.json"
+    resolve_state_store(str(state_path)).save(
+        str(state_path),
+        {
+            "project_name": "Demo",
+            "goal": "Build demo",
+            "tasks": [],
+            "unexpected_field": True,
+        },
+    )
+
+    with pytest.raises(StatePersistenceError, match="Project state data is invalid"):
+        ProjectState.load(str(state_path))
+
+
+def test_legacy_skip_reason_helpers_treat_non_matching_dependency_messages_as_manual():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="docs",
+        title="Docs",
+        description="Document",
+        assigned_to="docs_writer",
+        status=TaskStatus.SKIPPED.value,
+        output="Skipped manually by operator",
+    )
+
+    assert project._extract_dependency_failed_task_id(task) is None
+    assert project._matching_dependency_failed_reason_task_id(task) is None
+    assert project._infer_legacy_skip_reason_type(task) == "manual"
+
+
+def test_depends_on_task_handles_cycles_and_missing_dependencies_without_looping():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            dependencies=["code", "missing"],
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    assert project._depends_on_task(project.get_task("arch"), "code") is True
+    assert project._depends_on_task(project.get_task("arch"), "tests") is False
+
+
+def test_duration_ms_returns_none_for_invalid_timestamps():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    assert project._duration_ms("not-an-iso-date", "2026-03-22T10:06:00+00:00") is None
+
+
+def test_snapshot_reports_failed_workflow_status_for_terminal_failed_outcome():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        workflow_finished_at="2026-03-22T10:06:00+00:00",
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+    )
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+        )
+    )
+
+    assert project.snapshot().workflow_status == WorkflowStatus.FAILED
+
+
+def test_build_agent_output_handles_blank_output_and_summary_helper_returns_empty_string():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="docs",
+        title="Documentation",
+        description="Document",
+        assigned_to="docs_writer",
+        status=TaskStatus.DONE.value,
+        output=None,
+    )
+
+    output = project._build_agent_output(task)
+
+    assert project._summarize_output("   \n\t") == ""
+    assert output.summary == ""
+    assert output.raw_content == ""
+    assert output.metadata["status"] == TaskStatus.DONE.value
+
+
+def test_project_summary_reports_done_task_counts():
+    project = ProjectState(project_name="Demo", goal="Build demo", phase="running")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement",
+            assigned_to="code_engineer",
+            status=TaskStatus.PENDING.value,
+        )
+    )
+
+    assert project.summary() == "Project: Demo | Phase: running | Tasks: 1/2 done"
+
+
 def test_save_and_load_preserves_execution_events_json(tmp_path):
     state_path = tmp_path / "project_state.json"
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))

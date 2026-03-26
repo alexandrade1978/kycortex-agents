@@ -11,6 +11,11 @@ from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.providers.factory import create_provider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
+from kycortex_agents.providers._error_classifier import (
+    extract_http_status_code,
+    is_retryable_http_status,
+    is_transient_provider_exception,
+)
 
 
 class FakeAPIError(Exception):
@@ -89,6 +94,46 @@ def build_ollama_opener(payload=None, error=None):
 
 def build_http_error(url: str, code: int, reason: str) -> HTTPError:
     return HTTPError(url=url, code=code, msg=reason, hdrs=None, fp=None)
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected"),
+    [
+        (SimpleNamespace(status_code=429), 429),
+        (SimpleNamespace(code=503), 503),
+        (SimpleNamespace(response=SimpleNamespace(status_code=502)), 502),
+        (SimpleNamespace(status_code="429", response=SimpleNamespace(status_code="502")), None),
+    ],
+)
+def test_extract_http_status_code_supports_multiple_exception_shapes(exc, expected):
+    assert extract_http_status_code(exc) == expected
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected"),
+    [
+        (408, True),
+        (429, True),
+        (500, True),
+        (599, True),
+        (404, False),
+    ],
+)
+def test_is_retryable_http_status_matches_retry_policy(status_code, expected):
+    assert is_retryable_http_status(status_code) is expected
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected"),
+    [
+        (SimpleNamespace(), True),
+        (SimpleNamespace(status_code=503), True),
+        (SimpleNamespace(response=SimpleNamespace(status_code=429)), True),
+        (SimpleNamespace(code=400), False),
+    ],
+)
+def test_is_transient_provider_exception_distinguishes_deterministic_statuses(exc, expected):
+    assert is_transient_provider_exception(exc) is expected
 
 
 def test_create_provider_returns_openai_provider(tmp_path):

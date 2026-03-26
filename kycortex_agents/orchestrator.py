@@ -68,8 +68,11 @@ _PYTEST_BUILTIN_FIXTURES = {
 _SANDBOX_SITECUSTOMIZE = """
 import asyncio
 import builtins
+import ctypes
+import ctypes.util
 import glob
 import io
+import mmap
 import os
 import pathlib
 import shutil
@@ -257,6 +260,8 @@ def _ensure_mutation_within_sandbox(*path_values):
 
 
 def _guarded_open(file, mode="r", *args, **kwargs):
+    if isinstance(file, int):
+        _blocked()
     if _is_write_mode(mode):
         if not _is_within_sandbox(file):
             _blocked_filesystem_write()
@@ -282,6 +287,7 @@ tempfile.tempdir = str(_SANDBOX_ROOT)
 
 for _name in (
     "chmod",
+    "chdir",
     "chown",
     "lchown",
     "makedirs",
@@ -290,7 +296,9 @@ for _name in (
     "mknod",
     "remove",
     "removedirs",
+    "removexattr",
     "rmdir",
+    "setxattr",
     "unlink",
     "utime",
 ):
@@ -327,6 +335,18 @@ for _name in ("stat", "lstat"):
             return __real(*args, **kwargs)
 
         setattr(os, _name, _guarded_metadata_read_path)
+
+
+for _name in ("getxattr", "listxattr"):
+    if hasattr(os, _name):
+        _real = getattr(os, _name)
+
+        def _guarded_xattr_read_path(*args, __real=_real, **kwargs):
+            if args:
+                _ensure_metadata_read_within_policy(args[0])
+            return __real(*args, **kwargs)
+
+        setattr(os, _name, _guarded_xattr_read_path)
 
 
 if hasattr(os, "readlink"):
@@ -555,6 +575,31 @@ for _name in ("rmtree",):
         setattr(shutil, _name, _guarded_shutil_single)
 
 
+for _name in ("CDLL", "OleDLL", "PyDLL", "WinDLL"):
+    if hasattr(ctypes, _name):
+        setattr(ctypes, _name, _blocked)
+
+
+for _loader_name in ("cdll", "oledll", "pydll", "windll"):
+    if hasattr(ctypes, _loader_name):
+        _loader = getattr(ctypes, _loader_name)
+        if hasattr(_loader, "LoadLibrary"):
+            _loader.LoadLibrary = _blocked
+
+
+if hasattr(ctypes.util, "find_library"):
+    ctypes.util.find_library = _blocked
+
+
+if hasattr(mmap, "mmap"):
+    mmap.mmap = _blocked
+
+
+for _name in ("dup", "dup2"):
+    if hasattr(os, _name):
+        setattr(os, _name, _blocked)
+
+
 if os.environ.get("KYCORTEX_SANDBOX_ALLOW_NETWORK") != "1":
     socket.socket = _blocked
     socket.create_connection = _blocked
@@ -611,19 +656,22 @@ if {sandbox_enabled}:
 
 import pytest
 
+pytest_args = [
+    "-c",
+    {pytest_config_path},
+    "--rootdir",
+    {rootdir_path},
+    "-o",
+    {pytest_log_option},
+    {test_filename},
+    "-q",
+]
+
+if {sandbox_enabled}:
+    pytest_args.extend(["--capture=sys", "-p", "no:faulthandler"])
+
 raise SystemExit(
-    pytest.main(
-        [
-            "-c",
-            {pytest_config_path},
-            "--rootdir",
-            {rootdir_path},
-            "-o",
-            {pytest_log_option},
-            {test_filename},
-            "-q",
-        ]
-    )
+    pytest.main(pytest_args)
 )
 """
 

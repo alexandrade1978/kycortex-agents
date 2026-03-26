@@ -111,6 +111,28 @@ class CompletedProcessStub:
         self.stderr = stderr
 
 
+def supports_user_xattrs(target_path: pathlib.Path) -> bool:
+    if not all(hasattr(os, name) for name in ("getxattr", "listxattr", "setxattr", "removexattr")):
+        return False
+
+    attribute_name = "user.kycortex_probe"
+    attribute_value = b"probe"
+
+    try:
+        os.setxattr(target_path, attribute_name, attribute_value)
+        listed_names = os.listxattr(target_path)
+        loaded_value = os.getxattr(target_path, attribute_name)
+    except OSError:
+        return False
+    finally:
+        try:
+            os.removexattr(target_path, attribute_name)
+        except OSError:
+            pass
+
+    return attribute_name in listed_names and loaded_value == attribute_value
+
+
 def build_openai_client(response=None, error=None):
     def create(**kwargs):
         if error is not None:
@@ -302,7 +324,7 @@ def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     )
 
     assert result["returncode"] != 0
-    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+    assert "sandbox policy blocked" in result["stdout"] or "sandbox policy blocked" in result["stderr"]
     assert result["sandbox"]["allow_subprocesses"] is False
 
 
@@ -322,7 +344,7 @@ def test_execute_generated_tests_blocks_os_spawn_calls_in_sandbox(tmp_path):
     )
 
     assert result["returncode"] != 0
-    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+    assert "sandbox policy blocked" in result["stdout"] or "sandbox policy blocked" in result["stderr"]
     assert result["sandbox"]["allow_subprocesses"] is False
 
 
@@ -344,6 +366,163 @@ def test_execute_generated_tests_blocks_network_calls_in_sandbox(tmp_path):
     assert result["returncode"] != 0
     assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
     assert result["sandbox"]["allow_network"] is False
+
+
+def test_execute_generated_tests_blocks_ctypes_loading_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import ctypes\nimport ctypes.util\n\n"
+        "def load_native_library():\n"
+        "    ctypes.CDLL(None)\n"
+        "    ctypes.util.find_library('c')\n",
+        "tests_generated.py",
+        "from code_under_test import load_native_library\n\n"
+        "def test_ctypes_loading_is_blocked():\n"
+        "    load_native_library()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_mmap_calls_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import mmap\n\n"
+        "def allocate_memory_map():\n"
+        "    mapping = mmap.mmap(-1, 64)\n"
+        "    mapping.close()\n",
+        "tests_generated.py",
+        "from code_under_test import allocate_memory_map\n\n"
+        "def test_mmap_is_blocked():\n"
+        "    allocate_memory_map()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_chdir_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_chdir").resolve()
+    escaped_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def leave_sandbox(target_path):\n"
+        "    os.chdir(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import leave_sandbox\n\n"
+        f"def test_chdir_is_blocked():\n"
+        f"    leave_sandbox({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked" in result["stdout"] or "sandbox policy blocked" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_fd_duplication_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def duplicate_stdout():\n"
+        "    os.dup(1)\n",
+        "tests_generated.py",
+        "from code_under_test import duplicate_stdout\n\n"
+        "def test_fd_duplication_is_blocked():\n"
+        "    duplicate_stdout()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_fd_wrapping_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import io\nimport os\n\n"
+        "def wrap_stdout():\n"
+        "    handle = io.open(1, 'w', closefd=False)\n"
+        "    try:\n"
+        "        return handle.writable()\n"
+        "    finally:\n"
+        "        handle.close()\n",
+        "tests_generated.py",
+        "from code_under_test import wrap_stdout\n\n"
+        "def test_fd_wrapping_is_blocked():\n"
+        "    wrap_stdout()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_xattr_reads_outside_sandbox_when_supported(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_xattr_read.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+    attribute_name = "user.kycortex_read"
+    attribute_value = b"secret"
+
+    if not supports_user_xattrs(escaped_file):
+        pytest.skip("user xattrs unsupported")
+
+    os.setxattr(escaped_file, attribute_name, attribute_value)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_xattrs(target_path, attribute_name):\n"
+        "    return (os.listxattr(target_path), os.getxattr(target_path, attribute_name))\n",
+        "tests_generated.py",
+        "from code_under_test import read_xattrs\n\n"
+        f"def test_xattr_reads_are_blocked_when_supported():\n"
+        f"    read_xattrs({str(escaped_file)!r}, {attribute_name!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_xattr_mutation_outside_sandbox_when_supported(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_xattr_write.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+    attribute_name = "user.kycortex_write"
+    attribute_value = b"secret"
+
+    if not supports_user_xattrs(escaped_file):
+        pytest.skip("user xattrs unsupported")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def write_xattr(target_path, attribute_name, attribute_value):\n"
+        "    os.setxattr(target_path, attribute_name, attribute_value)\n",
+        "tests_generated.py",
+        "from code_under_test import write_xattr\n\n"
+        f"def test_xattr_mutation_is_blocked_when_supported():\n"
+        f"    write_xattr({str(escaped_file)!r}, {attribute_name!r}, {attribute_value!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
 
 
 def test_execute_generated_tests_blocks_filesystem_writes_outside_sandbox(tmp_path):
@@ -1263,6 +1442,155 @@ def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_p
         "from code_under_test import spawn_child\n\n"
         "def test_spawn_child_runs_when_sandbox_is_disabled():\n"
         "    assert spawn_child() == 'hi'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_ctypes_loading_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import ctypes\nimport ctypes.util\n\n"
+        "def load_native_library():\n"
+        "    return (ctypes.CDLL(None)._name, ctypes.util.find_library('c'))\n",
+        "tests_generated.py",
+        "from code_under_test import load_native_library\n\n"
+        "def test_ctypes_loading_runs_when_sandbox_is_disabled():\n"
+        "    library_name, lookup = load_native_library()\n"
+        "    assert library_name is None\n"
+        "    assert lookup is None or isinstance(lookup, str)\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_mmap_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import mmap\n\n"
+        "def allocate_memory_map():\n"
+        "    mapping = mmap.mmap(-1, 64)\n"
+        "    try:\n"
+        "        mapping[0:4] = b'test'\n"
+        "        return bytes(mapping[0:4])\n"
+        "    finally:\n"
+        "        mapping.close()\n",
+        "tests_generated.py",
+        "from code_under_test import allocate_memory_map\n\n"
+        "def test_mmap_runs_when_sandbox_is_disabled():\n"
+        "    assert allocate_memory_map() == b'test'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_chdir_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_dir = tmp_path / "chdir_target"
+    target_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def change_directory(target_path):\n"
+        "    original = os.getcwd()\n"
+        "    try:\n"
+        "        os.chdir(target_path)\n"
+        "        return os.getcwd()\n"
+        "    finally:\n"
+        "        os.chdir(original)\n",
+        "tests_generated.py",
+        "from code_under_test import change_directory\n\n"
+        f"def test_chdir_runs_when_sandbox_is_disabled():\n"
+        f"    assert change_directory({str(target_dir)!r}) == {str(target_dir)!r}\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_fd_duplication_and_wrapping_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import io\nimport os\n\n"
+        "def duplicate_and_wrap_stdout():\n"
+        "    duplicated_fd = os.dup(1)\n"
+        "    try:\n"
+        "        handle = io.open(duplicated_fd, 'w', closefd=True)\n"
+        "        try:\n"
+        "            return handle.writable()\n"
+        "        finally:\n"
+        "            handle.close()\n"
+        "    finally:\n"
+        "        try:\n"
+        "            os.close(duplicated_fd)\n"
+        "        except OSError:\n"
+        "            pass\n",
+        "tests_generated.py",
+        "from code_under_test import duplicate_and_wrap_stdout\n\n"
+        "def test_fd_duplication_and_wrapping_run_when_sandbox_is_disabled():\n"
+        "    assert duplicate_and_wrap_stdout() is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_xattr_helpers_when_sandbox_disabled_when_supported(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "xattr_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    if not supports_user_xattrs(target_file):
+        pytest.skip("user xattrs unsupported")
+
+    attribute_name = "user.kycortex_allowed"
+    attribute_value = b"secret"
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def mutate_and_read_xattrs(target_path, attribute_name, attribute_value):\n"
+        "    os.setxattr(target_path, attribute_name, attribute_value)\n"
+        "    try:\n"
+        "        return (attribute_name in os.listxattr(target_path), os.getxattr(target_path, attribute_name))\n"
+        "    finally:\n"
+        "        os.removexattr(target_path, attribute_name)\n",
+        "tests_generated.py",
+        "from code_under_test import mutate_and_read_xattrs\n\n"
+        f"def test_xattr_helpers_run_when_supported_and_sandbox_is_disabled():\n"
+        f"    has_attribute, attribute_value = mutate_and_read_xattrs({str(target_file)!r}, {attribute_name!r}, {attribute_value!r})\n"
+        "    assert has_attribute is True\n"
+        f"    assert attribute_value == {attribute_value!r}\n",
     )
 
     assert result["returncode"] == 0

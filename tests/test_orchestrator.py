@@ -448,6 +448,27 @@ def test_execute_generated_tests_blocks_pathlib_mutation_outside_sandbox(tmp_pat
     assert escaped_file.exists()
 
 
+def test_execute_generated_tests_blocks_pathlib_write_text_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_write_text.txt").resolve()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def write_file(target_path):\n"
+        "    pathlib.Path(target_path).write_text('escaped', encoding='utf-8')\n",
+        "tests_generated.py",
+        "from code_under_test import write_file\n\n"
+        f"def test_pathlib_write_text_is_blocked():\n"
+        f"    write_file({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+    assert not escaped_file.exists()
+
+
 def test_execute_generated_tests_blocks_shutil_rmtree_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -542,6 +563,31 @@ def test_execute_generated_tests_allows_pathlib_mutation_when_sandbox_disabled(t
     assert result["returncode"] == 0
     assert result["sandbox"]["enabled"] is False
     assert not target_file.exists()
+
+
+def test_execute_generated_tests_allows_pathlib_write_text_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "pathlib_write_text_target.txt"
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def write_file(target_path):\n"
+        "    pathlib.Path(target_path).write_text('ok', encoding='utf-8')\n"
+        "    return pathlib.Path(target_path).read_text(encoding='utf-8')\n",
+        "tests_generated.py",
+        "from code_under_test import write_file\n\n"
+        f"def test_pathlib_write_text_runs_when_sandbox_is_disabled():\n"
+        f"    assert write_file({str(target_file)!r}) == 'ok'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+    assert target_file.read_text(encoding="utf-8") == "ok"
 
 
 def test_execute_generated_tests_allows_shutil_move_when_sandbox_disabled(tmp_path):

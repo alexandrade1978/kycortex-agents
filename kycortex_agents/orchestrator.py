@@ -68,6 +68,7 @@ _PYTEST_BUILTIN_FIXTURES = {
 _SANDBOX_SITECUSTOMIZE = """
 import asyncio
 import builtins
+import io
 import os
 import pathlib
 import shutil
@@ -77,6 +78,7 @@ import tempfile
 
 
 _REAL_OPEN = builtins.open
+_REAL_IO_OPEN = io.open
 _REAL_OS_OPEN = os.open
 _SANDBOX_ROOT = pathlib.Path(os.environ.get("KYCORTEX_SANDBOX_ROOT", os.getcwd())).resolve()
 
@@ -136,6 +138,7 @@ def _guarded_os_open(path, flags, mode=0o777, *args, **kwargs):
 
 
 builtins.open = _guarded_open
+io.open = _guarded_open
 os.open = _guarded_os_open
 tempfile.tempdir = str(_SANDBOX_ROOT)
 

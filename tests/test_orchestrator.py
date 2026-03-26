@@ -1294,6 +1294,9 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "        'config_exists': Path(os.environ.get('XDG_CONFIG_HOME', '')).is_dir(),\n"
         "        'cache_exists': Path(os.environ.get('XDG_CACHE_HOME', '')).is_dir(),\n"
         "        'data_exists': Path(os.environ.get('XDG_DATA_HOME', '')).is_dir(),\n"
+        "        'config_mode': Path(os.environ.get('XDG_CONFIG_HOME', '')).stat().st_mode & 0o777,\n"
+        "        'cache_mode': Path(os.environ.get('XDG_CACHE_HOME', '')).stat().st_mode & 0o777,\n"
+        "        'data_mode': Path(os.environ.get('XDG_DATA_HOME', '')).stat().st_mode & 0o777,\n"
         "    }\n",
         "tests_generated.py",
         "from pathlib import Path\n"
@@ -1321,7 +1324,10 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "    assert paths['data'] == str(Path(paths['home']) / '.local' / 'share')\n"
         "    assert paths['config_exists'] is True\n"
         "    assert paths['cache_exists'] is True\n"
-        "    assert paths['data_exists'] is True\n",
+        "    assert paths['data_exists'] is True\n"
+        "    assert paths['config_mode'] == 0o700\n"
+        "    assert paths['cache_mode'] == 0o700\n"
+        "    assert paths['data_mode'] == 0o700\n",
     )
 
     assert result["returncode"] == 0

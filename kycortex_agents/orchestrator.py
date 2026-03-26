@@ -910,12 +910,14 @@ class Orchestrator:
         if sandbox_policy.enabled:
             sandbox_config_home = tmp_path / ".config"
             sandbox_cache_home = tmp_path / ".cache"
-            sandbox_data_home = tmp_path / ".local" / "share"
+            sandbox_local_home = tmp_path / ".local"
+            sandbox_data_home = sandbox_local_home / "share"
             sandbox_config_home.mkdir(parents=True, exist_ok=True)
             sandbox_cache_home.mkdir(parents=True, exist_ok=True)
             sandbox_data_home.mkdir(parents=True, exist_ok=True)
             sandbox_config_home.chmod(0o700)
             sandbox_cache_home.chmod(0o700)
+            sandbox_local_home.chmod(0o700)
             sandbox_data_home.chmod(0o700)
             env["PATH"] = str(tmp_path)
             env["TMPDIR"] = str(tmp_path)

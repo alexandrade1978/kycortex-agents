@@ -1650,9 +1650,16 @@ def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_p
     captured: dict[str, object] = {}
 
     def fake_run(command, **kwargs):
+        runner_path = pathlib.Path(command[-1])
+        sandbox_root = runner_path.parent
         captured["command"] = command
         captured["env"] = kwargs["env"]
-        captured["runner"] = pathlib.Path(command[-1]).read_text(encoding="utf-8")
+        captured["runner"] = runner_path.read_text(encoding="utf-8")
+        captured["runner_mode"] = runner_path.stat().st_mode & 0o777
+        captured["module_mode"] = (sandbox_root / "code_implementation.py").stat().st_mode & 0o777
+        captured["test_mode"] = (sandbox_root / "tests_tests.py").stat().st_mode & 0o777
+        captured["config_mode"] = (sandbox_root / "pytest.ini").stat().st_mode & 0o777
+        captured["sitecustomize_mode"] = (sandbox_root / "sitecustomize.py").stat().st_mode & 0o777
         return CompletedProcessStub()
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -1668,6 +1675,11 @@ def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_p
     assert result["returncode"] == 0
     assert captured["command"][:2] == [sys.executable, "-I"]
     assert pathlib.Path(captured["command"][-1]).name == "_kycortex_run_pytest.py"
+    assert captured["runner_mode"] == 0o600
+    assert captured["module_mode"] == 0o600
+    assert captured["test_mode"] == 0o600
+    assert captured["config_mode"] == 0o600
+    assert captured["sitecustomize_mode"] == 0o600
     assert "spec_from_file_location" in captured["runner"]
     assert "_kycortex_sandbox_sitecustomize" in captured["runner"]
     assert "pytest.main" in captured["runner"]

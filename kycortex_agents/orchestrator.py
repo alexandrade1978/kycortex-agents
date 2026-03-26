@@ -793,9 +793,13 @@ class Orchestrator:
             safe_test_filename = self._sanitize_generated_filename(test_filename, "generated_tests.py")
             pytest_config_path = tmp_path / "pytest.ini"
             pytest_runner_path = self._write_generated_test_runner(tmp_path, safe_test_filename, sandbox_policy.enabled)
-            (tmp_path / safe_module_filename).write_text(code_content, encoding="utf-8")
-            (tmp_path / safe_test_filename).write_text(test_content, encoding="utf-8")
+            module_path = tmp_path / safe_module_filename
+            test_path = tmp_path / safe_test_filename
+            module_path.write_text(code_content, encoding="utf-8")
+            test_path.write_text(test_content, encoding="utf-8")
             pytest_config_path.write_text("[pytest]\n", encoding="utf-8")
+            for path in (module_path, test_path, pytest_config_path, pytest_runner_path):
+                path.chmod(0o600)
             env = self._build_generated_test_env(tmp_path, sandbox_policy)
             command = [sys.executable]
             if sandbox_policy.enabled:
@@ -933,6 +937,7 @@ class Orchestrator:
                 textwrap.dedent(_SANDBOX_SITECUSTOMIZE).strip() + "\n",
                 encoding="utf-8",
             )
+            (tmp_path / "sitecustomize.py").chmod(0o600)
         else:
             env.pop("TMPDIR", None)
             env.pop("KYCORTEX_SANDBOX_ALLOW_NETWORK", None)

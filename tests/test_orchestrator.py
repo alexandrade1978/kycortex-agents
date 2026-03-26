@@ -1,3 +1,4 @@
+import pathlib
 import subprocess
 from types import SimpleNamespace
 
@@ -540,8 +541,12 @@ def test_execute_generated_tests_blocks_path_walk_outside_sandbox_when_supported
         f"    walk_tree({str(escaped_dir)!r})\n",
     )
 
-    assert result["returncode"] != 0
-    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+    if hasattr(pathlib.Path("."), "walk"):
+        assert result["returncode"] != 0
+        assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+    else:
+        assert result["returncode"] == 0
+        assert "1 skipped" in result["stdout"]
 
 
 def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_path):

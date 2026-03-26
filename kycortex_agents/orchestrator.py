@@ -330,6 +330,20 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
     if _path_class is None:
         continue
 
+    if hasattr(_path_class, "open"):
+        _real = getattr(_path_class, "open")
+
+        def _guarded_path_open(*args, __real=_real, **kwargs):
+            target_path = args[0] if args else kwargs.get("self")
+            mode = args[1] if len(args) >= 2 else kwargs.get("mode", "r")
+            if _is_write_mode(mode):
+                _ensure_mutation_within_sandbox(target_path)
+            else:
+                _ensure_read_within_policy(target_path)
+            return __real(*args, **kwargs)
+
+        setattr(_path_class, "open", _guarded_path_open)
+
     for _name in ("chmod", "mkdir", "rmdir", "unlink"):
         if hasattr(_path_class, _name):
             _real = getattr(_path_class, _name)

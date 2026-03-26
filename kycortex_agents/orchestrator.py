@@ -278,6 +278,16 @@ if hasattr(os, "walk"):
     os.walk = _guarded_walk
 
 
+if hasattr(os, "fwalk"):
+    _real = os.fwalk
+
+    def _guarded_fwalk(top, *args, __real=_real, **kwargs):
+        _ensure_read_within_policy(top)
+        return __real(top, *args, **kwargs)
+
+    os.fwalk = _guarded_fwalk
+
+
 def _guarded_glob(pathname, *args, __real=_REAL_GLOB_GLOB, **kwargs):
     _ensure_read_within_policy(pathname)
     return __real(pathname, *args, **kwargs)
@@ -342,7 +352,7 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
 
             setattr(_path_class, _name, _guarded_path_read)
 
-    for _name in ("glob", "iterdir", "rglob"):
+    for _name in ("glob", "iterdir", "rglob", "walk"):
         if hasattr(_path_class, _name):
             _real = getattr(_path_class, _name)
 

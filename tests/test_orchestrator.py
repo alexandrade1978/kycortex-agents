@@ -493,6 +493,57 @@ def test_execute_generated_tests_blocks_os_walk_outside_sandbox(tmp_path):
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_os_fwalk_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_fwalk").resolve()
+    escaped_dir.mkdir()
+    (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def walk_tree(target_path):\n"
+        "    return list(os.fwalk(target_path))\n",
+        "tests_generated.py",
+        "from code_under_test import walk_tree\n\n"
+        f"def test_os_fwalk_is_blocked():\n"
+        f"    walk_tree({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_path_walk_outside_sandbox_when_supported(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_path_walk").resolve()
+    escaped_dir.mkdir()
+    (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def walk_tree(target_path):\n"
+        "    target = Path(target_path)\n"
+        "    if not hasattr(target, 'walk'):\n"
+        "        return 'unsupported'\n"
+        "    return list(target.walk())\n",
+        "tests_generated.py",
+        "import pytest\n"
+        "from pathlib import Path\n\n"
+        "from code_under_test import walk_tree\n\n"
+        "def test_path_walk_is_blocked_when_supported():\n"
+        "    if not hasattr(Path('.'), 'walk'):\n"
+        "        pytest.skip('Path.walk unavailable')\n"
+        f"    walk_tree({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -762,6 +813,32 @@ def test_execute_generated_tests_allows_glob_enumeration_when_sandbox_disabled(t
         f"def test_glob_enumeration_runs_when_sandbox_is_disabled():\n"
         f"    matches = list_matches({str(target_dir / '*')!r})\n"
         f"    assert matches == [{str(target_dir / 'secret.txt')!r}]\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_os_fwalk_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_dir = tmp_path / "fwalk_target"
+    target_dir.mkdir()
+    (target_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def walk_tree(target_path):\n"
+        "    return [(root, sorted(files)) for root, _dirs, files, _fd in os.fwalk(target_path)]\n",
+        "tests_generated.py",
+        "from code_under_test import walk_tree\n\n"
+        f"def test_os_fwalk_runs_when_sandbox_is_disabled():\n"
+        f"    walked = walk_tree({str(target_dir)!r})\n"
+        f"    assert walked == [({str(target_dir)!r}, ['secret.txt'])]\n",
     )
 
     assert result["returncode"] == 0

@@ -4,6 +4,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+import kycortex_agents.orchestrator as orchestrator_module
 
 from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.registry import AgentRegistry
@@ -1434,6 +1435,30 @@ def test_build_generated_test_env_strips_terminal_and_color_markers(tmp_path, mo
     assert "COLUMNS" not in env
     assert "LINES" not in env
     assert env["TERM"] == "dumb"
+
+
+def test_sandbox_preexec_fn_sets_restrictive_umask(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    policy = config.execution_sandbox_policy()
+    recorded_calls: list[tuple[object, tuple[int, int]]] = []
+    recorded_umasks: list[int] = []
+
+    monkeypatch.setattr(orchestrator_module.os, "name", "posix")
+    monkeypatch.setattr(
+        orchestrator_module.resource,
+        "setrlimit",
+        lambda limit, values: recorded_calls.append((limit, values)),
+    )
+    monkeypatch.setattr(orchestrator_module.os, "umask", lambda value: recorded_umasks.append(value) or 0)
+
+    preexec = orchestrator._sandbox_preexec_fn(policy)
+
+    assert callable(preexec)
+    preexec()
+
+    assert recorded_umasks == [0o077]
+    assert len(recorded_calls) == 4
 
 
 def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):

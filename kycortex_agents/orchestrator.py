@@ -975,6 +975,7 @@ class Orchestrator:
         def _apply_limits() -> None:
             cpu_seconds = max(int(sandbox_policy.max_cpu_seconds), 1)
             memory_bytes = max(sandbox_policy.max_memory_mb, 1) * 1024 * 1024
+            os.umask(0o077)
             resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
             resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
             resource.setrlimit(resource.RLIMIT_CORE, (0, 0))

@@ -867,8 +867,9 @@ class Orchestrator:
             "PYTHONVERBOSE",
         ):
             env.pop(key, None)
-        for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
-            env.pop(key, None)
+        for key in list(env):
+            if key.startswith("PYTEST_"):
+                env.pop(key, None)
         for key in list(env):
             if key.startswith(("VIRTUAL_ENV", "CONDA_", "PIP_", "UV_", "POETRY_", "PIXI_", "PYENV_")):
                 env.pop(key, None)

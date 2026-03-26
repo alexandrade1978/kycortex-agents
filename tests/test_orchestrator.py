@@ -1384,11 +1384,15 @@ def test_build_generated_test_env_strips_inherited_pytest_env(tmp_path, monkeypa
 
     monkeypatch.setenv("PYTEST_ADDOPTS", "-p external_plugin --maxfail=1")
     monkeypatch.setenv("PYTEST_PLUGINS", "external_plugin")
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_demo.py::test_case (call)")
+    monkeypatch.setenv("PYTEST_DEBUG", "1")
 
     env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
 
     assert "PYTEST_ADDOPTS" not in env
     assert "PYTEST_PLUGINS" not in env
+    assert "PYTEST_CURRENT_TEST" not in env
+    assert "PYTEST_DEBUG" not in env
 
 
 def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):

@@ -1279,6 +1279,7 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "        'lang': os.environ.get('LANG', ''),\n"
         "        'lc_all': os.environ.get('LC_ALL', ''),\n"
         "        'language': os.environ.get('LANGUAGE', ''),\n"
+        "        'pythonhashseed': os.environ.get('PYTHONHASHSEED', ''),\n"
         "        'tz': os.environ.get('TZ', ''),\n"
         "        'tmpdir': os.environ.get('TMPDIR', ''),\n"
         "        'tmp': os.environ.get('TMP', ''),\n"
@@ -1302,6 +1303,7 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "    assert paths['lang'] == 'C.UTF-8'\n"
         "    assert paths['lc_all'] == 'C.UTF-8'\n"
         "    assert paths['language'] == 'en'\n"
+        "    assert paths['pythonhashseed'] == '0'\n"
         "    assert paths['tz'] == 'UTC'\n"
         "    assert paths['tmpdir'] == paths['sandbox_root']\n"
         "    assert paths['tmp'] == paths['sandbox_root']\n"
@@ -1379,6 +1381,7 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
         "LANG": "pt_BR.UTF-8",
         "LC_ALL": "pt_BR.UTF-8",
         "LANGUAGE": "pt_BR",
+        "PYTHONHASHSEED": "123",
         "TZ": "America/Sao_Paulo",
         "PYTHONDONTWRITEBYTECODE": "0",
         "PYTHONNOUSERSITE": "0",
@@ -1396,6 +1399,7 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
     assert env["LANG"] == "C.UTF-8"
     assert env["LC_ALL"] == "C.UTF-8"
     assert env["LANGUAGE"] == "en"
+    assert env["PYTHONHASHSEED"] == "0"
     assert env["TZ"] == "UTC"
     assert env["PYTHONDONTWRITEBYTECODE"] == "1"
     assert env["PYTHONNOUSERSITE"] == "1"

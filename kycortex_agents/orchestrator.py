@@ -846,6 +846,7 @@ class Orchestrator:
         env["PATH"] = os.environ.get("PATH", "")
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         env["PYTHONNOUSERSITE"] = "1"
+        env["PYTHONHASHSEED"] = "0"
         for key in ("PYTHONBREAKPOINT", "PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONUSERBASE"):
             env.pop(key, None)
         for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):

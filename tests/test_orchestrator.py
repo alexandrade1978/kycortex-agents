@@ -1569,6 +1569,104 @@ def test_ast_name_formats_nested_attributes(tmp_path):
     assert orchestrator._ast_name(ast.Constant("x")) == ""
 
 
+def test_summarize_output_returns_blank_for_whitespace_and_truncates_first_line(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._summarize_output("   ") == ""
+    assert orchestrator._summarize_output("  first line  \nsecond line") == "first line"
+    assert len(orchestrator._summarize_output("x" * 200)) == 120
+
+
+@pytest.mark.parametrize(
+    ("task", "expected_key"),
+    [
+        (Task(id="t1", title="Architecture Review", description="", assigned_to="unknown"), "architecture"),
+        (Task(id="t2", title="Security Review", description="", assigned_to="unknown"), "review"),
+        (Task(id="t3", title="Test Cases", description="", assigned_to="unknown"), "tests"),
+        (Task(id="t4", title="Package Manifest", description="", assigned_to="unknown"), "dependencies"),
+        (Task(id="t5", title="Docs Bundle", description="", assigned_to="unknown"), "documentation"),
+        (Task(id="t6", title="License Scan", description="", assigned_to="unknown"), "legal"),
+        (Task(id="t7", title="Misc Task", description="", assigned_to="unknown"), None),
+    ],
+)
+def test_semantic_output_key_title_fallbacks(tmp_path, task, expected_key):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._semantic_output_key(task) == expected_key
+
+
+def test_build_agent_input_uses_repair_defaults_when_optional_fields_are_blank(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="repair",
+        title="Repair architecture",
+        description="Repair the architecture",
+        assigned_to="architect",
+        repair_context={
+            "instruction": "",
+            "failure_category": "",
+            "failure_message": "   ",
+            "validation_summary": "   ",
+        },
+    )
+    project.add_task(task)
+
+    agent_input = orchestrator._build_agent_input(task, project)
+
+    assert "Repair objective:" in agent_input.task_description
+    assert "Repair the previous failure." in agent_input.task_description
+    assert f"Previous failure category: {FailureCategory.UNKNOWN.value}" in agent_input.task_description
+    assert "Previous failure message:" not in agent_input.task_description
+    assert "Validation summary:" not in agent_input.task_description
+
+
+def test_validate_agent_resolution_accepts_known_registry(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ok")}))
+
+    assert orchestrator._validate_agent_resolution(project) is None
+
+
+def test_execute_workflow_marks_failed_when_runnable_tasks_raise_definition_error(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ARCH")}))
+
+    monkeypatch.setattr(project, "runnable_tasks", lambda: (_ for _ in ()).throw(WorkflowDefinitionError("cycle")))
+
+    with pytest.raises(WorkflowDefinitionError, match="cycle"):
+        orchestrator.execute_workflow(project)
+
+    assert project.phase == "failed"
+    assert project.failure_category == FailureCategory.WORKFLOW_DEFINITION.value
+    assert project.terminal_outcome == WorkflowOutcome.FAILED.value
+
+
+def test_execute_workflow_marks_blocked_when_no_runnable_tasks_exist(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    blocked_task = Task(id="blocked", title="Blocked task", description="Wait", assigned_to="architect")
+    project.add_task(blocked_task)
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ARCH")}))
+
+    monkeypatch.setattr(project, "runnable_tasks", lambda: [])
+    monkeypatch.setattr(project, "blocked_tasks", lambda: [blocked_task])
+
+    with pytest.raises(AgentExecutionError, match="Workflow is blocked"):
+        orchestrator.execute_workflow(project)
+
+    assert project.phase == "failed"
+    assert project.failure_category == FailureCategory.WORKFLOW_BLOCKED.value
+    assert project.terminal_outcome == WorkflowOutcome.FAILED.value
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

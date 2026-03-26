@@ -480,6 +480,46 @@ if os.environ.get("KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES") != "1":
     asyncio.create_subprocess_shell = _blocked
 """
 
+_GENERATED_TEST_RUNNER = """
+import importlib
+import importlib.util
+import pathlib
+import sys
+
+TMP_PATH = pathlib.Path(__file__).resolve().parent
+if str(TMP_PATH) not in sys.path:
+    sys.path.insert(0, str(TMP_PATH))
+
+if {sandbox_enabled}:
+    sandbox_sitecustomize = TMP_PATH / "sitecustomize.py"
+    sandbox_spec = importlib.util.spec_from_file_location(
+        "_kycortex_sandbox_sitecustomize",
+        sandbox_sitecustomize,
+    )
+    if sandbox_spec is None or sandbox_spec.loader is None:
+        raise RuntimeError("sandbox startup failed: missing sitecustomize loader")
+    sandbox_module = importlib.util.module_from_spec(sandbox_spec)
+    sys.modules[sandbox_spec.name] = sandbox_module
+    sandbox_spec.loader.exec_module(sandbox_module)
+
+import pytest
+
+raise SystemExit(
+    pytest.main(
+        [
+            "-c",
+            {pytest_config_path},
+            "--rootdir",
+            {rootdir_path},
+            "-o",
+            {pytest_log_option},
+            {test_filename},
+            "-q",
+        ]
+    )
+)
+"""
+
 
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
@@ -752,26 +792,18 @@ class Orchestrator:
             safe_module_filename = self._sanitize_generated_filename(module_filename, "generated_module.py")
             safe_test_filename = self._sanitize_generated_filename(test_filename, "generated_tests.py")
             pytest_config_path = tmp_path / "pytest.ini"
-            pytest_log_path = tmp_path / "pytest.log"
+            pytest_runner_path = self._write_generated_test_runner(tmp_path, safe_test_filename, sandbox_policy.enabled)
             (tmp_path / safe_module_filename).write_text(code_content, encoding="utf-8")
             (tmp_path / safe_test_filename).write_text(test_content, encoding="utf-8")
             pytest_config_path.write_text("[pytest]\n", encoding="utf-8")
             env = self._build_generated_test_env(tmp_path, sandbox_policy)
+            command = [sys.executable]
+            if sandbox_policy.enabled:
+                command.append("-I")
+            command.append(str(pytest_runner_path))
             try:
                 completed = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        "-c",
-                        str(pytest_config_path),
-                        "--rootdir",
-                        str(tmp_path),
-                        "-o",
-                        f"log_file={pytest_log_path}",
-                        safe_test_filename,
-                        "-q",
-                    ],
+                    command,
                     cwd=tmp_path,
                     capture_output=True,
                     text=True,
@@ -812,9 +844,10 @@ class Orchestrator:
         else:
             env = os.environ.copy()
         env["PATH"] = os.environ.get("PATH", "")
-        env["PYTHONPATH"] = str(tmp_path)
         env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
         env.setdefault("PYTHONNOUSERSITE", "1")
+        for key in ("PYTHONBREAKPOINT", "PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONUSERBASE"):
+            env.pop(key, None)
         if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
             env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
         for key in list(env):
@@ -844,6 +877,28 @@ class Orchestrator:
             env.pop("XDG_CACHE_HOME", None)
             env.pop("XDG_DATA_HOME", None)
         return env
+
+    def _write_generated_test_runner(
+        self,
+        tmp_path: Path,
+        test_filename: str,
+        sandbox_enabled: bool,
+    ) -> Path:
+        runner_path = tmp_path / "_kycortex_run_pytest.py"
+        runner_path.write_text(
+            textwrap.dedent(
+                _GENERATED_TEST_RUNNER.format(
+                    sandbox_enabled=repr(sandbox_enabled),
+                    pytest_config_path=repr(str(tmp_path / "pytest.ini")),
+                    rootdir_path=repr(str(tmp_path)),
+                    pytest_log_option=repr(f"log_file={tmp_path / 'pytest.log'}"),
+                    test_filename=repr(test_filename),
+                )
+            ).strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        return runner_path
 
     def _sanitize_generated_filename(self, filename: str, default_filename: str) -> str:
         candidate = Path(filename).name if isinstance(filename, str) else ""

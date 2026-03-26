@@ -1,5 +1,6 @@
 import pathlib
 import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -1302,7 +1303,57 @@ def test_build_generated_test_env_omits_sandbox_hooks_when_disabled(tmp_path):
     assert "XDG_CONFIG_HOME" not in env
     assert "XDG_CACHE_HOME" not in env
     assert "XDG_DATA_HOME" not in env
+    assert "PYTHONPATH" not in env
     assert not (tmp_path / "sitecustomize.py").exists()
+
+
+def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("PYTHONPATH", "/tmp/injected")
+    monkeypatch.setenv("PYTHONHOME", "/tmp/home")
+    monkeypatch.setenv("PYTHONSTARTUP", "/tmp/startup.py")
+    monkeypatch.setenv("PYTHONBREAKPOINT", "evil.module:breakpoint")
+    monkeypatch.setenv("PYTHONUSERBASE", "/tmp/userbase")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "PYTHONPATH" not in env
+    assert "PYTHONHOME" not in env
+    assert "PYTHONSTARTUP" not in env
+    assert "PYTHONBREAKPOINT" not in env
+    assert "PYTHONUSERBASE" not in env
+
+
+def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    orchestrator = Orchestrator(config, registry=AgentRegistry({}))
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        captured["runner"] = pathlib.Path(command[-1]).read_text(encoding="utf-8")
+        return CompletedProcessStub()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = orchestrator._execute_generated_tests(
+        "code_implementation.py",
+        "def run():\n    return 1\n",
+        "tests_tests.py",
+        "from code_implementation import run\n\ndef test_run():\n    assert run() == 1\n",
+    )
+
+    assert result["ran"] is True
+    assert result["returncode"] == 0
+    assert captured["command"][:2] == [sys.executable, "-I"]
+    assert pathlib.Path(captured["command"][-1]).name == "_kycortex_run_pytest.py"
+    assert "spec_from_file_location" in captured["runner"]
+    assert "_kycortex_sandbox_sitecustomize" in captured["runner"]
+    assert "pytest.main" in captured["runner"]
+    assert "PYTHONPATH" not in captured["env"]
 
 
 def test_sanitize_generated_filename_strips_path_traversal():

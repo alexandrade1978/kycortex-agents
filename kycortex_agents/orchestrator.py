@@ -74,6 +74,8 @@ import pathlib
 import shutil
 import socket
 import subprocess
+import sys
+import sysconfig
 import tempfile
 
 
@@ -81,6 +83,38 @@ _REAL_OPEN = builtins.open
 _REAL_IO_OPEN = io.open
 _REAL_OS_OPEN = os.open
 _SANDBOX_ROOT = pathlib.Path(os.environ.get("KYCORTEX_SANDBOX_ROOT", os.getcwd())).resolve()
+_RUNTIME_SAFE_ROOTS = set()
+_RUNTIME_SAFE_FILES = set()
+
+
+def _add_runtime_safe_root(path_value):
+    if not path_value:
+        return
+    try:
+        _RUNTIME_SAFE_ROOTS.add(pathlib.Path(path_value).resolve())
+    except Exception:
+        return
+
+
+for _path_value in sysconfig.get_paths().values():
+    _add_runtime_safe_root(_path_value)
+
+for _path_value in (
+    sys.prefix,
+    getattr(sys, "base_prefix", ""),
+    sys.exec_prefix,
+    getattr(sys, "base_exec_prefix", ""),
+    sys.executable,
+):
+    _add_runtime_safe_root(_path_value)
+
+for _path_value in (os.devnull, "/dev/urandom"):
+    if not _path_value:
+        continue
+    try:
+        _RUNTIME_SAFE_FILES.add(pathlib.Path(_path_value).resolve())
+    except Exception:
+        continue
 
 
 def _is_write_mode(mode):
@@ -111,12 +145,34 @@ def _is_within_sandbox(path_value):
         return False
 
 
+def _is_runtime_safe_path(path_value):
+    if isinstance(path_value, int):
+        return True
+    try:
+        candidate = pathlib.Path(path_value).resolve()
+    except Exception:
+        return False
+    if candidate in _RUNTIME_SAFE_FILES:
+        return True
+    for safe_root in _RUNTIME_SAFE_ROOTS:
+        try:
+            candidate.relative_to(safe_root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 def _blocked(*args, **kwargs):
     raise RuntimeError("sandbox policy blocked this operation")
 
 
 def _blocked_filesystem_write(*args, **kwargs):
     raise RuntimeError("sandbox policy blocked filesystem write outside sandbox root")
+
+
+def _blocked_filesystem_read(*args, **kwargs):
+    raise RuntimeError("sandbox policy blocked file access outside sandbox root")
 
 
 def _ensure_mutation_within_sandbox(*path_values):
@@ -126,14 +182,20 @@ def _ensure_mutation_within_sandbox(*path_values):
 
 
 def _guarded_open(file, mode="r", *args, **kwargs):
-    if _is_write_mode(mode) and not _is_within_sandbox(file):
-        raise RuntimeError("sandbox policy blocked filesystem write outside sandbox root")
+    if _is_write_mode(mode):
+        if not _is_within_sandbox(file):
+            _blocked_filesystem_write()
+    elif not (_is_within_sandbox(file) or _is_runtime_safe_path(file)):
+        _blocked_filesystem_read()
     return _REAL_OPEN(file, mode, *args, **kwargs)
 
 
 def _guarded_os_open(path, flags, mode=0o777, *args, **kwargs):
-    if _is_write_mode(flags) and not _is_within_sandbox(path):
-        raise RuntimeError("sandbox policy blocked filesystem write outside sandbox root")
+    if _is_write_mode(flags):
+        if not _is_within_sandbox(path):
+            _blocked_filesystem_write()
+    elif not (_is_within_sandbox(path) or _is_runtime_safe_path(path)):
+        _blocked_filesystem_read()
     return _REAL_OS_OPEN(path, flags, mode, *args, **kwargs)
 
 

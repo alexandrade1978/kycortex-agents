@@ -363,6 +363,27 @@ def test_execute_generated_tests_blocks_filesystem_writes_outside_sandbox(tmp_pa
     assert not escaped_path.exists()
 
 
+def test_execute_generated_tests_blocks_file_reads_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_path = (tmp_path / "escaped_read.txt").resolve()
+    escaped_path.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "def read_outside_sandbox(target_path):\n"
+        "    with open(target_path, 'r', encoding='utf-8') as handle:\n"
+        "        return handle.read()\n",
+        "tests_generated.py",
+        "from code_under_test import read_outside_sandbox\n\n"
+        f"def test_filesystem_read_is_blocked():\n"
+        f"    read_outside_sandbox({str(escaped_path)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked file access outside sandbox root" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -533,6 +554,30 @@ def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_p
         "from code_under_test import spawn_child\n\n"
         "def test_spawn_child_runs_when_sandbox_is_disabled():\n"
         "    assert spawn_child() == 'hi'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_file_reads_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "read_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "def read_file(target_path):\n"
+        "    with open(target_path, 'r', encoding='utf-8') as handle:\n"
+        "        return handle.read()\n",
+        "tests_generated.py",
+        "from code_under_test import read_file\n\n"
+        f"def test_file_read_runs_when_sandbox_is_disabled():\n"
+        f"    assert read_file({str(target_file)!r}) == 'secret'\n",
     )
 
     assert result["returncode"] == 0

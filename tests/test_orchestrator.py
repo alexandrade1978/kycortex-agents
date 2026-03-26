@@ -486,6 +486,147 @@ def test_validate_test_output_returns_early_when_context_is_incomplete(tmp_path,
     assert orchestrator._validate_test_output({"module_name": "code_implementation", "code": "   "}, output) is None
 
 
+def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_analyze_test_module",
+        lambda *args, **kwargs: {
+            "syntax_ok": False,
+            "missing_function_imports": ["missing_helper"],
+            "unsafe_entrypoint_calls": ["main()"],
+        },
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_tests",
+        lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": ""},
+    )
+
+    with pytest.raises(AgentExecutionError) as excinfo:
+        orchestrator._validate_test_output(
+            {
+                "module_name": "code_implementation",
+                "code": "def ok():\n    return 1",
+            },
+            output,
+        )
+
+    message = str(excinfo.value)
+    assert "test syntax error unknown syntax error" in message
+    assert "missing function imports: missing_helper" in message
+    assert "unsafe entrypoint calls: main()" in message
+    assert "pytest failed: generated tests failed" in message
+
+
+def test_classify_task_failure_returns_workflow_definition_for_definition_errors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description="Design the architecture",
+        assigned_to="architect",
+    )
+
+    category = orchestrator._classify_task_failure(task, WorkflowDefinitionError("invalid workflow"))
+
+    assert category == FailureCategory.WORKFLOW_DEFINITION.value
+
+
+def test_artifact_helpers_return_matching_content_and_filename(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="artifacts",
+        raw_content="fallback",
+        artifacts=[
+            ArtifactRecord(name="note", artifact_type=ArtifactType.TEXT, content="ignored"),
+            ArtifactRecord(name="code", artifact_type=ArtifactType.CODE, content="   "),
+            ArtifactRecord(
+                name="tests",
+                artifact_type=ArtifactType.TEST,
+                path="nested/generated_tests.py",
+                content="def test_ok():\n    assert True",
+            ),
+            ArtifactRecord(
+                name="module",
+                artifact_type=ArtifactType.CODE,
+                path="artifacts/generated_module.py",
+                content="def ok():\n    return 1",
+            ),
+        ],
+    )
+
+    assert orchestrator._artifact_content(output, ArtifactType.CODE) == "def ok():\n    return 1"
+    assert orchestrator._artifact_filename(output, ArtifactType.TEST, "default_test.py") == "generated_tests.py"
+    assert orchestrator._artifact_filename(output, ArtifactType.DOCUMENT, "default_doc.md") == "default_doc.md"
+
+
+def test_record_output_validation_ignores_non_mapping_validation_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="tests", raw_content="ok", metadata={"validation": "invalid"})
+
+    orchestrator._record_output_validation(output, "test_analysis", {"syntax_ok": True})
+
+    assert output.metadata["validation"] == "invalid"
+
+
+def test_should_validate_content_helpers_cover_typed_and_blank_cases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._should_validate_code_content("anything", has_typed_artifact=True) is True
+    assert orchestrator._should_validate_code_content("   ", has_typed_artifact=False) is False
+    assert orchestrator._should_validate_code_content("plain prose only", has_typed_artifact=False) is False
+    assert orchestrator._should_validate_test_content("anything", has_typed_artifact=True) is True
+    assert orchestrator._should_validate_test_content("   ", has_typed_artifact=False) is False
+    assert orchestrator._should_validate_test_content("plain prose only", has_typed_artifact=False) is False
+
+
+def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    monkeypatch.setattr(orchestrator_module.importlib.util, "find_spec", lambda name: None)
+
+    result = orchestrator._execute_generated_tests(
+        "generated_module.py",
+        "def ok():\n    return 1",
+        "generated_tests.py",
+        "def test_ok():\n    assert True",
+    )
+
+    assert result == {
+        "available": False,
+        "ran": False,
+        "returncode": None,
+        "summary": "pytest is not installed in the current environment",
+    }
+
+
+def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "generated_module.py",
+        "   ",
+        "generated_tests.py",
+        "def test_ok():\n    assert True",
+    )
+
+    assert result == {
+        "available": True,
+        "ran": False,
+        "returncode": None,
+        "summary": "generated code or tests were empty",
+    }
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

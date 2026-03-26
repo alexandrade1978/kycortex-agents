@@ -17,6 +17,7 @@ from kycortex_agents.providers import BaseLLMProvider as ProviderBaseLLMProvider
 from kycortex_agents.providers import AnthropicProvider as ProviderAnthropicProvider
 from kycortex_agents.providers import OllamaProvider as ProviderOllamaProvider
 from kycortex_agents.providers import OpenAIProvider as ProviderOpenAIProvider
+from kycortex_agents.providers import probe_provider_health
 from kycortex_agents.providers import factory as provider_factory_module
 from kycortex_agents import (
     AgentRegistry,
@@ -77,6 +78,7 @@ def test_public_api_exports_core_symbols():
     assert DEFAULT_CONFIG is not None
     assert StatePersistenceError is not None
     assert ProviderTransientError is not None
+    assert probe_provider_health is not None
     assert WorkflowDefinitionError is not None
 
 
@@ -135,7 +137,7 @@ def test_public_contract_modules_define_explicit_exports():
 
 def test_public_extension_modules_define_explicit_exports():
     assert registry_module.__all__ == ["AgentRegistry", "build_default_registry"]
-    assert provider_factory_module.__all__ == ["create_provider"]
+    assert provider_factory_module.__all__ == ["create_provider", "probe_provider_health"]
     assert state_store_module.__all__ == [
         "BaseStateStore",
         "JsonStateStore",
@@ -178,6 +180,7 @@ def test_public_config_and_factory_modules_define_docstrings():
     assert config_module.KYCortexConfig.validate_runtime.__doc__ == "Validate provider-specific runtime requirements such as credentials and base URLs."
     assert provider_factory_module.__doc__ == "Public provider-factory helpers for resolving built-in LLM backends."
     assert provider_factory_module.create_provider.__doc__ == "Instantiate the built-in provider configured by the supplied runtime settings."
+    assert provider_factory_module.probe_provider_health.__doc__ == "Instantiate the built-in provider and return a structured health snapshot."
 
 
 def test_public_type_module_defines_docstrings():
@@ -207,6 +210,7 @@ def test_public_extension_types_define_class_docstrings():
 def test_public_extension_types_define_method_docstrings():
     assert ProviderBaseLLMProvider.generate.__doc__ == "Return a model response for the given system and user prompts."
     assert ProviderBaseLLMProvider.get_last_call_metadata.__doc__ == "Return provider-specific metadata captured from the most recent model call."
+    assert ProviderBaseLLMProvider.health_check.__doc__ == "Return a lightweight provider health snapshot without generating model output."
     assert state_store_module.BaseStateStore.save.__doc__ == "Persist the serialized project-state payload to the target path."
     assert state_store_module.BaseStateStore.load.__doc__ == "Load and return the serialized project-state payload from the target path."
     assert registry_module.AgentRegistry.register.__doc__ == "Register or replace an agent under the normalized registry key."

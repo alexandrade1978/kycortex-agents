@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
+from time import perf_counter
 from typing import Any, Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -57,6 +58,20 @@ class OllamaProvider(BaseLLMProvider):
             raise ProviderTransientError(
                 f"Ollama server is not responding at {self.config.base_url}"
             ) from exc
+
+    def health_check(self) -> dict[str, Any]:
+        started_at = perf_counter()
+        self._ensure_server_reachable()
+        completed_at = perf_counter()
+        return {
+            "provider": self.config.llm_provider,
+            "model": self.config.llm_model,
+            "status": "healthy",
+            "active_check": True,
+            "base_url": self.config.base_url,
+            "timeout_seconds": round(self._health_check_timeout(), 6),
+            "latency_ms": round((completed_at - started_at) * 1000, 3),
+        }
 
     def _build_payload(self, system_prompt: str, user_message: str) -> dict[str, Any]:
         return {

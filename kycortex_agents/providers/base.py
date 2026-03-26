@@ -17,3 +17,14 @@ class BaseLLMProvider(ABC):
         """Return provider-specific metadata captured from the most recent model call."""
 
         return None
+
+    def health_check(self) -> dict[str, Any]:
+        """Return a lightweight provider health snapshot without generating model output."""
+
+        config = getattr(self, "config", None)
+        return {
+            "provider": getattr(config, "llm_provider", None),
+            "model": getattr(config, "llm_model", None),
+            "status": "ready",
+            "active_check": False,
+        }

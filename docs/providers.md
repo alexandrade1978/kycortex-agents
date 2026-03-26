@@ -18,6 +18,7 @@ All built-in providers implement the same public entrypoints:
 
 - `generate(system_prompt, user_message)`: execute a model call and return the generated text response.
 - `get_last_call_metadata()`: return provider-specific usage and timing metadata captured from the most recent successful call when available.
+- `health_check()`: return a lightweight provider health snapshot without generating model output.
 
 Provider failures are normalized into `AgentExecutionError`, so the rest of the runtime can apply the same retry, persistence, and logging behavior regardless of backend.
 
@@ -32,6 +33,8 @@ Supported values are:
 - `ollama`
 
 `create_provider()` validates runtime configuration first and then resolves the configured provider through the built-in provider map.
+
+`probe_provider_health()` is the matching public helper when callers need a structured provider-readiness snapshot before generation. Providers that do not implement an active probe return a passive `ready` snapshot, while providers such as Ollama can report an active reachability result.
 
 ## OpenAI Configuration
 
@@ -124,6 +127,13 @@ The built-in providers expose different metadata shapes, but they all flow back 
 - Anthropic: usage token counts plus cache token details when present
 - Ollama: usage token counts plus duration metrics converted to milliseconds
 
+Health probes also flow through a shared shape:
+
+- `status`: `ready`, `healthy`, `degraded`, or `failing`
+- `active_check`: whether the provider performed a real probe instead of returning passive readiness
+- `retryable`: whether a failed probe indicates a transient condition
+- `latency_ms`: elapsed probe latency for readiness checks
+
 This metadata is later attached to task outputs, execution events, and persisted project state for post-run inspection.
 
 ## Error Handling
@@ -138,7 +148,7 @@ This keeps retry behavior and workflow-failure policy handling consistent across
 
 ## Extension Path
 
-Custom providers should implement `BaseLLMProvider` and return metadata through `get_last_call_metadata()` when they want observability data to flow through the rest of the runtime.
+Custom providers should implement `BaseLLMProvider`, return metadata through `get_last_call_metadata()` when they want observability data to flow through the rest of the runtime, and override `health_check()` when they can perform an active readiness probe.
 
 If a project needs a non-built-in backend, the cleanest extension path is:
 
@@ -146,4 +156,4 @@ If a project needs a non-built-in backend, the cleanest extension path is:
 2. instantiate it in custom runtime setup
 3. inject it into custom agents or a provider-aware customization layer
 
-The built-in `create_provider()` helper remains the canonical path for the supported OpenAI, Anthropic, and Ollama integrations.
+The built-in `create_provider()` and `probe_provider_health()` helpers remain the canonical public entrypoints for the supported OpenAI, Anthropic, and Ollama integrations.

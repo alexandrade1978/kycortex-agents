@@ -8,7 +8,7 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderConfigurationError, ProviderTransientError
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.base import BaseLLMProvider
-from kycortex_agents.providers.factory import create_provider
+from kycortex_agents.providers.factory import create_provider, probe_provider_health
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
 from kycortex_agents.providers._error_classifier import (
@@ -213,6 +213,64 @@ def test_create_provider_accepts_ollama_default_base_url(tmp_path):
     assert provider.config.base_url == "http://localhost:11434"
 
 
+def test_probe_provider_health_returns_default_snapshot_for_providers_without_active_check(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token")
+
+    snapshot = probe_provider_health(config)
+
+    assert snapshot["provider"] == "openai"
+    assert snapshot["model"] == "gpt-4o"
+    assert snapshot["status"] == "ready"
+    assert snapshot["active_check"] is False
+    assert snapshot["retryable"] is False
+    assert snapshot["latency_ms"] >= 0
+
+
+def test_probe_provider_health_wraps_transient_provider_failures(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+
+    def create_failing_provider(runtime_config: KYCortexConfig):
+        return OllamaProvider(runtime_config, request_opener=build_ollama_opener(error=OSError("down")))
+
+    monkeypatch.setattr("kycortex_agents.providers.factory.create_provider", create_failing_provider)
+
+    snapshot = probe_provider_health(config)
+
+    assert snapshot["provider"] == "ollama"
+    assert snapshot["model"] == "llama3"
+    assert snapshot["status"] == "degraded"
+    assert snapshot["active_check"] is True
+    assert snapshot["retryable"] is True
+    assert snapshot["error_type"] == "ProviderTransientError"
+    assert "not responding" in snapshot["error_message"]
+    assert snapshot["latency_ms"] >= 0
+
+
+def test_probe_provider_health_wraps_deterministic_provider_failures(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+
+    def create_failing_provider(runtime_config: KYCortexConfig):
+        return OllamaProvider(
+            runtime_config,
+            request_opener=build_ollama_opener(
+                error=build_http_error("http://localhost:11434/api/tags", 404, "Not Found")
+            ),
+        )
+
+    monkeypatch.setattr("kycortex_agents.providers.factory.create_provider", create_failing_provider)
+
+    snapshot = probe_provider_health(config)
+
+    assert snapshot["provider"] == "ollama"
+    assert snapshot["model"] == "llama3"
+    assert snapshot["status"] == "failing"
+    assert snapshot["active_check"] is True
+    assert snapshot["retryable"] is False
+    assert snapshot["error_type"] == "AgentExecutionError"
+    assert "HTTP 404" in snapshot["error_message"]
+    assert snapshot["latency_ms"] >= 0
+
+
 def test_openai_provider_returns_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(response=build_response("ok")))
@@ -408,6 +466,29 @@ def test_ollama_provider_uses_configured_timeouts_for_health_check_and_generatio
     provider.generate("system", "message")
 
     assert captured_timeouts == [5.0, 14.0]
+
+
+def test_ollama_provider_health_check_returns_structured_success_snapshot(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="llama3",
+        timeout_seconds=14.0,
+    )
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload='{"models": []}'),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["provider"] == "ollama"
+    assert snapshot["model"] == "llama3"
+    assert snapshot["status"] == "healthy"
+    assert snapshot["active_check"] is True
+    assert snapshot["base_url"] == "http://localhost:11434"
+    assert snapshot["timeout_seconds"] == 5.0
+    assert snapshot["latency_ms"] >= 0
 
 
 def test_anthropic_provider_treats_client_4xx_errors_as_deterministic(tmp_path):
@@ -645,6 +726,19 @@ def test_base_provider_default_metadata_is_none():
             return "ok"
 
     assert MinimalProvider().get_last_call_metadata() is None
+
+
+def test_base_provider_default_health_check_returns_ready_snapshot():
+    class MinimalProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+    assert MinimalProvider().health_check() == {
+        "provider": None,
+        "model": None,
+        "status": "ready",
+        "active_check": False,
+    }
 
 
 def test_base_provider_generate_super_raises_not_implemented():

@@ -885,9 +885,8 @@ class Orchestrator:
         if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
             env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         for key in list(env):
-            if key.startswith("COV_CORE_"):
+            if key.startswith(("COV_CORE_", "COVERAGE_")):
                 env.pop(key, None)
-        env.pop("COVERAGE_PROCESS_START", None)
         if sandbox_policy.enabled:
             env["PATH"] = str(tmp_path)
             env["TMPDIR"] = str(tmp_path)

@@ -1940,6 +1940,9 @@ def test_generated_test_subprocess_strips_inherited_coverage_env(tmp_path, monke
     monkeypatch.setenv("COV_CORE_CONFIG", "/tmp/.coveragerc")
     monkeypatch.setenv("COV_CORE_DATAFILE", "/tmp/.coverage")
     monkeypatch.setenv("COVERAGE_PROCESS_START", "/tmp/.coveragerc")
+    monkeypatch.setenv("COVERAGE_FILE", "/tmp/custom.coverage")
+    monkeypatch.setenv("COVERAGE_RCFILE", "/tmp/custom.coveragerc")
+    monkeypatch.setenv("COVERAGE_DEBUG", "config")
 
     def fake_run(*args, **kwargs):
         captured_env.update(kwargs["env"])
@@ -1961,6 +1964,9 @@ def test_generated_test_subprocess_strips_inherited_coverage_env(tmp_path, monke
     assert "COV_CORE_CONFIG" not in captured_env
     assert "COV_CORE_DATAFILE" not in captured_env
     assert "COVERAGE_PROCESS_START" not in captured_env
+    assert "COVERAGE_FILE" not in captured_env
+    assert "COVERAGE_RCFILE" not in captured_env
+    assert "COVERAGE_DEBUG" not in captured_env
 
 
 def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_fixtures(tmp_path):

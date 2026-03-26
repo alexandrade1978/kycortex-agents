@@ -7,6 +7,7 @@ import os
 import sqlite3
 import tempfile
 from abc import ABC, abstractmethod
+from contextlib import closing
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -71,44 +72,38 @@ class SqliteStateStore(BaseStateStore):
 
         payload = json.dumps(data, default=str)
         try:
-            connection = sqlite3.connect(path)
-            with connection:
-                connection.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS project_state (
-                        id INTEGER PRIMARY KEY CHECK (id = 1),
-                        payload TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
+            with closing(sqlite3.connect(path)) as connection:
+                with connection:
+                    connection.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS project_state (
+                            id INTEGER PRIMARY KEY CHECK (id = 1),
+                            payload TEXT NOT NULL,
+                            updated_at TEXT NOT NULL
+                        )
+                        """
                     )
-                    """
-                )
-                connection.execute(
-                    """
-                    INSERT INTO project_state (id, payload, updated_at)
-                    VALUES (1, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        payload = excluded.payload,
-                        updated_at = excluded.updated_at
-                    """,
-                    (payload, datetime.now(timezone.utc).isoformat()),
-                )
+                    connection.execute(
+                        """
+                        INSERT INTO project_state (id, payload, updated_at)
+                        VALUES (1, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            payload = excluded.payload,
+                            updated_at = excluded.updated_at
+                        """,
+                        (payload, datetime.now(timezone.utc).isoformat()),
+                    )
         except sqlite3.Error as exc:
             raise StatePersistenceError(f"Failed to save project state to {path}") from exc
-        finally:
-            if 'connection' in locals():
-                connection.close()
 
     def load(self, path: str) -> Dict[str, Any]:
         if not os.path.exists(path):
             raise StatePersistenceError(f"Project state file not found: {path}")
         try:
-            connection = sqlite3.connect(path)
-            row = connection.execute("SELECT payload FROM project_state WHERE id = 1").fetchone()
+            with closing(sqlite3.connect(path)) as connection:
+                row = connection.execute("SELECT payload FROM project_state WHERE id = 1").fetchone()
         except sqlite3.Error as exc:
             raise StatePersistenceError(f"Project state file is invalid SQLite: {path}") from exc
-        finally:
-            if 'connection' in locals():
-                connection.close()
 
         if row is None:
             raise StatePersistenceError(f"Project state file is invalid SQLite: {path}")

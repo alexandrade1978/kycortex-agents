@@ -345,6 +345,27 @@ def test_anthropic_provider_captures_usage_metadata(tmp_path):
     }
 
 
+def test_anthropic_provider_preserves_none_total_tokens_when_usage_counts_are_missing(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(config, client=build_anthropic_client(response=SimpleNamespace()))
+
+    metadata = provider._extract_metadata(
+        SimpleNamespace(
+            usage=SimpleNamespace(
+                input_tokens=None,
+                output_tokens=None,
+                cache_creation_input_tokens=0,
+                cache_read_input_tokens=0,
+            )
+        )
+    )
+
+    assert metadata is not None
+    assert metadata["usage"]["input_tokens"] is None
+    assert metadata["usage"]["output_tokens"] is None
+    assert metadata["usage"]["total_tokens"] is None
+
+
 def test_anthropic_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
     provider = AnthropicProvider(config, client=build_anthropic_client(error=RuntimeError("down")))

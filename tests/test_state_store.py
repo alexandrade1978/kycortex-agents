@@ -256,6 +256,30 @@ def test_sqlite_state_store_load_wraps_connection_errors(tmp_path, monkeypatch):
         store.load(str(state_path))
 
 
+def test_sqlite_state_store_load_wraps_query_errors_and_closes_connection(tmp_path, monkeypatch):
+    state_path = tmp_path / "project_state.sqlite"
+    state_path.write_text("placeholder", encoding="utf-8")
+    store = SqliteStateStore()
+
+    class FailingConnection:
+        def __init__(self):
+            self.closed = False
+
+        def execute(self, query):
+            raise sqlite3.Error("boom")
+
+        def close(self):
+            self.closed = True
+
+    connection = FailingConnection()
+    monkeypatch.setattr("kycortex_agents.memory.state_store.sqlite3.connect", lambda path: connection)
+
+    with pytest.raises(StatePersistenceError, match="invalid SQLite"):
+        store.load(str(state_path))
+
+    assert connection.closed is True
+
+
 def test_json_state_store_serializes_non_json_native_values(tmp_path):
     state_path = tmp_path / "project_state.json"
     store = JsonStateStore()

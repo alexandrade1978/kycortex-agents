@@ -562,6 +562,71 @@ def test_execute_generated_tests_blocks_samefile_outside_sandbox(tmp_path):
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_os_stat_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_stat.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_mode(target_path):\n"
+        "    return os.stat(target_path).st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_mode\n\n"
+        f"def test_os_stat_is_blocked():\n"
+        f"    read_mode({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_os_lstat_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_target = (tmp_path / "escaped_lstat_target.txt").resolve()
+    escaped_target.write_text("secret", encoding="utf-8")
+    escaped_link = (tmp_path / "escaped_lstat_link.txt").resolve()
+    escaped_link.symlink_to(escaped_target)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_link_mode(target_path):\n"
+        "    return os.lstat(target_path).st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_link_mode\n\n"
+        f"def test_os_lstat_is_blocked():\n"
+        f"    read_link_mode({str(escaped_link)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_path_stat_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_path_stat.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_mode(target_path):\n"
+        "    return Path(target_path).stat().st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_mode\n\n"
+        f"def test_path_stat_is_blocked():\n"
+        f"    read_mode({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_path_resolve_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1004,6 +1069,80 @@ def test_execute_generated_tests_allows_samefile_when_sandbox_disabled(tmp_path)
         "from code_under_test import is_same_file\n\n"
         f"def test_samefile_runs_when_sandbox_is_disabled():\n"
         f"    assert is_same_file({str(target_file)!r}, {str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_os_stat_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "stat_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_mode(target_path):\n"
+        "    return os.stat(target_path).st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_mode\n\n"
+        f"def test_os_stat_runs_when_sandbox_is_disabled():\n"
+        f"    assert read_mode({str(target_file)!r}) > 0\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_os_lstat_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "lstat_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+    target_link = tmp_path / "lstat_link.txt"
+    target_link.symlink_to(target_file)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_link_mode(target_path):\n"
+        "    return os.lstat(target_path).st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_link_mode\n\n"
+        f"def test_os_lstat_runs_when_sandbox_is_disabled():\n"
+        f"    assert read_link_mode({str(target_link)!r}) > 0\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_path_stat_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "path_stat_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_mode(target_path):\n"
+        "    return Path(target_path).stat().st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_mode\n\n"
+        f"def test_path_stat_runs_when_sandbox_is_disabled():\n"
+        f"    assert read_mode({str(target_file)!r}) > 0\n",
     )
 
     assert result["returncode"] == 0

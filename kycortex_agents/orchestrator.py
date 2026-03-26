@@ -83,9 +83,16 @@ import tempfile
 _REAL_OPEN = builtins.open
 _REAL_IO_OPEN = io.open
 _REAL_OS_OPEN = os.open
+_REAL_OS_STAT = os.stat
+_REAL_OS_LSTAT = getattr(os, "lstat", None)
 _REAL_GLOB_GLOB = glob.glob
 _REAL_GLOB_IGLOB = glob.iglob
 _REAL_PATH_RESOLVE = pathlib.Path.resolve
+_REAL_PATH_STATS = {
+    _class_name: getattr(getattr(pathlib, _class_name), "stat")
+    for _class_name in ("Path", "PosixPath", "WindowsPath")
+    if getattr(pathlib, _class_name, None) is not None and hasattr(getattr(pathlib, _class_name), "stat")
+}
 _SANDBOX_ROOT = pathlib.Path(os.environ.get("KYCORTEX_SANDBOX_ROOT", os.getcwd())).resolve()
 _RUNTIME_SAFE_ROOTS = set()
 _RUNTIME_SAFE_FILES = set()
@@ -141,11 +148,38 @@ def _is_write_mode(mode):
     return any(flag in normalized_mode for flag in ("w", "a", "+", "x"))
 
 
+def _resolve_path_unchecked(path_value):
+    if isinstance(path_value, int):
+        return path_value
+    _saved_os_stat = os.stat
+    _saved_os_lstat = getattr(os, "lstat", None)
+    _saved_path_stats = {}
+    try:
+        os.stat = _REAL_OS_STAT
+        if _REAL_OS_LSTAT is not None:
+            os.lstat = _REAL_OS_LSTAT
+        for _class_name, _real_stat in _REAL_PATH_STATS.items():
+            _path_class = getattr(pathlib, _class_name, None)
+            if _path_class is None:
+                continue
+            _saved_path_stats[_class_name] = getattr(_path_class, "stat", None)
+            setattr(_path_class, "stat", _real_stat)
+        return _REAL_PATH_RESOLVE(pathlib.Path(path_value))
+    finally:
+        os.stat = _saved_os_stat
+        if _REAL_OS_LSTAT is not None and _saved_os_lstat is not None:
+            os.lstat = _saved_os_lstat
+        for _class_name, _saved_stat in _saved_path_stats.items():
+            _path_class = getattr(pathlib, _class_name, None)
+            if _path_class is not None and _saved_stat is not None:
+                setattr(_path_class, "stat", _saved_stat)
+
+
 def _is_within_sandbox(path_value):
     if isinstance(path_value, int):
         return True
     try:
-        candidate = _REAL_PATH_RESOLVE(pathlib.Path(path_value))
+        candidate = _resolve_path_unchecked(path_value)
     except Exception:
         return False
     try:
@@ -159,7 +193,7 @@ def _is_runtime_safe_path(path_value):
     if isinstance(path_value, int):
         return True
     try:
-        candidate = _REAL_PATH_RESOLVE(pathlib.Path(path_value))
+        candidate = _resolve_path_unchecked(path_value)
     except Exception:
         return False
     if candidate in _RUNTIME_SAFE_FILES:
@@ -194,7 +228,7 @@ def _ensure_metadata_read_within_policy(path_value):
     if _is_within_sandbox(path_value) or _is_runtime_safe_path(path_value):
         return
     try:
-        candidate = _REAL_PATH_RESOLVE(pathlib.Path(path_value))
+        candidate = _resolve_path_unchecked(path_value)
     except Exception:
         _blocked_filesystem_read(path_value)
     if candidate in _RUNTIME_SAFE_METADATA_PATHS:
@@ -267,6 +301,18 @@ for _name in ("access", "listdir", "scandir"):
             return __real(*args, **kwargs)
 
         setattr(os, _name, _guarded_read_path)
+
+
+for _name in ("stat", "lstat"):
+    if hasattr(os, _name):
+        _real = getattr(os, _name)
+
+        def _guarded_metadata_read_path(*args, __real=_real, **kwargs):
+            if args:
+                _ensure_metadata_read_within_policy(args[0])
+            return __real(*args, **kwargs)
+
+        setattr(os, _name, _guarded_metadata_read_path)
 
 
 if hasattr(os, "walk"):
@@ -367,7 +413,7 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
 
             setattr(_path_class, _name, _guarded_path_read)
 
-    for _name in ("readlink",):
+    for _name in ("readlink", "stat"):
         if hasattr(_path_class, _name):
             _real = getattr(_path_class, _name)
 

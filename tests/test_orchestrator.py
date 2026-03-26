@@ -1473,6 +1473,25 @@ def test_build_generated_test_env_strips_credential_and_provider_markers(tmp_pat
     assert "HF_TOKEN" not in env
 
 
+def test_build_generated_test_env_strips_git_ssh_and_gnupg_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "Host User")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/host/.gitconfig")
+    monkeypatch.setenv("GIT_SSH_COMMAND", "ssh -i /host/key")
+    monkeypatch.setenv("SSH_AUTH_SOCK", "/host/ssh-agent.sock")
+    monkeypatch.setenv("GNUPGHOME", "/host/.gnupg")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "GIT_AUTHOR_NAME" not in env
+    assert "GIT_CONFIG_GLOBAL" not in env
+    assert "GIT_SSH_COMMAND" not in env
+    assert "SSH_AUTH_SOCK" not in env
+    assert "GNUPGHOME" not in env
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

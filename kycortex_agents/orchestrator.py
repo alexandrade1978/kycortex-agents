@@ -859,6 +859,9 @@ class Orchestrator:
         for key in list(env):
             if key.startswith(("AWS_", "AZURE_", "GCP_", "GOOGLE_", "HF_", "OLLAMA_")) or key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
                 env.pop(key, None)
+        for key in list(env):
+            if key.startswith(("GIT_", "SSH_")) or key == "GNUPGHOME":
+                env.pop(key, None)
         if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
             env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         for key in list(env):

@@ -858,6 +858,9 @@ class Orchestrator:
         env.pop("COVERAGE_PROCESS_START", None)
         if sandbox_policy.enabled:
             env.setdefault("TMPDIR", str(tmp_path))
+            env.setdefault("TMP", str(tmp_path))
+            env.setdefault("TEMP", str(tmp_path))
+            env.setdefault("TEMPDIR", str(tmp_path))
             env.setdefault("HOME", str(tmp_path))
             env.setdefault("USERPROFILE", str(tmp_path))
             env.setdefault("XDG_CONFIG_HOME", str(tmp_path / ".config"))

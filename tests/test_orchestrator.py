@@ -1267,11 +1267,16 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
 
     result = orchestrator._execute_generated_tests(
         "code_under_test.py",
-        "import os\nfrom pathlib import Path\n\n"
+        "import os\nimport tempfile\nfrom pathlib import Path\n\n"
         "def runtime_paths():\n"
         "    return {\n"
         "        'home': str(Path.home()),\n"
         "        'sandbox_root': os.environ.get('KYCORTEX_SANDBOX_ROOT', ''),\n"
+        "        'tmpdir': os.environ.get('TMPDIR', ''),\n"
+        "        'tmp': os.environ.get('TMP', ''),\n"
+        "        'temp': os.environ.get('TEMP', ''),\n"
+        "        'tempdir_env': os.environ.get('TEMPDIR', ''),\n"
+        "        'tempfile_dir': tempfile.gettempdir(),\n"
         "        'config': os.environ.get('XDG_CONFIG_HOME', ''),\n"
         "        'cache': os.environ.get('XDG_CACHE_HOME', ''),\n"
         "        'data': os.environ.get('XDG_DATA_HOME', ''),\n"
@@ -1282,6 +1287,11 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "def test_runtime_paths_are_sandboxed(tmp_path):\n"
         "    paths = runtime_paths()\n"
         "    assert paths['home'] == paths['sandbox_root']\n"
+        "    assert paths['tmpdir'] == paths['sandbox_root']\n"
+        "    assert paths['tmp'] == paths['sandbox_root']\n"
+        "    assert paths['temp'] == paths['sandbox_root']\n"
+        "    assert paths['tempdir_env'] == paths['sandbox_root']\n"
+        "    assert paths['tempfile_dir'] == paths['sandbox_root']\n"
         "    assert paths['config'] == str(Path(paths['home']) / '.config')\n"
         "    assert paths['cache'] == str(Path(paths['home']) / '.cache')\n"
         "    assert paths['data'] == str(Path(paths['home']) / '.local' / 'share')\n",

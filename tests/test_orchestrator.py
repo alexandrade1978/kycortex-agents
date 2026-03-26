@@ -732,6 +732,305 @@ def test_default_artifact_path_sanitizes_blank_names_and_other_suffix(tmp_path):
     assert orchestrator._default_artifact_path(artifact) == "artifacts/artifact.artifact"
 
 
+def test_build_context_includes_test_repair_content_and_summary(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="tests",
+        title="Repair tests",
+        description="Fix the tests",
+        assigned_to="qa_tester",
+        repair_context={
+            "repair_owner": "qa_tester",
+            "validation_summary": "Generated test validation: failed",
+            "failed_output": "def test_old():\n    assert False",
+        },
+    )
+    project.add_task(task)
+
+    context = orchestrator._build_context(task, project)
+
+    assert context["existing_tests"] == "def test_old():\n    assert False"
+    assert context["test_validation_summary"] == "Generated test validation: failed"
+
+
+def test_build_context_includes_dependency_repair_content_and_summary_without_existing_context(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="deps",
+        title="Repair dependencies",
+        description="Fix the manifest",
+        assigned_to="dependency_manager",
+        repair_context={
+            "repair_owner": "dependency_manager",
+            "validation_summary": "Generated dependency validation: failed",
+            "failed_artifact_content": "requests>=2.0",
+        },
+    )
+    project.add_task(task)
+
+    context = orchestrator._build_context(task, project)
+
+    assert context["existing_dependency_manifest"] == "requests>=2.0"
+    assert context["dependency_validation_summary"] == "Generated dependency validation: failed"
+
+
+def test_validation_payload_returns_empty_for_non_mapping_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description="Design the architecture",
+        assigned_to="architect",
+        output_payload={"metadata": "invalid"},
+    )
+
+    assert orchestrator._validation_payload(task) == {}
+
+
+def test_failed_artifact_content_skips_invalid_entries_and_falls_back_to_raw_content(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement the application",
+        assigned_to="code_engineer",
+        output="fallback output",
+        output_payload={
+            "raw_content": "def fallback() -> int:\n    return 1",
+            "artifacts": [
+                "invalid",
+                {"artifact_type": ArtifactType.TEST.value, "content": "def test_ok():\n    assert True"},
+                {"artifact_type": ArtifactType.CODE.value, "content": "   "},
+            ],
+        },
+    )
+
+    assert orchestrator._failed_artifact_content(task, ArtifactType.CODE) == "def fallback() -> int:\n    return 1"
+
+
+def test_build_code_validation_summary_omits_optional_fields_when_missing(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_validation_summary({"syntax_ok": True, "third_party_imports": []}, "")
+
+    assert summary == "Generated code validation:\n- Syntax OK: yes\n- Third-party imports: none"
+
+
+def test_build_repair_validation_summary_falls_back_when_validation_payload_shape_is_unusable(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement the application",
+        assigned_to="code_engineer",
+        output="fallback output",
+        last_error="fallback error",
+        output_payload={
+            "metadata": {
+                "validation": {
+                    "code_analysis": "invalid",
+                    "dependency_analysis": "invalid",
+                }
+            }
+        },
+    )
+
+    assert (
+        orchestrator._build_repair_validation_summary(task, FailureCategory.CODE_VALIDATION.value)
+        == "fallback error"
+    )
+    assert (
+        orchestrator._build_repair_validation_summary(task, FailureCategory.DEPENDENCY_VALIDATION.value)
+        == "fallback error"
+    )
+
+
+def test_active_repair_cycle_returns_none_for_non_mapping_history_entries(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.repair_history.append("invalid")
+
+    assert orchestrator._active_repair_cycle(project) is None
+
+
+def test_has_repair_task_for_cycle_matches_origin_and_attempt(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch__repair_1",
+            title="Repair architecture",
+            description="Repair architecture",
+            assigned_to="architect",
+            repair_origin_task_id="arch",
+            repair_attempt=1,
+        )
+    )
+
+    assert orchestrator._has_repair_task_for_cycle(project, "arch", 1) is True
+
+
+def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, monkeypatch):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_resume_policy="resume_failed",
+    )
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(id="arch", title="Architecture", description="Design", assigned_to="architect")
+    project.add_task(task)
+
+    project.repair_history.append({"cycle": 0})
+    assert orchestrator._queue_active_cycle_repair(project, task) is False
+
+    project.repair_history[-1] = {"cycle": 1}
+    monkeypatch.setattr(orchestrator, "_has_repair_task_for_cycle", lambda *args, **kwargs: True)
+    assert orchestrator._queue_active_cycle_repair(project, task) is False
+
+    monkeypatch.setattr(orchestrator, "_has_repair_task_for_cycle", lambda *args, **kwargs: False)
+    monkeypatch.setattr(project, "_plan_task_repair", lambda *args, **kwargs: None)
+    monkeypatch.setattr(orchestrator, "_repair_task_ids_for_cycle", lambda *args, **kwargs: [])
+    assert orchestrator._queue_active_cycle_repair(project, task) is False
+
+
+def test_failed_artifact_content_for_dependency_validation_uses_config_artifact(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="deps",
+        title="Dependencies",
+        description="Infer dependencies",
+        assigned_to="dependency_manager",
+        output_payload={
+            "raw_content": "fallback",
+            "artifacts": [
+                {"artifact_type": ArtifactType.CONFIG.value, "content": "requests>=2.0"},
+            ],
+        },
+    )
+
+    assert (
+        orchestrator._failed_artifact_content_for_category(task, FailureCategory.DEPENDENCY_VALIDATION.value)
+        == "requests>=2.0"
+    )
+
+
+def test_repair_task_ids_for_cycle_skips_missing_tasks(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    assert orchestrator._repair_task_ids_for_cycle(project, ["missing-task"]) == []
+
+
+def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement",
+            assigned_to="code_engineer",
+        )
+    )
+    monkeypatch.setattr(orchestrator, "_default_module_name_for_task", lambda task: None)
+
+    assert orchestrator._planned_module_context(project) == {}
+
+
+def test_artifact_context_helpers_return_empty_for_invalid_payload_shapes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(id="task", title="Task", description="Task", assigned_to="architect")
+
+    assert orchestrator._code_artifact_context(task) == {}
+    assert orchestrator._test_artifact_context(task, {}) == {}
+    assert orchestrator._dependency_artifact_context(task, {}) == {}
+
+    task.output_payload = {"artifacts": "invalid"}
+    assert orchestrator._code_artifact_context(task) == {}
+    assert orchestrator._test_artifact_context(task, {}) == {}
+    assert orchestrator._dependency_artifact_context(task, {}) == {}
+
+
+def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_context(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement",
+        assigned_to="code_engineer",
+        output="def ok():\n    return 1",
+        output_payload={
+            "artifacts": [
+                "invalid",
+                {"artifact_type": ArtifactType.TEST.value, "path": "tests_generated.py", "content": "def test_ok():\n    assert True"},
+                {"artifact_type": ArtifactType.CODE.value, "path": "   ", "content": "def ok():\n    return 1"},
+            ]
+        },
+    )
+    test_task = Task(
+        id="tests",
+        title="Tests",
+        description="Test",
+        assigned_to="qa_tester",
+        output="def test_ok():\n    assert True",
+        output_payload={
+            "artifacts": [
+                "invalid",
+                {"artifact_type": ArtifactType.CODE.value, "path": "code.py", "content": "def ok():\n    return 1"},
+                {"artifact_type": ArtifactType.TEST.value, "path": "   ", "content": "def test_ok():\n    assert True"},
+            ]
+        },
+    )
+    dep_task = Task(
+        id="deps",
+        title="Dependencies",
+        description="Deps",
+        assigned_to="dependency_manager",
+        output="requests>=2.0",
+        output_payload={
+            "artifacts": [
+                "invalid",
+                {"artifact_type": ArtifactType.CONFIG.value, "path": "   ", "content": "requests>=2.0"},
+                {"artifact_type": ArtifactType.CONFIG.value, "path": "deps.txt", "content": "requests>=2.0"},
+            ]
+        },
+    )
+
+    assert orchestrator._code_artifact_context(code_task) == {}
+    assert orchestrator._test_artifact_context(test_task, {}) == {}
+    assert orchestrator._test_artifact_context(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}
+    assert orchestrator._dependency_artifact_context(dep_task, {}) == {}
+
+
+def test_analyze_dependency_manifest_skips_blank_requirement_names(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    analysis = orchestrator._analyze_dependency_manifest(
+        ">=1.0\nrequests>=2.0",
+        {"third_party_imports": ["requests"]},
+    )
+
+    assert analysis["declared_packages"] == ["requests"]
+    assert analysis["missing_manifest_entries"] == []
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

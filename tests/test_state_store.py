@@ -42,6 +42,16 @@ def test_json_state_store_save_and_load_round_trip(tmp_path):
     assert store.load(str(state_path)) == payload
 
 
+def test_json_state_store_save_and_load_round_trip_without_parent_directory(tmp_path):
+    state_path = tmp_path / "project_state.json"
+    store = JsonStateStore()
+    payload = {"project_name": "Demo", "tasks": [{"id": "arch"}]}
+
+    store.save(str(state_path), payload)
+
+    assert store.load(str(state_path)) == payload
+
+
 def test_json_state_store_cleans_up_temp_file_after_replace_failure(tmp_path, monkeypatch):
     state_path = tmp_path / "state" / "project_state.json"
     store = JsonStateStore()
@@ -90,6 +100,16 @@ def test_json_state_store_rejects_missing_and_invalid_files(tmp_path):
 
 def test_sqlite_state_store_save_and_load_round_trip(tmp_path):
     state_path = tmp_path / "state" / "project_state.sqlite"
+    store = SqliteStateStore()
+    payload = {"project_name": "Demo", "tasks": [{"id": "arch"}]}
+
+    store.save(str(state_path), payload)
+
+    assert store.load(str(state_path)) == payload
+
+
+def test_sqlite_state_store_save_and_load_round_trip_without_parent_directory(tmp_path):
+    state_path = tmp_path / "project_state.sqlite"
     store = SqliteStateStore()
     payload = {"project_name": "Demo", "tasks": [{"id": "arch"}]}
 
@@ -195,6 +215,20 @@ def test_sqlite_state_store_save_wraps_connection_errors(tmp_path, monkeypatch):
 
     with pytest.raises(StatePersistenceError, match="Failed to save project state"):
         store.save(str(state_path), {"project_name": "Demo"})
+
+
+def test_sqlite_state_store_load_wraps_connection_errors(tmp_path, monkeypatch):
+    state_path = tmp_path / "project_state.sqlite"
+    state_path.write_text("placeholder", encoding="utf-8")
+    store = SqliteStateStore()
+
+    def failing_connect(path):
+        raise sqlite3.Error("boom")
+
+    monkeypatch.setattr("kycortex_agents.memory.state_store.sqlite3.connect", failing_connect)
+
+    with pytest.raises(StatePersistenceError, match="invalid SQLite"):
+        store.load(str(state_path))
 
 
 def test_json_state_store_serializes_non_json_native_values(tmp_path):

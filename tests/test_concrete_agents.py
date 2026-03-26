@@ -9,7 +9,7 @@ from kycortex_agents.agents.legal_advisor import LegalAdvisorAgent
 from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
-from kycortex_agents.types import AgentInput, ArtifactType
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType
 
 
 class ChatCaptureMixin:
@@ -235,6 +235,27 @@ def test_dependency_manager_agent_normalizes_bulleted_requirements_and_deduplica
     )
 
     assert normalized == "requests>=2.31.0\nnumpy==2.1.1"
+
+
+def test_dependency_manager_after_execute_leaves_non_requirements_artifacts_unchanged(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+    agent_input = AgentInput(
+        task_id="deps",
+        task_title="Dependencies",
+        task_description="Infer runtime dependencies",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={"code": "import requests"},
+    )
+    output = AgentOutput(
+        summary="summary",
+        raw_content="requests>=2.31.0",
+        artifacts=[ArtifactRecord(name="notes", artifact_type=ArtifactType.DOCUMENT, path="artifacts/notes.md", content="leave me alone")],
+    )
+
+    result = agent.after_execute(agent_input, output)
+
+    assert result.artifacts[0].content == "leave me alone"
 
 
 @pytest.mark.parametrize(

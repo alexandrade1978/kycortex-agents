@@ -440,7 +440,7 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
 
             setattr(_path_class, _name, _guarded_path_read)
 
-    for _name in ("readlink", "stat"):
+    for _name in ("group", "owner", "readlink", "stat"):
         if hasattr(_path_class, _name):
             _real = getattr(_path_class, _name)
 

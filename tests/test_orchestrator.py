@@ -690,6 +690,48 @@ def test_execute_generated_tests_blocks_os_path_samefile_outside_sandbox(tmp_pat
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_path_owner_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_path_owner.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_owner(target_path):\n"
+        "    return Path(target_path).owner()\n",
+        "tests_generated.py",
+        "from code_under_test import read_owner\n\n"
+        f"def test_path_owner_is_blocked():\n"
+        f"    read_owner({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_path_group_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_path_group.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_group(target_path):\n"
+        "    return Path(target_path).group()\n",
+        "tests_generated.py",
+        "from code_under_test import read_group\n\n"
+        f"def test_path_group_is_blocked():\n"
+        f"    read_group({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_os_stat_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1280,6 +1322,33 @@ def test_execute_generated_tests_allows_os_path_samefile_when_sandbox_disabled(t
         "from code_under_test import is_same_file\n\n"
         f"def test_os_path_samefile_runs_when_sandbox_is_disabled():\n"
         f"    assert is_same_file({str(target_file)!r}, {str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_path_owner_group_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "path_owner_group_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_identity(target_path):\n"
+        "    target = Path(target_path)\n"
+        "    return (target.owner(), target.group())\n",
+        "tests_generated.py",
+        "from code_under_test import read_identity\n\n"
+        f"def test_path_owner_group_run_when_sandbox_is_disabled():\n"
+        f"    owner, group = read_identity({str(target_file)!r})\n"
+        "    assert owner\n"
+        "    assert group\n",
     )
 
     assert result["returncode"] == 0

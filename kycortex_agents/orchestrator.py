@@ -85,6 +85,7 @@ _REAL_OS_OPEN = os.open
 _SANDBOX_ROOT = pathlib.Path(os.environ.get("KYCORTEX_SANDBOX_ROOT", os.getcwd())).resolve()
 _RUNTIME_SAFE_ROOTS = set()
 _RUNTIME_SAFE_FILES = set()
+_RUNTIME_SAFE_METADATA_PATHS = set()
 
 
 def _add_runtime_safe_root(path_value):
@@ -115,6 +116,11 @@ for _path_value in (os.devnull, "/dev/urandom"):
         _RUNTIME_SAFE_FILES.add(pathlib.Path(_path_value).resolve())
     except Exception:
         continue
+
+try:
+    _RUNTIME_SAFE_METADATA_PATHS.add(_SANDBOX_ROOT.parent.resolve())
+except Exception:
+    pass
 
 
 def _is_write_mode(mode):
@@ -171,13 +177,25 @@ def _blocked_filesystem_write(*args, **kwargs):
     raise RuntimeError("sandbox policy blocked filesystem write outside sandbox root")
 
 
-def _blocked_filesystem_read(*args, **kwargs):
+def _blocked_filesystem_read(path_value=None, *args, **kwargs):
     raise RuntimeError("sandbox policy blocked file access outside sandbox root")
 
 
 def _ensure_read_within_policy(path_value):
     if not (_is_within_sandbox(path_value) or _is_runtime_safe_path(path_value)):
-        _blocked_filesystem_read()
+        _blocked_filesystem_read(path_value)
+
+
+def _ensure_metadata_read_within_policy(path_value):
+    if _is_within_sandbox(path_value) or _is_runtime_safe_path(path_value):
+        return
+    try:
+        candidate = pathlib.Path(path_value).resolve()
+    except Exception:
+        _blocked_filesystem_read(path_value)
+    if candidate in _RUNTIME_SAFE_METADATA_PATHS:
+        return
+    _blocked_filesystem_read(path_value)
 
 
 def _ensure_mutation_within_sandbox(*path_values):
@@ -214,7 +232,6 @@ for _name in (
     "chmod",
     "chown",
     "lchown",
-    "listdir",
     "makedirs",
     "mkdir",
     "mkfifo",
@@ -230,25 +247,33 @@ for _name in (
 
         def _guarded_single_path(*args, __real=_real, **kwargs):
             if args:
-                if __real is os.listdir:
-                    _ensure_read_within_policy(args[0])
-                else:
-                    _ensure_mutation_within_sandbox(args[0])
+                _ensure_mutation_within_sandbox(args[0])
             return __real(*args, **kwargs)
 
         setattr(os, _name, _guarded_single_path)
 
 
-for _name in ("scandir",):
+for _name in ("access", "listdir", "scandir"):
     if hasattr(os, _name):
         _real = getattr(os, _name)
 
-        def _guarded_scandir(*args, __real=_real, **kwargs):
+        def _guarded_read_path(*args, __real=_real, **kwargs):
             if args:
                 _ensure_read_within_policy(args[0])
             return __real(*args, **kwargs)
 
-        setattr(os, _name, _guarded_scandir)
+        setattr(os, _name, _guarded_read_path)
+
+
+for _name in ("exists", "isdir", "isfile", "islink", "lexists"):
+    if hasattr(os.path, _name):
+        _real = getattr(os.path, _name)
+
+        def _guarded_os_path_read(path, *args, __real=_real, **kwargs):
+            _ensure_metadata_read_within_policy(path)
+            return __real(path, *args, **kwargs)
+
+        setattr(os.path, _name, _guarded_os_path_read)
 
 
 for _name in ("link", "rename", "replace", "symlink"):
@@ -278,6 +303,17 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
                 return __real(*args, **kwargs)
 
             setattr(_path_class, _name, _guarded_path_single)
+
+    for _name in ("exists", "is_dir", "is_file", "is_symlink"):
+        if hasattr(_path_class, _name):
+            _real = getattr(_path_class, _name)
+
+            def _guarded_path_read(*args, __real=_real, **kwargs):
+                if args:
+                    _ensure_metadata_read_within_policy(args[0])
+                return __real(*args, **kwargs)
+
+            setattr(_path_class, _name, _guarded_path_read)
 
     for _name in ("hardlink_to", "rename", "replace", "symlink_to"):
         if hasattr(_path_class, _name):

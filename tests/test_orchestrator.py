@@ -1031,6 +1031,155 @@ def test_analyze_dependency_manifest_skips_blank_requirement_names(tmp_path):
     assert analysis["missing_manifest_entries"] == []
 
 
+def test_build_generated_test_env_strips_additional_prefix_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    monkeypatch.setenv("SSL_CERT_FILE", "/tmp/cert.pem")
+    monkeypatch.setenv("KUBECONFIG", "/tmp/kubeconfig")
+    monkeypatch.setenv("PYTHONMALLOCSTATS", "1")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "SSL_CERT_FILE" not in env
+    assert "KUBECONFIG" not in env
+    assert "PYTHONMALLOCSTATS" not in env
+
+
+def test_build_dependency_validation_summary_formats_failures_and_passes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_dependency_validation_summary(
+        {
+            "required_imports": ["requests"],
+            "declared_packages": ["urllib3"],
+            "missing_manifest_entries": ["requests"],
+            "unused_manifest_entries": ["urllib3"],
+            "is_valid": False,
+        }
+    )
+
+    assert summary == (
+        "Dependency manifest validation:\n"
+        "- Required third-party imports: requests\n"
+        "- Declared packages: urllib3\n"
+        "- Missing manifest entries: requests\n"
+        "- Unused manifest entries: urllib3\n"
+        "- Verdict: FAIL"
+    )
+
+
+def test_build_code_outline_returns_empty_for_blank_content(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._build_code_outline("   ") == ""
+
+
+def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    raw_content = (
+        "import requests\n"
+        "from package.module import helper\n"
+        "from .local import thing\n"
+        "CONSTANT = 1\n\n"
+        "def _private():\n"
+        "    return 0\n\n"
+        "async def public_async(value):\n"
+        "    return value\n\n"
+        "class Service:\n"
+        "    status = 'ok'\n"
+        "    def __init__(self, request_id):\n"
+        "        self.request_id = request_id\n"
+        "    def run(self, payload):\n"
+        "        return payload\n"
+    )
+
+    analysis = orchestrator._analyze_python_module(raw_content)
+
+    assert analysis["syntax_ok"] is True
+    assert analysis["imports"] == ["package", "requests"]
+    assert analysis["third_party_imports"] == ["package", "requests"]
+    assert analysis["functions"] == [
+        {
+            "name": "public_async",
+            "params": ["value"],
+            "signature": "public_async(value)",
+            "async": True,
+        }
+    ]
+    assert analysis["classes"]["Service"] == {
+        "name": "Service",
+        "bases": [],
+        "is_enum": False,
+        "fields": [],
+        "attributes": ["status"],
+        "constructor_params": ["request_id"],
+        "methods": ["run(self, payload)"],
+    }
+    assert analysis["symbols"] == ["Service", "public_async"]
+
+
+def test_analyze_python_module_returns_default_shape_for_blank_content(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    analysis = orchestrator._analyze_python_module("   ")
+
+    assert analysis == {
+        "syntax_ok": True,
+        "syntax_error": None,
+        "functions": [],
+        "classes": {},
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": [],
+        "has_main_guard": False,
+    }
+
+
+def test_is_probable_third_party_import_rejects_blank_and_future(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._is_probable_third_party_import("") is False
+    assert orchestrator._is_probable_third_party_import("__future__") is False
+
+
+def test_build_code_public_api_reports_syntax_errors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_public_api({"syntax_ok": False, "syntax_error": "invalid syntax"})
+
+    assert summary == "Module syntax error: invalid syntax"
+
+
+def test_build_module_run_command_returns_python_command_for_main_guard(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._build_module_run_command("app.py", {"has_main_guard": True}) == "python app.py"
+
+
+def test_build_code_test_targets_reports_invalid_syntax(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_test_targets({"syntax_ok": False})
+
+    assert summary == "Test targets unavailable because module syntax is invalid."
+
+
+def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid_modules(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._build_code_behavior_contract("   ") == ""
+    assert orchestrator._build_code_behavior_contract("def broken(:\n    pass") == ""
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

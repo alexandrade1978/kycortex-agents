@@ -448,6 +448,53 @@ def test_execute_generated_tests_blocks_pathlib_mutation_outside_sandbox(tmp_pat
     assert escaped_file.exists()
 
 
+def test_execute_generated_tests_blocks_shutil_rmtree_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_tree").resolve()
+    escaped_dir.mkdir()
+    (escaped_dir / "data.txt").write_text("data", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import shutil\n\n"
+        "def remove_tree(target_path):\n"
+        "    shutil.rmtree(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import remove_tree\n\n"
+        f"def test_shutil_rmtree_is_blocked():\n"
+        f"    remove_tree({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+    assert escaped_dir.exists()
+
+
+def test_execute_generated_tests_blocks_shutil_move_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_source = (tmp_path / "escaped_source.txt").resolve()
+    escaped_target = (tmp_path / "escaped_target.txt").resolve()
+    escaped_source.write_text("data", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import shutil\n\n"
+        "def move_file(source_path, target_path):\n"
+        "    shutil.move(source_path, target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import move_file\n\n"
+        f"def test_shutil_move_is_blocked():\n"
+        f"    move_file({str(escaped_source)!r}, {str(escaped_target)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
+    assert escaped_source.exists()
+    assert not escaped_target.exists()
+
+
 def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -495,6 +542,34 @@ def test_execute_generated_tests_allows_pathlib_mutation_when_sandbox_disabled(t
     assert result["returncode"] == 0
     assert result["sandbox"]["enabled"] is False
     assert not target_file.exists()
+
+
+def test_execute_generated_tests_allows_shutil_move_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    source_file = tmp_path / "shutil_source.txt"
+    target_file = tmp_path / "shutil_target.txt"
+    source_file.write_text("data", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\nimport shutil\n\n"
+        "def move_file(source_path, target_path):\n"
+        "    shutil.move(source_path, target_path)\n"
+        "    return pathlib.Path(target_path).exists() and not pathlib.Path(source_path).exists()\n",
+        "tests_generated.py",
+        "from code_under_test import move_file\n\n"
+        f"def test_shutil_move_runs_when_sandbox_is_disabled():\n"
+        f"    assert move_file({str(source_file)!r}, {str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+    assert not source_file.exists()
+    assert target_file.exists()
 
 
 def test_execute_generated_tests_allows_directory_creation_when_sandbox_disabled(tmp_path):

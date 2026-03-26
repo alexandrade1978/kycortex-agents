@@ -70,6 +70,7 @@ import asyncio
 import builtins
 import os
 import pathlib
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -202,6 +203,30 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
                 return __real(*args, **kwargs)
 
             setattr(_path_class, _name, _guarded_path_double)
+
+
+for _name in ("copy", "copy2", "copyfile", "copytree", "move"):
+    if hasattr(shutil, _name):
+        _real = getattr(shutil, _name)
+
+        def _guarded_shutil_two_path(*args, __real=_real, **kwargs):
+            if len(args) >= 2:
+                _ensure_mutation_within_sandbox(args[0], args[1])
+            return __real(*args, **kwargs)
+
+        setattr(shutil, _name, _guarded_shutil_two_path)
+
+
+for _name in ("rmtree",):
+    if hasattr(shutil, _name):
+        _real = getattr(shutil, _name)
+
+        def _guarded_shutil_single(*args, __real=_real, **kwargs):
+            if args:
+                _ensure_mutation_within_sandbox(args[0])
+            return __real(*args, **kwargs)
+
+        setattr(shutil, _name, _guarded_shutil_single)
 
 
 if os.environ.get("KYCORTEX_SANDBOX_ALLOW_NETWORK") != "1":

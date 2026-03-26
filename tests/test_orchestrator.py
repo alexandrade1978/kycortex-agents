@@ -1363,6 +1363,7 @@ def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, 
     monkeypatch.setenv("PYTHONBREAKPOINT", "evil.module:breakpoint")
     monkeypatch.setenv("PYTHONCASEOK", "1")
     monkeypatch.setenv("PYTHONDEBUG", "1")
+    monkeypatch.setenv("PYTHONDEVMODE", "1")
     monkeypatch.setenv("PYTHONEXECUTABLE", "/tmp/python")
     monkeypatch.setenv("PYTHONFAULTHANDLER", "1")
     monkeypatch.setenv("PYTHONINTMAXSTRDIGITS", "1000")
@@ -1389,6 +1390,7 @@ def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, 
     assert "PYTHONBREAKPOINT" not in env
     assert "PYTHONCASEOK" not in env
     assert "PYTHONDEBUG" not in env
+    assert "PYTHONDEVMODE" not in env
     assert "PYTHONEXECUTABLE" not in env
     assert "PYTHONFAULTHANDLER" not in env
     assert "PYTHONINTMAXSTRDIGITS" not in env
@@ -1641,6 +1643,7 @@ def test_build_generated_test_env_strips_loader_and_native_runtime_markers(tmp_p
     monkeypatch.setenv("LD_LIBRARY_PATH", "/host/lib")
     monkeypatch.setenv("DYLD_INSERT_LIBRARIES", "/host/libinject.dylib")
     monkeypatch.setenv("PYTHONMALLOC", "malloc_debug")
+    monkeypatch.setenv("PYTHONMALLOCSTATS", "1")
     monkeypatch.setenv("PYTHONWARNINGS", "error")
 
     env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
@@ -1649,6 +1652,7 @@ def test_build_generated_test_env_strips_loader_and_native_runtime_markers(tmp_p
     assert "LD_LIBRARY_PATH" not in env
     assert "DYLD_INSERT_LIBRARIES" not in env
     assert "PYTHONMALLOC" not in env
+    assert "PYTHONMALLOCSTATS" not in env
     assert "PYTHONWARNINGS" not in env
 
 

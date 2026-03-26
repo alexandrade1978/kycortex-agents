@@ -559,6 +559,29 @@ def test_execute_generated_tests_blocks_samefile_outside_sandbox(tmp_path):
     assert result["returncode"] != 0
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
+
+def test_execute_generated_tests_blocks_path_resolve_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_target = (tmp_path / "escaped_resolve_target.txt").resolve()
+    escaped_target.write_text("secret", encoding="utf-8")
+    escaped_link = (tmp_path / "escaped_resolve_link").resolve()
+    escaped_link.symlink_to(escaped_target)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def resolve_path(target_path):\n"
+        "    return str(Path(target_path).resolve())\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_path\n\n"
+        f"def test_path_resolve_is_blocked():\n"
+        f"    resolve_path({str(escaped_link)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
 def test_execute_generated_tests_blocks_path_walk_outside_sandbox_when_supported(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -979,6 +1002,32 @@ def test_execute_generated_tests_allows_samefile_when_sandbox_disabled(tmp_path)
         "from code_under_test import is_same_file\n\n"
         f"def test_samefile_runs_when_sandbox_is_disabled():\n"
         f"    assert is_same_file({str(target_file)!r}, {str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_path_resolve_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "resolve_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+    target_link = tmp_path / "resolve_link.txt"
+    target_link.symlink_to(target_file)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def resolve_path(target_path):\n"
+        "    return str(Path(target_path).resolve())\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_path\n\n"
+        f"def test_path_resolve_runs_when_sandbox_is_disabled():\n"
+        f"    assert resolve_path({str(target_link)!r}) == {str(target_file)!r}\n",
     )
 
     assert result["returncode"] == 0

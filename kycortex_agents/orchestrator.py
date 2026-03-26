@@ -85,6 +85,7 @@ _REAL_IO_OPEN = io.open
 _REAL_OS_OPEN = os.open
 _REAL_GLOB_GLOB = glob.glob
 _REAL_GLOB_IGLOB = glob.iglob
+_REAL_PATH_RESOLVE = pathlib.Path.resolve
 _SANDBOX_ROOT = pathlib.Path(os.environ.get("KYCORTEX_SANDBOX_ROOT", os.getcwd())).resolve()
 _RUNTIME_SAFE_ROOTS = set()
 _RUNTIME_SAFE_FILES = set()
@@ -144,7 +145,7 @@ def _is_within_sandbox(path_value):
     if isinstance(path_value, int):
         return True
     try:
-        candidate = pathlib.Path(path_value).resolve()
+        candidate = _REAL_PATH_RESOLVE(pathlib.Path(path_value))
     except Exception:
         return False
     try:
@@ -158,7 +159,7 @@ def _is_runtime_safe_path(path_value):
     if isinstance(path_value, int):
         return True
     try:
-        candidate = pathlib.Path(path_value).resolve()
+        candidate = _REAL_PATH_RESOLVE(pathlib.Path(path_value))
     except Exception:
         return False
     if candidate in _RUNTIME_SAFE_FILES:
@@ -193,7 +194,7 @@ def _ensure_metadata_read_within_policy(path_value):
     if _is_within_sandbox(path_value) or _is_runtime_safe_path(path_value):
         return
     try:
-        candidate = pathlib.Path(path_value).resolve()
+        candidate = _REAL_PATH_RESOLVE(pathlib.Path(path_value))
     except Exception:
         _blocked_filesystem_read(path_value)
     if candidate in _RUNTIME_SAFE_METADATA_PATHS:
@@ -376,6 +377,17 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
                 return __real(*args, **kwargs)
 
             setattr(_path_class, _name, _guarded_path_metadata_single)
+
+    for _name in ("resolve",):
+        if hasattr(_path_class, _name):
+            _real = getattr(_path_class, _name)
+
+            def _guarded_path_resolve(*args, __real=_real, **kwargs):
+                if args:
+                    _ensure_metadata_read_within_policy(args[0])
+                return __real(*args, **kwargs)
+
+            setattr(_path_class, _name, _guarded_path_resolve)
 
     for _name in ("samefile",):
         if hasattr(_path_class, _name):

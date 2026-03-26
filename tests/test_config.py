@@ -42,6 +42,49 @@ def test_config_rejects_invalid_timeout(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=0)
 
 
+def test_config_rejects_non_positive_provider_timeout_override(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_timeout_seconds values must be greater than zero",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_timeout_seconds={"openai": 0.0},
+        )
+
+
+def test_config_rejects_unsupported_provider_timeout_override_key(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_timeout_seconds contains unsupported provider: custom",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_timeout_seconds={"custom": 15.0},
+        )
+
+
+def test_provider_runtime_config_uses_provider_specific_timeout_for_primary_and_fallback(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        llm_model="gpt-4o",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        timeout_seconds=60.0,
+        provider_timeout_seconds={"openai": 12.5, "anthropic": 30.0},
+    )
+
+    primary_runtime = config.provider_runtime_config("openai")
+    fallback_runtime = config.provider_runtime_config("anthropic")
+
+    assert primary_runtime.timeout_seconds == 12.5
+    assert fallback_runtime.timeout_seconds == 30.0
+    assert config.provider_timeout_seconds_for("openai") == 12.5
+    assert config.provider_timeout_seconds_for("anthropic") == 30.0
+    assert config.provider_timeout_seconds_for("ollama") == 60.0
+
+
 def test_config_rejects_invalid_temperature(tmp_path):
     with pytest.raises(ConfigValidationError, match="temperature must be between 0 and 2"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), temperature=2.5)

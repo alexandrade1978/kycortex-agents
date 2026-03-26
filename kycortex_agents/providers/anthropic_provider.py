@@ -44,6 +44,7 @@ class AnthropicProvider(BaseLLMProvider):
                 system=system_prompt,
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
+                timeout=self.config.timeout_seconds,
                 messages=[{"role": "user", "content": user_message}],
             )
         except Exception as exc:

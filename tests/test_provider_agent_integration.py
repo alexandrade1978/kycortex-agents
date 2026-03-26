@@ -28,8 +28,10 @@ def build_agent_input() -> AgentInput:
     )
 
 
-def build_openai_client(response=None, error=None):
+def build_openai_client(response=None, error=None, captured_kwargs=None):
     def create(**kwargs):
+        if captured_kwargs is not None:
+            captured_kwargs.append(kwargs)
         if error is not None:
             raise error
         return response
@@ -37,8 +39,10 @@ def build_openai_client(response=None, error=None):
     return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
 
-def build_anthropic_client(response=None, error=None):
+def build_anthropic_client(response=None, error=None, captured_kwargs=None):
     def create(**kwargs):
+        if captured_kwargs is not None:
+            captured_kwargs.append(kwargs)
         if error is not None:
             raise error
         return response
@@ -407,3 +411,64 @@ def test_execute_falls_back_to_secondary_provider_after_primary_provider_budget_
     assert metadata["provider_call_counts_by_provider"] == {"openai": 1, "anthropic": 1}
     assert metadata["provider_max_calls_per_provider"] == {"openai": 1}
     assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+
+
+def test_execute_surfaces_provider_specific_timeout_metadata_and_runtime_override(monkeypatch):
+    primary_calls: list[dict[str, object]] = []
+    fallback_calls: list[dict[str, object]] = []
+    primary_config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        api_key="token",
+        llm_model="gpt-4o",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_max_calls_per_provider={"openai": 1},
+        timeout_seconds=60.0,
+        provider_timeout_seconds={"openai": 11.0, "anthropic": 22.0},
+    )
+    primary_provider = OpenAIProvider(
+        primary_config.provider_runtime_config("openai"),
+        client=build_openai_client(
+            response=SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="PRIMARY RESULT"))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            ),
+            captured_kwargs=primary_calls,
+        ),
+    )
+    fallback_provider = AnthropicProvider(
+        KYCortexConfig(
+            output_dir="./output_test",
+            llm_provider="anthropic",
+            api_key="token",
+            llm_model="claude-3-5-sonnet",
+            timeout_seconds=22.0,
+        ),
+        client=build_anthropic_client(
+            response=SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="FALLBACK RESULT")],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=8),
+            ),
+            captured_kwargs=fallback_calls,
+        ),
+    )
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        assert runtime_config.timeout_seconds == 22.0
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+    agent = ProviderBackedAgent(primary_provider, primary_config)
+
+    first_result = agent.execute(build_agent_input())
+    second_result = agent.execute(build_agent_input())
+
+    metadata = second_result.metadata["provider_call"]
+    assert first_result.raw_content == "PRIMARY RESULT"
+    assert second_result.raw_content == "FALLBACK RESULT"
+    assert primary_calls[0]["timeout"] == 11.0
+    assert fallback_calls[0]["timeout"] == 22.0
+    assert metadata["provider_timeout_seconds"] == 22.0
+    assert metadata["provider_timeout_seconds_by_provider"] == {"openai": 11.0, "anthropic": 22.0}

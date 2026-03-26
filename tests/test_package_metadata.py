@@ -814,6 +814,7 @@ def test_readme_documents_all_public_configuration_parameters():
     assert "| `temperature` |" in readme
     assert "| `max_tokens` |" in readme
     assert "| `timeout_seconds` |" in readme
+    assert "| `provider_timeout_seconds` |" in readme
     assert "| `workflow_failure_policy` |" in readme
     assert "| `workflow_resume_policy` |" in readme
     assert "| `project_name` |" in readme

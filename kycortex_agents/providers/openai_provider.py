@@ -45,6 +45,7 @@ class OpenAIProvider(BaseLLMProvider):
                 model=self.config.llm_model,
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
+                timeout=self.config.timeout_seconds,
                 messages=self._build_messages(system_prompt, user_message),
             )
         except Exception as exc:

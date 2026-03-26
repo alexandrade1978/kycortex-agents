@@ -140,6 +140,7 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | `temperature` | `0.2` | Sampling temperature validated between `0` and `2`. |
 | `max_tokens` | `4096` | Maximum number of output tokens requested from the provider. |
 | `timeout_seconds` | `60.0` | Provider request timeout in seconds. |
+| `provider_timeout_seconds` | `{}` | Optional per-provider timeout overrides keyed by provider name, used for primary and fallback provider runtime configs. |
 | `workflow_failure_policy` | `"fail_fast"` | Controls whether workflow execution stops immediately or continues while skipping blocked descendants. |
 | `workflow_resume_policy` | `"interrupted_only"` | Controls whether resume only re-queues interrupted tasks or also re-queues failed and dependency-skipped tasks. |
 | `project_name` | `"kycortex-project"` | Human-readable project name persisted into workflow state and snapshots. |

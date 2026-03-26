@@ -36,8 +36,10 @@ def build_response_with_usage(content, prompt_tokens=10, completion_tokens=5, to
     )
 
 
-def build_client(response=None, error=None):
+def build_client(response=None, error=None, captured_kwargs=None):
     def create(**kwargs):
+        if captured_kwargs is not None:
+            captured_kwargs.append(kwargs)
         if error is not None:
             raise error
         return response
@@ -45,8 +47,10 @@ def build_client(response=None, error=None):
     return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
 
-def build_anthropic_client(response=None, error=None):
+def build_anthropic_client(response=None, error=None, captured_kwargs=None):
     def create(**kwargs):
+        if captured_kwargs is not None:
+            captured_kwargs.append(kwargs)
         if error is not None:
             raise error
         return response
@@ -192,6 +196,19 @@ def test_openai_provider_wraps_api_error(tmp_path):
         provider.generate("system", "message")
 
 
+def test_openai_provider_passes_configured_timeout_to_sdk(tmp_path):
+    captured_kwargs: list[dict[str, object]] = []
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=17.0)
+    provider = OpenAIProvider(
+        config,
+        client=build_client(response=build_response("ok"), captured_kwargs=captured_kwargs),
+    )
+
+    provider.generate("system", "message")
+
+    assert captured_kwargs[0]["timeout"] == 17.0
+
+
 def test_openai_provider_treats_client_4xx_errors_as_deterministic(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(error=FakeAPIError("bad request", 400)))
@@ -289,6 +306,42 @@ def test_anthropic_provider_wraps_api_error(tmp_path):
 
     with pytest.raises(ProviderTransientError, match="failed to call the model API"):
         provider.generate("system", "message")
+
+
+def test_anthropic_provider_passes_configured_timeout_to_sdk(tmp_path):
+    captured_kwargs: list[dict[str, object]] = []
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", timeout_seconds=19.0)
+    response = SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")])
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(response=response, captured_kwargs=captured_kwargs),
+    )
+
+    provider.generate("system", "message")
+
+    assert captured_kwargs[0]["timeout"] == 19.0
+
+
+def test_ollama_provider_uses_configured_timeouts_for_health_check_and_generation(tmp_path):
+    captured_timeouts: list[float] = []
+
+    def open_request(request, timeout=None):
+        captured_timeouts.append(timeout)
+        if request.full_url.endswith("/api/tags"):
+            return FakeHTTPResponse('{"models": []}')
+        return FakeHTTPResponse('{"response": "ok"}')
+
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="llama3",
+        timeout_seconds=14.0,
+    )
+    provider = OllamaProvider(config, request_opener=open_request)
+
+    provider.generate("system", "message")
+
+    assert captured_timeouts == [5.0, 14.0]
 
 
 def test_anthropic_provider_treats_client_4xx_errors_as_deterministic(tmp_path):

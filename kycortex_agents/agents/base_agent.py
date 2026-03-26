@@ -48,6 +48,7 @@ class BaseAgent(ABC):
 
     def _get_provider_for(self, provider_name: str, model_name: str) -> BaseLLMProvider:
         provider_key = (provider_name, model_name)
+        runtime_config = self.config.provider_runtime_config(provider_name)
         if provider_name == self.config.llm_provider and model_name == self.config.llm_model:
             if self._provider is not None:
                 self._provider_cache[provider_key] = self._provider
@@ -55,13 +56,13 @@ class BaseAgent(ABC):
             if provider_key in self._provider_cache:
                 self._provider = self._provider_cache[provider_key]
                 return self._provider
-            self._provider = create_provider(self.config)
+            self._provider = create_provider(runtime_config)
             self._provider_cache[provider_key] = self._provider
             return self._provider
         cached_provider = self._provider_cache.get(provider_key)
         if cached_provider is not None:
             return cached_provider
-        provider = create_provider(self.config.provider_runtime_config(provider_name))
+        provider = create_provider(runtime_config)
         self._provider_cache[provider_key] = provider
         return provider
 
@@ -111,6 +112,7 @@ class BaseAgent(ABC):
                     "max_attempts": max_attempts,
                     "attempt_history": list(attempt_history),
                     **self._provider_call_budget_metadata(),
+                    **self._provider_timeout_metadata(provider_name, provider_plan),
                     **self._provider_elapsed_budget_metadata(started_at, current_time),
                     **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                     **self._provider_cancellation_metadata(),
@@ -148,6 +150,7 @@ class BaseAgent(ABC):
                     "max_attempts": max_attempts,
                     "attempt_history": list(attempt_history),
                     **self._provider_call_budget_metadata(),
+                    **self._provider_timeout_metadata(provider_name, provider_plan),
                     **self._provider_elapsed_budget_metadata(started_at, current_time),
                     **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                     **self._provider_cancellation_metadata(),
@@ -183,6 +186,7 @@ class BaseAgent(ABC):
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
                         **self._provider_call_budget_metadata(),
+                        **self._provider_timeout_metadata(provider_name, provider_plan),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
@@ -207,6 +211,7 @@ class BaseAgent(ABC):
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
                         **self._provider_call_budget_metadata(),
+                        **self._provider_timeout_metadata(provider_name, provider_plan),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
@@ -245,6 +250,7 @@ class BaseAgent(ABC):
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
                         **self._provider_call_budget_metadata(),
+                        **self._provider_timeout_metadata(provider_name, provider_plan),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
@@ -277,6 +283,7 @@ class BaseAgent(ABC):
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
                         **self._provider_call_budget_metadata(),
+                        **self._provider_timeout_metadata(provider_name, provider_plan),
                         **self._provider_elapsed_budget_metadata(started_at, completed_at),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
@@ -326,6 +333,7 @@ class BaseAgent(ABC):
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
                         **self._provider_call_budget_metadata(),
+                        **self._provider_timeout_metadata(provider_name, provider_plan),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
@@ -376,6 +384,7 @@ class BaseAgent(ABC):
                             "max_attempts": max_attempts,
                             "attempt_history": list(attempt_history),
                             **self._provider_call_budget_metadata(),
+                            **self._provider_timeout_metadata(provider_name, provider_plan),
                             **self._provider_elapsed_budget_metadata(started_at, current_time),
                             **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                             **self._provider_cancellation_metadata(),
@@ -425,6 +434,7 @@ class BaseAgent(ABC):
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
                         **self._provider_call_budget_metadata(),
+                        **self._provider_timeout_metadata(provider_name, provider_plan),
                         **self._provider_elapsed_budget_metadata(started_at, current_time),
                         **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
                         **self._provider_cancellation_metadata(),
@@ -594,6 +604,22 @@ class BaseAgent(ABC):
             "provider_remaining_calls_by_provider": remaining_calls_by_provider,
         }
 
+    def _provider_timeout_metadata(
+        self,
+        provider_name: str,
+        provider_plan: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        return {
+            "provider_timeout_seconds": round(self.config.provider_timeout_seconds_for(provider_name), 6),
+            "provider_timeout_seconds_by_provider": {
+                planned_provider_name: round(
+                    self.config.provider_timeout_seconds_for(planned_provider_name),
+                    6,
+                )
+                for planned_provider_name, _ in provider_plan
+            },
+        }
+
     def _provider_elapsed_budget_metadata(
         self,
         started_at: float,
@@ -670,6 +696,7 @@ class BaseAgent(ABC):
             "max_attempts": max_attempts,
             "attempt_history": list(attempt_history),
             **self._provider_call_budget_metadata(),
+            **self._provider_timeout_metadata(provider_name, self._provider_execution_plan()),
             **self._provider_elapsed_budget_metadata(started_at, current_time),
             **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
             **self._provider_cancellation_metadata(),

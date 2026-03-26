@@ -35,6 +35,7 @@ class KYCortexConfig:
     temperature: float = 0.2
     max_tokens: int = 4096
     timeout_seconds: float = 60.0
+    provider_timeout_seconds: dict[str, float] = field(default_factory=dict)
     workflow_failure_policy: str = "fail_fast"
     workflow_resume_policy: str = "interrupted_only"
     workflow_acceptance_policy: str = "all_tasks"
@@ -75,6 +76,11 @@ class KYCortexConfig:
             for provider_name, model_name in self.provider_fallback_models.items()
             if provider_name.strip()
         }
+        self.provider_timeout_seconds = {
+            provider_name.strip().lower(): timeout_seconds
+            for provider_name, timeout_seconds in self.provider_timeout_seconds.items()
+            if provider_name.strip()
+        }
         self.provider_max_calls_per_provider = {
             provider_name.strip().lower(): max_calls
             for provider_name, max_calls in self.provider_max_calls_per_provider.items()
@@ -112,6 +118,15 @@ class KYCortexConfig:
             raise ConfigValidationError("max_tokens must be greater than zero")
         if self.timeout_seconds <= 0:
             raise ConfigValidationError("timeout_seconds must be greater than zero")
+        for provider_name, timeout_seconds in self.provider_timeout_seconds.items():
+            if provider_name not in PROVIDER_ENV_VARS:
+                raise ConfigValidationError(
+                    f"provider_timeout_seconds contains unsupported provider: {provider_name}"
+                )
+            if timeout_seconds <= 0:
+                raise ConfigValidationError(
+                    "provider_timeout_seconds values must be greater than zero"
+                )
         if self.base_url is not None and not self.base_url.strip():
             raise ConfigValidationError("base_url must not be empty when provided")
         if self.workflow_failure_policy not in {"fail_fast", "continue"}:
@@ -239,18 +254,30 @@ class KYCortexConfig:
             disable_pytest_plugin_autoload=True,
         )
 
+    def provider_timeout_seconds_for(self, provider_name: str) -> float:
+        """Return the resolved request timeout for a provider, including per-provider overrides."""
+
+        normalized_provider_name = provider_name.strip().lower()
+        return self.provider_timeout_seconds.get(normalized_provider_name, self.timeout_seconds)
+
     def provider_runtime_config(self, provider_name: str) -> "KYCortexConfig":
         """Return a provider-specific runtime config derived from the current policy surface."""
 
         normalized_provider_name = provider_name.strip().lower()
-        if normalized_provider_name == self.llm_provider:
+        provider_timeout_seconds = self.provider_timeout_seconds_for(normalized_provider_name)
+        if normalized_provider_name == self.llm_provider and provider_timeout_seconds == self.timeout_seconds:
             return self
         return replace(
             self,
             llm_provider=normalized_provider_name,
-            llm_model=self.provider_fallback_models[normalized_provider_name],
-            api_key=None,
-            base_url=None,
+            llm_model=(
+                self.llm_model
+                if normalized_provider_name == self.llm_provider
+                else self.provider_fallback_models[normalized_provider_name]
+            ),
+            api_key=(self.api_key if normalized_provider_name == self.llm_provider else None),
+            base_url=(self.base_url if normalized_provider_name == self.llm_provider else None),
+            timeout_seconds=provider_timeout_seconds,
             provider_fallback_order=(),
             provider_fallback_models={},
         )

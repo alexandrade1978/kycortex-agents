@@ -66,6 +66,8 @@ def test_chat_returns_response_content():
     assert metadata["provider_max_calls_per_provider"] == {}
     assert metadata["provider_remaining_calls"] is None
     assert metadata["provider_remaining_calls_by_provider"] == {}
+    assert metadata["provider_timeout_seconds"] == 60.0
+    assert metadata["provider_timeout_seconds_by_provider"] == {"openai": 60.0}
     assert metadata["provider_max_elapsed_seconds_per_call"] == 0.0
     assert metadata["provider_remaining_elapsed_seconds"] is None
     assert metadata["provider_cancellation_requested"] is False
@@ -754,6 +756,36 @@ def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monk
     assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
     assert primary_provider.calls == [("system", "message")]
     assert fallback_provider.calls == [("system", "second-message")]
+
+
+def test_chat_surfaces_provider_specific_timeout_metadata_for_fallback(monkeypatch):
+    primary_provider = DummyProvider(response="PRIMARY RESULT")
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_max_calls_per_provider={"openai": 1},
+        timeout_seconds=60.0,
+        provider_timeout_seconds={"openai": 10.0, "anthropic": 25.0},
+    )
+    agent = DummyAgent(primary_provider, config)
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        assert runtime_config.timeout_seconds == 25.0
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+
+    agent.chat("system", "message")
+    agent.chat("system", "second-message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["provider"] == "anthropic"
+    assert metadata["provider_timeout_seconds"] == 25.0
+    assert metadata["provider_timeout_seconds_by_provider"] == {"openai": 10.0, "anthropic": 25.0}
 
 
 @pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])

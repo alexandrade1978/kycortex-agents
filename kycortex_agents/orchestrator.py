@@ -893,6 +893,8 @@ class Orchestrator:
         for key in list(env):
             if key.startswith(("COV_CORE_", "COVERAGE_")):
                 env.pop(key, None)
+        for key in ("COLORTERM", "FORCE_COLOR", "NO_COLOR", "PY_COLORS", "CLICOLOR", "CLICOLOR_FORCE", "COLUMNS", "LINES"):
+            env.pop(key, None)
         if sandbox_policy.enabled:
             env["PATH"] = str(tmp_path)
             env["TMPDIR"] = str(tmp_path)
@@ -900,6 +902,7 @@ class Orchestrator:
             env["TEMP"] = str(tmp_path)
             env["TEMPDIR"] = str(tmp_path)
             env["HOME"] = str(tmp_path)
+            env["TERM"] = "dumb"
             env["USERPROFILE"] = str(tmp_path)
             env["USER"] = "sandbox_user"
             env["LOGNAME"] = "sandbox_user"

@@ -1280,6 +1280,7 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "        'lc_all': os.environ.get('LC_ALL', ''),\n"
         "        'language': os.environ.get('LANGUAGE', ''),\n"
         "        'pythonhashseed': os.environ.get('PYTHONHASHSEED', ''),\n"
+        "        'term': os.environ.get('TERM', ''),\n"
         "        'tz': os.environ.get('TZ', ''),\n"
         "        'tmpdir': os.environ.get('TMPDIR', ''),\n"
         "        'tmp': os.environ.get('TMP', ''),\n"
@@ -1304,6 +1305,7 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "    assert paths['lc_all'] == 'C.UTF-8'\n"
         "    assert paths['language'] == 'en'\n"
         "    assert paths['pythonhashseed'] == '0'\n"
+        "    assert paths['term'] == 'dumb'\n"
         "    assert paths['tz'] == 'UTC'\n"
         "    assert paths['tmpdir'] == paths['sandbox_root']\n"
         "    assert paths['tmp'] == paths['sandbox_root']\n"
@@ -1393,6 +1395,33 @@ def test_build_generated_test_env_strips_inherited_pytest_env(tmp_path, monkeypa
     assert "PYTEST_PLUGINS" not in env
     assert "PYTEST_CURRENT_TEST" not in env
     assert "PYTEST_DEBUG" not in env
+
+
+def test_build_generated_test_env_strips_terminal_and_color_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("PY_COLORS", "1")
+    monkeypatch.setenv("CLICOLOR", "1")
+    monkeypatch.setenv("CLICOLOR_FORCE", "1")
+    monkeypatch.setenv("COLUMNS", "240")
+    monkeypatch.setenv("LINES", "70")
+    monkeypatch.setenv("TERM", "xterm-256color")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "COLORTERM" not in env
+    assert "FORCE_COLOR" not in env
+    assert "NO_COLOR" not in env
+    assert "PY_COLORS" not in env
+    assert "CLICOLOR" not in env
+    assert "CLICOLOR_FORCE" not in env
+    assert "COLUMNS" not in env
+    assert "LINES" not in env
+    assert env["TERM"] == "dumb"
 
 
 def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):

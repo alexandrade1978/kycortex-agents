@@ -732,6 +732,48 @@ def test_execute_generated_tests_blocks_path_group_outside_sandbox(tmp_path):
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_os_path_ismount_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_os_path_ismount").resolve()
+    escaped_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def is_mount_point(target_path):\n"
+        "    return os.path.ismount(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import is_mount_point\n\n"
+        f"def test_os_path_ismount_is_blocked():\n"
+        f"    is_mount_point({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_path_is_mount_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_path_is_mount").resolve()
+    escaped_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def is_mount_point(target_path):\n"
+        "    return Path(target_path).is_mount()\n",
+        "tests_generated.py",
+        "from code_under_test import is_mount_point\n\n"
+        f"def test_path_is_mount_is_blocked():\n"
+        f"    is_mount_point({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_os_stat_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1349,6 +1391,34 @@ def test_execute_generated_tests_allows_path_owner_group_when_sandbox_disabled(t
         f"    owner, group = read_identity({str(target_file)!r})\n"
         "    assert owner\n"
         "    assert group\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_mount_helpers_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_dir = tmp_path / "mount_helper_target"
+    target_dir.mkdir()
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n"
+        "from pathlib import Path\n\n"
+        "def read_mount_flags(target_path):\n"
+        "    target = Path(target_path)\n"
+        "    return (os.path.ismount(target_path), target.is_mount())\n",
+        "tests_generated.py",
+        "from code_under_test import read_mount_flags\n\n"
+        f"def test_mount_helpers_run_when_sandbox_is_disabled():\n"
+        f"    os_mount, path_mount = read_mount_flags({str(target_dir)!r})\n"
+        "    assert os_mount is False\n"
+        "    assert path_mount is False\n",
     )
 
     assert result["returncode"] == 0

@@ -362,6 +362,7 @@ for _name in (
     "isdir",
     "isfile",
     "islink",
+    "ismount",
     "lexists",
     "realpath",
 ):
@@ -429,7 +430,7 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
 
             setattr(_path_class, _name, _guarded_path_single)
 
-    for _name in ("exists", "is_dir", "is_file", "is_symlink"):
+    for _name in ("exists", "is_dir", "is_file", "is_mount", "is_symlink"):
         if hasattr(_path_class, _name):
             _real = getattr(_path_class, _name)
 

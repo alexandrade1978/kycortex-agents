@@ -430,6 +430,90 @@ def test_execute_generated_tests_blocks_file_metadata_probes_outside_sandbox(tmp
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_os_path_getsize_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_getsize.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_size(target_path):\n"
+        "    return os.path.getsize(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import read_size\n\n"
+        f"def test_os_path_getsize_is_blocked():\n"
+        f"    read_size({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_os_path_getmtime_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_getmtime.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_mtime(target_path):\n"
+        "    return os.path.getmtime(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import read_mtime\n\n"
+        f"def test_os_path_getmtime_is_blocked():\n"
+        f"    read_mtime({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_os_path_getctime_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_getctime.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_ctime(target_path):\n"
+        "    return os.path.getctime(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import read_ctime\n\n"
+        f"def test_os_path_getctime_is_blocked():\n"
+        f"    read_ctime({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_os_path_getatime_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_getatime.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_atime(target_path):\n"
+        "    return os.path.getatime(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import read_atime\n\n"
+        f"def test_os_path_getatime_is_blocked():\n"
+        f"    read_atime({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_glob_enumeration_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -967,6 +1051,39 @@ def test_execute_generated_tests_allows_file_metadata_probes_when_sandbox_disabl
         "from code_under_test import file_exists\n\n"
         f"def test_file_metadata_probe_runs_when_sandbox_is_disabled():\n"
         f"    assert file_exists({str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_os_path_metadata_helpers_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "os_path_meta_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def read_metadata(target_path):\n"
+        "    return (\n"
+        "        os.path.getsize(target_path),\n"
+        "        os.path.getmtime(target_path),\n"
+        "        os.path.getctime(target_path),\n"
+        "        os.path.getatime(target_path),\n"
+        "    )\n",
+        "tests_generated.py",
+        "from code_under_test import read_metadata\n\n"
+        f"def test_os_path_metadata_helpers_run_when_sandbox_is_disabled():\n"
+        f"    size, mtime, ctime, atime = read_metadata({str(target_file)!r})\n"
+        "    assert size == 6\n"
+        "    assert mtime >= 0\n"
+        "    assert ctime >= 0\n"
+        "    assert atime >= 0\n",
     )
 
     assert result["returncode"] == 0

@@ -349,7 +349,17 @@ glob.glob = _guarded_glob
 glob.iglob = _guarded_iglob
 
 
-for _name in ("exists", "isdir", "isfile", "islink", "lexists"):
+for _name in (
+    "exists",
+    "getatime",
+    "getctime",
+    "getmtime",
+    "getsize",
+    "isdir",
+    "isfile",
+    "islink",
+    "lexists",
+):
     if hasattr(os.path, _name):
         _real = getattr(os.path, _name)
 

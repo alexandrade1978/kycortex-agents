@@ -85,6 +85,7 @@ _REAL_IO_OPEN = io.open
 _REAL_OS_OPEN = os.open
 _REAL_OS_STAT = os.stat
 _REAL_OS_LSTAT = getattr(os, "lstat", None)
+_REAL_OS_PATH_REALPATH = os.path.realpath
 _REAL_GLOB_GLOB = glob.glob
 _REAL_GLOB_IGLOB = glob.iglob
 _REAL_PATH_RESOLVE = pathlib.Path.resolve
@@ -153,11 +154,13 @@ def _resolve_path_unchecked(path_value):
         return path_value
     _saved_os_stat = os.stat
     _saved_os_lstat = getattr(os, "lstat", None)
+    _saved_os_path_realpath = os.path.realpath
     _saved_path_stats = {}
     try:
         os.stat = _REAL_OS_STAT
         if _REAL_OS_LSTAT is not None:
             os.lstat = _REAL_OS_LSTAT
+        os.path.realpath = _REAL_OS_PATH_REALPATH
         for _class_name, _real_stat in _REAL_PATH_STATS.items():
             _path_class = getattr(pathlib, _class_name, None)
             if _path_class is None:
@@ -169,6 +172,7 @@ def _resolve_path_unchecked(path_value):
         os.stat = _saved_os_stat
         if _REAL_OS_LSTAT is not None and _saved_os_lstat is not None:
             os.lstat = _saved_os_lstat
+        os.path.realpath = _saved_os_path_realpath
         for _class_name, _saved_stat in _saved_path_stats.items():
             _path_class = getattr(pathlib, _class_name, None)
             if _path_class is not None and _saved_stat is not None:
@@ -359,6 +363,7 @@ for _name in (
     "isfile",
     "islink",
     "lexists",
+    "realpath",
 ):
     if hasattr(os.path, _name):
         _real = getattr(os.path, _name)
@@ -368,6 +373,18 @@ for _name in (
             return __real(path, *args, **kwargs)
 
         setattr(os.path, _name, _guarded_os_path_read)
+
+
+for _name in ("samefile",):
+    if hasattr(os.path, _name):
+        _real = getattr(os.path, _name)
+
+        def _guarded_os_path_metadata_pair(left_path, right_path, *args, __real=_real, **kwargs):
+            _ensure_metadata_read_within_policy(left_path)
+            _ensure_metadata_read_within_policy(right_path)
+            return __real(left_path, right_path, *args, **kwargs)
+
+        setattr(os.path, _name, _guarded_os_path_metadata_pair)
 
 
 for _name in ("link", "rename", "replace", "symlink"):

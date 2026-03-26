@@ -646,6 +646,50 @@ def test_execute_generated_tests_blocks_samefile_outside_sandbox(tmp_path):
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_os_path_realpath_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_target = (tmp_path / "escaped_realpath_target.txt").resolve()
+    escaped_target.write_text("secret", encoding="utf-8")
+    escaped_link = (tmp_path / "escaped_realpath_link.txt").resolve()
+    escaped_link.symlink_to(escaped_target)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def resolve_path(target_path):\n"
+        "    return os.path.realpath(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_path\n\n"
+        f"def test_os_path_realpath_is_blocked():\n"
+        f"    resolve_path({str(escaped_link)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_os_path_samefile_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_os_path_samefile.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def is_same_file(left_path, right_path):\n"
+        "    return os.path.samefile(left_path, right_path)\n",
+        "tests_generated.py",
+        "from code_under_test import is_same_file\n\n"
+        f"def test_os_path_samefile_is_blocked():\n"
+        f"    is_same_file({str(escaped_file)!r}, {str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_os_stat_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1185,6 +1229,56 @@ def test_execute_generated_tests_allows_samefile_when_sandbox_disabled(tmp_path)
         "tests_generated.py",
         "from code_under_test import is_same_file\n\n"
         f"def test_samefile_runs_when_sandbox_is_disabled():\n"
+        f"    assert is_same_file({str(target_file)!r}, {str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_os_path_realpath_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "os_path_realpath_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+    target_link = tmp_path / "os_path_realpath_link.txt"
+    target_link.symlink_to(target_file)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def resolve_path(target_path):\n"
+        "    return os.path.realpath(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_path\n\n"
+        f"def test_os_path_realpath_runs_when_sandbox_is_disabled():\n"
+        f"    assert resolve_path({str(target_link)!r}) == {str(target_file)!r}\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_os_path_samefile_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "os_path_samefile_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def is_same_file(left_path, right_path):\n"
+        "    return os.path.samefile(left_path, right_path)\n",
+        "tests_generated.py",
+        "from code_under_test import is_same_file\n\n"
+        f"def test_os_path_samefile_runs_when_sandbox_is_disabled():\n"
         f"    assert is_same_file({str(target_file)!r}, {str(target_file)!r}) is True\n",
     )
 

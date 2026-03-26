@@ -428,6 +428,64 @@ def test_summarize_pytest_output_handles_empty_and_fallback_cases(tmp_path):
     assert orchestrator._summarize_pytest_output("line one", "line two", 1) == "line two"
 
 
+def test_validate_test_output_rejects_syntax_invalid_code_under_test(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+    with pytest.raises(AgentExecutionError, match="code under test has syntax error invalid syntax"):
+        orchestrator._validate_test_output(
+            {
+                "code_analysis": {"syntax_ok": False, "syntax_error": "invalid syntax"},
+                "module_name": "code_implementation",
+                "code": "def broken(:\n    pass",
+            },
+            output,
+        )
+
+
+def test_validate_test_output_uses_default_module_filename_when_missing(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(orchestrator, "_analyze_test_module", lambda *args, **kwargs: {"syntax_ok": True})
+
+    def fake_execute_generated_tests(module_filename, code_content, test_filename, test_content):
+        captured["module_filename"] = module_filename
+        captured["test_filename"] = test_filename
+        return {"ran": False, "returncode": None, "summary": "skipped"}
+
+    monkeypatch.setattr(orchestrator, "_execute_generated_tests", fake_execute_generated_tests)
+
+    orchestrator._validate_test_output(
+        {
+            "module_name": "code_implementation",
+            "module_filename": "   ",
+            "code": "def ok():\n    return 1",
+        },
+        output,
+    )
+
+    assert captured == {"module_filename": "code_implementation.py", "test_filename": "tests_tests.py"}
+
+
+def test_validate_test_output_returns_early_when_context_is_incomplete(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_tests",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not execute generated tests")),
+    )
+
+    assert orchestrator._validate_test_output({"module_name": "", "code": "def ok():\n    return 1"}, output) is None
+    assert orchestrator._validate_test_output({"module_name": "code_implementation", "code": "   "}, output) is None
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

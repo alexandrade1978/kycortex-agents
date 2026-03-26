@@ -839,6 +839,29 @@ def test_execute_generated_tests_blocks_path_stat_outside_sandbox(tmp_path):
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_path_lstat_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_target = (tmp_path / "escaped_path_lstat_target.txt").resolve()
+    escaped_target.write_text("secret", encoding="utf-8")
+    escaped_link = (tmp_path / "escaped_path_lstat_link.txt").resolve()
+    escaped_link.symlink_to(escaped_target)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_link_mode(target_path):\n"
+        "    return Path(target_path).lstat().st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_link_mode\n\n"
+        f"def test_path_lstat_is_blocked():\n"
+        f"    read_link_mode({str(escaped_link)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_path_resolve_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1493,6 +1516,32 @@ def test_execute_generated_tests_allows_path_stat_when_sandbox_disabled(tmp_path
         "from code_under_test import read_mode\n\n"
         f"def test_path_stat_runs_when_sandbox_is_disabled():\n"
         f"    assert read_mode({str(target_file)!r}) > 0\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_path_lstat_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "path_lstat_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+    target_link = tmp_path / "path_lstat_link.txt"
+    target_link.symlink_to(target_file)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_link_mode(target_path):\n"
+        "    return Path(target_path).lstat().st_mode\n",
+        "tests_generated.py",
+        "from code_under_test import read_link_mode\n\n"
+        f"def test_path_lstat_runs_when_sandbox_is_disabled():\n"
+        f"    assert read_link_mode({str(target_link)!r}) > 0\n",
     )
 
     assert result["returncode"] == 0

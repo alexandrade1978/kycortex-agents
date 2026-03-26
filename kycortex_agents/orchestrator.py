@@ -857,6 +857,7 @@ class Orchestrator:
                 env.pop(key, None)
         env.pop("COVERAGE_PROCESS_START", None)
         if sandbox_policy.enabled:
+            env["PATH"] = str(tmp_path)
             env.setdefault("TMPDIR", str(tmp_path))
             env.setdefault("TMP", str(tmp_path))
             env.setdefault("TEMP", str(tmp_path))

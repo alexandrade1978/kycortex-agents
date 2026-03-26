@@ -1425,6 +1425,31 @@ def test_build_generated_test_env_strips_package_manager_markers(tmp_path, monke
     assert "PYENV_VERSION" not in env
 
 
+def test_build_generated_test_env_strips_proxy_and_tls_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("HTTP_PROXY", "http://corp-proxy:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "https://corp-proxy:8443")
+    monkeypatch.setenv("ALL_PROXY", "http://fallback:3128")
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "/host/certs/requests.pem")
+    monkeypatch.setenv("CURL_CA_BUNDLE", "/host/certs/curl.pem")
+    monkeypatch.setenv("SSL_CERT_FILE", "/host/certs/ssl.pem")
+    monkeypatch.setenv("SSL_CERT_DIR", "/host/certs")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "HTTP_PROXY" not in env
+    assert "HTTPS_PROXY" not in env
+    assert "ALL_PROXY" not in env
+    assert "NO_PROXY" not in env
+    assert "REQUESTS_CA_BUNDLE" not in env
+    assert "CURL_CA_BUNDLE" not in env
+    assert "SSL_CERT_FILE" not in env
+    assert "SSL_CERT_DIR" not in env
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

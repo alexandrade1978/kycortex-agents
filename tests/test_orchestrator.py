@@ -427,6 +427,72 @@ def test_execute_generated_tests_blocks_file_metadata_probes_outside_sandbox(tmp
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_glob_enumeration_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_glob").resolve()
+    escaped_dir.mkdir()
+    (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import glob\n\n"
+        "def list_matches(pattern):\n"
+        "    return glob.glob(pattern)\n",
+        "tests_generated.py",
+        "from code_under_test import list_matches\n\n"
+        f"def test_glob_enumeration_is_blocked():\n"
+        f"    list_matches({str(escaped_dir / '*')!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_pathlib_iteration_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_iterdir").resolve()
+    escaped_dir.mkdir()
+    (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def list_children(target_path):\n"
+        "    return [child.name for child in Path(target_path).iterdir()]\n",
+        "tests_generated.py",
+        "from code_under_test import list_children\n\n"
+        f"def test_pathlib_iteration_is_blocked():\n"
+        f"    list_children({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_os_walk_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_dir = (tmp_path / "escaped_walk").resolve()
+    escaped_dir.mkdir()
+    (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def walk_tree(target_path):\n"
+        "    return list(os.walk(target_path))\n",
+        "tests_generated.py",
+        "from code_under_test import walk_tree\n\n"
+        f"def test_os_walk_is_blocked():\n"
+        f"    walk_tree({str(escaped_dir)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -670,6 +736,32 @@ def test_execute_generated_tests_allows_file_metadata_probes_when_sandbox_disabl
         "from code_under_test import file_exists\n\n"
         f"def test_file_metadata_probe_runs_when_sandbox_is_disabled():\n"
         f"    assert file_exists({str(target_file)!r}) is True\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_glob_enumeration_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_dir = tmp_path / "glob_target"
+    target_dir.mkdir()
+    (target_dir / "secret.txt").write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import glob\n\n"
+        "def list_matches(pattern):\n"
+        "    return sorted(glob.glob(pattern))\n",
+        "tests_generated.py",
+        "from code_under_test import list_matches\n\n"
+        f"def test_glob_enumeration_runs_when_sandbox_is_disabled():\n"
+        f"    matches = list_matches({str(target_dir / '*')!r})\n"
+        f"    assert matches == [{str(target_dir / 'secret.txt')!r}]\n",
     )
 
     assert result["returncode"] == 0

@@ -68,6 +68,7 @@ _PYTEST_BUILTIN_FIXTURES = {
 _SANDBOX_SITECUSTOMIZE = """
 import asyncio
 import builtins
+import glob
 import io
 import os
 import pathlib
@@ -82,6 +83,8 @@ import tempfile
 _REAL_OPEN = builtins.open
 _REAL_IO_OPEN = io.open
 _REAL_OS_OPEN = os.open
+_REAL_GLOB_GLOB = glob.glob
+_REAL_GLOB_IGLOB = glob.iglob
 _SANDBOX_ROOT = pathlib.Path(os.environ.get("KYCORTEX_SANDBOX_ROOT", os.getcwd())).resolve()
 _RUNTIME_SAFE_ROOTS = set()
 _RUNTIME_SAFE_FILES = set()
@@ -265,6 +268,30 @@ for _name in ("access", "listdir", "scandir"):
         setattr(os, _name, _guarded_read_path)
 
 
+if hasattr(os, "walk"):
+    _real = os.walk
+
+    def _guarded_walk(top, *args, __real=_real, **kwargs):
+        _ensure_read_within_policy(top)
+        return __real(top, *args, **kwargs)
+
+    os.walk = _guarded_walk
+
+
+def _guarded_glob(pathname, *args, __real=_REAL_GLOB_GLOB, **kwargs):
+    _ensure_read_within_policy(pathname)
+    return __real(pathname, *args, **kwargs)
+
+
+def _guarded_iglob(pathname, *args, __real=_REAL_GLOB_IGLOB, **kwargs):
+    _ensure_read_within_policy(pathname)
+    return __real(pathname, *args, **kwargs)
+
+
+glob.glob = _guarded_glob
+glob.iglob = _guarded_iglob
+
+
 for _name in ("exists", "isdir", "isfile", "islink", "lexists"):
     if hasattr(os.path, _name):
         _real = getattr(os.path, _name)
@@ -314,6 +341,17 @@ for _path_class_name in ("Path", "PosixPath", "WindowsPath"):
                 return __real(*args, **kwargs)
 
             setattr(_path_class, _name, _guarded_path_read)
+
+    for _name in ("glob", "iterdir", "rglob"):
+        if hasattr(_path_class, _name):
+            _real = getattr(_path_class, _name)
+
+            def _guarded_path_iter(*args, __real=_real, **kwargs):
+                if args:
+                    _ensure_read_within_policy(args[0])
+                return __real(*args, **kwargs)
+
+            setattr(_path_class, _name, _guarded_path_iter)
 
     for _name in ("hardlink_to", "rename", "replace", "symlink_to"):
         if hasattr(_path_class, _name):

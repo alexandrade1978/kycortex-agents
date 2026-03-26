@@ -1450,6 +1450,29 @@ def test_build_generated_test_env_strips_proxy_and_tls_markers(tmp_path, monkeyp
     assert "SSL_CERT_DIR" not in env
 
 
+def test_build_generated_test_env_strips_credential_and_provider_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "azure-secret")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/host/gcp.json")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-anthropic")
+    monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
+    monkeypatch.setenv("HF_TOKEN", "hf-token")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "AWS_ACCESS_KEY_ID" not in env
+    assert "AZURE_CLIENT_SECRET" not in env
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in env
+    assert "OPENAI_API_KEY" not in env
+    assert "ANTHROPIC_API_KEY" not in env
+    assert "OLLAMA_HOST" not in env
+    assert "HF_TOKEN" not in env
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

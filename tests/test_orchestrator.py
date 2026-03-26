@@ -559,7 +559,6 @@ def test_execute_generated_tests_blocks_samefile_outside_sandbox(tmp_path):
     assert result["returncode"] != 0
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
-
 def test_execute_generated_tests_blocks_path_walk_outside_sandbox_when_supported(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -697,6 +696,48 @@ def test_execute_generated_tests_blocks_pathlib_write_text_outside_sandbox(tmp_p
     assert result["returncode"] != 0
     assert "sandbox policy blocked filesystem write outside sandbox root" in result["stdout"] or "sandbox policy blocked filesystem write outside sandbox root" in result["stderr"]
     assert not escaped_file.exists()
+
+
+def test_execute_generated_tests_blocks_pathlib_read_text_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_read_text.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def read_file(target_path):\n"
+        "    return pathlib.Path(target_path).read_text(encoding='utf-8')\n",
+        "tests_generated.py",
+        "from code_under_test import read_file\n\n"
+        f"def test_pathlib_read_text_is_blocked():\n"
+        f"    read_file({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
+def test_execute_generated_tests_blocks_pathlib_read_bytes_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_read_bytes.bin").resolve()
+    escaped_file.write_bytes(b"secret")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def read_file(target_path):\n"
+        "    return pathlib.Path(target_path).read_bytes()\n",
+        "tests_generated.py",
+        "from code_under_test import read_file\n\n"
+        f"def test_pathlib_read_bytes_is_blocked():\n"
+        f"    read_file({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
 def test_execute_generated_tests_blocks_shutil_rmtree_outside_sandbox(tmp_path):
@@ -944,6 +985,8 @@ def test_execute_generated_tests_allows_samefile_when_sandbox_disabled(tmp_path)
     assert result["sandbox"]["enabled"] is False
 
 
+
+
 def test_execute_generated_tests_allows_pathlib_mutation_when_sandbox_disabled(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -993,6 +1036,54 @@ def test_execute_generated_tests_allows_pathlib_write_text_when_sandbox_disabled
     assert result["returncode"] == 0
     assert result["sandbox"]["enabled"] is False
     assert target_file.read_text(encoding="utf-8") == "ok"
+
+
+def test_execute_generated_tests_allows_pathlib_read_text_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "pathlib_read_text_target.txt"
+    target_file.write_text("ok", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def read_file(target_path):\n"
+        "    return pathlib.Path(target_path).read_text(encoding='utf-8')\n",
+        "tests_generated.py",
+        "from code_under_test import read_file\n\n"
+        f"def test_pathlib_read_text_runs_when_sandbox_is_disabled():\n"
+        f"    assert read_file({str(target_file)!r}) == 'ok'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_pathlib_read_bytes_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "pathlib_read_bytes_target.bin"
+    target_file.write_bytes(b"ok")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import pathlib\n\n"
+        "def read_file(target_path):\n"
+        "    return pathlib.Path(target_path).read_bytes()\n",
+        "tests_generated.py",
+        "from code_under_test import read_file\n\n"
+        f"def test_pathlib_read_bytes_runs_when_sandbox_is_disabled():\n"
+        f"    assert read_file({str(target_file)!r}) == b'ok'\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
 
 
 def test_execute_generated_tests_allows_shutil_move_when_sandbox_disabled(tmp_path):

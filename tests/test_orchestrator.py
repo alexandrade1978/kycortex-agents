@@ -1492,6 +1492,35 @@ def test_build_generated_test_env_strips_git_ssh_and_gnupg_markers(tmp_path, mon
     assert "GNUPGHOME" not in env
 
 
+def test_build_generated_test_env_strips_container_and_ci_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+    monkeypatch.setenv("KUBECONFIG", "/host/.kube/config")
+    monkeypatch.setenv("KUBE_NAMESPACE", "production")
+    monkeypatch.setenv("PODMAN_SOCKET_PATH", "/host/podman.sock")
+    monkeypatch.setenv("CONTAINER_RUNTIME", "docker")
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("GITHUB_ACTOR", "host-user")
+    monkeypatch.setenv("GITLAB_CI", "true")
+    monkeypatch.setenv("BUILDKITE_BUILD_ID", "12345")
+    monkeypatch.setenv("JENKINS_HOME", "/host/jenkins")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "DOCKER_HOST" not in env
+    assert "KUBECONFIG" not in env
+    assert "KUBE_NAMESPACE" not in env
+    assert "PODMAN_SOCKET_PATH" not in env
+    assert "CONTAINER_RUNTIME" not in env
+    assert "CI" not in env
+    assert "GITHUB_ACTOR" not in env
+    assert "GITLAB_CI" not in env
+    assert "BUILDKITE_BUILD_ID" not in env
+    assert "JENKINS_HOME" not in env
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

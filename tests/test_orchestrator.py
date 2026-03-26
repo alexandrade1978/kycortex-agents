@@ -1,3 +1,4 @@
+import ast
 import os
 import pathlib
 import subprocess
@@ -1178,6 +1179,123 @@ def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid
 
     assert orchestrator._build_code_behavior_contract("   ") == ""
     assert orchestrator._build_code_behavior_contract("def broken(:\n    pass") == ""
+
+
+def test_extract_required_fields_returns_declared_required_fields_list(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    function_node = ast.parse(
+        "def validate(payload):\n"
+        "    required_fields = ['name', 1, 'email']\n"
+        "    return payload\n"
+    ).body[0]
+
+    assert orchestrator._extract_required_fields(function_node) == ["name", "email"]
+
+
+def test_extract_required_fields_collects_unique_comparison_literals(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    function_node = ast.parse(
+        "def validate(payload):\n"
+        "    if 'status' in payload:\n"
+        "        return True\n"
+        "    if 'status' not in payload:\n"
+        "        return False\n"
+        "    return 'request_id' in payload\n"
+    ).body[0]
+
+    assert orchestrator._extract_required_fields(function_node) == ["status", "request_id"]
+
+
+def test_comparison_required_field_rejects_invalid_shapes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    compare_nodes = [
+        ast.Compare(left=ast.Constant("field"), ops=[], comparators=[]),
+        ast.Compare(left=ast.Constant("field"), ops=[ast.In()], comparators=[ast.Constant("value")]),
+        ast.Compare(left=ast.Constant("field"), ops=[ast.Eq()], comparators=[ast.Name("payload")]),
+    ]
+
+    assert [orchestrator._comparison_required_field(node) for node in compare_nodes] == ["", "", ""]
+
+
+def test_extract_indirect_required_fields_supports_attribute_calls(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    function_node = ast.parse(
+        "def process(payload):\n"
+        "    return helper.validate_request(payload)\n"
+    ).body[0]
+
+    assert orchestrator._extract_indirect_required_fields(function_node, {"validate_request": ["request_id"]}) == ["request_id"]
+    assert orchestrator._extract_indirect_required_fields(function_node, {"other": ["request_id"]}) == []
+
+
+def test_extract_lookup_field_rules_collects_literal_key_sets_and_skips_unknown_selectors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    function_node = ast.parse(
+        "def score_request(request, payload, selector):\n"
+        "    if True:\n"
+        "        pass\n"
+        "    risk_scores = {'approved': 1, 'denied': 0}\n"
+        "    return risk_scores[request.status] + risk_scores[payload['state']] + risk_scores[selector]\n"
+    ).body[0]
+
+    assert orchestrator._extract_lookup_field_rules(function_node) == {
+        "status": ["approved", "denied"],
+        "state": ["approved", "denied"],
+    }
+    assert orchestrator._field_selector_name(ast.Subscript(value=ast.Name("payload"), slice=ast.Constant("state"))) == "state"
+    assert orchestrator._field_selector_name(ast.Constant("status")) == "status"
+    assert orchestrator._field_selector_name(ast.Name("selector")) == ""
+
+
+def test_extract_batch_rule_covers_direct_and_nested_shapes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    direct_batch = ast.parse(
+        "def process_batch(items):\n"
+        "    for item in items:\n"
+        "        intake_request(item['request_id'], item)\n"
+    ).body[0]
+    nested_batch = ast.parse(
+        "def process_batch(items):\n"
+        "    for item in items:\n"
+        "        self.intake_request(item['request_id'], item['payload'])\n"
+    ).body[0]
+    wrapper_only_batch = ast.parse(
+        "def process_batch(items):\n"
+        "    for item in items:\n"
+        "        intake_request(item.id, item['payload'])\n"
+    ).body[0]
+    missing_args_batch = ast.parse(
+        "def process_batch(items):\n"
+        "    for item in items:\n"
+        "        intake_request(item)\n"
+    ).body[0]
+    not_batch = ast.parse(
+        "def process_items(items):\n"
+        "    for item in items:\n"
+        "        intake_request(item['request_id'], item)\n"
+    ).body[0]
+    validation_rules = {"intake_request": ["name", "email"]}
+
+    assert (
+        orchestrator._extract_batch_rule(direct_batch, validation_rules)
+        == "process_batch expects each batch item to include: request_id, name, email"
+    )
+    assert (
+        orchestrator._extract_batch_rule(nested_batch, validation_rules)
+        == "process_batch expects each batch item to include key `request_id` and nested `payload` fields: name, email"
+    )
+    assert (
+        orchestrator._extract_batch_rule(wrapper_only_batch, validation_rules)
+        == "process_batch expects nested `payload` fields: name, email"
+    )
+    assert orchestrator._extract_batch_rule(missing_args_batch, validation_rules) == ""
+    assert orchestrator._extract_batch_rule(not_batch, validation_rules) == ""
 
 
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):

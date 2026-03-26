@@ -50,6 +50,11 @@ class PytestDummyAgent(DummyAgent):
     output_artifact_type = ArtifactType.TEST
 
 
+class DirectBaseRunAgent(DummyAgent):
+    def run(self, task_description: str, context: dict) -> str | AgentOutput:
+        return BaseAgent.run(self, task_description, context)
+
+
 def test_chat_returns_response_content():
     provider = DummyProvider(response="ok")
     agent = DummyAgent(provider)
@@ -75,6 +80,59 @@ def test_chat_returns_response_content():
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
     assert metadata["provider_health"]["openai"]["last_failure_age_seconds"] is None
+
+
+def test_get_provider_for_reuses_cached_primary_provider(monkeypatch):
+    created_providers: list[DummyProvider] = []
+    agent = DummyAgent(None)
+
+    def create_primary_provider(runtime_config: KYCortexConfig):
+        provider = DummyProvider(response=f"provider-for-{runtime_config.llm_provider}")
+        created_providers.append(provider)
+        return provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_primary_provider)
+
+    first = agent._get_provider_for("openai", "gpt-4o")
+    agent._provider = None
+    second = agent._get_provider_for("openai", "gpt-4o")
+
+    assert first is second
+    assert len(created_providers) == 1
+
+
+def test_get_provider_delegates_to_primary_provider_resolution(monkeypatch):
+    agent = DummyAgent(DummyProvider(response="ok"))
+    captured: list[tuple[str, str]] = []
+
+    def fake_get_provider_for(provider_name: str, model_name: str):
+        captured.append((provider_name, model_name))
+        return agent._provider
+
+    monkeypatch.setattr(agent, "_get_provider_for", fake_get_provider_for)
+
+    assert agent._get_provider() is agent._provider
+    assert captured == [(agent.config.llm_provider, agent.config.llm_model)]
+
+
+def test_get_provider_for_reuses_cached_fallback_provider(monkeypatch):
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+    agent = DummyAgent(DummyProvider(response="primary"), config)
+    cached_fallback = DummyProvider(response="fallback")
+    agent._provider_cache[("anthropic", "claude-3-5-sonnet")] = cached_fallback
+
+    def unexpected_create_provider(runtime_config: KYCortexConfig):
+        raise AssertionError("create_provider should not be called when fallback provider is cached")
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", unexpected_create_provider)
+
+    resolved = agent._get_provider_for("anthropic", "claude-3-5-sonnet")
+
+    assert resolved is cached_fallback
 
 
 def test_chat_raises_on_provider_error():
@@ -550,6 +608,16 @@ def test_chat_fails_fast_when_provider_cancellation_is_requested_before_first_at
     assert provider.calls == []
 
 
+def test_clear_provider_cancellation_resets_requested_state():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent.request_provider_cancellation("operator requested stop")
+
+    agent.clear_provider_cancellation()
+
+    assert agent._provider_cancellation_requested is False
+    assert agent._provider_cancellation_reason is None
+
+
 def test_chat_cancels_during_retry_backoff(monkeypatch):
     class AlwaysTransientProvider(DummyProvider):
         def generate(self, system_prompt: str, user_message: str) -> str:
@@ -717,6 +785,45 @@ def test_chat_resets_circuit_breaker_after_successful_call(monkeypatch):
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
 
 
+def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
+    primary_provider = DummyProvider(response="PRIMARY RESULT")
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_circuit_breaker_threshold=1,
+        provider_circuit_breaker_cooldown_seconds=10.0,
+    )
+    agent = DummyAgent(primary_provider, config)
+    agent._provider_circuit_open_untils["openai"] = 110.0
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: 100.0)
+
+    result = agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert result == "FALLBACK RESULT"
+    assert metadata is not None
+    assert metadata["provider"] == "anthropic"
+    assert metadata["fallback_used"] is True
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "skipped_open_circuit",
+            "remaining_cooldown_seconds": 10.0,
+        }
+    ]
+    assert primary_provider.calls == []
+    assert fallback_provider.calls == [("system", "message")]
+
+
 def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monkeypatch):
     primary_provider = DummyProvider(response="PRIMARY RESULT")
     fallback_provider = DummyProvider(response="FALLBACK RESULT")
@@ -758,6 +865,92 @@ def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monk
     assert fallback_provider.calls == [("system", "second-message")]
 
 
+def test_chat_falls_back_after_primary_provider_budget_is_exhausted_mid_retry(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    primary_provider = AlwaysTransientProvider()
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_max_attempts=2,
+        provider_retry_backoff_seconds=0.0,
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_max_calls_per_provider={"openai": 1},
+    )
+    agent = DummyAgent(primary_provider, config)
+
+    def create_provider_for_fallback(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_provider_for_fallback)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
+
+    result = agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert result == "FALLBACK RESULT"
+    assert metadata is not None
+    assert metadata["provider"] == "anthropic"
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_call_budget_exhausted",
+            "provider_call_count": 1,
+            "provider_max_calls": 1,
+            "attempts_used": 1,
+        }
+    ]
+    assert metadata["attempt_history"][0]["retryable"] is True
+    assert primary_provider.calls == [("system", "message")]
+    assert fallback_provider.calls == [("system", "message")]
+
+
+def test_chat_falls_back_after_primary_provider_transient_failure(monkeypatch):
+    class AlwaysTransientProvider(DummyProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+    primary_provider = AlwaysTransientProvider()
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_max_attempts=1,
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+    agent = DummyAgent(primary_provider, config)
+
+    def create_provider_for_fallback(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_provider_for_fallback)
+
+    result = agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert result == "FALLBACK RESULT"
+    assert metadata is not None
+    assert metadata["provider"] == "anthropic"
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_transient",
+            "error_type": "ProviderTransientError",
+            "error_message": "provider temporarily unavailable",
+            "attempts_used": 1,
+        }
+    ]
+
+
 def test_chat_surfaces_provider_specific_timeout_metadata_for_fallback(monkeypatch):
     primary_provider = DummyProvider(response="PRIMARY RESULT")
     fallback_provider = DummyProvider(response="FALLBACK RESULT")
@@ -786,6 +979,238 @@ def test_chat_surfaces_provider_specific_timeout_metadata_for_fallback(monkeypat
     assert metadata["provider"] == "anthropic"
     assert metadata["provider_timeout_seconds"] == 25.0
     assert metadata["provider_timeout_seconds_by_provider"] == {"openai": 10.0, "anthropic": 25.0}
+
+
+def test_execute_raises_assertion_when_error_hook_does_not_raise():
+    class NonRaisingErrorHookAgent(DummyAgent):
+        def run(self, task_description: str, context: dict) -> str:
+            raise RuntimeError("boom")
+
+        def on_execution_error(self, agent_input: AgentInput, exc: Exception) -> None:
+            self.events.append(("error", str(exc)))
+
+    agent = NonRaisingErrorHookAgent(DummyProvider(response="ok"))
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+
+    with pytest.raises(AssertionError, match="on_execution_error must raise an exception"):
+        agent.execute(agent_input)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("task_id", "   ", "task_id must not be empty"),
+        ("task_title", "   ", "task_title must not be empty"),
+        ("task_description", "   ", "task_description must not be empty"),
+        ("project_name", "   ", "project_name must not be empty"),
+    ],
+)
+def test_validate_input_rejects_blank_required_fields(field, value, message):
+    agent = DummyAgent(DummyProvider(response="ok"))
+    payload = {
+        "task_id": "task-1",
+        "task_title": "Task",
+        "task_description": "message",
+        "project_name": "Demo",
+        "project_goal": "Build demo",
+        "context": {},
+    }
+    payload[field] = value
+
+    with pytest.raises(AgentExecutionError, match=message):
+        agent.validate_input(AgentInput(**payload))
+
+
+def test_validate_input_rejects_non_dict_context_and_missing_required_keys():
+    class RequiresArchitectureAgent(DummyAgent):
+        required_context_keys = ("architecture",)
+
+    agent = RequiresArchitectureAgent(DummyProvider(response="ok"))
+
+    with pytest.raises(AgentExecutionError, match="context must be a dictionary"):
+        agent.validate_input(
+            AgentInput(
+                task_id="task-1",
+                task_title="Task",
+                task_description="message",
+                project_name="Demo",
+                project_goal="Build demo",
+                context="not-a-dict",
+            )
+        )
+
+    with pytest.raises(AgentExecutionError, match="required context key 'architecture' is missing"):
+        agent.validate_input(
+            AgentInput(
+                task_id="task-1",
+                task_title="Task",
+                task_description="message",
+                project_name="Demo",
+                project_goal="Build demo",
+                context={},
+            )
+        )
+
+    with pytest.raises(AgentExecutionError, match="required context key 'architecture' must not be empty"):
+        agent.validate_input(
+            AgentInput(
+                task_id="task-1",
+                task_title="Task",
+                task_description="message",
+                project_name="Demo",
+                project_goal="Build demo",
+                context={"architecture": "   "},
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutator", "message"),
+    [
+        (lambda output: setattr(output, "raw_content", "   "), "agent output raw_content must not be empty"),
+        (lambda output: setattr(output, "summary", "   "), "agent output summary must not be empty"),
+        (lambda output: setattr(output, "artifacts", None), "agent output artifacts must be a list"),
+        (lambda output: setattr(output, "decisions", None), "agent output decisions must be a list"),
+        (lambda output: setattr(output, "metadata", None), "agent output metadata must be a dictionary"),
+    ],
+)
+def test_validate_output_rejects_invalid_public_contract_fields(mutator, message):
+    agent = DummyAgent(DummyProvider(response="ok"))
+    output = AgentOutput(summary="summary", raw_content="content", artifacts=[], decisions=[], metadata={})
+    mutator(output)
+
+    with pytest.raises(AgentExecutionError, match=message):
+        agent.validate_output(output)
+
+
+def test_before_execute_returns_none_and_after_execute_adds_default_artifact_without_provider_metadata():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent._last_provider_call_metadata = None
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+    output = AgentOutput(summary="summary", raw_content="content", artifacts=[], decisions=[], metadata={})
+
+    assert agent.before_execute(agent_input) is None
+
+    finalized = BaseAgent.after_execute(agent, agent_input, output)
+
+    assert finalized.artifacts[0].name == "task-1_output"
+    assert "provider_call" not in finalized.metadata
+
+
+def test_on_execution_error_reraises_agent_execution_errors():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+
+    with pytest.raises(AgentExecutionError, match="already normalized"):
+        agent.on_execution_error(agent_input, AgentExecutionError("already normalized"))
+
+
+def test_code_artifact_normalization_falls_back_when_markdown_code_block_is_empty():
+    agent = CodeDummyAgent(DummyProvider(response="ok"))
+    output = AgentOutput(summary="summary", raw_content="```python\n```", artifacts=[], decisions=[], metadata={})
+
+    normalized = agent._normalize_output_for_artifact_type(output)
+
+    assert normalized.raw_content == "```python\n```"
+
+
+def test_normalize_output_handles_agent_output_and_rejects_invalid_types_or_blank_strings():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+    structured = AgentOutput(summary="   ", raw_content="first line\nsecond line", artifacts=[], decisions=[], metadata={})
+
+    normalized = agent._normalize_output(structured, agent_input)
+
+    assert normalized.summary == "first line"
+
+    with pytest.raises(AgentExecutionError, match="agent output must be a string or AgentOutput"):
+        agent._normalize_output(123, agent_input)
+
+    with pytest.raises(AgentExecutionError, match="agent output must not be empty"):
+        agent._normalize_output("   ", agent_input)
+
+
+@pytest.mark.parametrize(
+    ("context", "message"),
+    [
+        ({}, "required context key 'architecture' is missing"),
+        ({"architecture": "   "}, "required context key 'architecture' must not be empty"),
+    ],
+)
+def test_require_context_value_rejects_missing_or_blank_values(context, message):
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context=context,
+    )
+
+    with pytest.raises(AgentExecutionError, match=message):
+        agent.require_context_value(agent_input, "architecture")
+
+
+def test_require_context_value_returns_non_empty_value_and_provider_metadata_accessor_copies_state():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={"architecture": "Layered runtime"},
+    )
+    agent._last_provider_call_metadata = {"provider": "openai"}
+
+    metadata_copy = agent.get_last_provider_call_metadata()
+    metadata_copy["provider"] = "mutated"
+
+    assert agent.require_context_value(agent_input, "architecture") == "Layered runtime"
+    assert agent.get_last_provider_call_metadata() == {"provider": "openai"}
+
+
+def test_get_last_provider_call_metadata_returns_none_when_no_call_has_run():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent._last_provider_call_metadata = None
+
+    assert agent.get_last_provider_call_metadata() is None
+
+
+def test_base_agent_repr_and_abstract_run_fallback_are_exposed():
+    agent = DirectBaseRunAgent(DummyProvider(response="ok"))
+
+    assert repr(agent) == "<Agent name=Dummy role=Testing>"
+    assert agent.run("message", {}) is None
 
 
 @pytest.mark.parametrize("agent_class", [CodeDummyAgent, PytestDummyAgent])

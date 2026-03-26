@@ -789,6 +789,7 @@ class Orchestrator:
             dir=sandbox_policy.temp_root,
         ) as tmp_dir:
             tmp_path = Path(tmp_dir)
+            tmp_path.chmod(0o700)
             safe_module_filename = self._sanitize_generated_filename(module_filename, "generated_module.py")
             safe_test_filename = self._sanitize_generated_filename(test_filename, "generated_tests.py")
             pytest_config_path = tmp_path / "pytest.ini"

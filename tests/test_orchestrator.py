@@ -1298,6 +1298,87 @@ def test_extract_batch_rule_covers_direct_and_nested_shapes(tmp_path):
     assert orchestrator._extract_batch_rule(not_batch, validation_rules) == ""
 
 
+def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_input(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    blank_analysis = orchestrator._analyze_test_module("   ", "module_under_test", {})
+    syntax_error_analysis = orchestrator._analyze_test_module("def broken(:\n    pass", "module_under_test", {})
+
+    assert blank_analysis == {
+        "syntax_ok": True,
+        "syntax_error": None,
+        "imported_module_symbols": [],
+        "missing_function_imports": [],
+        "unknown_module_symbols": [],
+        "invalid_member_references": [],
+        "constructor_arity_mismatches": [],
+        "payload_contract_violations": [],
+        "non_batch_sequence_calls": [],
+        "undefined_fixtures": [],
+        "imported_entrypoint_symbols": [],
+        "unsafe_entrypoint_calls": [],
+    }
+    assert syntax_error_analysis["syntax_ok"] is False
+    assert syntax_error_analysis["syntax_error"] == "invalid syntax at line 1"
+
+
+def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    function_node = ast.parse(
+        "def test_case():\n"
+        "    payload: dict = {'status': 'approved'}\n"
+        "    service.validate_request(payload)\n"
+        "    process_request('id-1', payload=payload)\n"
+    ).body[0]
+    call_nodes = [node for node in ast.walk(function_node) if isinstance(node, ast.Call)]
+
+    bindings = orchestrator._collect_local_bindings(function_node)
+
+    assert isinstance(bindings["payload"], ast.Dict)
+    assert orchestrator._callable_name(call_nodes[0]) == "validate_request"
+    assert orchestrator._callable_name(call_nodes[1]) == "process_request"
+    assert orchestrator._callable_name(ast.Call(func=ast.Lambda(args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]), body=ast.Constant(None)), args=[], keywords=[])) == ""
+    assert isinstance(orchestrator._first_call_argument(call_nodes[1]), ast.Constant)
+    first_keyword_arg = orchestrator._first_call_argument(
+        ast.Call(func=ast.Name("process_request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Name("payload"))])
+    )
+    assert isinstance(first_keyword_arg, ast.Name)
+    assert first_keyword_arg.id == "payload"
+    assert isinstance(orchestrator._payload_argument_for_validation(call_nodes[0], "validate_request"), ast.Name)
+    assert isinstance(orchestrator._payload_argument_for_validation(call_nodes[1], "process_request"), ast.Name)
+    keyword_only_call = ast.Call(func=ast.Name("process_request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Name("payload"))])
+    assert orchestrator._payload_argument_for_validation(keyword_only_call, "process_request") == keyword_only_call.keywords[0].value
+
+
+def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    validate_request({'name': 'Ada'})\n"
+        "    score_request({'status': 'pending'})\n"
+        "    helper([1, 2, 3])\n"
+        "    (factory())()\n"
+    )
+
+    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+        tree,
+        {"validate_request": ["name", "email"]},
+        {"score_request": {"status": ["approved"]}},
+        {},
+        {"helper"},
+        {},
+    )
+
+    assert payload_violations == [
+        "score_request field `status` uses unsupported values: pending at line 3",
+        "validate_request payload missing required fields: email at line 2",
+    ]
+    assert non_batch_calls == ["helper does not accept batch/list inputs at line 4"]
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

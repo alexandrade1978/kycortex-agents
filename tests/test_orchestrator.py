@@ -774,6 +774,33 @@ def test_execute_generated_tests_blocks_path_is_mount_outside_sandbox(tmp_path):
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_path_type_helpers_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_file = (tmp_path / "escaped_path_type_helpers.txt").resolve()
+    escaped_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_types(target_path):\n"
+        "    target = Path(target_path)\n"
+        "    return (\n"
+        "        target.is_block_device(),\n"
+        "        target.is_char_device(),\n"
+        "        target.is_fifo(),\n"
+        "        target.is_socket(),\n"
+        "    )\n",
+        "tests_generated.py",
+        "from code_under_test import read_types\n\n"
+        f"def test_path_type_helpers_are_blocked():\n"
+        f"    read_types({str(escaped_file)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_os_stat_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1442,6 +1469,40 @@ def test_execute_generated_tests_allows_mount_helpers_when_sandbox_disabled(tmp_
         f"    os_mount, path_mount = read_mount_flags({str(target_dir)!r})\n"
         "    assert os_mount is False\n"
         "    assert path_mount is False\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_path_type_helpers_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "path_type_helpers_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "from pathlib import Path\n\n"
+        "def read_types(target_path):\n"
+        "    target = Path(target_path)\n"
+        "    return (\n"
+        "        target.is_block_device(),\n"
+        "        target.is_char_device(),\n"
+        "        target.is_fifo(),\n"
+        "        target.is_socket(),\n"
+        "    )\n",
+        "tests_generated.py",
+        "from code_under_test import read_types\n\n"
+        f"def test_path_type_helpers_run_when_sandbox_is_disabled():\n"
+        f"    block_device, char_device, fifo, socket = read_types({str(target_file)!r})\n"
+        "    assert block_device is False\n"
+        "    assert char_device is False\n"
+        "    assert fifo is False\n"
+        "    assert socket is False\n",
     )
 
     assert result["returncode"] == 0

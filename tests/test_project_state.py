@@ -1325,6 +1325,31 @@ def test_legacy_skip_reason_helpers_treat_non_matching_dependency_messages_as_ma
     assert project._infer_legacy_skip_reason_type(task) == "manual"
 
 
+def test_legacy_skip_reason_helpers_treat_non_failed_dependency_as_manual():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+        )
+    )
+    task = Task(
+        id="docs",
+        title="Docs",
+        description="Document",
+        assigned_to="docs_writer",
+        dependencies=["arch"],
+        status=TaskStatus.SKIPPED.value,
+        output="Skipped because dependency 'arch' failed",
+    )
+
+    assert project._matching_dependency_failed_reason_task_id(task) == "arch"
+    assert project._infer_legacy_skip_reason_type(task) == "manual"
+
+
 def test_depends_on_task_handles_cycles_and_missing_dependencies_without_looping():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
@@ -1348,6 +1373,42 @@ def test_depends_on_task_handles_cycles_and_missing_dependencies_without_looping
 
     assert project._depends_on_task(project.get_task("arch"), "code") is True
     assert project._depends_on_task(project.get_task("arch"), "tests") is False
+
+
+def test_skip_task_ignores_missing_task_ids_without_side_effects():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    project.skip_task("missing", "nothing to do")
+
+    assert project.execution_events == []
+
+
+def test_skip_dependent_tasks_ignores_non_pending_dependents():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Docs",
+            description="Document",
+            assigned_to="docs_writer",
+            dependencies=["arch"],
+            status=TaskStatus.DONE.value,
+        )
+    )
+
+    skipped = project.skip_dependent_tasks("arch", "Skipped because dependency 'arch' failed")
+
+    assert skipped == []
+    assert project.get_task("docs").status == TaskStatus.DONE.value
 
 
 def test_duration_ms_returns_none_for_invalid_timestamps():

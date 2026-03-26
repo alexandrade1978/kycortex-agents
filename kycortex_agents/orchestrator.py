@@ -850,9 +850,13 @@ class Orchestrator:
         for key in (
             "PYTHONASYNCIODEBUG",
             "PYTHONBREAKPOINT",
+            "PYTHONCASEOK",
+            "PYTHONDEBUG",
             "PYTHONFAULTHANDLER",
             "PYTHONHOME",
             "PYTHONIOENCODING",
+            "PYTHONINSPECT",
+            "PYTHONOPTIMIZE",
             "PYTHONPATH",
             "PYTHONPYCACHEPREFIX",
             "PYTHONPROFILEIMPORTTIME",
@@ -860,6 +864,7 @@ class Orchestrator:
             "PYTHONTRACEMALLOC",
             "PYTHONUSERBASE",
             "PYTHONUTF8",
+            "PYTHONVERBOSE",
         ):
             env.pop(key, None)
         for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):

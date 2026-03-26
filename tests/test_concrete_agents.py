@@ -191,6 +191,42 @@ def test_dependency_manager_agent_falls_back_to_no_external_dependencies(tmp_pat
     assert result.artifacts[0].content == "# No external runtime dependencies"
 
 
+def test_dependency_manager_agent_normalizes_blank_requirements_output(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+
+    assert agent._normalize_requirements("   \n\t") == "# No external runtime dependencies"
+
+
+def test_dependency_manager_agent_preserves_explicit_no_dependency_marker(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+
+    normalized = agent._normalize_requirements(
+        "The module only uses the standard library.\n# No external runtime dependencies"
+    )
+
+    assert normalized == "# No external runtime dependencies"
+
+
+def test_dependency_manager_agent_detects_no_dependency_marker_inside_prose(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+
+    normalized = agent._normalize_requirements(
+        "Final answer: use the literal marker # No external runtime dependencies in the manifest."
+    )
+
+    assert normalized == "# No external runtime dependencies"
+
+
+def test_dependency_manager_agent_falls_back_when_output_contains_no_requirement_lines(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+
+    normalized = agent._normalize_requirements(
+        "After analyzing the module, there are no runtime packages to declare."
+    )
+
+    assert normalized == "# No external runtime dependencies"
+
+
 def test_dependency_manager_agent_normalizes_bulleted_requirements_and_deduplicates(tmp_path):
     agent = CaptureDependencyManagerAgent(build_config(tmp_path))
 

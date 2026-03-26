@@ -850,6 +850,9 @@ class Orchestrator:
             env.pop(key, None)
         for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
             env.pop(key, None)
+        for key in list(env):
+            if key.startswith(("VIRTUAL_ENV", "CONDA_", "PIP_", "UV_", "POETRY_", "PIXI_", "PYENV_")):
+                env.pop(key, None)
         if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
             env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         for key in list(env):

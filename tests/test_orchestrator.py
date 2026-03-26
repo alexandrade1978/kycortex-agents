@@ -1374,6 +1374,29 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
     assert env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
 
 
+def test_build_generated_test_env_strips_package_manager_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("VIRTUAL_ENV", "/host/venv")
+    monkeypatch.setenv("CONDA_PREFIX", "/host/conda")
+    monkeypatch.setenv("PIP_INDEX_URL", "https://host.example/simple")
+    monkeypatch.setenv("UV_INDEX_URL", "https://host.example/uv")
+    monkeypatch.setenv("POETRY_VIRTUALENVS_PATH", "/host/poetry")
+    monkeypatch.setenv("PIXI_PROJECT_ROOT", "/host/pixi")
+    monkeypatch.setenv("PYENV_VERSION", "3.12.3")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "VIRTUAL_ENV" not in env
+    assert "CONDA_PREFIX" not in env
+    assert "PIP_INDEX_URL" not in env
+    assert "UV_INDEX_URL" not in env
+    assert "POETRY_VIRTUALENVS_PATH" not in env
+    assert "PIXI_PROJECT_ROOT" not in env
+    assert "PYENV_VERSION" not in env
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

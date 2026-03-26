@@ -607,6 +607,11 @@ class Orchestrator:
         env.pop("COVERAGE_PROCESS_START", None)
         if sandbox_policy.enabled:
             env.setdefault("TMPDIR", str(tmp_path))
+            env.setdefault("HOME", str(tmp_path))
+            env.setdefault("USERPROFILE", str(tmp_path))
+            env.setdefault("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+            env.setdefault("XDG_CACHE_HOME", str(tmp_path / ".cache"))
+            env.setdefault("XDG_DATA_HOME", str(tmp_path / ".local" / "share"))
             env["KYCORTEX_SANDBOX_ALLOW_NETWORK"] = "1" if sandbox_policy.allow_network else "0"
             env["KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES"] = "1" if sandbox_policy.allow_subprocesses else "0"
             env["KYCORTEX_SANDBOX_ROOT"] = str(tmp_path)
@@ -619,6 +624,9 @@ class Orchestrator:
             env.pop("KYCORTEX_SANDBOX_ALLOW_NETWORK", None)
             env.pop("KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES", None)
             env.pop("KYCORTEX_SANDBOX_ROOT", None)
+            env.pop("XDG_CONFIG_HOME", None)
+            env.pop("XDG_CACHE_HOME", None)
+            env.pop("XDG_DATA_HOME", None)
         return env
 
     def _sanitize_generated_filename(self, filename: str, default_filename: str) -> str:

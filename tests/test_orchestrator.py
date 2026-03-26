@@ -715,6 +715,36 @@ def test_execute_generated_tests_allows_os_spawn_calls_when_sandbox_disabled(tmp
     assert result["sandbox"]["enabled"] is False
 
 
+def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\nfrom pathlib import Path\n\n"
+        "def runtime_paths():\n"
+        "    return {\n"
+        "        'home': str(Path.home()),\n"
+        "        'sandbox_root': os.environ.get('KYCORTEX_SANDBOX_ROOT', ''),\n"
+        "        'config': os.environ.get('XDG_CONFIG_HOME', ''),\n"
+        "        'cache': os.environ.get('XDG_CACHE_HOME', ''),\n"
+        "        'data': os.environ.get('XDG_DATA_HOME', ''),\n"
+        "    }\n",
+        "tests_generated.py",
+        "from pathlib import Path\n"
+        "from code_under_test import runtime_paths\n\n"
+        "def test_runtime_paths_are_sandboxed(tmp_path):\n"
+        "    paths = runtime_paths()\n"
+        "    assert paths['home'] == paths['sandbox_root']\n"
+        "    assert paths['config'] == str(Path(paths['home']) / '.config')\n"
+        "    assert paths['cache'] == str(Path(paths['home']) / '.cache')\n"
+        "    assert paths['data'] == str(Path(paths['home']) / '.local' / 'share')\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is True
+
+
 def test_build_generated_test_env_omits_sandbox_hooks_when_disabled(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_enabled=False)
     orchestrator = Orchestrator(config)
@@ -724,6 +754,9 @@ def test_build_generated_test_env_omits_sandbox_hooks_when_disabled(tmp_path):
     assert "KYCORTEX_SANDBOX_ALLOW_NETWORK" not in env
     assert "KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES" not in env
     assert "KYCORTEX_SANDBOX_ROOT" not in env
+    assert "XDG_CONFIG_HOME" not in env
+    assert "XDG_CACHE_HOME" not in env
+    assert "XDG_DATA_HOME" not in env
     assert not (tmp_path / "sitecustomize.py").exists()
 
 

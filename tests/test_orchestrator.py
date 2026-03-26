@@ -1521,6 +1521,25 @@ def test_build_generated_test_env_strips_container_and_ci_markers(tmp_path, monk
     assert "JENKINS_HOME" not in env
 
 
+def test_build_generated_test_env_strips_loader_and_native_runtime_markers(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("LD_PRELOAD", "/host/libinject.so")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/host/lib")
+    monkeypatch.setenv("DYLD_INSERT_LIBRARIES", "/host/libinject.dylib")
+    monkeypatch.setenv("PYTHONMALLOC", "malloc_debug")
+    monkeypatch.setenv("PYTHONWARNINGS", "error")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "LD_PRELOAD" not in env
+    assert "LD_LIBRARY_PATH" not in env
+    assert "DYLD_INSERT_LIBRARIES" not in env
+    assert "PYTHONMALLOC" not in env
+    assert "PYTHONWARNINGS" not in env
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

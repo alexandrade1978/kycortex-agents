@@ -865,6 +865,9 @@ class Orchestrator:
         for key in list(env):
             if key.startswith(("DOCKER_", "KUBE", "PODMAN_", "CONTAINER_", "GITHUB_", "GITLAB_", "BUILDKITE_", "JENKINS_")) or key == "CI":
                 env.pop(key, None)
+        for key in list(env):
+            if key.startswith(("LD_", "DYLD_")) or key in ("PYTHONMALLOC", "PYTHONWARNINGS"):
+                env.pop(key, None)
         if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
             env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         for key in list(env):

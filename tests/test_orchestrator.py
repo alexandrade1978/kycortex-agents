@@ -341,6 +341,93 @@ def test_classify_task_failure_returns_sandbox_violation_for_blocked_operations(
     assert category == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
 
 
+def test_classify_task_failure_falls_back_to_task_execution_for_unmapped_agent_errors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description="Design the architecture",
+        assigned_to="architect",
+    )
+
+    category = orchestrator._classify_task_failure(task, AgentExecutionError("unexpected validation failure"))
+
+    assert category == FailureCategory.TASK_EXECUTION.value
+
+
+def test_is_sandbox_security_violation_returns_false_for_unrelated_errors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._is_sandbox_security_violation(RuntimeError("provider temporarily unavailable")) is False
+
+
+def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    contract = "\n".join(
+        [
+            "- intake_request requires fields: request_id, compliance_data",
+            "- intake_request expects field `status` to be one of: approved, denied",
+            "- process_batch expects each batch item to include key `request_id` and nested `payload` fields: compliance_data, status",
+            "- process_requests expects each batch item to include: request_id, compliance_data",
+            "- process_nested expects nested `payload` fields: compliance_data, status",
+            "This line should be ignored",
+        ]
+    )
+
+    validation_rules, field_value_rules, batch_rules = orchestrator._parse_behavior_contract(contract)
+
+    assert validation_rules == {"intake_request": ["request_id", "compliance_data"]}
+    assert field_value_rules == {"intake_request": {"status": ["approved", "denied"]}}
+    assert batch_rules == {
+        "process_batch": {
+            "request_key": "request_id",
+            "wrapper_key": "payload",
+            "fields": ["compliance_data", "status"],
+        },
+        "process_requests": {
+            "request_key": None,
+            "wrapper_key": None,
+            "fields": ["request_id", "compliance_data"],
+        },
+        "process_nested": {
+            "request_key": None,
+            "wrapper_key": "payload",
+            "fields": ["compliance_data", "status"],
+        },
+    }
+
+
+def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    contract = "\n".join(
+        [
+            "  ",
+            "- intake_request requires fields: , , ",
+            "- intake_request expects field `status` to be one of: , , ",
+            "- process_batch expects each batch item to include: , , ",
+            "not a rule",
+        ]
+    )
+
+    validation_rules, field_value_rules, batch_rules = orchestrator._parse_behavior_contract(contract)
+
+    assert validation_rules == {}
+    assert field_value_rules == {}
+    assert batch_rules == {"process_batch": {"request_key": None, "wrapper_key": None, "fields": []}}
+
+
+def test_summarize_pytest_output_handles_empty_and_fallback_cases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._summarize_pytest_output("", "", 5) == "pytest exited with code 5"
+    assert orchestrator._summarize_pytest_output("line one", "line two", 1) == "line two"
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

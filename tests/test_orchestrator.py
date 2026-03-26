@@ -1351,6 +1351,29 @@ def test_build_generated_test_env_strips_inherited_pytest_env(tmp_path, monkeypa
     assert "PYTEST_PLUGINS" not in env
 
 
+def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    policy = config.execution_sandbox_policy()
+    policy.sanitized_env = {
+        "PATH": "/host/bin",
+        "HOME": "/host/home",
+        "TMPDIR": "/host/tmp",
+        "PYTHONDONTWRITEBYTECODE": "0",
+        "PYTHONNOUSERSITE": "0",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "0",
+    }
+
+    env = orchestrator._build_generated_test_env(tmp_path, policy)
+
+    assert env["PATH"] == str(tmp_path)
+    assert env["HOME"] == str(tmp_path)
+    assert env["TMPDIR"] == str(tmp_path)
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert env["PYTHONNOUSERSITE"] == "1"
+    assert env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

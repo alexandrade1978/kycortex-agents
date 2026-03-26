@@ -844,29 +844,29 @@ class Orchestrator:
         else:
             env = os.environ.copy()
         env["PATH"] = os.environ.get("PATH", "")
-        env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
-        env.setdefault("PYTHONNOUSERSITE", "1")
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        env["PYTHONNOUSERSITE"] = "1"
         for key in ("PYTHONBREAKPOINT", "PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONUSERBASE"):
             env.pop(key, None)
         for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
             env.pop(key, None)
         if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
-            env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+            env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         for key in list(env):
             if key.startswith("COV_CORE_"):
                 env.pop(key, None)
         env.pop("COVERAGE_PROCESS_START", None)
         if sandbox_policy.enabled:
             env["PATH"] = str(tmp_path)
-            env.setdefault("TMPDIR", str(tmp_path))
-            env.setdefault("TMP", str(tmp_path))
-            env.setdefault("TEMP", str(tmp_path))
-            env.setdefault("TEMPDIR", str(tmp_path))
-            env.setdefault("HOME", str(tmp_path))
-            env.setdefault("USERPROFILE", str(tmp_path))
-            env.setdefault("XDG_CONFIG_HOME", str(tmp_path / ".config"))
-            env.setdefault("XDG_CACHE_HOME", str(tmp_path / ".cache"))
-            env.setdefault("XDG_DATA_HOME", str(tmp_path / ".local" / "share"))
+            env["TMPDIR"] = str(tmp_path)
+            env["TMP"] = str(tmp_path)
+            env["TEMP"] = str(tmp_path)
+            env["TEMPDIR"] = str(tmp_path)
+            env["HOME"] = str(tmp_path)
+            env["USERPROFILE"] = str(tmp_path)
+            env["XDG_CONFIG_HOME"] = str(tmp_path / ".config")
+            env["XDG_CACHE_HOME"] = str(tmp_path / ".cache")
+            env["XDG_DATA_HOME"] = str(tmp_path / ".local" / "share")
             env["KYCORTEX_SANDBOX_ALLOW_NETWORK"] = "1" if sandbox_policy.allow_network else "0"
             env["KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES"] = "1" if sandbox_policy.allow_subprocesses else "0"
             env["KYCORTEX_SANDBOX_ROOT"] = str(tmp_path)

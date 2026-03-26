@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 
 import pytest
@@ -50,6 +51,18 @@ def test_json_state_store_save_and_load_round_trip_without_parent_directory(tmp_
     store.save(str(state_path), payload)
 
     assert store.load(str(state_path)) == payload
+
+
+def test_json_state_store_save_and_load_round_trip_with_relative_path_and_no_parent_dir(tmp_path, monkeypatch):
+    store = JsonStateStore()
+    payload = {"project_name": "Demo", "tasks": [{"id": "arch"}]}
+
+    monkeypatch.chdir(tmp_path)
+
+    store.save("project_state.json", payload)
+
+    assert os.path.exists(tmp_path / "project_state.json")
+    assert store.load("project_state.json") == payload
 
 
 def test_json_state_store_cleans_up_temp_file_after_replace_failure(tmp_path, monkeypatch):
@@ -116,6 +129,18 @@ def test_sqlite_state_store_save_and_load_round_trip_without_parent_directory(tm
     store.save(str(state_path), payload)
 
     assert store.load(str(state_path)) == payload
+
+
+def test_sqlite_state_store_save_and_load_round_trip_with_relative_path_and_no_parent_dir(tmp_path, monkeypatch):
+    store = SqliteStateStore()
+    payload = {"project_name": "Demo", "tasks": [{"id": "arch"}]}
+
+    monkeypatch.chdir(tmp_path)
+
+    store.save("project_state.sqlite", payload)
+
+    assert os.path.exists(tmp_path / "project_state.sqlite")
+    assert store.load("project_state.sqlite") == payload
 
 
 def test_sqlite_state_store_overwrites_existing_payload(tmp_path):

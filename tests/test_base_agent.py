@@ -82,6 +82,27 @@ def test_chat_returns_response_content():
     assert metadata["provider_health"]["openai"]["last_failure_age_seconds"] is None
 
 
+def test_chat_raises_when_provider_execution_plan_is_empty():
+    provider = DummyProvider(response="ok")
+    agent = DummyAgent(provider)
+    agent._provider_execution_plan = lambda: []
+
+    with pytest.raises(AgentExecutionError, match="Dummy failed to call the model provider"):
+        agent.chat("system", "message")
+
+    assert provider.calls == []
+
+
+def test_chat_raises_when_provider_attempts_are_zero_after_runtime_override():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent.config.provider_max_attempts = 0
+
+    with pytest.raises(AgentExecutionError, match="Dummy failed to call the model provider"):
+        agent.chat("system", "message")
+
+    assert agent._provider.calls == []
+
+
 def test_get_provider_for_reuses_cached_primary_provider(monkeypatch):
     created_providers: list[DummyProvider] = []
     agent = DummyAgent(None)

@@ -364,6 +364,31 @@ def test_project_state_handles_missing_tasks_unresolved_dependencies_and_lightwe
     assert project.decisions[0]["at"]
 
 
+def test_start_and_fail_task_ignore_unknown_task_ids():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    original_updated_at = project.updated_at
+    project.start_task("missing")
+    project.fail_task("missing", "boom")
+
+    task = project.get_task("arch")
+
+    assert task is not None
+    assert task.status == TaskStatus.PENDING.value
+    assert task.attempts == 0
+    assert task.last_error is None
+    assert project.updated_at == original_updated_at
+    assert project.execution_events == []
+
+
 def test_snapshot_skips_malformed_project_decisions_in_legacy_state():
     project = ProjectState(
         project_name="Demo",
@@ -899,6 +924,57 @@ def test_resume_failed_tasks_records_workflow_resumed_for_additional_ids_without
     assert project.workflow_last_resumed_at is not None
     assert project.execution_events[-1]["event"] == "workflow_resumed"
     assert project.execution_events[-1]["details"]["task_ids"] == ["code__repair_1"]
+
+
+def test_resume_failed_tasks_without_failed_or_additional_ids_is_a_no_op():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    resumed = project.resume_failed_tasks(include_failed_tasks=False, failed_task_ids=[], additional_task_ids=[])
+
+    assert resumed == []
+    assert project.workflow_last_resumed_at is None
+    assert project.execution_events == []
+
+
+def test_fail_task_syncs_repair_retry_without_finalizing_origin_output():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+            status=TaskStatus.FAILED.value,
+            output="broken docs",
+            attempts=1,
+        )
+    )
+    repair_task = project._create_repair_task(
+        "docs",
+        "docs_writer",
+        {"cycle": 1, "instruction": "Repair the docs."},
+    )
+    repair_task.retry_limit = 1
+
+    project.start_task(repair_task.id)
+    project.fail_task(
+        repair_task.id,
+        RuntimeError("markdown broken"),
+        output=AgentOutput(summary="docs", raw_content="# repaired docs"),
+        error_category="task_execution",
+    )
+
+    origin = project.get_task("docs")
+    repair = project.get_task(repair_task.id)
+
+    assert repair is not None
+    assert repair.status == TaskStatus.PENDING.value
+    assert origin is not None
+    assert origin.status == TaskStatus.FAILED.value
+    assert origin.output == "broken docs"
+    assert origin.output_payload is None
+    assert origin.completed_at is None
+    assert origin.history[-1]["event"] == "repair_retry_scheduled"
 
 
 def test_plan_task_repair_and_repair_helpers_ignore_missing_origin():

@@ -867,6 +867,10 @@ class Orchestrator:
             env["TEMPDIR"] = str(tmp_path)
             env["HOME"] = str(tmp_path)
             env["USERPROFILE"] = str(tmp_path)
+            env["LANG"] = "C.UTF-8"
+            env["LC_ALL"] = "C.UTF-8"
+            env["LANGUAGE"] = "en"
+            env["TZ"] = "UTC"
             env["XDG_CONFIG_HOME"] = str(tmp_path / ".config")
             env["XDG_CACHE_HOME"] = str(tmp_path / ".cache")
             env["XDG_DATA_HOME"] = str(tmp_path / ".local" / "share")

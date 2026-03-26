@@ -1273,6 +1273,10 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "        'home': str(Path.home()),\n"
         "        'sandbox_root': os.environ.get('KYCORTEX_SANDBOX_ROOT', ''),\n"
         "        'path': os.environ.get('PATH', ''),\n"
+        "        'lang': os.environ.get('LANG', ''),\n"
+        "        'lc_all': os.environ.get('LC_ALL', ''),\n"
+        "        'language': os.environ.get('LANGUAGE', ''),\n"
+        "        'tz': os.environ.get('TZ', ''),\n"
         "        'tmpdir': os.environ.get('TMPDIR', ''),\n"
         "        'tmp': os.environ.get('TMP', ''),\n"
         "        'temp': os.environ.get('TEMP', ''),\n"
@@ -1289,6 +1293,10 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
         "    paths = runtime_paths()\n"
         "    assert paths['home'] == paths['sandbox_root']\n"
         "    assert paths['path'] == paths['sandbox_root']\n"
+        "    assert paths['lang'] == 'C.UTF-8'\n"
+        "    assert paths['lc_all'] == 'C.UTF-8'\n"
+        "    assert paths['language'] == 'en'\n"
+        "    assert paths['tz'] == 'UTC'\n"
         "    assert paths['tmpdir'] == paths['sandbox_root']\n"
         "    assert paths['tmp'] == paths['sandbox_root']\n"
         "    assert paths['temp'] == paths['sandbox_root']\n"
@@ -1359,6 +1367,10 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
         "PATH": "/host/bin",
         "HOME": "/host/home",
         "TMPDIR": "/host/tmp",
+        "LANG": "pt_BR.UTF-8",
+        "LC_ALL": "pt_BR.UTF-8",
+        "LANGUAGE": "pt_BR",
+        "TZ": "America/Sao_Paulo",
         "PYTHONDONTWRITEBYTECODE": "0",
         "PYTHONNOUSERSITE": "0",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "0",
@@ -1369,6 +1381,10 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
     assert env["PATH"] == str(tmp_path)
     assert env["HOME"] == str(tmp_path)
     assert env["TMPDIR"] == str(tmp_path)
+    assert env["LANG"] == "C.UTF-8"
+    assert env["LC_ALL"] == "C.UTF-8"
+    assert env["LANGUAGE"] == "en"
+    assert env["TZ"] == "UTC"
     assert env["PYTHONDONTWRITEBYTECODE"] == "1"
     assert env["PYTHONNOUSERSITE"] == "1"
     assert env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"

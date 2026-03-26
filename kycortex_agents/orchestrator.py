@@ -902,6 +902,12 @@ class Orchestrator:
         for key in ("COLORTERM", "FORCE_COLOR", "NO_COLOR", "PY_COLORS", "CLICOLOR", "CLICOLOR_FORCE", "COLUMNS", "LINES"):
             env.pop(key, None)
         if sandbox_policy.enabled:
+            sandbox_config_home = tmp_path / ".config"
+            sandbox_cache_home = tmp_path / ".cache"
+            sandbox_data_home = tmp_path / ".local" / "share"
+            sandbox_config_home.mkdir(parents=True, exist_ok=True)
+            sandbox_cache_home.mkdir(parents=True, exist_ok=True)
+            sandbox_data_home.mkdir(parents=True, exist_ok=True)
             env["PATH"] = str(tmp_path)
             env["TMPDIR"] = str(tmp_path)
             env["TMP"] = str(tmp_path)
@@ -917,9 +923,9 @@ class Orchestrator:
             env["LC_ALL"] = "C.UTF-8"
             env["LANGUAGE"] = "en"
             env["TZ"] = "UTC"
-            env["XDG_CONFIG_HOME"] = str(tmp_path / ".config")
-            env["XDG_CACHE_HOME"] = str(tmp_path / ".cache")
-            env["XDG_DATA_HOME"] = str(tmp_path / ".local" / "share")
+            env["XDG_CONFIG_HOME"] = str(sandbox_config_home)
+            env["XDG_CACHE_HOME"] = str(sandbox_cache_home)
+            env["XDG_DATA_HOME"] = str(sandbox_data_home)
             env["KYCORTEX_SANDBOX_ALLOW_NETWORK"] = "1" if sandbox_policy.allow_network else "0"
             env["KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES"] = "1" if sandbox_policy.allow_subprocesses else "0"
             env["KYCORTEX_SANDBOX_ROOT"] = str(tmp_path)

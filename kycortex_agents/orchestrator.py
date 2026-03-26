@@ -847,7 +847,20 @@ class Orchestrator:
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         env["PYTHONNOUSERSITE"] = "1"
         env["PYTHONHASHSEED"] = "0"
-        for key in ("PYTHONBREAKPOINT", "PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONUSERBASE"):
+        for key in (
+            "PYTHONASYNCIODEBUG",
+            "PYTHONBREAKPOINT",
+            "PYTHONFAULTHANDLER",
+            "PYTHONHOME",
+            "PYTHONIOENCODING",
+            "PYTHONPATH",
+            "PYTHONPYCACHEPREFIX",
+            "PYTHONPROFILEIMPORTTIME",
+            "PYTHONSTARTUP",
+            "PYTHONTRACEMALLOC",
+            "PYTHONUSERBASE",
+            "PYTHONUTF8",
+        ):
             env.pop(key, None)
         for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
             env.pop(key, None)

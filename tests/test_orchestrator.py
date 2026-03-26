@@ -1339,19 +1339,33 @@ def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, 
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
 
+    monkeypatch.setenv("PYTHONASYNCIODEBUG", "1")
     monkeypatch.setenv("PYTHONPATH", "/tmp/injected")
     monkeypatch.setenv("PYTHONHOME", "/tmp/home")
     monkeypatch.setenv("PYTHONSTARTUP", "/tmp/startup.py")
     monkeypatch.setenv("PYTHONBREAKPOINT", "evil.module:breakpoint")
+    monkeypatch.setenv("PYTHONFAULTHANDLER", "1")
+    monkeypatch.setenv("PYTHONIOENCODING", "latin-1")
+    monkeypatch.setenv("PYTHONPYCACHEPREFIX", "/tmp/pycache")
+    monkeypatch.setenv("PYTHONPROFILEIMPORTTIME", "1")
+    monkeypatch.setenv("PYTHONTRACEMALLOC", "25")
     monkeypatch.setenv("PYTHONUSERBASE", "/tmp/userbase")
+    monkeypatch.setenv("PYTHONUTF8", "0")
 
     env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
 
+    assert "PYTHONASYNCIODEBUG" not in env
     assert "PYTHONPATH" not in env
     assert "PYTHONHOME" not in env
     assert "PYTHONSTARTUP" not in env
     assert "PYTHONBREAKPOINT" not in env
+    assert "PYTHONFAULTHANDLER" not in env
+    assert "PYTHONIOENCODING" not in env
+    assert "PYTHONPYCACHEPREFIX" not in env
+    assert "PYTHONPROFILEIMPORTTIME" not in env
+    assert "PYTHONTRACEMALLOC" not in env
     assert "PYTHONUSERBASE" not in env
+    assert "PYTHONUTF8" not in env
 
 
 def test_build_generated_test_env_strips_inherited_pytest_env(tmp_path, monkeypatch):

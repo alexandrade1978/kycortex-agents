@@ -626,6 +626,29 @@ def test_execute_generated_tests_blocks_path_readlink_outside_sandbox(tmp_path):
     assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
 
 
+def test_execute_generated_tests_blocks_os_readlink_outside_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_target = (tmp_path / "escaped_os_readlink_target.txt").resolve()
+    escaped_target.write_text("secret", encoding="utf-8")
+    escaped_link = (tmp_path / "escaped_os_readlink_link").resolve()
+    escaped_link.symlink_to(escaped_target)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def resolve_link(target_path):\n"
+        "    return os.readlink(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_link\n\n"
+        f"def test_os_readlink_is_blocked():\n"
+        f"    resolve_link({str(escaped_link)!r})\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "RuntimeError" in result["stdout"] or "sandbox policy blocked file access outside sandbox root" in result["stderr"]
+
+
 def test_execute_generated_tests_blocks_samefile_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1402,6 +1425,32 @@ def test_execute_generated_tests_allows_path_readlink_when_sandbox_disabled(tmp_
         "tests_generated.py",
         "from code_under_test import resolve_link\n\n"
         f"def test_path_readlink_runs_when_sandbox_is_disabled():\n"
+        f"    assert resolve_link({str(target_link)!r}) == {str(target_file)!r}\n",
+    )
+
+    assert result["returncode"] == 0
+    assert result["sandbox"]["enabled"] is False
+
+
+def test_execute_generated_tests_allows_os_readlink_when_sandbox_disabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        execution_sandbox_enabled=False,
+    )
+    orchestrator = Orchestrator(config)
+    target_file = tmp_path / "os_readlink_target.txt"
+    target_file.write_text("secret", encoding="utf-8")
+    target_link = tmp_path / "os_readlink_link.txt"
+    target_link.symlink_to(target_file)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import os\n\n"
+        "def resolve_link(target_path):\n"
+        "    return os.readlink(target_path)\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_link\n\n"
+        f"def test_os_readlink_runs_when_sandbox_is_disabled():\n"
         f"    assert resolve_link({str(target_link)!r}) == {str(target_file)!r}\n",
     )
 

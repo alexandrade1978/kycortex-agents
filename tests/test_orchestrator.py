@@ -627,6 +627,111 @@ def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
     }
 
 
+def test_execute_generated_tests_reports_timeout(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=2)
+    orchestrator = Orchestrator(config)
+
+    def raise_timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=2)
+
+    monkeypatch.setattr(orchestrator_module.subprocess, "run", raise_timeout)
+
+    result = orchestrator._execute_generated_tests(
+        "generated_module.py",
+        "def ok():\n    return 1",
+        "generated_tests.py",
+        "def test_ok():\n    assert True",
+    )
+
+    assert result == {
+        "available": True,
+        "ran": True,
+        "returncode": -1,
+        "summary": "pytest timed out after 2 seconds",
+    }
+
+
+def test_sanitize_generated_filename_appends_default_suffix_when_missing(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._sanitize_generated_filename("generated tests", "generated_tests.py") == "generated_tests.py"
+    assert orchestrator._sanitize_generated_filename("custom-name", "generated_tests.py") == "custom-name.py"
+
+
+def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    class MetadataAgent:
+        def get_last_provider_call_metadata(self):
+            return {"provider": "openai", "model": "gpt-test"}
+
+    metadata = orchestrator._provider_call_metadata(MetadataAgent(), AgentOutput(summary="ok", raw_content="ok"))
+
+    assert metadata == {"provider": "openai", "model": "gpt-test"}
+
+
+def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    artifacts = [
+        ArtifactRecord(name="blank", artifact_type=ArtifactType.TEXT, content="   ", path="ignored.txt"),
+        ArtifactRecord(name="Report Draft", artifact_type=ArtifactType.DOCUMENT, content="hello", path="reports/final draft.md"),
+    ]
+
+    orchestrator._persist_artifacts(artifacts)
+
+    persisted_path = tmp_path / "output" / "reports" / "final_draft.md"
+    assert artifacts[0].path == "ignored.txt"
+    assert artifacts[1].path == "reports/final_draft.md"
+    assert persisted_path.read_text(encoding="utf-8") == "hello"
+
+
+def test_sanitize_artifact_relative_path_rejects_invalid_segments_and_empty_paths(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._sanitize_artifact_relative_path("reports/./summary.md") == pathlib.Path("reports/summary.md")
+
+    with pytest.raises(AgentExecutionError, match="artifact path must not be empty"):
+        orchestrator._sanitize_artifact_relative_path(".")
+
+
+def test_sanitize_artifact_relative_path_rejects_defensive_invalid_segment(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    real_sub = orchestrator_module.re.sub
+
+    def fake_sub(pattern, replacement, value):
+        if value == "unsafe":
+            return "."
+        return real_sub(pattern, replacement, value)
+
+    monkeypatch.setattr(orchestrator_module.re, "sub", fake_sub)
+
+    with pytest.raises(AgentExecutionError, match="artifact path contains an invalid segment"):
+        orchestrator._sanitize_artifact_relative_path("reports/unsafe/summary.md")
+
+
+def test_artifact_record_path_returns_absolute_path_outside_output_root(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    external_path = tmp_path / "external" / "report.txt"
+    external_path.parent.mkdir()
+    external_path.write_text("hello", encoding="utf-8")
+
+    assert orchestrator._artifact_record_path(external_path) == str(external_path.resolve())
+
+
+def test_default_artifact_path_sanitizes_blank_names_and_other_suffix(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    artifact = ArtifactRecord(name="...", artifact_type=ArtifactType.OTHER)
+
+    assert orchestrator._default_artifact_path(artifact) == "artifacts/artifact.artifact"
+
+
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

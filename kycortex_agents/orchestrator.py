@@ -86,6 +86,7 @@ _REAL_OS_OPEN = os.open
 _REAL_OS_STAT = os.stat
 _REAL_OS_LSTAT = getattr(os, "lstat", None)
 _REAL_OS_READLINK = getattr(os, "readlink", None)
+_REAL_OS_PATH_ISABS = os.path.isabs
 _REAL_OS_PATH_REALPATH = os.path.realpath
 _REAL_GLOB_GLOB = glob.glob
 _REAL_GLOB_IGLOB = glob.iglob
@@ -156,6 +157,7 @@ def _resolve_path_unchecked(path_value):
     _saved_os_stat = os.stat
     _saved_os_lstat = getattr(os, "lstat", None)
     _saved_os_readlink = getattr(os, "readlink", None)
+    _saved_os_path_isabs = os.path.isabs
     _saved_os_path_realpath = os.path.realpath
     _saved_path_stats = {}
     try:
@@ -164,6 +166,7 @@ def _resolve_path_unchecked(path_value):
             os.lstat = _REAL_OS_LSTAT
         if _REAL_OS_READLINK is not None:
             os.readlink = _REAL_OS_READLINK
+        os.path.isabs = _REAL_OS_PATH_ISABS
         os.path.realpath = _REAL_OS_PATH_REALPATH
         for _class_name, _real_stat in _REAL_PATH_STATS.items():
             _path_class = getattr(pathlib, _class_name, None)
@@ -178,6 +181,7 @@ def _resolve_path_unchecked(path_value):
             os.lstat = _saved_os_lstat
         if _REAL_OS_READLINK is not None and _saved_os_readlink is not None:
             os.readlink = _saved_os_readlink
+        os.path.isabs = _saved_os_path_isabs
         os.path.realpath = _saved_os_path_realpath
         for _class_name, _saved_stat in _saved_path_stats.items():
             _path_class = getattr(pathlib, _class_name, None)
@@ -375,6 +379,7 @@ for _name in (
     "getctime",
     "getmtime",
     "getsize",
+    "isabs",
     "isdir",
     "isfile",
     "isjunction",

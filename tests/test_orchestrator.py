@@ -1326,6 +1326,19 @@ def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, 
     assert "PYTHONUSERBASE" not in env
 
 
+def test_build_generated_test_env_strips_inherited_pytest_env(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setenv("PYTEST_ADDOPTS", "-p external_plugin --maxfail=1")
+    monkeypatch.setenv("PYTEST_PLUGINS", "external_plugin")
+
+    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+
+    assert "PYTEST_ADDOPTS" not in env
+    assert "PYTEST_PLUGINS" not in env
+
+
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))

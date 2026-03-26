@@ -848,6 +848,8 @@ class Orchestrator:
         env.setdefault("PYTHONNOUSERSITE", "1")
         for key in ("PYTHONBREAKPOINT", "PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONUSERBASE"):
             env.pop(key, None)
+        for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
+            env.pop(key, None)
         if sandbox_policy.enabled and sandbox_policy.disable_pytest_plugin_autoload:
             env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
         for key in list(env):

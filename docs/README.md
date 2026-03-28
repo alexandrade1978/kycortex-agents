@@ -27,7 +27,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [examples/example_test_mode.py](../examples/example_test_mode.py): deterministic local execution example using fake agents instead of live provider calls.
 - [examples/example_complex_workflow.py](../examples/example_complex_workflow.py): converging multi-parent workflow example showing merged artifacts and decisions flowing into a downstream task.
 - [examples/example_failure_recovery.py](../examples/example_failure_recovery.py): persisted failure-and-resume example showing retry exhaustion, reload, and `resume_failed` recovery.
-- [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py): structured snapshot-inspection example showing task results, provider metadata, artifacts, decisions, and execution events.
+- [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py): structured snapshot-inspection example showing task results, aggregate workflow telemetry, provider health summaries, artifacts, decisions, and execution events.
 
 ## Public API Navigation
 
@@ -60,7 +60,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [examples/example_test_mode.py](../examples/example_test_mode.py) when validating workflow behavior locally without calling a live provider.
 - Use [examples/example_complex_workflow.py](../examples/example_complex_workflow.py) when learning how converging DAGs expose merged upstream artifacts and decisions to a downstream agent.
 - Use [examples/example_failure_recovery.py](../examples/example_failure_recovery.py) when learning how persisted failed workflows reload and continue under `workflow_resume_policy="resume_failed"`.
-- Use [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py) when learning how snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events.
+- Use [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py) when learning how snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events, plus explicit workflow progress and provider-health telemetry.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 - Use [CONTRIBUTOR_RIGHTS.md](../CONTRIBUTOR_RIGHTS.md) when you need the repository's contributor-rights policy for dual-licensed maintenance.
 - Use [COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md) when you need the repository's dual-license overview or the contact path for commercial terms.

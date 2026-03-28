@@ -14,6 +14,15 @@ class FakeMetadataProvider(BaseLLMProvider):
     def get_last_call_metadata(self) -> dict:
         return dict(self.metadata)
 
+    def health_check(self) -> dict:
+        return {
+            "provider": self.metadata.get("provider"),
+            "model": self.metadata.get("model"),
+            "status": "healthy",
+            "active_check": True,
+            "latency_ms": 1,
+        }
+
 
 class SnapshotAgent(BaseAgent):
     def __init__(
@@ -60,10 +69,24 @@ class SnapshotAgent(BaseAgent):
 
 
 def build_snapshot_registry(config: KYCortexConfig) -> AgentRegistry:
+    openai_config = KYCortexConfig(
+        project_name=config.project_name,
+        output_dir=config.output_dir,
+        llm_provider="openai",
+        llm_model="snapshot-openai-demo",
+        api_key="demo-openai-key",
+    )
+    anthropic_config = KYCortexConfig(
+        project_name=config.project_name,
+        output_dir=config.output_dir,
+        llm_provider="anthropic",
+        llm_model="snapshot-anthropic-demo",
+        api_key="demo-anthropic-key",
+    )
     return AgentRegistry(
         {
             "architect": SnapshotAgent(
-                config,
+                openai_config,
                 name="Snapshot Architect",
                 role="architect",
                 artifact_type=ArtifactType.DOCUMENT,
@@ -74,7 +97,7 @@ def build_snapshot_registry(config: KYCortexConfig) -> AgentRegistry:
                 decision_topic="architecture_snapshot",
             ),
             "code_reviewer": SnapshotAgent(
-                config,
+                anthropic_config,
                 name="Snapshot Reviewer",
                 role="code_reviewer",
                 artifact_type=ArtifactType.DOCUMENT,
@@ -141,6 +164,10 @@ if __name__ == "__main__":
 
     print("\nWorkflow telemetry:")
     print(snapshot.workflow_telemetry)
+    print("\nWorkflow progress summary:")
+    print(snapshot.workflow_telemetry["progress_summary"])
+    print("\nWorkflow provider health summary:")
+    print(snapshot.workflow_telemetry["provider_health_summary"])
 
     print("\nArtifacts:")
     print([artifact.name for artifact in snapshot.artifacts])

@@ -26,6 +26,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 - `BaseAgent` now performs provider preflight health checks before generation attempts, routes unhealthy providers into fail-fast or fallback behavior, and exposes the latest structured health snapshot per provider in provider metadata.
 - `BaseAgent` now preserves compatibility with injected legacy providers that do not implement `health_check()` by recording a passive ready snapshot instead of failing before generation.
 - Provider and workflow runtime documentation plus snapshot-inspection examples now describe the current resilience and observability behavior, including cooldown caching, fallback metadata, workflow-level aggregate telemetry, and the new acceptance/resume/repair rollups.
+- `examples/example_snapshot_inspection.py` now prints the explicit workflow `progress_summary` and `provider_health_summary` views so the Phase 10 observability surface is demonstrated directly instead of only through the raw aggregate telemetry dictionary.
 
 ## 1.0.10 - 2026-03-25
 

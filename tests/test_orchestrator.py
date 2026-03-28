@@ -5975,11 +5975,18 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
         orchestrator.execute_workflow(project)
 
     events = [getattr(record, "event", None) for record in caplog.records]
+    progress_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_progress")
     finished_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_finished")
 
     assert "workflow_started" in events
+    assert "workflow_progress" in events
     assert "workflow_completed" in events
     assert "workflow_finished" in events
+    assert progress_record.project_name == "Demo"
+    assert progress_record.phase == "execution"
+    assert progress_record.task_id == "arch"
+    assert progress_record.task_status == TaskStatus.DONE.value
+    assert progress_record.workflow_telemetry["task_status_counts"]["done"] == 1
     assert finished_record.project_name == "Demo"
     assert finished_record.terminal_outcome == WorkflowOutcome.COMPLETED.value
     assert finished_record.workflow_telemetry["task_count"] == 1
@@ -6028,6 +6035,20 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
     assert project.workflow_started_at is not None
     assert project.workflow_finished_at is not None
     assert project.execution_events[0]["event"] == "workflow_started"
+    progress_events = [event for event in project.execution_events if event["event"] == "workflow_progress"]
+    assert len(progress_events) == 2
+    assert progress_events[0]["task_id"] == "arch"
+    assert progress_events[0]["status"] == "execution"
+    assert progress_events[0]["details"]["task_status"] == TaskStatus.DONE.value
+    assert progress_events[0]["details"]["workflow_telemetry"]["task_status_counts"] == {
+        "pending": 1,
+        "running": 0,
+        "done": 1,
+        "failed": 0,
+        "skipped": 0,
+    }
+    assert progress_events[1]["task_id"] == "code"
+    assert progress_events[1]["details"]["workflow_telemetry"]["task_status_counts"]["done"] == 2
     assert project.execution_events[-1]["event"] == "workflow_finished"
     assert project.execution_events[-1]["details"]["workflow_duration_ms"] is not None
     assert project.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.COMPLETED.value

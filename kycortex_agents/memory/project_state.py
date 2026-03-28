@@ -679,6 +679,31 @@ class ProjectState:
         )
         self._touch(finished_at)
 
+    def record_workflow_progress(
+        self,
+        *,
+        task_id: Optional[str] = None,
+        task_status: Optional[str] = None,
+    ) -> WorkflowTelemetry:
+        """Append a streaming workflow telemetry event for the current execution state."""
+
+        recorded_at = datetime.now(timezone.utc).isoformat()
+        workflow_telemetry = self._workflow_telemetry_summary()
+        details: Dict[str, Any] = {
+            "workflow_telemetry": workflow_telemetry,
+        }
+        if task_status is not None:
+            details["task_status"] = task_status
+        self._record_execution_event(
+            event="workflow_progress",
+            timestamp=recorded_at,
+            task_id=task_id,
+            status=self.phase,
+            details=details,
+        )
+        self._touch(recorded_at)
+        return workflow_telemetry
+
     def save(self):
         """Persist the current project state through the configured state-store backend."""
 

@@ -693,6 +693,21 @@ class Orchestrator:
         log_method = getattr(self.logger, level)
         log_method(event, extra={"event": event, **fields})
 
+    def _emit_workflow_progress(self, project: ProjectState, *, task: Optional[Task] = None) -> None:
+        workflow_telemetry = project.record_workflow_progress(
+            task_id=task.id if task is not None else None,
+            task_status=task.status if task is not None else None,
+        )
+        self._log_event(
+            "info",
+            "workflow_progress",
+            project_name=project.project_name,
+            phase=project.phase,
+            task_id=task.id if task is not None else None,
+            task_status=task.status if task is not None else None,
+            workflow_telemetry=workflow_telemetry,
+        )
+
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""
         execution_agent_name = self._execution_agent_name(task)
@@ -2847,6 +2862,7 @@ class Orchestrator:
                 except Exception as exc:
                     failure_category = self._classify_task_failure(task, exc)
                     if project.should_retry_task(task.id):
+                        self._emit_workflow_progress(project, task=task)
                         project.save()
                         continue
                     if not self._is_repairable_failure(failure_category):
@@ -2862,14 +2878,16 @@ class Orchestrator:
                         self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                         raise
                     if self._queue_active_cycle_repair(project, task):
+                        self._emit_workflow_progress(project, task=task)
                         project.save()
                         continue
-                    project.save()
                     if self.config.workflow_failure_policy == "continue":
                         skipped = project.skip_dependent_tasks(
                             task.id,
                             f"Skipped because dependency '{task.id}' failed",
                         )
+                        self._emit_workflow_progress(project, task=task)
+                        project.save()
                         if skipped:
                             self._log_event(
                                 "warning",
@@ -2890,6 +2908,7 @@ class Orchestrator:
                     project.save()
                     self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                     raise
+                self._emit_workflow_progress(project, task=task)
                 project.save()
         self._log_event(
             "info",

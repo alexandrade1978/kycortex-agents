@@ -1100,9 +1100,38 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
         "max_cycles": 2,
         "budget_remaining": 1,
         "history_count": 1,
+        "reasons": {"resume_failed_tasks": 1},
+        "last_reason": "resume_failed_tasks",
         "failure_categories": {"test_validation": 1},
         "failed_task_count": 1,
         "failed_task_ids": ["tests"],
+    }
+
+
+def test_repair_summary_aggregates_repair_reasons_across_cycles():
+    project = ProjectState(project_name="Demo", goal="Build demo", repair_max_cycles=3)
+
+    project.start_repair_cycle(
+        reason="resume_failed_tasks",
+        failure_category="test_validation",
+        failed_task_ids=["tests"],
+    )
+    project.start_repair_cycle(
+        reason="manual_retry",
+        failure_category="dependency_validation",
+        failed_task_ids=["deps", "tests"],
+    )
+
+    assert project.snapshot().workflow_telemetry["repair_summary"] == {
+        "cycle_count": 2,
+        "max_cycles": 3,
+        "budget_remaining": 1,
+        "history_count": 2,
+        "reasons": {"manual_retry": 1, "resume_failed_tasks": 1},
+        "last_reason": "manual_retry",
+        "failure_categories": {"dependency_validation": 1, "test_validation": 1},
+        "failed_task_count": 2,
+        "failed_task_ids": ["deps", "tests"],
     }
 
 

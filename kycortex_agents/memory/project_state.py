@@ -1233,11 +1233,17 @@ class ProjectState:
         }
 
     def _repair_summary(self) -> WorkflowRepairSummary:
+        reasons: Dict[str, int] = {}
+        last_reason: Optional[str] = None
         failure_categories: Dict[str, int] = {}
         failed_task_ids: List[str] = []
         for entry in self.repair_history:
             if not isinstance(entry, dict):
                 continue
+            reason = entry.get("reason")
+            if isinstance(reason, str) and reason:
+                reasons[reason] = reasons.get(reason, 0) + 1
+                last_reason = reason
             failure_category = entry.get("failure_category")
             if isinstance(failure_category, str) and failure_category:
                 failure_categories[failure_category] = failure_categories.get(failure_category, 0) + 1
@@ -1248,6 +1254,8 @@ class ProjectState:
             "max_cycles": self.repair_max_cycles,
             "budget_remaining": max(self.repair_max_cycles - self.repair_cycle_count, 0),
             "history_count": len([entry for entry in self.repair_history if isinstance(entry, dict)]),
+            "reasons": dict(sorted(reasons.items())),
+            "last_reason": last_reason,
             "failure_categories": dict(sorted(failure_categories.items())),
             "failed_task_count": len(unique_failed_task_ids),
             "failed_task_ids": unique_failed_task_ids,

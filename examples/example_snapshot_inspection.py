@@ -139,6 +139,9 @@ if __name__ == "__main__":
             f"model={provider_call['model'] if provider_call else None}"
         )
 
+    print("\nWorkflow telemetry:")
+    print(snapshot.workflow_telemetry)
+
     print("\nArtifacts:")
     print([artifact.name for artifact in snapshot.artifacts])
     print("\nDecisions:")

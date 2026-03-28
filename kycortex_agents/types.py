@@ -194,6 +194,7 @@ class ProjectSnapshot:
     repair_budget_remaining: int = 0
     repair_history: List[Dict[str, Any]] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
+    workflow_telemetry: Dict[str, Any] = field(default_factory=dict)
     decisions: List[DecisionRecord] = field(default_factory=list)
     artifacts: List[ArtifactRecord] = field(default_factory=list)
     execution_events: List[Dict[str, Any]] = field(default_factory=list)

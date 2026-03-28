@@ -639,6 +639,7 @@ class ProjectState:
         """Mark the workflow finished under the supplied phase label."""
 
         finished_at = datetime.now(timezone.utc).isoformat()
+        workflow_telemetry = self._workflow_telemetry_summary()
         self.phase = phase
         self.workflow_finished_at = finished_at
         if acceptance_policy is not None:
@@ -665,6 +666,7 @@ class ProjectState:
                 "failure_category": self.failure_category,
                 "acceptance_criteria_met": self.acceptance_criteria_met,
                 "acceptance_evaluation": self.acceptance_evaluation,
+                "workflow_telemetry": workflow_telemetry,
             },
         )
         self._touch(finished_at)
@@ -895,6 +897,7 @@ class ProjectState:
                         "error_type": task.last_error_type,
                         "error_category": task.last_error_category,
                         "provider_call": task.last_provider_call,
+                        "provider_budget": self._provider_budget_summary(task.last_provider_call),
                         "started_at": task.started_at,
                         "last_attempt_started_at": task.last_attempt_started_at,
                         "last_resumed_at": task.last_resumed_at,
@@ -922,6 +925,7 @@ class ProjectState:
                     "last_error_type": task.last_error_type,
                     "last_error_category": task.last_error_category,
                     "last_provider_call": task.last_provider_call,
+                    "provider_budget": self._provider_budget_summary(task.last_provider_call),
                     "repair_context": task.repair_context,
                     "repair_origin_task_id": task.repair_origin_task_id,
                     "repair_attempt": task.repair_attempt,
@@ -941,6 +945,7 @@ class ProjectState:
 
         self._normalize_legacy_decision_timestamps()
         self._normalize_legacy_artifact_timestamps()
+        workflow_telemetry = self._workflow_telemetry_summary()
         return ProjectSnapshot(
             project_name=self.project_name,
             goal=self.goal,
@@ -959,6 +964,7 @@ class ProjectState:
             repair_budget_remaining=max(self.repair_max_cycles - self.repair_cycle_count, 0),
             repair_history=list(self.repair_history),
             task_results=self.task_results(),
+            workflow_telemetry=workflow_telemetry,
             decisions=[
                 DecisionRecord(
                     topic=decision.get("topic", ""),
@@ -1002,15 +1008,239 @@ class ProjectState:
         status: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
     ):
+        normalized_details = dict(details or {})
+        if "provider_budget" not in normalized_details:
+            normalized_details["provider_budget"] = self._provider_budget_summary(
+                normalized_details.get("provider_call")
+            )
         self.execution_events.append(
             {
                 "event": event,
                 "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
                 "task_id": task_id,
                 "status": status,
-                "details": details or {},
+                "details": normalized_details,
             }
         )
+
+    def _provider_budget_summary(
+        self,
+        provider_call: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(provider_call, dict):
+            return None
+        return {
+            "total_calls": provider_call.get("provider_call_count"),
+            "calls_by_provider": dict(provider_call.get("provider_call_counts_by_provider") or {}),
+            "max_calls_per_agent": provider_call.get("provider_max_calls_per_agent"),
+            "max_calls_by_provider": dict(provider_call.get("provider_max_calls_per_provider") or {}),
+            "remaining_calls": provider_call.get("provider_remaining_calls"),
+            "remaining_calls_by_provider": dict(provider_call.get("provider_remaining_calls_by_provider") or {}),
+        }
+
+    def _workflow_telemetry_summary(self) -> Dict[str, Any]:
+        task_status_counts: Dict[str, int] = {}
+        tasks_with_provider_calls = 0
+        final_providers: set[str] = set()
+        observed_providers: set[str] = set()
+        provider_summary: Dict[str, Dict[str, Any]] = {}
+        usage_totals: Dict[str, float] = {}
+        duration_values: List[float] = []
+        attempt_count = 0
+        retry_attempt_count = 0
+        fallback_task_count = 0
+        fallback_entry_count = 0
+        fallback_by_provider: Dict[str, int] = {}
+        fallback_by_status: Dict[str, int] = {}
+        final_error_types: Dict[str, int] = {}
+        fallback_error_types: Dict[str, int] = {}
+
+        for task in self.tasks:
+            task_status_counts[task.status] = task_status_counts.get(task.status, 0) + 1
+            provider_call = task.last_provider_call
+            if not isinstance(provider_call, dict):
+                continue
+            tasks_with_provider_calls += 1
+
+            provider_name = provider_call.get("provider")
+            summary_for_provider: Optional[Dict[str, Any]] = None
+            if isinstance(provider_name, str) and provider_name:
+                final_providers.add(provider_name)
+                observed_providers.add(provider_name)
+                summary_for_provider = provider_summary.setdefault(
+                    provider_name,
+                    {
+                        "task_count": 0,
+                        "success_count": 0,
+                        "failure_count": 0,
+                        "attempt_count": 0,
+                        "retry_attempt_count": 0,
+                        "duration_values": [],
+                        "usage": {},
+                    },
+                )
+                summary_for_provider["task_count"] += 1
+                if provider_call.get("success") is True:
+                    summary_for_provider["success_count"] += 1
+                elif provider_call.get("success") is False:
+                    summary_for_provider["failure_count"] += 1
+
+            attempts_used = self._provider_attempt_count(provider_call)
+            attempt_count += attempts_used
+            if summary_for_provider is not None:
+                summary_for_provider["attempt_count"] += attempts_used
+
+            retry_attempts = self._provider_retry_attempt_count(provider_call, attempts_used)
+            retry_attempt_count += retry_attempts
+            if summary_for_provider is not None:
+                summary_for_provider["retry_attempt_count"] += retry_attempts
+
+            duration_ms = self._provider_call_duration_ms(provider_call)
+            if duration_ms is not None:
+                duration_values.append(duration_ms)
+                if summary_for_provider is not None:
+                    summary_for_provider["duration_values"].append(duration_ms)
+
+            usage = provider_call.get("usage")
+            if isinstance(usage, dict):
+                self._accumulate_numeric_metrics(usage_totals, usage)
+                if summary_for_provider is not None:
+                    self._accumulate_numeric_metrics(summary_for_provider["usage"], usage)
+
+            if provider_call.get("success") is False:
+                error_type = provider_call.get("error_type")
+                if isinstance(error_type, str) and error_type:
+                    final_error_types[error_type] = final_error_types.get(error_type, 0) + 1
+
+            fallback_history = provider_call.get("fallback_history")
+            if not isinstance(fallback_history, list) or not fallback_history:
+                continue
+            fallback_task_count += 1
+            fallback_entry_count += len(fallback_history)
+            for entry in fallback_history:
+                if not isinstance(entry, dict):
+                    continue
+                fallback_provider = entry.get("provider")
+                if isinstance(fallback_provider, str) and fallback_provider:
+                    observed_providers.add(fallback_provider)
+                    fallback_by_provider[fallback_provider] = fallback_by_provider.get(fallback_provider, 0) + 1
+                fallback_status = entry.get("status")
+                if isinstance(fallback_status, str) and fallback_status:
+                    fallback_by_status[fallback_status] = fallback_by_status.get(fallback_status, 0) + 1
+                fallback_error_type = entry.get("error_type")
+                if isinstance(fallback_error_type, str) and fallback_error_type:
+                    fallback_error_types[fallback_error_type] = fallback_error_types.get(fallback_error_type, 0) + 1
+
+        normalized_provider_summary: Dict[str, Dict[str, Any]] = {}
+        for provider_name in sorted(provider_summary):
+            summary_for_provider = dict(provider_summary[provider_name])
+            duration_series = list(summary_for_provider.pop("duration_values"))
+            summary_for_provider["duration_ms"] = self._metric_distribution(duration_series)
+            summary_for_provider["usage"] = self._sorted_numeric_metrics(summary_for_provider["usage"])
+            normalized_provider_summary[provider_name] = summary_for_provider
+
+        return {
+            "task_count": len(self.tasks),
+            "task_status_counts": self._ordered_task_status_counts(task_status_counts),
+            "tasks_with_provider_calls": tasks_with_provider_calls,
+            "tasks_without_provider_calls": max(len(self.tasks) - tasks_with_provider_calls, 0),
+            "final_providers": sorted(final_providers),
+            "observed_providers": sorted(observed_providers),
+            "provider_summary": normalized_provider_summary,
+            "attempt_count": attempt_count,
+            "retry_attempt_count": retry_attempt_count,
+            "duration_ms": self._metric_distribution(duration_values),
+            "usage": self._sorted_numeric_metrics(usage_totals),
+            "fallback_summary": {
+                "task_count": fallback_task_count,
+                "entry_count": fallback_entry_count,
+                "by_provider": dict(sorted(fallback_by_provider.items())),
+                "by_status": dict(sorted(fallback_by_status.items())),
+            },
+            "error_summary": {
+                "final_error_types": dict(sorted(final_error_types.items())),
+                "fallback_error_types": dict(sorted(fallback_error_types.items())),
+            },
+        }
+
+    def _provider_attempt_count(self, provider_call: Dict[str, Any]) -> int:
+        attempt_history = provider_call.get("attempt_history")
+        if isinstance(attempt_history, list):
+            return sum(1 for entry in attempt_history if isinstance(entry, dict))
+        attempts_used = provider_call.get("attempts_used")
+        if isinstance(attempts_used, (int, float)) and not isinstance(attempts_used, bool):
+            return max(int(attempts_used), 0)
+        return 0
+
+    def _provider_retry_attempt_count(self, provider_call: Dict[str, Any], attempts_used: int) -> int:
+        attempt_history = provider_call.get("attempt_history")
+        if isinstance(attempt_history, list):
+            return sum(
+                1
+                for entry in attempt_history
+                if isinstance(entry, dict)
+                and entry.get("success") is False
+                and entry.get("retryable") is True
+            )
+        if attempts_used <= 1:
+            return 0
+        return attempts_used - 1
+
+    def _provider_call_duration_ms(self, provider_call: Dict[str, Any]) -> Optional[float]:
+        for value in (
+            provider_call.get("duration_ms"),
+            provider_call.get("latency_ms"),
+            (provider_call.get("timing") or {}).get("total_duration_ms") if isinstance(provider_call.get("timing"), dict) else None,
+            (provider_call.get("timing") or {}).get("duration_ms") if isinstance(provider_call.get("timing"), dict) else None,
+            (provider_call.get("timing") or {}).get("latency_ms") if isinstance(provider_call.get("timing"), dict) else None,
+        ):
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return round(float(value), 3)
+        return None
+
+    def _accumulate_numeric_metrics(self, target: Dict[str, float], metrics: Dict[str, Any]) -> None:
+        for key, value in metrics.items():
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                continue
+            target[key] = target.get(key, 0.0) + float(value)
+
+    def _sorted_numeric_metrics(self, metrics: Dict[str, float]) -> Dict[str, Any]:
+        return {
+            key: self._normalize_metric_number(value)
+            for key, value in sorted(metrics.items())
+        }
+
+    def _metric_distribution(self, values: List[float]) -> Dict[str, Any]:
+        if not values:
+            return {
+                "count": 0,
+                "total": 0,
+                "min": None,
+                "max": None,
+                "avg": None,
+            }
+        total = sum(values)
+        return {
+            "count": len(values),
+            "total": self._normalize_metric_number(total),
+            "min": self._normalize_metric_number(min(values)),
+            "max": self._normalize_metric_number(max(values)),
+            "avg": self._normalize_metric_number(total / len(values)),
+        }
+
+    def _normalize_metric_number(self, value: float) -> int | float:
+        rounded = round(float(value), 3)
+        if rounded.is_integer():
+            return int(rounded)
+        return rounded
+
+    def _ordered_task_status_counts(self, counts: Dict[str, int]) -> Dict[str, int]:
+        ordered_counts = {status.value: counts.get(status.value, 0) for status in TaskStatus}
+        for status, count in sorted(counts.items()):
+            if status in ordered_counts:
+                continue
+            ordered_counts[status] = count
+        return ordered_counts
 
     def _duration_ms(self, start: Optional[str], end: Optional[str]) -> Optional[float]:
         if not start or not end:

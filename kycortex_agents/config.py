@@ -52,6 +52,7 @@ class KYCortexConfig:
     provider_cancellation_check_interval_seconds: float = 0.1
     provider_circuit_breaker_threshold: int = 0
     provider_circuit_breaker_cooldown_seconds: float = 0.0
+    provider_health_check_cooldown_seconds: float = 0.0
     execution_sandbox_enabled: bool = True
     execution_sandbox_allow_network: bool = False
     execution_sandbox_allow_subprocesses: bool = False
@@ -214,6 +215,8 @@ class KYCortexConfig:
             raise ConfigValidationError(
                 "provider_circuit_breaker_cooldown_seconds must be greater than zero when provider_circuit_breaker_threshold is enabled"
             )
+        if self.provider_health_check_cooldown_seconds < 0:
+            raise ConfigValidationError("provider_health_check_cooldown_seconds must be zero or greater")
         if self.execution_sandbox_max_cpu_seconds <= 0:
             raise ConfigValidationError("execution_sandbox_max_cpu_seconds must be greater than zero")
         if self.execution_sandbox_max_memory_mb <= 0:

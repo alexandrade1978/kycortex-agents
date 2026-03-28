@@ -7,7 +7,11 @@ from typing import Any, Optional
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.base import BaseLLMProvider
-from kycortex_agents.providers.factory import create_provider
+from kycortex_agents.providers.factory import (
+    _maybe_get_cached_health_snapshot,
+    _store_health_snapshot,
+    create_provider,
+)
 from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType
 
 
@@ -40,6 +44,7 @@ class BaseAgent(ABC):
         self._provider_last_error_types: dict[str, str] = {}
         self._provider_last_error_messages: dict[str, str] = {}
         self._provider_last_retryable_failures: dict[str, bool] = {}
+        self._provider_last_health_checks: dict[str, dict[str, Any]] = {}
         self._provider_cancellation_requested = False
         self._provider_cancellation_reason: Optional[str] = None
 
@@ -158,6 +163,42 @@ class BaseAgent(ABC):
                     **self._provider_health_metadata(current_time, provider_plan),
                 }
                 raise AgentExecutionError(message)
+            try:
+                self._probe_provider_health(provider_name, model_name, provider)
+            except (ProviderTransientError, AgentExecutionError) as exc:
+                current_time = perf_counter()
+                if provider_index < len(provider_plan) - 1:
+                    fallback_history.append(
+                        {
+                            "provider": provider_name,
+                            "model": model_name,
+                            "status": "failed_health_check",
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                            "retryable": isinstance(exc, ProviderTransientError),
+                        }
+                    )
+                    continue
+                self._last_provider_call_metadata = {
+                    "provider": provider_name,
+                    "model": model_name,
+                    "success": False,
+                    "duration_ms": round((current_time - started_at) * 1000, 3),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "retryable": isinstance(exc, ProviderTransientError),
+                    "attempts_used": len(attempt_history),
+                    "max_attempts": max_attempts,
+                    "attempt_history": list(attempt_history),
+                    **self._provider_call_budget_metadata(),
+                    **self._provider_timeout_metadata(provider_name, provider_plan),
+                    **self._provider_elapsed_budget_metadata(started_at, current_time),
+                    **self._provider_fallback_metadata(provider_name, model_name, fallback_history),
+                    **self._provider_cancellation_metadata(),
+                    **self._provider_circuit_metadata(provider_name, current_time),
+                    **self._provider_health_metadata(current_time, provider_plan),
+                }
+                raise AgentExecutionError(f"{self.name}: {exc}") from exc
             for attempt in range(1, max_attempts + 1):
                 current_time = perf_counter()
                 self._raise_if_provider_cancellation_requested(
@@ -547,6 +588,7 @@ class BaseAgent(ABC):
         for provider_name, model_name in provider_plan:
             circuit_open = self._is_provider_circuit_open(provider_name, current_time)
             last_outcome = self._provider_last_outcomes.get(provider_name)
+            last_health_check = self._provider_last_health_checks.get(provider_name)
             status = "idle"
             if circuit_open:
                 status = "open_circuit"
@@ -558,6 +600,8 @@ class BaseAgent(ABC):
                     if self._provider_last_retryable_failures.get(provider_name, False)
                     else "failing"
                 )
+            elif last_health_check is not None:
+                status = str(last_health_check.get("status", status))
             last_success_at = self._provider_last_success_at.get(provider_name)
             last_failure_at = self._provider_last_failure_at.get(provider_name)
             provider_health[provider_name] = {
@@ -575,8 +619,140 @@ class BaseAgent(ABC):
                 "last_error_type": self._provider_last_error_types.get(provider_name),
                 "last_error_message": self._provider_last_error_messages.get(provider_name),
                 "last_failure_retryable": self._provider_last_retryable_failures.get(provider_name),
+                "last_health_check": (
+                    None
+                    if last_health_check is None
+                    else {
+                        key: value
+                        for key, value in last_health_check.items()
+                        if key != "checked_at"
+                    }
+                ),
+                "last_health_check_age_seconds": (
+                    None
+                    if last_health_check is None or "checked_at" not in last_health_check
+                    else round(max(current_time - float(last_health_check["checked_at"]), 0.0), 6)
+                ),
             }
         return {"provider_health": provider_health}
+
+    def _probe_provider_health(
+        self,
+        provider_name: str,
+        model_name: str,
+        provider: BaseLLMProvider,
+    ) -> dict[str, Any]:
+        started_at = perf_counter()
+        runtime_config = self.config.provider_runtime_config(provider_name)
+        cached_snapshot = _maybe_get_cached_health_snapshot(runtime_config, started_at)
+        if cached_snapshot is not None:
+            snapshot = dict(cached_snapshot)
+            self._provider_last_health_checks[provider_name] = snapshot
+            error_message = str(
+                snapshot.get("error_message")
+                or f"{provider_name} health check returned status {snapshot.get('status', 'degraded')}"
+            )
+            retryable = bool(snapshot.get("retryable", snapshot.get("status") == "degraded"))
+            self._record_provider_failure(
+                provider_name,
+                started_at,
+                str(snapshot.get("error_type") or type(self).__name__),
+                error_message,
+                retryable=retryable,
+            )
+            if retryable:
+                self._record_provider_transient_failure(provider_name, started_at)
+                raise ProviderTransientError(error_message)
+            raise AgentExecutionError(error_message)
+        try:
+            snapshot = dict(provider.health_check())
+        except ProviderTransientError as exc:
+            completed_at = perf_counter()
+            snapshot = {
+                "provider": provider_name,
+                "model": model_name,
+                "status": "degraded",
+                "active_check": True,
+                "retryable": True,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "latency_ms": round((completed_at - started_at) * 1000, 3),
+                "checked_at": completed_at,
+                "cooldown_cached": False,
+                "cooldown_remaining_seconds": 0.0,
+            }
+            self._provider_last_health_checks[provider_name] = snapshot
+            _store_health_snapshot(runtime_config, snapshot, completed_at)
+            self._record_provider_failure(
+                provider_name,
+                completed_at,
+                type(exc).__name__,
+                str(exc),
+                retryable=True,
+            )
+            self._record_provider_transient_failure(provider_name, completed_at)
+            raise
+        except AgentExecutionError as exc:
+            completed_at = perf_counter()
+            snapshot = {
+                "provider": provider_name,
+                "model": model_name,
+                "status": "failing",
+                "active_check": True,
+                "retryable": False,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "latency_ms": round((completed_at - started_at) * 1000, 3),
+                "checked_at": completed_at,
+                "cooldown_cached": False,
+                "cooldown_remaining_seconds": 0.0,
+            }
+            self._provider_last_health_checks[provider_name] = snapshot
+            _store_health_snapshot(runtime_config, snapshot, completed_at)
+            self._record_provider_failure(
+                provider_name,
+                completed_at,
+                type(exc).__name__,
+                str(exc),
+                retryable=False,
+            )
+            raise
+
+        completed_at = perf_counter()
+        if snapshot.get("provider") is None:
+            snapshot["provider"] = provider_name
+        if snapshot.get("model") is None:
+            snapshot["model"] = model_name
+        if snapshot.get("status") is None:
+            snapshot["status"] = "ready"
+        if snapshot.get("active_check") is None:
+            snapshot["active_check"] = False
+        if snapshot.get("retryable") is None:
+            snapshot["retryable"] = False
+        snapshot.setdefault("latency_ms", round((completed_at - started_at) * 1000, 3))
+        snapshot["checked_at"] = completed_at
+        snapshot.setdefault("cooldown_cached", False)
+        snapshot.setdefault("cooldown_remaining_seconds", 0.0)
+        self._provider_last_health_checks[provider_name] = snapshot
+        _store_health_snapshot(runtime_config, snapshot, completed_at)
+        if snapshot.get("active_check") and snapshot.get("status") in {"degraded", "failing"}:
+            error_message = str(
+                snapshot.get("error_message")
+                or f"{provider_name} health check returned status {snapshot['status']}"
+            )
+            retryable = bool(snapshot.get("retryable", snapshot["status"] == "degraded"))
+            self._record_provider_failure(
+                provider_name,
+                completed_at,
+                str(snapshot.get("error_type") or "AgentExecutionError"),
+                error_message,
+                retryable=retryable,
+            )
+            if retryable:
+                self._record_provider_transient_failure(provider_name, completed_at)
+                raise ProviderTransientError(error_message)
+            raise AgentExecutionError(error_message)
+        return snapshot
 
     def _provider_cancellation_metadata(self) -> dict[str, Any]:
         return {

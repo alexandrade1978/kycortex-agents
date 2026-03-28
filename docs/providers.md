@@ -20,7 +20,12 @@ All built-in providers implement the same public entrypoints:
 - `get_last_call_metadata()`: return provider-specific usage and timing metadata captured from the most recent successful call when available.
 - `health_check()`: return a lightweight provider health snapshot without generating model output.
 
-Provider failures are normalized into `AgentExecutionError`, so the rest of the runtime can apply the same retry, persistence, and logging behavior regardless of backend.
+Provider implementations surface two operational failure classes:
+
+- `ProviderTransientError` for retryable backend conditions such as rate limits, timeouts, temporary network failures, and transient service unavailability
+- `AgentExecutionError` for deterministic invalid requests, invalid payloads, unsupported backend behavior, or explicit unhealthy states that should fail fast
+
+The agent runtime consumes those two classes to apply retries, fallback routing, circuit breaking, persistence, and workflow failure policy consistently across providers.
 
 ## Provider Selection
 
@@ -34,7 +39,22 @@ Supported values are:
 
 `create_provider()` validates runtime configuration first and then resolves the configured provider through the built-in provider map.
 
-`probe_provider_health()` is the matching public helper when callers need a structured provider-readiness snapshot before generation. Providers that do not implement an active probe return a passive `ready` snapshot, while providers such as Ollama can report an active reachability result.
+`probe_provider_health()` is the matching public helper when callers need a structured provider-readiness snapshot before generation. Providers that do not implement an active probe return a passive `ready` snapshot, while built-in providers can report active reachability results and unhealthy snapshots. The runtime also reuses cached unhealthy health snapshots during a configured cooldown window so repeated calls do not keep probing a backend that already failed moments earlier.
+
+## Runtime Resilience Controls
+
+The provider layer is consumed by `BaseAgent`, which applies the production-facing resilience controls configured through `KYCortexConfig`.
+
+- Per-provider request deadlines through `provider_timeout_seconds`
+- Retry policy with capped backoff and jitter through `provider_max_attempts`, `provider_retry_backoff_seconds`, `provider_retry_max_backoff_seconds`, and `provider_retry_jitter_ratio`
+- Per-agent and per-provider call budgets through `provider_max_calls_per_agent` and `provider_max_calls_per_provider`
+- Aggregate elapsed-time limits through `provider_max_elapsed_seconds_per_call`
+- Provider fallback routing through `provider_fallback_order` and `provider_fallback_models`
+- Circuit breaking through `provider_circuit_breaker_threshold` and `provider_circuit_breaker_cooldown_seconds`
+- Health-probe cooldown caching through `provider_health_check_cooldown_seconds`
+- Cooperative cancellation through `provider_cancellation_check_interval_seconds`
+
+In practice, this means provider selection is not just a direct SDK call. The runtime can preflight provider health, skip providers whose circuit is open, reroute around exhausted quotas, and fall back to secondary providers before or after a failed generation attempt.
 
 ## OpenAI Configuration
 
@@ -134,21 +154,40 @@ Health probes also flow through a shared shape:
 - `retryable`: whether a failed probe indicates a transient condition
 - `latency_ms`: elapsed probe latency for readiness checks
 
-This metadata is later attached to task outputs, execution events, and persisted project state for post-run inspection.
+Cached unhealthy health snapshots additionally expose:
+
+- `cooldown_cached`: whether the snapshot came from the unhealthy-probe cache instead of a fresh provider call
+- `cooldown_remaining_seconds`: how much unhealthy-probe cooldown remains before a fresh probe is attempted again
+
+The agent runtime also emits higher-level provider execution metadata such as:
+
+- `provider_health` across the whole execution plan, including `healthy`, `degraded`, `failing`, and `open_circuit` states
+- `provider_budget` summaries derived from per-call budget metadata
+- active-provider and fallback history
+- provider timeout resolution by backend
+- circuit-breaker state and remaining cooldown
+
+This metadata is later attached to task outputs, execution events, provider-matrix summaries, and persisted project state for post-run inspection.
 
 ## Error Handling
 
-The provider layer normalizes backend problems into runtime-safe failures:
+The provider layer normalizes backend problems into runtime-safe failures, but not into a single exception type:
 
 - invalid response payloads become `AgentExecutionError`
 - empty backend responses become `AgentExecutionError`
-- SDK, HTTP, timeout, and decode failures become `AgentExecutionError`
+- deterministic client-side request rejections such as 4xx validation failures become `AgentExecutionError`
+- retryable backend failures such as 429s, transient 5xx responses, timeouts, and transport errors become `ProviderTransientError`
 
-This keeps retry behavior and workflow-failure policy handling consistent across vendors.
+This distinction is what allows the runtime to retry only retryable failures, open circuits only on transient failure streaks, and fail fast on deterministic invalid requests.
 
 ## Extension Path
 
 Custom providers should implement `BaseLLMProvider`, return metadata through `get_last_call_metadata()` when they want observability data to flow through the rest of the runtime, and override `health_check()` when they can perform an active readiness probe.
+
+Custom provider implementations should also preserve the retryability split used by the built-in providers:
+
+- raise `ProviderTransientError` for retryable outages
+- raise `AgentExecutionError` for deterministic invalid states
 
 If a project needs a non-built-in backend, the cleanest extension path is:
 

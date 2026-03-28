@@ -23,6 +23,19 @@ PROVIDER_CREDENTIAL_ENV_VARS = {
 }
 
 
+def _provider_budget_summary(provider_call: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(provider_call, Mapping):
+        return None
+    return {
+        "total_calls": provider_call.get("provider_call_count"),
+        "calls_by_provider": dict(provider_call.get("provider_call_counts_by_provider") or {}),
+        "max_calls_per_agent": provider_call.get("provider_max_calls_per_agent"),
+        "max_calls_by_provider": dict(provider_call.get("provider_max_calls_per_provider") or {}),
+        "remaining_calls": provider_call.get("provider_remaining_calls"),
+        "remaining_calls_by_provider": dict(provider_call.get("provider_remaining_calls_by_provider") or {}),
+    }
+
+
 def resolve_model(provider: str, model_override: str | None) -> str:
     """Resolve the concrete model to use for a provider validation run."""
 
@@ -238,6 +251,7 @@ def summarize_workflow_run(
                 "last_error": task.last_error,
                 "last_error_type": task.last_error_type,
                 "last_error_category": task.last_error_category,
+                "provider_budget": _provider_budget_summary(task.last_provider_call),
                 "repair_origin_task_id": task.repair_origin_task_id,
                 "repair_attempt": task.repair_attempt,
             }

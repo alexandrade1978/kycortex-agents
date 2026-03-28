@@ -28,7 +28,14 @@ def build_agent_input() -> AgentInput:
     )
 
 
-def build_openai_client(response=None, error=None, captured_kwargs=None):
+def build_openai_client(
+    response=None,
+    error=None,
+    captured_kwargs=None,
+    health_response=None,
+    health_error=None,
+    health_captured_kwargs=None,
+):
     def create(**kwargs):
         if captured_kwargs is not None:
             captured_kwargs.append(kwargs)
@@ -36,10 +43,27 @@ def build_openai_client(response=None, error=None, captured_kwargs=None):
             raise error
         return response
 
-    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    def list_models(**kwargs):
+        if health_captured_kwargs is not None:
+            health_captured_kwargs.append(kwargs)
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
-def build_anthropic_client(response=None, error=None, captured_kwargs=None):
+def build_anthropic_client(
+    response=None,
+    error=None,
+    captured_kwargs=None,
+    health_response=None,
+    health_error=None,
+    health_captured_kwargs=None,
+):
     def create(**kwargs):
         if captured_kwargs is not None:
             captured_kwargs.append(kwargs)
@@ -47,7 +71,17 @@ def build_anthropic_client(response=None, error=None, captured_kwargs=None):
             raise error
         return response
 
-    return SimpleNamespace(messages=SimpleNamespace(create=create))
+    def list_models(**kwargs):
+        if health_captured_kwargs is not None:
+            health_captured_kwargs.append(kwargs)
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        messages=SimpleNamespace(create=create),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
 class FakeHTTPResponse:
@@ -169,7 +203,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
 
 
 @pytest.mark.parametrize(
-    ("provider_name", "provider", "expected_message"),
+    ("provider_name", "provider", "expected_message", "expected_attempts_used"),
     [
         (
             "openai",
@@ -178,6 +212,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
                 client=build_openai_client(error=RuntimeError("openai down")),
             ),
             "failed to call the model API",
+            1,
         ),
         (
             "anthropic",
@@ -186,6 +221,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
                 client=build_anthropic_client(error=RuntimeError("anthropic down")),
             ),
             "failed to call the model API",
+            1,
         ),
         (
             "ollama",
@@ -194,10 +230,16 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
                 request_opener=build_ollama_opener(error=OSError("ollama down")),
             ),
             "Ollama server is not responding",
+            0,
         ),
     ],
 )
-def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_name, provider, expected_message):
+def test_execute_surfaces_provider_failures_with_failed_call_metadata(
+    provider_name,
+    provider,
+    expected_message,
+    expected_attempts_used,
+):
     config = provider.config
     agent = ProviderBackedAgent(provider, config)
 
@@ -212,10 +254,13 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(provider_n
     assert metadata["success"] is False
     assert metadata["error_type"] == "ProviderTransientError"
     assert metadata["retryable"] is True
-    assert metadata["attempts_used"] == 1
+    assert metadata["attempts_used"] == expected_attempts_used
     assert metadata["max_attempts"] == 1
-    assert metadata["attempt_history"][0]["error_type"] == "ProviderTransientError"
-    assert metadata["attempt_history"][0]["base_backoff_seconds"] == 0.0
+    if expected_attempts_used == 0:
+        assert metadata["attempt_history"] == []
+    else:
+        assert metadata["attempt_history"][0]["error_type"] == "ProviderTransientError"
+        assert metadata["attempt_history"][0]["base_backoff_seconds"] == 0.0
     assert expected_message in metadata["error_message"]
     assert metadata["duration_ms"] >= 0
 
@@ -237,6 +282,15 @@ def test_execute_records_retry_attempt_metadata_for_transient_provider_recovery(
             if self.calls == 1:
                 raise ProviderTransientError("temporary provider outage")
             return "RECOVERED RESULT"
+
+        def health_check(self) -> dict[str, object]:
+            return {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "status": "healthy",
+                "active_check": False,
+                "retryable": False,
+            }
 
         def get_last_call_metadata(self):
             return {"usage": {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5}}
@@ -346,6 +400,66 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
     assert metadata["usage"]["total_tokens"] == 20
     assert metadata["provider_health"]["openai"]["status"] == "degraded"
     assert metadata["provider_health"]["openai"]["last_failure_retryable"] is True
+    assert metadata["provider_health"]["anthropic"]["status"] == "healthy"
+
+
+def test_execute_falls_back_to_secondary_provider_after_primary_health_check_failure(monkeypatch):
+    primary_config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        api_key="token",
+        llm_model="gpt-4o",
+        provider_max_attempts=1,
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+    primary_provider = OpenAIProvider(
+        primary_config,
+        client=build_openai_client(health_error=RuntimeError("openai health down")),
+    )
+    fallback_provider = AnthropicProvider(
+        KYCortexConfig(
+            output_dir="./output_test",
+            llm_provider="anthropic",
+            api_key="token",
+            llm_model="claude-3-5-sonnet",
+        ),
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            response=SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="FALLBACK RESULT")],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=8),
+            ),
+        ),
+    )
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        assert runtime_config.llm_model == "claude-3-5-sonnet"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+    agent = ProviderBackedAgent(primary_provider, primary_config)
+
+    result = agent.execute(build_agent_input())
+
+    metadata = result.metadata["provider_call"]
+    assert result.raw_content == "FALLBACK RESULT"
+    assert metadata["provider"] == "anthropic"
+    assert metadata["success"] is True
+    assert metadata["fallback_used"] is True
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_health_check",
+            "error_type": "ProviderTransientError",
+            "error_message": "OpenAI provider health check failed",
+            "retryable": True,
+        }
+    ]
+    assert metadata["provider_health"]["openai"]["status"] == "degraded"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"
     assert metadata["provider_health"]["anthropic"]["status"] == "healthy"
 
 

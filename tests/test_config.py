@@ -184,6 +184,17 @@ def test_config_rejects_negative_provider_retry_backoff(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_backoff_seconds=-0.1)
 
 
+def test_config_rejects_negative_provider_health_check_cooldown(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="provider_health_check_cooldown_seconds must be zero or greater",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            provider_health_check_cooldown_seconds=-0.1,
+        )
+
+
 def test_config_rejects_invalid_provider_retry_jitter_ratio(tmp_path):
     with pytest.raises(ConfigValidationError, match="provider_retry_jitter_ratio must be between 0 and 1"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), provider_retry_jitter_ratio=1.5)

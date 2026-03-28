@@ -4,6 +4,7 @@ from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.base import BaseLLMProvider
+from kycortex_agents.providers import factory as provider_factory
 from kycortex_agents.types import AgentInput, AgentOutput, ArtifactType
 
 
@@ -26,11 +27,14 @@ class DummyAgent(BaseAgent):
         return output
 
 class DummyProvider(BaseLLMProvider):
-    def __init__(self, response=None, error=None, metadata=None):
+    def __init__(self, response=None, error=None, metadata=None, health_response=None, health_error=None):
         self.response = response
         self.error = error
         self.metadata = metadata
+        self.health_response = health_response
+        self.health_error = health_error
         self.calls = []
+        self.health_calls = 0
 
     def generate(self, system_prompt: str, user_message: str) -> str:
         self.calls.append((system_prompt, user_message))
@@ -40,6 +44,14 @@ class DummyProvider(BaseLLMProvider):
 
     def get_last_call_metadata(self):
         return self.metadata
+
+    def health_check(self):
+        self.health_calls += 1
+        if self.health_error is not None:
+            raise self.health_error
+        if self.health_response is not None:
+            return self.health_response
+        return super().health_check()
 
 
 class CodeDummyAgent(DummyAgent):
@@ -80,6 +92,8 @@ def test_chat_returns_response_content():
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
     assert metadata["provider_health"]["openai"]["last_failure_age_seconds"] is None
+    assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "ready"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
 
 
 def test_chat_raises_when_provider_execution_plan_is_empty():
@@ -554,7 +568,7 @@ def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attemp
     agent.config.provider_max_attempts = 3
     agent.config.provider_retry_backoff_seconds = 0.0
     agent.config.provider_max_elapsed_seconds_per_call = 0.5
-    timestamps = iter([100.0, 100.0, 100.2, 100.2, 100.6, 100.6])
+    timestamps = iter([100.0, 100.0, 100.0, 100.0, 100.2, 100.6])
     monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps))
     monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
 
@@ -970,6 +984,157 @@ def test_chat_falls_back_after_primary_provider_transient_failure(monkeypatch):
             "attempts_used": 1,
         }
     ]
+
+
+def test_chat_falls_back_after_transient_provider_health_check_failure(monkeypatch):
+    primary_provider = DummyProvider(health_error=ProviderTransientError("provider health check timed out"))
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+    agent = DummyAgent(primary_provider, config)
+
+    def create_provider_for_fallback(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_provider_for_fallback)
+
+    result = agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert result == "FALLBACK RESULT"
+    assert metadata is not None
+    assert metadata["provider"] == "anthropic"
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_health_check",
+            "error_type": "ProviderTransientError",
+            "error_message": "provider health check timed out",
+            "retryable": True,
+        }
+    ]
+    assert primary_provider.calls == []
+    assert primary_provider.health_calls == 1
+    assert fallback_provider.calls == [("system", "message")]
+    assert metadata["provider_health"]["openai"]["status"] == "degraded"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["retryable"] is True
+
+
+def test_chat_reuses_cached_unhealthy_health_check_during_cooldown(monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    primary_provider = DummyProvider(health_error=ProviderTransientError("provider health check timed out"))
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_health_check_cooldown_seconds=30.0,
+    )
+    agent = DummyAgent(primary_provider, config)
+
+    def create_provider_for_fallback(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_provider_for_fallback)
+
+    first_result = agent.chat("system", "message one")
+    second_result = agent.chat("system", "message two")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert first_result == "FALLBACK RESULT"
+    assert second_result == "FALLBACK RESULT"
+    assert primary_provider.calls == []
+    assert primary_provider.health_calls == 1
+    assert fallback_provider.calls == [("system", "message one"), ("system", "message two")]
+    assert metadata is not None
+    assert metadata["provider_health"]["openai"]["last_health_check"]["cooldown_cached"] is True
+    assert metadata["provider_health"]["openai"]["last_health_check"]["cooldown_remaining_seconds"] > 0
+
+
+def test_cached_unhealthy_health_check_can_open_circuit_breaker(monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    primary_provider = DummyProvider(health_error=ProviderTransientError("provider health check timed out"))
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_health_check_cooldown_seconds=30.0,
+        provider_circuit_breaker_threshold=2,
+        provider_circuit_breaker_cooldown_seconds=10.0,
+    )
+    agent = DummyAgent(primary_provider, config)
+
+    def create_provider_for_fallback(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_provider_for_fallback)
+    timestamps = iter([100.0] * 20 + [101.0] * 20 + [102.0] * 20)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps, 102.0))
+
+    first_result = agent.chat("system", "message one")
+    first_metadata = agent.get_last_provider_call_metadata()
+    second_result = agent.chat("system", "message two")
+    second_metadata = agent.get_last_provider_call_metadata()
+    third_result = agent.chat("system", "message three")
+    third_metadata = agent.get_last_provider_call_metadata()
+
+    assert first_result == "FALLBACK RESULT"
+    assert second_result == "FALLBACK RESULT"
+    assert third_result == "FALLBACK RESULT"
+    assert first_metadata is not None
+    assert first_metadata["provider_health"]["openai"]["status"] == "degraded"
+    assert second_metadata is not None
+    assert agent._provider_transient_failure_streaks["openai"] == 2
+    assert agent._provider_circuit_open_untils["openai"] > 102.0
+    assert second_metadata["provider_health"]["openai"]["status"] == "open_circuit"
+    assert second_metadata["provider_health"]["openai"]["last_health_check"]["cooldown_cached"] is True
+    assert third_metadata is not None
+    assert third_metadata["provider_health"]["openai"]["status"] == "open_circuit"
+    assert third_metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "skipped_open_circuit",
+            "remaining_cooldown_seconds": 9.0,
+        }
+    ]
+    assert primary_provider.calls == []
+    assert primary_provider.health_calls == 1
+    assert fallback_provider.calls == [
+        ("system", "message one"),
+        ("system", "message two"),
+        ("system", "message three"),
+    ]
+
+
+def test_chat_fails_fast_when_last_provider_health_check_is_deterministically_unhealthy():
+    provider = DummyProvider(health_error=AgentExecutionError("provider health check rejected backend"))
+    agent = DummyAgent(provider)
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider health check rejected backend"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is False
+    assert metadata["attempts_used"] == 0
+    assert metadata["attempt_history"] == []
+    assert metadata["error_type"] == "AgentExecutionError"
+    assert metadata["error_message"] == "provider health check rejected backend"
+    assert metadata["provider_health"]["openai"]["status"] == "failing"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "failing"
+    assert provider.calls == []
+    assert provider.health_calls == 1
 
 
 def test_chat_surfaces_provider_specific_timeout_metadata_for_fallback(monkeypatch):

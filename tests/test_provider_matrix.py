@@ -133,6 +133,49 @@ def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
     assert summary["failed_task_ids"] == ["tests"]
 
 
+def test_provider_matrix_summary_includes_provider_budget(tmp_path):
+    from kycortex_agents.provider_matrix import summarize_workflow_run
+
+    project = ProjectState(
+        project_name="Demo",
+        goal="Validate provider summary output",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status="done",
+            last_provider_call={
+                "provider_call_count": 2,
+                "provider_call_counts_by_provider": {"openai": 1, "anthropic": 1},
+                "provider_max_calls_per_agent": 3,
+                "provider_max_calls_per_provider": {"openai": 2},
+                "provider_remaining_calls": 1,
+                "provider_remaining_calls_by_provider": {"openai": 1},
+            },
+        )
+    )
+
+    summary = summarize_workflow_run(
+        project,
+        provider="openai",
+        model="gpt-4o-mini",
+        output_dir=str(tmp_path / "output"),
+    )
+
+    assert summary["task_summaries"][0]["provider_budget"] == {
+        "total_calls": 2,
+        "calls_by_provider": {"openai": 1, "anthropic": 1},
+        "max_calls_per_agent": 3,
+        "max_calls_by_provider": {"openai": 2},
+        "remaining_calls": 1,
+        "remaining_calls_by_provider": {"openai": 1},
+    }
+
+
 def test_provider_matrix_resolve_model_handles_override_and_ollama_probe(monkeypatch):
     from kycortex_agents.provider_matrix import resolve_model
 

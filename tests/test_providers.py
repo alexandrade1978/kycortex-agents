@@ -16,6 +16,7 @@ from kycortex_agents.providers._error_classifier import (
     is_retryable_http_status,
     is_transient_provider_exception,
 )
+from kycortex_agents.providers import factory as provider_factory
 
 
 class FakeAPIError(Exception):
@@ -41,7 +42,14 @@ def build_response_with_usage(content, prompt_tokens=10, completion_tokens=5, to
     )
 
 
-def build_client(response=None, error=None, captured_kwargs=None):
+def build_client(
+    response=None,
+    error=None,
+    captured_kwargs=None,
+    health_response=None,
+    health_error=None,
+    health_captured_kwargs=None,
+):
     def create(**kwargs):
         if captured_kwargs is not None:
             captured_kwargs.append(kwargs)
@@ -49,10 +57,27 @@ def build_client(response=None, error=None, captured_kwargs=None):
             raise error
         return response
 
-    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    def list_models(**kwargs):
+        if health_captured_kwargs is not None:
+            health_captured_kwargs.append(kwargs)
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
-def build_anthropic_client(response=None, error=None, captured_kwargs=None):
+def build_anthropic_client(
+    response=None,
+    error=None,
+    captured_kwargs=None,
+    health_response=None,
+    health_error=None,
+    health_captured_kwargs=None,
+):
     def create(**kwargs):
         if captured_kwargs is not None:
             captured_kwargs.append(kwargs)
@@ -60,7 +85,17 @@ def build_anthropic_client(response=None, error=None, captured_kwargs=None):
             raise error
         return response
 
-    return SimpleNamespace(messages=SimpleNamespace(create=create))
+    def list_models(**kwargs):
+        if health_captured_kwargs is not None:
+            health_captured_kwargs.append(kwargs)
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        messages=SimpleNamespace(create=create),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
 class FakeHTTPResponse:
@@ -213,8 +248,14 @@ def test_create_provider_accepts_ollama_default_base_url(tmp_path):
     assert provider.config.base_url == "http://localhost:11434"
 
 
-def test_probe_provider_health_returns_default_snapshot_for_providers_without_active_check(tmp_path):
+def test_probe_provider_health_returns_default_snapshot_for_providers_without_active_check(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token")
+
+    class MinimalProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+    monkeypatch.setattr("kycortex_agents.providers.factory.create_provider", lambda runtime_config: MinimalProvider())
 
     snapshot = probe_provider_health(config)
 
@@ -271,6 +312,78 @@ def test_probe_provider_health_wraps_deterministic_provider_failures(tmp_path, m
     assert snapshot["latency_ms"] >= 0
 
 
+def test_probe_provider_health_caches_unhealthy_snapshot_during_cooldown(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token",
+        provider_health_check_cooldown_seconds=30.0,
+    )
+    provider_calls: list[str] = []
+
+    class UnhealthyProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+        def health_check(self) -> dict[str, object]:
+            provider_calls.append("health")
+            raise ProviderTransientError("temporary outage")
+
+    monkeypatch.setattr(
+        "kycortex_agents.providers.factory.create_provider",
+        lambda runtime_config: UnhealthyProvider(),
+    )
+
+    first_snapshot = probe_provider_health(config)
+    second_snapshot = probe_provider_health(config)
+
+    assert provider_calls == ["health"]
+    assert first_snapshot["status"] == "degraded"
+    assert first_snapshot["cooldown_cached"] is False
+    assert first_snapshot["cooldown_remaining_seconds"] == 0.0
+    assert second_snapshot["status"] == "degraded"
+    assert second_snapshot["cooldown_cached"] is True
+    assert second_snapshot["cooldown_remaining_seconds"] > 0
+
+
+def test_probe_provider_health_does_not_cache_ready_snapshot(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token",
+        provider_health_check_cooldown_seconds=30.0,
+    )
+    provider_calls: list[str] = []
+
+    class HealthyProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+        def health_check(self) -> dict[str, object]:
+            provider_calls.append("health")
+            return {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "status": "healthy",
+                "active_check": True,
+                "retryable": False,
+            }
+
+    monkeypatch.setattr(
+        "kycortex_agents.providers.factory.create_provider",
+        lambda runtime_config: HealthyProvider(),
+    )
+
+    first_snapshot = probe_provider_health(config)
+    second_snapshot = probe_provider_health(config)
+
+    assert provider_calls == ["health", "health"]
+    assert first_snapshot["cooldown_cached"] is False
+    assert second_snapshot["cooldown_cached"] is False
+
+
 def test_openai_provider_returns_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(response=build_response("ok")))
@@ -310,6 +423,62 @@ def test_openai_provider_passes_configured_timeout_to_sdk(tmp_path):
     provider.generate("system", "message")
 
     assert captured_kwargs[0]["timeout"] == 17.0
+
+
+def test_openai_provider_health_check_returns_structured_success_snapshot(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=14.0)
+    provider = OpenAIProvider(
+        config,
+        client=build_client(health_response=[SimpleNamespace(id="gpt-4o")]),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["provider"] == "openai"
+    assert snapshot["model"] == "gpt-4o"
+    assert snapshot["status"] == "healthy"
+    assert snapshot["active_check"] is True
+    assert snapshot["timeout_seconds"] == 5.0
+    assert snapshot["latency_ms"] >= 0
+
+
+def test_openai_provider_health_check_passes_capped_timeout_to_sdk(tmp_path):
+    captured_kwargs: list[dict[str, object]] = []
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=17.0)
+    provider = OpenAIProvider(
+        config,
+        client=build_client(health_captured_kwargs=captured_kwargs),
+    )
+
+    provider.health_check()
+
+    assert captured_kwargs[0]["timeout"] == 5.0
+
+
+def test_openai_provider_health_check_treats_client_4xx_errors_as_deterministic(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = OpenAIProvider(
+        config,
+        client=build_client(health_error=FakeAPIError("bad request", 400)),
+    )
+
+    with pytest.raises(AgentExecutionError, match="health check was rejected") as exc_info:
+        provider.health_check()
+
+    assert exc_info.type is AgentExecutionError
+
+
+def test_openai_provider_health_check_treats_rate_limits_as_transient(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = OpenAIProvider(
+        config,
+        client=build_client(health_error=FakeAPIError("rate limited", 429)),
+    )
+
+    with pytest.raises(ProviderTransientError, match="health check failed") as exc_info:
+        provider.health_check()
+
+    assert exc_info.type is ProviderTransientError
 
 
 def test_openai_provider_treats_client_4xx_errors_as_deterministic(tmp_path):
@@ -444,6 +613,62 @@ def test_anthropic_provider_passes_configured_timeout_to_sdk(tmp_path):
     provider.generate("system", "message")
 
     assert captured_kwargs[0]["timeout"] == 19.0
+
+
+def test_anthropic_provider_health_check_returns_structured_success_snapshot(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", timeout_seconds=14.0)
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(health_response=[SimpleNamespace(id="claude-3-5-sonnet")]),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["provider"] == "anthropic"
+    assert snapshot["model"] == "gpt-4o"
+    assert snapshot["status"] == "healthy"
+    assert snapshot["active_check"] is True
+    assert snapshot["timeout_seconds"] == 5.0
+    assert snapshot["latency_ms"] >= 0
+
+
+def test_anthropic_provider_health_check_passes_capped_timeout_to_sdk(tmp_path):
+    captured_kwargs: list[dict[str, object]] = []
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", timeout_seconds=19.0)
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(health_captured_kwargs=captured_kwargs),
+    )
+
+    provider.health_check()
+
+    assert captured_kwargs[0]["timeout"] == 5.0
+
+
+def test_anthropic_provider_health_check_treats_client_4xx_errors_as_deterministic(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(health_error=FakeAPIError("bad request", 400)),
+    )
+
+    with pytest.raises(AgentExecutionError, match="health check was rejected") as exc_info:
+        provider.health_check()
+
+    assert exc_info.type is AgentExecutionError
+
+
+def test_anthropic_provider_health_check_treats_server_5xx_errors_as_transient(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(health_error=FakeAPIError("upstream down", 503)),
+    )
+
+    with pytest.raises(ProviderTransientError, match="health check failed") as exc_info:
+        provider.health_check()
+
+    assert exc_info.type is ProviderTransientError
 
 
 def test_ollama_provider_uses_configured_timeouts_for_health_check_and_generation(tmp_path):

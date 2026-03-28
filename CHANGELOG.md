@@ -6,6 +6,18 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+### Added
+
+- Active preflight health checks for OpenAI and Anthropic providers, including transient-vs-deterministic classification aligned with generation-time provider failures.
+- Provider-health cooldown caching so repeated unhealthy readiness probes can reuse a recent degraded/failing snapshot instead of repeatedly probing the same backend.
+- Persisted provider-budget summaries in task failures, task details, provider-matrix summaries, and workflow inspection paths.
+- Workflow-level aggregate `workflow_telemetry` summaries in `ProjectSnapshot`, terminal `workflow_finished` execution events, and final structured orchestrator logs.
+
+### Changed
+
+- `BaseAgent` now performs provider preflight health checks before generation attempts, routes unhealthy providers into fail-fast or fallback behavior, and exposes the latest structured health snapshot per provider in provider metadata.
+- Provider runtime documentation and snapshot-inspection examples now describe the current resilience and observability behavior, including cooldown caching, fallback metadata, and workflow-level aggregate telemetry.
+
 ## 1.0.10 - 2026-03-25
 
 ### Fixed

@@ -5975,10 +5975,15 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
         orchestrator.execute_workflow(project)
 
     events = [getattr(record, "event", None) for record in caplog.records]
+    finished_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_finished")
 
     assert "workflow_started" in events
     assert "workflow_completed" in events
     assert "workflow_finished" in events
+    assert finished_record.project_name == "Demo"
+    assert finished_record.terminal_outcome == WorkflowOutcome.COMPLETED.value
+    assert finished_record.workflow_telemetry["task_count"] == 1
+    assert finished_record.workflow_telemetry["tasks_with_provider_calls"] == 0
 
 
 def test_execute_workflow_respects_task_dependencies(tmp_path):

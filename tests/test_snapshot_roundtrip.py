@@ -255,6 +255,54 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert snapshot.artifacts[2].name == "legacy-report.md"
     assert snapshot.artifacts[2].artifact_type == ArtifactType.OTHER
     assert snapshot.execution_events[1]["details"]["provider_call"]["provider"] == "ollama"
+    assert snapshot.workflow_telemetry == {
+        "task_count": 4,
+        "task_status_counts": {
+            "pending": 1,
+            "running": 0,
+            "done": 1,
+            "failed": 1,
+            "skipped": 1,
+        },
+        "tasks_with_provider_calls": 2,
+        "tasks_without_provider_calls": 2,
+        "final_providers": ["ollama", "openai"],
+        "observed_providers": ["ollama", "openai"],
+        "provider_summary": {
+            "ollama": {
+                "task_count": 1,
+                "success_count": 0,
+                "failure_count": 1,
+                "attempt_count": 0,
+                "retry_attempt_count": 0,
+                "duration_ms": {"count": 1, "total": 125, "min": 125, "max": 125, "avg": 125},
+                "usage": {},
+            },
+            "openai": {
+                "task_count": 1,
+                "success_count": 1,
+                "failure_count": 0,
+                "attempt_count": 0,
+                "retry_attempt_count": 0,
+                "duration_ms": {"count": 1, "total": 120.5, "min": 120.5, "max": 120.5, "avg": 120.5},
+                "usage": {"completion_tokens": 5, "prompt_tokens": 10, "total_tokens": 15},
+            },
+        },
+        "attempt_count": 0,
+        "retry_attempt_count": 0,
+        "duration_ms": {"count": 2, "total": 245.5, "min": 120.5, "max": 125, "avg": 122.75},
+        "usage": {"completion_tokens": 5, "prompt_tokens": 10, "total_tokens": 15},
+        "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "by_provider": {},
+            "by_status": {},
+        },
+        "error_summary": {
+            "final_error_types": {"AgentExecutionError": 1},
+            "fallback_error_types": {},
+        },
+    }
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])

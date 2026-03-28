@@ -2891,4 +2891,11 @@ class Orchestrator:
                     self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                     raise
                 project.save()
-        self._log_event("info", "workflow_finished", project_name=project.project_name, phase=project.phase)
+        self._log_event(
+            "info",
+            "workflow_finished",
+            project_name=project.project_name,
+            phase=project.phase,
+            terminal_outcome=project.terminal_outcome,
+            workflow_telemetry=project.snapshot().workflow_telemetry,
+        )

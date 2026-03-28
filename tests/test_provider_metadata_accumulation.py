@@ -13,22 +13,38 @@ from kycortex_agents.providers.openai_provider import OpenAIProvider
 from kycortex_agents.types import TaskStatus
 
 
-def build_openai_client(response=None, error=None):
+def build_openai_client(response=None, error=None, health_response=None, health_error=None):
     def create(**kwargs):
         if error is not None:
             raise error
         return response
 
-    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    def list_models(**kwargs):
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
-def build_anthropic_client(response=None, error=None):
+def build_anthropic_client(response=None, error=None, health_response=None, health_error=None):
     def create(**kwargs):
         if error is not None:
             raise error
         return response
 
-    return SimpleNamespace(messages=SimpleNamespace(create=create))
+    def list_models(**kwargs):
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        messages=SimpleNamespace(create=create),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
 class FakeHTTPResponse:
@@ -141,6 +157,47 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert snapshot.task_results["arch"].details["last_provider_call"]["model"] == "gpt-4o"
     assert snapshot.task_results["code"].details["last_provider_call"]["model"] == "claude-3-5-sonnet"
     assert snapshot.task_results["review"].details["last_provider_call"]["model"] == "llama3"
+    assert snapshot.task_results["arch"].details["provider_budget"] == {
+        "total_calls": 1,
+        "calls_by_provider": {"openai": 1},
+        "max_calls_per_agent": 0,
+        "max_calls_by_provider": {},
+        "remaining_calls": None,
+        "remaining_calls_by_provider": {},
+    }
+    assert snapshot.workflow_telemetry["tasks_with_provider_calls"] == 3
+    assert snapshot.workflow_telemetry["final_providers"] == ["anthropic", "ollama", "openai"]
+    assert snapshot.workflow_telemetry["provider_summary"]["openai"]["usage"] == {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "total_tokens": 15,
+    }
+    assert snapshot.workflow_telemetry["provider_summary"]["anthropic"]["usage"] == {
+        "cache_creation_input_tokens": 3,
+        "cache_read_input_tokens": 2,
+        "input_tokens": 12,
+        "output_tokens": 8,
+        "total_tokens": 20,
+    }
+    assert snapshot.workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
+        "count": 1,
+        "total": review.last_provider_call["duration_ms"],
+        "min": review.last_provider_call["duration_ms"],
+        "max": review.last_provider_call["duration_ms"],
+        "avg": review.last_provider_call["duration_ms"],
+    }
+    assert snapshot.workflow_telemetry["usage"] == {
+        "cache_creation_input_tokens": 3,
+        "cache_read_input_tokens": 2,
+        "input_tokens": 36,
+        "output_tokens": 22,
+        "total_tokens": 58,
+    }
+    assert any(
+        event["task_id"] == "arch"
+        and (event["details"].get("provider_budget") or {}).get("calls_by_provider") == {"openai": 1}
+        for event in project.execution_events
+    )
 
 
 def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
@@ -188,7 +245,101 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert failed.last_provider_call["retryable"] is True
     assert failed.last_provider_call["error_message"] == "OpenAI provider failed to call the model API"
     assert snapshot.task_results["arch"].failure.details["provider_call"]["model"] == "gpt-4o"
+    assert snapshot.task_results["arch"].failure.details["provider_budget"] == {
+        "total_calls": 1,
+        "calls_by_provider": {"openai": 1},
+        "max_calls_per_agent": 0,
+        "max_calls_by_provider": {},
+        "remaining_calls": None,
+        "remaining_calls_by_provider": {},
+    }
     assert completed.last_provider_call["usage"]["total_tokens"] == 13
+
+
+def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_failure_policy="continue")
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
+
+    primary_config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token",
+        llm_model="gpt-4o",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+    primary_provider = OpenAIProvider(
+        primary_config,
+        client=build_openai_client(health_error=RuntimeError("openai health down")),
+    )
+    fallback_provider = AnthropicProvider(
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            llm_provider="anthropic",
+            api_key="token",
+            llm_model="claude-3-5-sonnet",
+        ),
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            response=SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="FALLBACK RESULT")],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=8),
+            ),
+        ),
+    )
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+    registry = AgentRegistry(
+        {
+            "architect": ProviderBackedAgent(
+                "ArchitectAgent",
+                "Architecture",
+                primary_provider,
+                primary_config,
+            )
+        }
+    )
+
+    Orchestrator(config, registry=registry).execute_workflow(project)
+
+    task = project.get_task("arch")
+    snapshot = project.snapshot()
+
+    assert task.status == TaskStatus.DONE.value
+    assert task.last_provider_call["provider"] == "anthropic"
+    assert task.last_provider_call["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_health_check",
+            "error_type": "ProviderTransientError",
+            "error_message": "OpenAI provider health check failed",
+            "retryable": True,
+        }
+    ]
+    assert task.last_provider_call["provider_health"]["openai"]["status"] == "degraded"
+    assert snapshot.task_results["arch"].details["last_provider_call"]["provider"] == "anthropic"
+    assert snapshot.workflow_telemetry["observed_providers"] == ["anthropic", "openai"]
+    assert snapshot.workflow_telemetry["final_providers"] == ["anthropic"]
+    assert snapshot.workflow_telemetry["fallback_summary"] == {
+        "task_count": 1,
+        "entry_count": 1,
+        "by_provider": {"openai": 1},
+        "by_status": {"failed_health_check": 1},
+    }
+    assert snapshot.workflow_telemetry["error_summary"]["fallback_error_types"] == {
+        "ProviderTransientError": 1,
+    }
+    assert any(
+        event["task_id"] == "arch"
+        and event["details"].get("provider_call", {}).get("fallback_history")
+        for event in project.execution_events
+    )
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])

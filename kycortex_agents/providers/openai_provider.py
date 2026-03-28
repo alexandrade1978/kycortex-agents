@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any, Optional
 
 from kycortex_agents.config import KYCortexConfig
@@ -22,6 +23,36 @@ class OpenAIProvider(BaseLLMProvider):
 
             self._client = OpenAI(api_key=self.config.api_key)
         return self._client
+
+    def _health_check_timeout(self) -> float:
+        return min(self.config.timeout_seconds, 5.0)
+
+    def health_check(self) -> dict[str, Any]:
+        client = self._get_client()
+        models_api = getattr(client, "models", None)
+        list_models = getattr(models_api, "list", None)
+        if not callable(list_models):
+            return super().health_check()
+
+        timeout_seconds = self._health_check_timeout()
+        started_at = perf_counter()
+        try:
+            list_models(timeout=timeout_seconds)
+        except Exception as exc:
+            self._last_call_metadata = None
+            if is_transient_provider_exception(exc):
+                raise ProviderTransientError("OpenAI provider health check failed") from exc
+            raise AgentExecutionError("OpenAI provider health check was rejected") from exc
+
+        completed_at = perf_counter()
+        return {
+            "provider": self.config.llm_provider,
+            "model": self.config.llm_model,
+            "status": "healthy",
+            "active_check": True,
+            "timeout_seconds": round(timeout_seconds, 6),
+            "latency_ms": round((completed_at - started_at) * 1000, 3),
+        }
 
     def _build_messages(self, system_prompt: str, user_message: str) -> list[dict[str, str]]:
         return [

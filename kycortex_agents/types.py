@@ -25,6 +25,7 @@ __all__ = [
     "WorkflowErrorSummary",
     "WorkflowFallbackSummary",
     "WorkflowOutcome",
+    "WorkflowProgressSummary",
     "WorkflowProviderSummary",
     "WorkflowRepairSummary",
     "WorkflowResumeSummary",
@@ -138,6 +139,17 @@ class WorkflowAcceptanceSummary(TypedDict):
     pending_task_count: int
 
 
+class WorkflowProgressSummary(TypedDict):
+    """Workflow execution-progress summary embedded in aggregate telemetry."""
+
+    pending_task_count: int
+    running_task_count: int
+    runnable_task_count: int
+    blocked_task_count: int
+    terminal_task_count: int
+    completion_percent: MetricValue
+
+
 class WorkflowResumeSummary(TypedDict):
     """Workflow resume activity summary embedded in aggregate telemetry."""
 
@@ -196,6 +208,7 @@ class WorkflowTelemetry(TypedDict):
 
     task_count: int
     task_status_counts: Dict[str, int]
+    progress_summary: WorkflowProgressSummary
     tasks_with_provider_calls: int
     tasks_without_provider_calls: int
     acceptance_summary: WorkflowAcceptanceSummary
@@ -238,6 +251,14 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
     return {
         "task_count": 0,
         "task_status_counts": {},
+        "progress_summary": {
+            "pending_task_count": 0,
+            "running_task_count": 0,
+            "runnable_task_count": 0,
+            "blocked_task_count": 0,
+            "terminal_task_count": 0,
+            "completion_percent": 0,
+        },
         "tasks_with_provider_calls": 0,
         "tasks_without_provider_calls": 0,
         "acceptance_summary": {

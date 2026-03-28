@@ -292,6 +292,14 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             "failed": 1,
             "skipped": 1,
         },
+        "progress_summary": {
+            "pending_task_count": 1,
+            "running_task_count": 0,
+            "runnable_task_count": 1,
+            "blocked_task_count": 0,
+            "terminal_task_count": 3,
+            "completion_percent": 75,
+        },
         "tasks_with_provider_calls": 2,
         "tasks_without_provider_calls": 2,
         "acceptance_summary": {

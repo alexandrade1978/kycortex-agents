@@ -5987,6 +5987,14 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
     assert progress_record.task_id == "arch"
     assert progress_record.task_status == TaskStatus.DONE.value
     assert progress_record.workflow_telemetry["task_status_counts"]["done"] == 1
+    assert progress_record.workflow_telemetry["progress_summary"] == {
+        "pending_task_count": 0,
+        "running_task_count": 0,
+        "runnable_task_count": 0,
+        "blocked_task_count": 0,
+        "terminal_task_count": 1,
+        "completion_percent": 100,
+    }
     assert finished_record.project_name == "Demo"
     assert finished_record.terminal_outcome == WorkflowOutcome.COMPLETED.value
     assert finished_record.workflow_telemetry["task_count"] == 1
@@ -6047,8 +6055,24 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
         "failed": 0,
         "skipped": 0,
     }
+    assert progress_events[0]["details"]["workflow_telemetry"]["progress_summary"] == {
+        "pending_task_count": 1,
+        "running_task_count": 0,
+        "runnable_task_count": 1,
+        "blocked_task_count": 0,
+        "terminal_task_count": 1,
+        "completion_percent": 50,
+    }
     assert progress_events[1]["task_id"] == "code"
     assert progress_events[1]["details"]["workflow_telemetry"]["task_status_counts"]["done"] == 2
+    assert progress_events[1]["details"]["workflow_telemetry"]["progress_summary"] == {
+        "pending_task_count": 0,
+        "running_task_count": 0,
+        "runnable_task_count": 0,
+        "blocked_task_count": 0,
+        "terminal_task_count": 2,
+        "completion_percent": 100,
+    }
     assert project.execution_events[-1]["event"] == "workflow_finished"
     assert project.execution_events[-1]["details"]["workflow_duration_ms"] is not None
     assert project.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.COMPLETED.value

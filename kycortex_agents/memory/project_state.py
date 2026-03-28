@@ -20,6 +20,7 @@ from kycortex_agents.types import (
     TaskStatus,
     WorkflowAcceptanceSummary,
     WorkflowOutcome,
+    WorkflowProgressSummary,
     WorkflowProviderSummary,
     WorkflowRepairSummary,
     WorkflowResumeSummary,
@@ -1197,6 +1198,7 @@ class ProjectState:
         return {
             "task_count": len(self.tasks),
             "task_status_counts": self._ordered_task_status_counts(task_status_counts),
+            "progress_summary": self._progress_summary(task_status_counts),
             "tasks_with_provider_calls": tasks_with_provider_calls,
             "tasks_without_provider_calls": max(len(self.tasks) - tasks_with_provider_calls, 0),
             "acceptance_summary": self._acceptance_summary(),
@@ -1219,6 +1221,34 @@ class ProjectState:
                 "final_error_types": dict(sorted(final_error_types.items())),
                 "fallback_error_types": dict(sorted(fallback_error_types.items())),
             },
+        }
+
+    def _progress_summary(self, task_status_counts: Dict[str, int]) -> WorkflowProgressSummary:
+        total_task_count = len(self.tasks)
+        pending_task_count = task_status_counts.get(TaskStatus.PENDING.value, 0)
+        running_task_count = task_status_counts.get(TaskStatus.RUNNING.value, 0)
+        terminal_task_count = sum(
+            task_status_counts.get(status.value, 0)
+            for status in (TaskStatus.DONE, TaskStatus.FAILED, TaskStatus.SKIPPED)
+        )
+        try:
+            runnable_task_count = len(self.runnable_tasks())
+            blocked_task_count = len(self.blocked_tasks())
+        except WorkflowDefinitionError:
+            runnable_task_count = 0
+            blocked_task_count = pending_task_count
+        completion_percent = (
+            self._normalize_metric_number((terminal_task_count / total_task_count) * 100.0)
+            if total_task_count > 0
+            else 0
+        )
+        return {
+            "pending_task_count": pending_task_count,
+            "running_task_count": running_task_count,
+            "runnable_task_count": runnable_task_count,
+            "blocked_task_count": blocked_task_count,
+            "terminal_task_count": terminal_task_count,
+            "completion_percent": completion_percent,
         }
 
     def _acceptance_summary(self) -> WorkflowAcceptanceSummary:

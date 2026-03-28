@@ -639,7 +639,6 @@ class ProjectState:
         """Mark the workflow finished under the supplied phase label."""
 
         finished_at = datetime.now(timezone.utc).isoformat()
-        workflow_telemetry = self._workflow_telemetry_summary()
         self.phase = phase
         self.workflow_finished_at = finished_at
         if acceptance_policy is not None:
@@ -655,6 +654,7 @@ class ProjectState:
             else resolved_outcome == WorkflowOutcome.COMPLETED.value
         )
         self.acceptance_evaluation = dict(acceptance_evaluation or {})
+        workflow_telemetry = self._workflow_telemetry_summary()
         self._record_execution_event(
             event="workflow_finished",
             timestamp=finished_at,
@@ -1144,6 +1144,9 @@ class ProjectState:
             "task_status_counts": self._ordered_task_status_counts(task_status_counts),
             "tasks_with_provider_calls": tasks_with_provider_calls,
             "tasks_without_provider_calls": max(len(self.tasks) - tasks_with_provider_calls, 0),
+            "acceptance_summary": self._acceptance_summary(),
+            "resume_summary": self._resume_summary(),
+            "repair_summary": self._repair_summary(),
             "final_providers": sorted(final_providers),
             "observed_providers": sorted(observed_providers),
             "provider_summary": normalized_provider_summary,
@@ -1162,6 +1165,77 @@ class ProjectState:
                 "fallback_error_types": dict(sorted(fallback_error_types.items())),
             },
         }
+
+    def _acceptance_summary(self) -> Dict[str, Any]:
+        acceptance_evaluation = self.acceptance_evaluation if isinstance(self.acceptance_evaluation, dict) else {}
+        return {
+            "policy": self.acceptance_policy,
+            "accepted": self.acceptance_criteria_met,
+            "reason": acceptance_evaluation.get("reason"),
+            "terminal_outcome": self.terminal_outcome,
+            "failure_category": self.failure_category,
+            "evaluated_task_count": len(self._list_like_values(acceptance_evaluation.get("evaluated_task_ids"))),
+            "required_task_count": len(self._list_like_values(acceptance_evaluation.get("required_task_ids"))),
+            "completed_task_count": len(self._list_like_values(acceptance_evaluation.get("completed_task_ids"))),
+            "failed_task_count": len(self._list_like_values(acceptance_evaluation.get("failed_task_ids"))),
+            "skipped_task_count": len(self._list_like_values(acceptance_evaluation.get("skipped_task_ids"))),
+            "pending_task_count": len(self._list_like_values(acceptance_evaluation.get("pending_task_ids"))),
+        }
+
+    def _resume_summary(self) -> Dict[str, Any]:
+        resumed_events = [
+            event for event in self.execution_events
+            if isinstance(event, dict) and event.get("event") == "workflow_resumed"
+        ]
+        reasons: Dict[str, int] = {}
+        resumed_task_ids: List[str] = []
+        for event in resumed_events:
+            raw_details = event.get("details")
+            details: Dict[str, Any] = raw_details if isinstance(raw_details, dict) else {}
+            reason = details.get("reason")
+            if isinstance(reason, str) and reason:
+                reasons[reason] = reasons.get(reason, 0) + 1
+            resumed_task_ids.extend(self._string_list(details.get("task_ids")))
+        unique_task_ids = sorted(set(resumed_task_ids))
+        return {
+            "count": len(resumed_events),
+            "reasons": dict(sorted(reasons.items())),
+            "task_count": len(resumed_task_ids),
+            "unique_task_count": len(unique_task_ids),
+            "unique_task_ids": unique_task_ids,
+            "last_resumed_at": self.workflow_last_resumed_at,
+        }
+
+    def _repair_summary(self) -> Dict[str, Any]:
+        failure_categories: Dict[str, int] = {}
+        failed_task_ids: List[str] = []
+        for entry in self.repair_history:
+            if not isinstance(entry, dict):
+                continue
+            failure_category = entry.get("failure_category")
+            if isinstance(failure_category, str) and failure_category:
+                failure_categories[failure_category] = failure_categories.get(failure_category, 0) + 1
+            failed_task_ids.extend(self._string_list(entry.get("failed_task_ids")))
+        unique_failed_task_ids = sorted(set(failed_task_ids))
+        return {
+            "cycle_count": self.repair_cycle_count,
+            "max_cycles": self.repair_max_cycles,
+            "budget_remaining": max(self.repair_max_cycles - self.repair_cycle_count, 0),
+            "history_count": len([entry for entry in self.repair_history if isinstance(entry, dict)]),
+            "failure_categories": dict(sorted(failure_categories.items())),
+            "failed_task_count": len(unique_failed_task_ids),
+            "failed_task_ids": unique_failed_task_ids,
+        }
+
+    def _list_like_values(self, value: Any) -> List[Any]:
+        if not isinstance(value, list):
+            return []
+        return list(value)
+
+    def _string_list(self, value: Any) -> List[str]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, str) and item]
 
     def _provider_attempt_count(self, provider_call: Dict[str, Any]) -> int:
         attempt_history = provider_call.get("attempt_history")

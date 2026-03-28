@@ -140,7 +140,7 @@ The runtime persists state after:
 
 This design ensures retries, failures, artifacts, decisions, provider metadata, and execution events survive restarts.
 
-The terminal `workflow_finished` execution event also carries a `workflow_telemetry` summary so callers can inspect provider usage, fallback activity, retries, and aggregate duration without manually re-scanning every task record.
+The terminal `workflow_finished` execution event also carries a `workflow_telemetry` summary so callers can inspect provider usage, fallback activity, retries, aggregate duration, acceptance outcomes, workflow resume activity, and repair-cycle usage without manually re-scanning every task record.
 
 ## Context Flow Between Tasks
 
@@ -167,7 +167,7 @@ Useful public inspection methods on `ProjectState` include:
 
 These methods are the preferred way to inspect workflow progress, blocked dependencies, and normalized task results.
 
-When consumers need workflow-level observability instead of per-task detail, `snapshot().workflow_telemetry` is the supported aggregate view.
+When consumers need workflow-level observability instead of per-task detail, `snapshot().workflow_telemetry` is the supported aggregate view. It now combines provider metrics with acceptance, resume, and repair summaries drawn from the persisted workflow state and execution history.
 
 ## Common Configuration Patterns
 

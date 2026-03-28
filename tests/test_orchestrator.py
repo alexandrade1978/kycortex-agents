@@ -5984,6 +5984,7 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
     assert finished_record.terminal_outcome == WorkflowOutcome.COMPLETED.value
     assert finished_record.workflow_telemetry["task_count"] == 1
     assert finished_record.workflow_telemetry["tasks_with_provider_calls"] == 0
+    assert finished_record.workflow_telemetry["acceptance_summary"]["accepted"] is True
 
 
 def test_execute_workflow_respects_task_dependencies(tmp_path):

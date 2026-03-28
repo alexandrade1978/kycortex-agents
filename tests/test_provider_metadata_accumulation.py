@@ -167,6 +167,9 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     }
     assert snapshot.workflow_telemetry["tasks_with_provider_calls"] == 3
     assert snapshot.workflow_telemetry["final_providers"] == ["anthropic", "ollama", "openai"]
+    assert snapshot.workflow_telemetry["acceptance_summary"]["accepted"] is True
+    assert snapshot.workflow_telemetry["acceptance_summary"]["policy"] == snapshot.acceptance_policy
+    assert snapshot.workflow_telemetry["acceptance_summary"]["terminal_outcome"] == snapshot.terminal_outcome
     assert snapshot.workflow_telemetry["provider_summary"]["openai"]["usage"] == {
         "input_tokens": 10,
         "output_tokens": 5,

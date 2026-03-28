@@ -786,12 +786,21 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
     )
 
     resumed = project.resume_failed_tasks(include_failed_tasks=False, failed_task_ids=["arch"], additional_task_ids=["arch__repair_1"])
+    snapshot = project.snapshot()
 
     assert resumed == ["review"]
     assert project.get_task("arch").status == TaskStatus.FAILED.value
     assert project.get_task("review").status == TaskStatus.PENDING.value
     assert project.execution_events[-1]["event"] == "workflow_resumed"
     assert project.execution_events[-1]["details"]["task_ids"] == ["review", "arch__repair_1"]
+    assert snapshot.workflow_telemetry["resume_summary"] == {
+        "count": 1,
+        "reasons": {"failed_workflow": 1},
+        "task_count": 2,
+        "unique_task_count": 2,
+        "unique_task_ids": ["arch__repair_1", "review"],
+        "last_resumed_at": project.workflow_last_resumed_at,
+    }
 
 
 def test_create_repair_task_records_lineage_and_requeue_audit():
@@ -1086,6 +1095,57 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
     assert snapshot.repair_budget_remaining == 1
     assert snapshot.repair_history == [entry]
     assert project.execution_events[-1]["event"] == "workflow_repair_cycle_started"
+    assert snapshot.workflow_telemetry["repair_summary"] == {
+        "cycle_count": 1,
+        "max_cycles": 2,
+        "budget_remaining": 1,
+        "history_count": 1,
+        "failure_categories": {"test_validation": 1},
+        "failed_task_count": 1,
+        "failed_task_ids": ["tests"],
+    }
+
+
+def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    project.mark_workflow_running(acceptance_policy="required_tasks", repair_max_cycles=1)
+    project.mark_workflow_finished(
+        "completed",
+        acceptance_policy="required_tasks",
+        terminal_outcome=WorkflowOutcome.COMPLETED.value,
+        acceptance_criteria_met=True,
+        acceptance_evaluation={
+            "policy": "required_tasks",
+            "accepted": True,
+            "reason": "all_required_tasks_done",
+            "evaluated_task_ids": ["arch", "code"],
+            "required_task_ids": ["arch"],
+            "completed_task_ids": ["arch", "code"],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+        },
+    )
+
+    event = project.execution_events[-1]
+    snapshot = project.snapshot()
+
+    assert event["event"] == "workflow_finished"
+    assert event["details"]["workflow_telemetry"]["acceptance_summary"] == {
+        "policy": "required_tasks",
+        "accepted": True,
+        "reason": "all_required_tasks_done",
+        "terminal_outcome": WorkflowOutcome.COMPLETED.value,
+        "failure_category": None,
+        "evaluated_task_count": 2,
+        "required_task_count": 1,
+        "completed_task_count": 2,
+        "failed_task_count": 0,
+        "skipped_task_count": 0,
+        "pending_task_count": 0,
+    }
+    assert snapshot.workflow_telemetry["acceptance_summary"] == event["details"]["workflow_telemetry"]["acceptance_summary"]
 
 
 def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_details():

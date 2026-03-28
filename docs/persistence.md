@@ -99,7 +99,7 @@ Persistence is what makes resume behavior deterministic across processes.
 That snapshot exposes:
 
 - `task_results` with `TaskResult`, `AgentOutput`, and `FailureRecord` data
-- `workflow_telemetry` with aggregated per-workflow provider usage, duration, retry, fallback, and error summaries
+- `workflow_telemetry` with aggregated per-workflow provider usage, duration, retry, fallback, acceptance, resume, and repair summaries
 - normalized `DecisionRecord` and `ArtifactRecord` collections
 - workflow lifecycle timestamps and overall `WorkflowStatus`
 - durable execution-event audit trails for workflow and task transitions

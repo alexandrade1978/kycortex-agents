@@ -184,6 +184,8 @@ This distinction is what allows the runtime to retry only retryable failures, op
 
 Custom providers should implement `BaseLLMProvider`, return metadata through `get_last_call_metadata()` when they want observability data to flow through the rest of the runtime, and override `health_check()` when they can perform an active readiness probe.
 
+For compatibility with legacy injected providers, the runtime also tolerates providers that omit `health_check()`. In that case the preflight path records a passive `ready` snapshot with `active_check=False` and continues to generation.
+
 Custom provider implementations should also preserve the retryability split used by the built-in providers:
 
 - raise `ProviderTransientError` for retryable outages

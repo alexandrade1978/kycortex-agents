@@ -96,6 +96,31 @@ def test_chat_returns_response_content():
     assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
 
 
+def test_chat_supports_provider_without_health_check_method():
+    class LegacyProvider:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            return "ok"
+
+        def get_last_call_metadata(self):
+            return None
+
+    provider = LegacyProvider()
+    agent = DummyAgent(provider)
+
+    result = agent.chat("system", "message")
+
+    assert result == "ok"
+    assert provider.calls == [("system", "message")]
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "ready"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
+
+
 def test_chat_raises_when_provider_execution_plan_is_empty():
     provider = DummyProvider(response="ok")
     agent = DummyAgent(provider)

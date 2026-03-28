@@ -664,8 +664,17 @@ class BaseAgent(ABC):
                 self._record_provider_transient_failure(provider_name, started_at)
                 raise ProviderTransientError(error_message)
             raise AgentExecutionError(error_message)
+        health_check = getattr(provider, "health_check", None)
         try:
-            snapshot = dict(provider.health_check())
+            if callable(health_check):
+                snapshot = dict(health_check())
+            else:
+                snapshot = {
+                    "provider": provider_name,
+                    "model": model_name,
+                    "status": "ready",
+                    "active_check": False,
+                }
         except ProviderTransientError as exc:
             completed_at = perf_counter()
             snapshot = {

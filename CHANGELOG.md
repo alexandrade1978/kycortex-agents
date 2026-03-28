@@ -13,6 +13,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 - Persisted provider-budget summaries in task failures, task details, provider-matrix summaries, and workflow inspection paths.
 - Workflow-level aggregate `workflow_telemetry` summaries in `ProjectSnapshot`, terminal `workflow_finished` execution events, and final structured orchestrator logs.
 - Operational workflow telemetry rollups for acceptance outcomes, workflow resume activity, and repair-cycle usage inside the aggregate `workflow_telemetry` summary.
+- Provider-matrix structured workflow summaries now embed the same aggregate `workflow_telemetry` payload exposed by `ProjectSnapshot`.
 
 ### Changed
 

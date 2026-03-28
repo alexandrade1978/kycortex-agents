@@ -53,9 +53,31 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     project.phase = "completed"
     project.terminal_outcome = "completed"
     project.acceptance_criteria_met = True
+    project.acceptance_policy = "required_tasks"
+    project.acceptance_evaluation = {
+        "policy": "required_tasks",
+        "accepted": True,
+        "reason": "all_required_tasks_done",
+        "evaluated_task_ids": ["tests"],
+        "required_task_ids": ["tests"],
+        "completed_task_ids": ["tests"],
+        "failed_task_ids": [],
+        "skipped_task_ids": [],
+        "pending_task_ids": [],
+    }
     project.repair_cycle_count = 1
     project.repair_max_cycles = 1
     project.repair_history = [{"cycle": 1, "failed_task_ids": ["tests"]}]
+    project.workflow_last_resumed_at = "2026-03-28T12:00:00+00:00"
+    project.execution_events.append(
+        {
+            "event": "workflow_resumed",
+            "timestamp": "2026-03-28T12:00:00+00:00",
+            "task_id": None,
+            "status": "execution",
+            "details": {"reason": "failed_workflow", "task_ids": ["tests__repair_1"]},
+        }
+    )
     project.add_task(
         Task(
             id="tests",
@@ -90,6 +112,36 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     assert summary["repair_cycle_count"] == 1
     assert summary["repair_task_ids"] == ["tests__repair_1"]
     assert summary["task_status_counts"] == {"done": 2}
+    assert summary["workflow_telemetry"]["acceptance_summary"] == {
+        "policy": "required_tasks",
+        "accepted": True,
+        "reason": "all_required_tasks_done",
+        "terminal_outcome": "completed",
+        "failure_category": None,
+        "evaluated_task_count": 1,
+        "required_task_count": 1,
+        "completed_task_count": 1,
+        "failed_task_count": 0,
+        "skipped_task_count": 0,
+        "pending_task_count": 0,
+    }
+    assert summary["workflow_telemetry"]["resume_summary"] == {
+        "count": 1,
+        "reasons": {"failed_workflow": 1},
+        "task_count": 1,
+        "unique_task_count": 1,
+        "unique_task_ids": ["tests__repair_1"],
+        "last_resumed_at": "2026-03-28T12:00:00+00:00",
+    }
+    assert summary["workflow_telemetry"]["repair_summary"] == {
+        "cycle_count": 1,
+        "max_cycles": 1,
+        "budget_remaining": 0,
+        "history_count": 1,
+        "failure_categories": {},
+        "failed_task_count": 1,
+        "failed_task_ids": ["tests"],
+    }
 
 
 def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):

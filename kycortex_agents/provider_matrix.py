@@ -231,6 +231,7 @@ def summarize_workflow_run(
 ) -> dict[str, Any]:
     """Build a compact structured summary for a provider workflow run."""
 
+    snapshot = project.snapshot()
     task_status_counts: dict[str, int] = {}
     task_summaries = []
     repair_task_ids = []
@@ -272,6 +273,7 @@ def summarize_workflow_run(
         "repair_history": list(project.repair_history),
         "workflow_last_resumed_at": project.workflow_last_resumed_at,
         "workflow_finished_at": project.workflow_finished_at,
+        "workflow_telemetry": snapshot.workflow_telemetry,
         "state_file": project.state_file,
         "output_dir": output_dir,
         "task_status_counts": task_status_counts,

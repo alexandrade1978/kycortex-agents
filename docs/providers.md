@@ -167,7 +167,7 @@ The agent runtime also emits higher-level provider execution metadata such as:
 - provider timeout resolution by backend
 - circuit-breaker state and remaining cooldown
 
-This metadata is later attached to task outputs, execution events, provider-matrix summaries, and persisted project state for post-run inspection.
+This metadata is later attached to task outputs, execution events, provider-matrix summaries, and persisted project state for post-run inspection. Provider-matrix summaries now also embed the aggregate workflow-level `workflow_telemetry` payload so comparative runs can inspect acceptance, resume, repair, and provider behavior from the same compact report.
 
 ## Error Handling
 

@@ -23,7 +23,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [examples/example_resume_workflow.py](../examples/example_resume_workflow.py): persisted-state resume example using the public top-level API.
 - [examples/example_custom_agent.py](../examples/example_custom_agent.py): custom-agent example using `BaseAgent` and `AgentRegistry` through the public API.
 - [examples/example_multi_provider.py](../examples/example_multi_provider.py): provider-configuration example showing the same workflow across OpenAI, Anthropic, and Ollama.
-- [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py): empirical provider-matrix runner that skips unavailable providers and writes a structured full-workflow validation summary.
+- [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py): empirical provider-matrix runner that skips unavailable providers and writes a structured full-workflow validation summary, including aggregate workflow telemetry.
 - [examples/example_test_mode.py](../examples/example_test_mode.py): deterministic local execution example using fake agents instead of live provider calls.
 - [examples/example_complex_workflow.py](../examples/example_complex_workflow.py): converging multi-parent workflow example showing merged artifacts and decisions flowing into a downstream task.
 - [examples/example_failure_recovery.py](../examples/example_failure_recovery.py): persisted failure-and-resume example showing retry exhaustion, reload, and `resume_failed` recovery.

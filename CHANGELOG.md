@@ -16,6 +16,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 - Provider-matrix structured workflow summaries now embed the same aggregate `workflow_telemetry` payload exposed by `ProjectSnapshot`.
 - Explicit public telemetry typed contracts in `kycortex_agents.types`, including `WorkflowTelemetry` and its nested workflow acceptance, resume, repair, fallback, error, provider, and metric summary shapes.
 - Workflow repair telemetry summaries now expose aggregated repair trigger reasons and the last observed repair trigger through `workflow_telemetry["repair_summary"]`.
+- `TaskResult` snapshots now expose typed per-task `resource_telemetry` summaries covering normalized task timing plus provider duration and usage metadata.
 
 ### Changed
 

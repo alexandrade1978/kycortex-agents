@@ -19,6 +19,7 @@ __all__ = [
     "MetricDistribution",
     "ProjectSnapshot",
     "TaskResult",
+    "TaskResourceTelemetry",
     "TaskStatus",
     "WorkflowAcceptanceSummary",
     "WorkflowErrorSummary",
@@ -107,6 +108,18 @@ class MetricDistribution(TypedDict):
     min: MetricValue
     max: MetricValue
     avg: MetricValue
+
+
+class TaskResourceTelemetry(TypedDict):
+    """Per-task normalized timing and provider-usage summary exposed through task results."""
+
+    has_provider_call: bool
+    provider: Optional[str]
+    model: Optional[str]
+    task_duration_ms: MetricValue
+    last_attempt_duration_ms: MetricValue
+    provider_duration_ms: MetricValue
+    usage: NumericMetricMap
 
 
 class WorkflowAcceptanceSummary(TypedDict):
@@ -206,6 +219,18 @@ def _empty_metric_distribution() -> MetricDistribution:
         "min": None,
         "max": None,
         "avg": None,
+    }
+
+
+def empty_task_resource_telemetry() -> TaskResourceTelemetry:
+    return {
+        "has_provider_call": False,
+        "provider": None,
+        "model": None,
+        "task_duration_ms": None,
+        "last_attempt_duration_ms": None,
+        "provider_duration_ms": None,
+        "usage": {},
     }
 
 
@@ -349,6 +374,7 @@ class TaskResult:
     agent_name: str
     output: Optional[AgentOutput] = None
     failure: Optional[FailureRecord] = None
+    resource_telemetry: TaskResourceTelemetry = field(default_factory=empty_task_resource_telemetry)
     details: Dict[str, Any] = field(default_factory=dict)
     started_at: Optional[str] = None
     completed_at: Optional[str] = None

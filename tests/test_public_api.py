@@ -129,6 +129,7 @@ def test_public_contract_modules_define_explicit_exports():
         "MetricDistribution",
         "ProjectSnapshot",
         "TaskResult",
+        "TaskResourceTelemetry",
         "TaskStatus",
         "WorkflowAcceptanceSummary",
         "WorkflowErrorSummary",
@@ -201,6 +202,7 @@ def test_public_type_module_defines_docstrings():
     assert types_module.ArtifactRecord.__doc__ == "Structured artifact entry captured from an agent output or project snapshot."
     assert types_module.DecisionRecord.__doc__ == "Structured project decision captured during workflow execution."
     assert types_module.FailureRecord.__doc__ == "Normalized failure details exposed through task results and snapshots."
+    assert types_module.TaskResourceTelemetry.__doc__ == "Per-task normalized timing and provider-usage summary exposed through task results."
     assert types_module.AgentInput.__doc__ == "Validated input payload passed into an agent execution entrypoint."
     assert types_module.AgentOutput.__doc__ == "Normalized agent result payload persisted back into workflow state."
     assert types_module.TaskResult.__doc__ == "Public task-result view exposed through workflow snapshots."

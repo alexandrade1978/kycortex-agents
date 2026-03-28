@@ -227,6 +227,15 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert arch_result.output.decisions[0].decision == "Persist snapshots"
     assert arch_result.output.decisions[0].metadata["priority"] == "high"
     assert arch_result.details["last_provider_call"]["usage"]["total_tokens"] == 15
+    assert arch_result.resource_telemetry == {
+        "has_provider_call": True,
+        "provider": "openai",
+        "model": "gpt-4o",
+        "task_duration_ms": 120000,
+        "last_attempt_duration_ms": 120000,
+        "provider_duration_ms": 120.5,
+        "usage": {"completion_tokens": 5, "prompt_tokens": 10, "total_tokens": 15},
+    }
 
     assert review_result.status == TaskStatus.FAILED
     assert review_result.failure is not None
@@ -235,16 +244,35 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.failure.details["provider_call"]["provider"] == "ollama"
     assert review_result.failure.details["last_resumed_at"] == "2026-03-22T10:07:00+00:00"
     assert review_result.details["history"][1]["event"] == "failed"
+    assert review_result.resource_telemetry == {
+        "has_provider_call": True,
+        "provider": "ollama",
+        "model": "llama3",
+        "task_duration_ms": 330000,
+        "last_attempt_duration_ms": 60000,
+        "provider_duration_ms": 125,
+        "usage": {},
+    }
 
     assert docs_result.status == TaskStatus.PENDING
     assert docs_result.output is None
     assert docs_result.failure is None
+    assert docs_result.resource_telemetry == {
+        "has_provider_call": False,
+        "provider": None,
+        "model": None,
+        "task_duration_ms": None,
+        "last_attempt_duration_ms": None,
+        "provider_duration_ms": None,
+        "usage": {},
+    }
 
     assert tests_result.status == TaskStatus.SKIPPED
     assert tests_result.output is not None
     assert tests_result.output.summary == "Skipped because dependency 'review' failed"
     assert tests_result.output.artifacts[0].artifact_type == ArtifactType.TEST
     assert tests_result.output.metadata["assigned_to"] == "qa_tester"
+    assert tests_result.resource_telemetry["has_provider_call"] is False
 
     assert snapshot.decisions[0].topic == "architecture"
     assert snapshot.decisions[0].metadata["version"] == 2

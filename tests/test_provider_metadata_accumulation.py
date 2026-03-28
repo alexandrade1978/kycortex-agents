@@ -157,6 +157,15 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert snapshot.task_results["arch"].details["last_provider_call"]["model"] == "gpt-4o"
     assert snapshot.task_results["code"].details["last_provider_call"]["model"] == "claude-3-5-sonnet"
     assert snapshot.task_results["review"].details["last_provider_call"]["model"] == "llama3"
+    assert snapshot.task_results["arch"].resource_telemetry["provider"] == "openai"
+    assert snapshot.task_results["arch"].resource_telemetry["model"] == "gpt-4o"
+    assert snapshot.task_results["arch"].resource_telemetry["provider_duration_ms"] == arch.last_provider_call["duration_ms"]
+    assert snapshot.task_results["arch"].resource_telemetry["usage"] == {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "total_tokens": 15,
+    }
+    assert snapshot.task_results["review"].resource_telemetry["provider_duration_ms"] == review.last_provider_call["duration_ms"]
     assert snapshot.task_results["arch"].details["provider_budget"] == {
         "total_calls": 1,
         "calls_by_provider": {"openai": 1},
@@ -248,6 +257,9 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert failed.last_provider_call["retryable"] is True
     assert failed.last_provider_call["error_message"] == "OpenAI provider failed to call the model API"
     assert snapshot.task_results["arch"].failure.details["provider_call"]["model"] == "gpt-4o"
+    assert snapshot.task_results["arch"].resource_telemetry["has_provider_call"] is True
+    assert snapshot.task_results["arch"].resource_telemetry["provider"] == "openai"
+    assert snapshot.task_results["arch"].resource_telemetry["model"] == "gpt-4o"
     assert snapshot.task_results["arch"].failure.details["provider_budget"] == {
         "total_calls": 1,
         "calls_by_provider": {"openai": 1},

@@ -13,8 +13,10 @@ from kycortex_agents.types import (
     FailureCategory,
     FailureRecord,
     MetricDistribution,
+    NumericMetricMap,
     ProjectSnapshot,
     TaskResult,
+    TaskResourceTelemetry,
     TaskStatus,
     WorkflowAcceptanceSummary,
     WorkflowOutcome,
@@ -891,6 +893,7 @@ class ProjectState:
             task_status = self._normalize_task_status(task.status)
             failure = None
             output = None
+            resource_telemetry = self._task_resource_telemetry(task)
             if task_status == TaskStatus.FAILED:
                 failure = FailureRecord(
                     message=task.output or task.last_error or "Task failed without output",
@@ -923,6 +926,7 @@ class ProjectState:
                 agent_name=task.assigned_to,
                 output=output,
                 failure=failure,
+                resource_telemetry=resource_telemetry,
                 details={
                     "attempts": task.attempts,
                     "retry_limit": task.retry_limit,
@@ -1306,13 +1310,34 @@ class ProjectState:
                 return round(float(value), 3)
         return None
 
+    def _task_resource_telemetry(self, task: Task) -> TaskResourceTelemetry:
+        task_duration_ms = self._duration_ms(task.started_at, task.completed_at)
+        last_attempt_duration_ms = self._duration_ms(task.last_attempt_started_at, task.completed_at)
+        provider_call = task.last_provider_call if isinstance(task.last_provider_call, dict) else {}
+        usage_metrics: Dict[str, float] = {}
+        usage = provider_call.get("usage")
+        if isinstance(usage, dict):
+            self._accumulate_numeric_metrics(usage_metrics, usage)
+        provider = provider_call.get("provider") if isinstance(provider_call.get("provider"), str) else None
+        model = provider_call.get("model") if isinstance(provider_call.get("model"), str) else None
+        provider_duration_ms = self._provider_call_duration_ms(provider_call) if provider_call else None
+        return {
+            "has_provider_call": bool(provider_call),
+            "provider": provider,
+            "model": model,
+            "task_duration_ms": self._normalize_metric_number(task_duration_ms) if task_duration_ms is not None else None,
+            "last_attempt_duration_ms": self._normalize_metric_number(last_attempt_duration_ms) if last_attempt_duration_ms is not None else None,
+            "provider_duration_ms": self._normalize_metric_number(provider_duration_ms) if provider_duration_ms is not None else None,
+            "usage": self._sorted_numeric_metrics(usage_metrics),
+        }
+
     def _accumulate_numeric_metrics(self, target: Dict[str, float], metrics: Dict[str, Any]) -> None:
         for key, value in metrics.items():
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 continue
             target[key] = target.get(key, 0.0) + float(value)
 
-    def _sorted_numeric_metrics(self, metrics: Dict[str, float]) -> Dict[str, Any]:
+    def _sorted_numeric_metrics(self, metrics: Dict[str, float]) -> NumericMetricMap:
         return {
             key: self._normalize_metric_number(value)
             for key, value in sorted(metrics.items())

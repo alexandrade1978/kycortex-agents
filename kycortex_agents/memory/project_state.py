@@ -12,11 +12,17 @@ from kycortex_agents.types import (
     DecisionRecord,
     FailureCategory,
     FailureRecord,
+    MetricDistribution,
     ProjectSnapshot,
     TaskResult,
     TaskStatus,
+    WorkflowAcceptanceSummary,
     WorkflowOutcome,
+    WorkflowProviderSummary,
+    WorkflowRepairSummary,
+    WorkflowResumeSummary,
     WorkflowStatus,
+    WorkflowTelemetry,
 )
 
 @dataclass
@@ -1038,7 +1044,7 @@ class ProjectState:
             "remaining_calls_by_provider": dict(provider_call.get("provider_remaining_calls_by_provider") or {}),
         }
 
-    def _workflow_telemetry_summary(self) -> Dict[str, Any]:
+    def _workflow_telemetry_summary(self) -> WorkflowTelemetry:
         task_status_counts: Dict[str, int] = {}
         tasks_with_provider_calls = 0
         final_providers: set[str] = set()
@@ -1131,13 +1137,33 @@ class ProjectState:
                 if isinstance(fallback_error_type, str) and fallback_error_type:
                     fallback_error_types[fallback_error_type] = fallback_error_types.get(fallback_error_type, 0) + 1
 
-        normalized_provider_summary: Dict[str, Dict[str, Any]] = {}
+        normalized_provider_summary: Dict[str, WorkflowProviderSummary] = {}
         for provider_name in sorted(provider_summary):
-            summary_for_provider = dict(provider_summary[provider_name])
-            duration_series = list(summary_for_provider.pop("duration_values"))
-            summary_for_provider["duration_ms"] = self._metric_distribution(duration_series)
-            summary_for_provider["usage"] = self._sorted_numeric_metrics(summary_for_provider["usage"])
-            normalized_provider_summary[provider_name] = summary_for_provider
+            raw_summary = provider_summary[provider_name]
+            raw_duration_series = raw_summary.get("duration_values")
+            duration_series = [
+                float(value)
+                for value in raw_duration_series
+                if isinstance(value, (int, float)) and not isinstance(value, bool)
+            ] if isinstance(raw_duration_series, list) else []
+            usage_metrics: Dict[str, float] = {}
+            raw_usage_metrics = raw_summary.get("usage")
+            if isinstance(raw_usage_metrics, dict):
+                for metric_name, metric_value in raw_usage_metrics.items():
+                    if not isinstance(metric_name, str):
+                        continue
+                    if not isinstance(metric_value, (int, float)) or isinstance(metric_value, bool):
+                        continue
+                    usage_metrics[metric_name] = float(metric_value)
+            normalized_provider_summary[provider_name] = {
+                "task_count": int(raw_summary.get("task_count", 0)),
+                "success_count": int(raw_summary.get("success_count", 0)),
+                "failure_count": int(raw_summary.get("failure_count", 0)),
+                "attempt_count": int(raw_summary.get("attempt_count", 0)),
+                "retry_attempt_count": int(raw_summary.get("retry_attempt_count", 0)),
+                "duration_ms": self._metric_distribution(duration_series),
+                "usage": self._sorted_numeric_metrics(usage_metrics),
+            }
 
         return {
             "task_count": len(self.tasks),
@@ -1166,7 +1192,7 @@ class ProjectState:
             },
         }
 
-    def _acceptance_summary(self) -> Dict[str, Any]:
+    def _acceptance_summary(self) -> WorkflowAcceptanceSummary:
         acceptance_evaluation = self.acceptance_evaluation if isinstance(self.acceptance_evaluation, dict) else {}
         return {
             "policy": self.acceptance_policy,
@@ -1182,7 +1208,7 @@ class ProjectState:
             "pending_task_count": len(self._list_like_values(acceptance_evaluation.get("pending_task_ids"))),
         }
 
-    def _resume_summary(self) -> Dict[str, Any]:
+    def _resume_summary(self) -> WorkflowResumeSummary:
         resumed_events = [
             event for event in self.execution_events
             if isinstance(event, dict) and event.get("event") == "workflow_resumed"
@@ -1206,7 +1232,7 @@ class ProjectState:
             "last_resumed_at": self.workflow_last_resumed_at,
         }
 
-    def _repair_summary(self) -> Dict[str, Any]:
+    def _repair_summary(self) -> WorkflowRepairSummary:
         failure_categories: Dict[str, int] = {}
         failed_task_ids: List[str] = []
         for entry in self.repair_history:
@@ -1284,7 +1310,7 @@ class ProjectState:
             for key, value in sorted(metrics.items())
         }
 
-    def _metric_distribution(self, values: List[float]) -> Dict[str, Any]:
+    def _metric_distribution(self, values: List[float]) -> MetricDistribution:
         if not values:
             return {
                 "count": 0,

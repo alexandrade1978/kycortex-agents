@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeAlias, TypedDict
 
 __all__ = [
     "AgentInput",
@@ -16,13 +16,26 @@ __all__ = [
     "DecisionRecord",
     "FailureCategory",
     "FailureRecord",
+    "MetricDistribution",
     "ProjectSnapshot",
     "TaskResult",
     "TaskStatus",
+    "WorkflowAcceptanceSummary",
+    "WorkflowErrorSummary",
+    "WorkflowFallbackSummary",
     "WorkflowOutcome",
+    "WorkflowProviderSummary",
+    "WorkflowRepairSummary",
+    "WorkflowResumeSummary",
     "WorkflowStatus",
+    "WorkflowTelemetry",
     "utc_now_iso",
 ]
+
+
+MetricNumber: TypeAlias = int | float
+MetricValue: TypeAlias = int | float | None
+NumericMetricMap: TypeAlias = Dict[str, MetricNumber]
 
 
 def utc_now_iso() -> str:
@@ -84,6 +97,170 @@ class ArtifactType(str, Enum):
     TEST = "test"
     CONFIG = "config"
     OTHER = "other"
+
+
+class MetricDistribution(TypedDict):
+    """Normalized numeric distribution used by aggregate telemetry summaries."""
+
+    count: int
+    total: MetricNumber
+    min: MetricValue
+    max: MetricValue
+    avg: MetricValue
+
+
+class WorkflowAcceptanceSummary(TypedDict):
+    """Workflow-level acceptance outcome summary embedded in aggregate telemetry."""
+
+    policy: Optional[str]
+    accepted: bool
+    reason: Optional[str]
+    terminal_outcome: Optional[str]
+    failure_category: Optional[str]
+    evaluated_task_count: int
+    required_task_count: int
+    completed_task_count: int
+    failed_task_count: int
+    skipped_task_count: int
+    pending_task_count: int
+
+
+class WorkflowResumeSummary(TypedDict):
+    """Workflow resume activity summary embedded in aggregate telemetry."""
+
+    count: int
+    reasons: Dict[str, int]
+    task_count: int
+    unique_task_count: int
+    unique_task_ids: List[str]
+    last_resumed_at: Optional[str]
+
+
+class WorkflowRepairSummary(TypedDict):
+    """Workflow repair-cycle usage summary embedded in aggregate telemetry."""
+
+    cycle_count: int
+    max_cycles: int
+    budget_remaining: int
+    history_count: int
+    failure_categories: Dict[str, int]
+    failed_task_count: int
+    failed_task_ids: List[str]
+
+
+class WorkflowProviderSummary(TypedDict):
+    """Per-provider aggregate telemetry rolled up across workflow execution."""
+
+    task_count: int
+    success_count: int
+    failure_count: int
+    attempt_count: int
+    retry_attempt_count: int
+    duration_ms: MetricDistribution
+    usage: NumericMetricMap
+
+
+class WorkflowFallbackSummary(TypedDict):
+    """Workflow-level fallback routing summary embedded in aggregate telemetry."""
+
+    task_count: int
+    entry_count: int
+    by_provider: Dict[str, int]
+    by_status: Dict[str, int]
+
+
+class WorkflowErrorSummary(TypedDict):
+    """Workflow-level final and fallback error-type tallies."""
+
+    final_error_types: Dict[str, int]
+    fallback_error_types: Dict[str, int]
+
+
+class WorkflowTelemetry(TypedDict):
+    """Aggregate workflow observability payload exposed through public snapshots."""
+
+    task_count: int
+    task_status_counts: Dict[str, int]
+    tasks_with_provider_calls: int
+    tasks_without_provider_calls: int
+    acceptance_summary: WorkflowAcceptanceSummary
+    resume_summary: WorkflowResumeSummary
+    repair_summary: WorkflowRepairSummary
+    final_providers: List[str]
+    observed_providers: List[str]
+    provider_summary: Dict[str, WorkflowProviderSummary]
+    attempt_count: int
+    retry_attempt_count: int
+    duration_ms: MetricDistribution
+    usage: NumericMetricMap
+    fallback_summary: WorkflowFallbackSummary
+    error_summary: WorkflowErrorSummary
+
+
+def _empty_metric_distribution() -> MetricDistribution:
+    return {
+        "count": 0,
+        "total": 0,
+        "min": None,
+        "max": None,
+        "avg": None,
+    }
+
+
+def empty_workflow_telemetry() -> WorkflowTelemetry:
+    return {
+        "task_count": 0,
+        "task_status_counts": {},
+        "tasks_with_provider_calls": 0,
+        "tasks_without_provider_calls": 0,
+        "acceptance_summary": {
+            "policy": None,
+            "accepted": False,
+            "reason": None,
+            "terminal_outcome": None,
+            "failure_category": None,
+            "evaluated_task_count": 0,
+            "required_task_count": 0,
+            "completed_task_count": 0,
+            "failed_task_count": 0,
+            "skipped_task_count": 0,
+            "pending_task_count": 0,
+        },
+        "resume_summary": {
+            "count": 0,
+            "reasons": {},
+            "task_count": 0,
+            "unique_task_count": 0,
+            "unique_task_ids": [],
+            "last_resumed_at": None,
+        },
+        "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 0,
+            "budget_remaining": 0,
+            "history_count": 0,
+            "failure_categories": {},
+            "failed_task_count": 0,
+            "failed_task_ids": [],
+        },
+        "final_providers": [],
+        "observed_providers": [],
+        "provider_summary": {},
+        "attempt_count": 0,
+        "retry_attempt_count": 0,
+        "duration_ms": _empty_metric_distribution(),
+        "usage": {},
+        "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "by_provider": {},
+            "by_status": {},
+        },
+        "error_summary": {
+            "final_error_types": {},
+            "fallback_error_types": {},
+        },
+    }
 
 
 @dataclass
@@ -194,7 +371,7 @@ class ProjectSnapshot:
     repair_budget_remaining: int = 0
     repair_history: List[Dict[str, Any]] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
-    workflow_telemetry: Dict[str, Any] = field(default_factory=dict)
+    workflow_telemetry: WorkflowTelemetry = field(default_factory=empty_workflow_telemetry)
     decisions: List[DecisionRecord] = field(default_factory=list)
     artifacts: List[ArtifactRecord] = field(default_factory=list)
     execution_events: List[Dict[str, Any]] = field(default_factory=list)

@@ -34,7 +34,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - `kycortex_agents`: top-level public package exporting the main runtime, config, types, providers, memory, and workflow symbols.
 - [kycortex_agents/config.py](../kycortex_agents/config.py): runtime configuration and provider validation.
 - [kycortex_agents/orchestrator.py](../kycortex_agents/orchestrator.py): workflow execution coordinator.
-- [kycortex_agents/types.py](../kycortex_agents/types.py): public typed contracts such as `AgentInput`, `AgentOutput`, `ProjectSnapshot`, and workflow statuses.
+- [kycortex_agents/types.py](../kycortex_agents/types.py): public typed contracts such as `AgentInput`, `AgentOutput`, `ProjectSnapshot`, workflow telemetry summaries, and workflow statuses.
 - [kycortex_agents/exceptions.py](../kycortex_agents/exceptions.py): public exception hierarchy.
 
 ## Module Guides

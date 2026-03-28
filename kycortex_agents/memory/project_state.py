@@ -21,6 +21,7 @@ from kycortex_agents.types import (
     WorkflowAcceptanceSummary,
     WorkflowOutcome,
     WorkflowProgressSummary,
+    WorkflowProviderHealthSummary,
     WorkflowProviderSummary,
     WorkflowRepairSummary,
     WorkflowResumeSummary,
@@ -1080,6 +1081,7 @@ class ProjectState:
         final_providers: set[str] = set()
         observed_providers: set[str] = set()
         provider_summary: Dict[str, Dict[str, Any]] = {}
+        provider_health_summary: Dict[str, Dict[str, Any]] = {}
         usage_totals: Dict[str, float] = {}
         duration_values: List[float] = []
         attempt_count = 0
@@ -1143,6 +1145,51 @@ class ProjectState:
                 if summary_for_provider is not None:
                     self._accumulate_numeric_metrics(summary_for_provider["usage"], usage)
 
+            raw_provider_health = provider_call.get("provider_health")
+            if isinstance(raw_provider_health, dict):
+                for health_provider_name, raw_health_entry in raw_provider_health.items():
+                    if not isinstance(health_provider_name, str) or not health_provider_name:
+                        continue
+                    if not isinstance(raw_health_entry, dict):
+                        continue
+                    health_summary = provider_health_summary.setdefault(
+                        health_provider_name,
+                        {
+                            "models": set(),
+                            "status_counts": {},
+                            "last_outcome_counts": {},
+                            "circuit_open_count": 0,
+                            "retryable_failure_count": 0,
+                            "active_health_check_count": 0,
+                            "last_error_types": {},
+                        },
+                    )
+                    model_name = raw_health_entry.get("model")
+                    if isinstance(model_name, str) and model_name:
+                        health_summary["models"].add(model_name)
+                    health_status = raw_health_entry.get("status")
+                    if isinstance(health_status, str) and health_status:
+                        health_summary["status_counts"][health_status] = (
+                            health_summary["status_counts"].get(health_status, 0) + 1
+                        )
+                    last_outcome = raw_health_entry.get("last_outcome")
+                    if isinstance(last_outcome, str) and last_outcome:
+                        health_summary["last_outcome_counts"][last_outcome] = (
+                            health_summary["last_outcome_counts"].get(last_outcome, 0) + 1
+                        )
+                    if raw_health_entry.get("circuit_breaker_open") is True:
+                        health_summary["circuit_open_count"] += 1
+                    if raw_health_entry.get("last_failure_retryable") is True:
+                        health_summary["retryable_failure_count"] += 1
+                    last_error_type = raw_health_entry.get("last_error_type")
+                    if isinstance(last_error_type, str) and last_error_type:
+                        health_summary["last_error_types"][last_error_type] = (
+                            health_summary["last_error_types"].get(last_error_type, 0) + 1
+                        )
+                    last_health_check = raw_health_entry.get("last_health_check")
+                    if isinstance(last_health_check, dict) and last_health_check.get("active_check") is True:
+                        health_summary["active_health_check_count"] += 1
+
             if provider_call.get("success") is False:
                 error_type = provider_call.get("error_type")
                 if isinstance(error_type, str) and error_type:
@@ -1195,6 +1242,20 @@ class ProjectState:
                 "usage": self._sorted_numeric_metrics(usage_metrics),
             }
 
+        normalized_provider_health_summary: Dict[str, WorkflowProviderHealthSummary] = {}
+        for provider_name in sorted(provider_health_summary):
+            raw_health_summary = provider_health_summary[provider_name]
+            raw_models = raw_health_summary.get("models")
+            normalized_provider_health_summary[provider_name] = {
+                "models": sorted(raw_models) if isinstance(raw_models, set) else [],
+                "status_counts": dict(sorted(raw_health_summary.get("status_counts", {}).items())),
+                "last_outcome_counts": dict(sorted(raw_health_summary.get("last_outcome_counts", {}).items())),
+                "circuit_open_count": int(raw_health_summary.get("circuit_open_count", 0)),
+                "retryable_failure_count": int(raw_health_summary.get("retryable_failure_count", 0)),
+                "active_health_check_count": int(raw_health_summary.get("active_health_check_count", 0)),
+                "last_error_types": dict(sorted(raw_health_summary.get("last_error_types", {}).items())),
+            }
+
         return {
             "task_count": len(self.tasks),
             "task_status_counts": self._ordered_task_status_counts(task_status_counts),
@@ -1207,6 +1268,7 @@ class ProjectState:
             "final_providers": sorted(final_providers),
             "observed_providers": sorted(observed_providers),
             "provider_summary": normalized_provider_summary,
+            "provider_health_summary": normalized_provider_health_summary,
             "attempt_count": attempt_count,
             "retry_attempt_count": retry_attempt_count,
             "duration_ms": self._metric_distribution(duration_values),

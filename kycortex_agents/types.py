@@ -26,6 +26,7 @@ __all__ = [
     "WorkflowFallbackSummary",
     "WorkflowOutcome",
     "WorkflowProgressSummary",
+    "WorkflowProviderHealthSummary",
     "WorkflowProviderSummary",
     "WorkflowRepairSummary",
     "WorkflowResumeSummary",
@@ -187,6 +188,18 @@ class WorkflowProviderSummary(TypedDict):
     usage: NumericMetricMap
 
 
+class WorkflowProviderHealthSummary(TypedDict):
+    """Per-provider health-state aggregate rolled up across workflow execution."""
+
+    models: List[str]
+    status_counts: Dict[str, int]
+    last_outcome_counts: Dict[str, int]
+    circuit_open_count: int
+    retryable_failure_count: int
+    active_health_check_count: int
+    last_error_types: Dict[str, int]
+
+
 class WorkflowFallbackSummary(TypedDict):
     """Workflow-level fallback routing summary embedded in aggregate telemetry."""
 
@@ -217,6 +230,7 @@ class WorkflowTelemetry(TypedDict):
     final_providers: List[str]
     observed_providers: List[str]
     provider_summary: Dict[str, WorkflowProviderSummary]
+    provider_health_summary: Dict[str, WorkflowProviderHealthSummary]
     attempt_count: int
     retry_attempt_count: int
     duration_ms: MetricDistribution
@@ -296,6 +310,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "final_providers": [],
         "observed_providers": [],
         "provider_summary": {},
+        "provider_health_summary": {},
         "attempt_count": 0,
         "retry_attempt_count": 0,
         "duration_ms": _empty_metric_distribution(),

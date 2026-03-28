@@ -19,6 +19,7 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 - `TaskResult` snapshots now expose typed per-task `resource_telemetry` summaries covering normalized task timing plus provider duration and usage metadata.
 - Active workflows now emit incremental `workflow_progress` execution events and structured logs carrying the current aggregate `workflow_telemetry` payload during execution, not only at terminal workflow completion.
 - Aggregate `workflow_telemetry` now includes a typed `progress_summary` with explicit pending, runnable, blocked, terminal, and completion-percentage progress signals.
+- Aggregate `workflow_telemetry` now includes `provider_health_summary`, rolling up persisted provider health snapshots such as healthy, degraded, failing, and open-circuit states across workflow execution.
 
 ### Changed
 

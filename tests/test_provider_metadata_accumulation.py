@@ -191,6 +191,35 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
         "output_tokens": 8,
         "total_tokens": 20,
     }
+    assert snapshot.workflow_telemetry["provider_health_summary"] == {
+        "anthropic": {
+            "models": ["claude-3-5-sonnet"],
+            "status_counts": {"healthy": 1},
+            "last_outcome_counts": {"success": 1},
+            "circuit_open_count": 0,
+            "retryable_failure_count": 0,
+            "active_health_check_count": 1,
+            "last_error_types": {},
+        },
+        "ollama": {
+            "models": ["llama3"],
+            "status_counts": {"healthy": 1},
+            "last_outcome_counts": {"success": 1},
+            "circuit_open_count": 0,
+            "retryable_failure_count": 0,
+            "active_health_check_count": 1,
+            "last_error_types": {},
+        },
+        "openai": {
+            "models": ["gpt-4o"],
+            "status_counts": {"healthy": 1},
+            "last_outcome_counts": {"success": 1},
+            "circuit_open_count": 0,
+            "retryable_failure_count": 0,
+            "active_health_check_count": 1,
+            "last_error_types": {},
+        },
+    }
     assert snapshot.workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
         "count": 1,
         "total": review.last_provider_call["duration_ms"],
@@ -346,6 +375,26 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
         "entry_count": 1,
         "by_provider": {"openai": 1},
         "by_status": {"failed_health_check": 1},
+    }
+    assert snapshot.workflow_telemetry["provider_health_summary"] == {
+        "anthropic": {
+            "models": ["claude-3-5-sonnet"],
+            "status_counts": {"healthy": 1},
+            "last_outcome_counts": {"success": 1},
+            "circuit_open_count": 0,
+            "retryable_failure_count": 0,
+            "active_health_check_count": 1,
+            "last_error_types": {},
+        },
+        "openai": {
+            "models": ["gpt-4o"],
+            "status_counts": {"degraded": 1},
+            "last_outcome_counts": {"failure": 1},
+            "circuit_open_count": 0,
+            "retryable_failure_count": 1,
+            "active_health_check_count": 1,
+            "last_error_types": {"ProviderTransientError": 1},
+        },
     }
     assert snapshot.workflow_telemetry["error_summary"]["fallback_error_types"] == {
         "ProviderTransientError": 1,

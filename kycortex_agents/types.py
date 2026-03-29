@@ -336,6 +336,7 @@ class ExecutionSandboxPolicy:
     allow_network: bool = False
     allow_subprocesses: bool = False
     max_cpu_seconds: float = 30.0
+    max_wall_clock_seconds: float = 60.0
     max_memory_mb: int = 512
     temp_root: Optional[str] = None
     disable_pytest_plugin_autoload: bool = True

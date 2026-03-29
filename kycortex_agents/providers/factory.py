@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from time import perf_counter
 from typing import Any, Callable, Optional
 
@@ -20,15 +21,23 @@ from kycortex_agents.providers.openai_provider import OpenAIProvider
 __all__ = ["create_provider", "probe_provider_health"]
 
 
-_HEALTH_PROBE_CACHE: dict[tuple[str, str, str, float], dict[str, Any]] = {}
+_HEALTH_PROBE_CACHE: dict[tuple[str, str, str, float, str], dict[str, Any]] = {}
 
 
-def _health_probe_cache_key(config: KYCortexConfig) -> tuple[str, str, str, float]:
+def _health_probe_cache_identity(config: KYCortexConfig) -> str:
+    credential = config.api_key or ""
+    if not credential:
+        return ""
+    return hashlib.sha256(credential.encode("utf-8")).hexdigest()
+
+
+def _health_probe_cache_key(config: KYCortexConfig) -> tuple[str, str, str, float, str]:
     return (
         config.llm_provider,
         config.llm_model,
         config.base_url or "",
         round(config.timeout_seconds, 6),
+        _health_probe_cache_identity(config),
     )
 
 

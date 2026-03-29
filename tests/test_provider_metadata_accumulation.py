@@ -22,7 +22,7 @@ def build_openai_client(response=None, error=None, health_response=None, health_
     def list_models(**kwargs):
         if health_error is not None:
             raise health_error
-        return health_response if health_response is not None else []
+        return health_response if health_response is not None else [SimpleNamespace(id="gpt-4o")]
 
     return SimpleNamespace(
         chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
@@ -39,7 +39,7 @@ def build_anthropic_client(response=None, error=None, health_response=None, heal
     def list_models(**kwargs):
         if health_error is not None:
             raise health_error
-        return health_response if health_response is not None else []
+        return health_response if health_response is not None else [SimpleNamespace(id="claude-3-5-sonnet")]
 
     return SimpleNamespace(
         messages=SimpleNamespace(create=create),
@@ -61,8 +61,22 @@ class FakeHTTPResponse:
         return False
 
 
-def build_ollama_opener(payload=None, error=None):
+def build_ollama_opener(
+    payload=None,
+    error=None,
+    health_payload='{"models": [{"name": "llama3:latest"}]}',
+    health_error=None,
+):
     def open_request(request, timeout=None):
+        url = getattr(request, "full_url", None)
+        if url is None and hasattr(request, "get_full_url"):
+            url = request.get_full_url()
+        if isinstance(url, str) and url.endswith("/api/tags"):
+            if health_error is not None:
+                raise health_error
+            if error is not None and health_payload is None:
+                raise error
+            return FakeHTTPResponse(health_payload if health_payload is not None else payload)
         if error is not None:
             raise error
         return FakeHTTPResponse(payload)
@@ -253,7 +267,7 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
             "architect": ProviderBackedAgent(
                 "ArchitectAgent",
                 "Architecture",
-                OpenAIProvider(failing_openai_config, client=build_openai_client(error=RuntimeError("down"))),
+                OpenAIProvider(failing_openai_config, client=build_openai_client(error=TimeoutError("down"))),
                 failing_openai_config,
             ),
             "code_engineer": ProviderBackedAgent(
@@ -300,6 +314,53 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert completed.last_provider_call["usage"]["total_tokens"] == 13
 
 
+def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_path):
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            last_provider_call={
+                "provider": "openai",
+                "model": "gpt-4o",
+                "success": True,
+                "duration_ms": 12.5,
+                "provider_health": {
+                    "openai": {
+                        "model": "gpt-4o",
+                        "status": "degraded",
+                        "last_outcome": "failure",
+                        "last_failure_retryable": True,
+                        "last_error_type": "ProviderTransientError",
+                        "last_health_check": {
+                            "status": "degraded",
+                            "active_check": True,
+                            "cooldown_cached": True,
+                        },
+                    }
+                },
+            },
+        )
+    )
+
+    snapshot = project.snapshot()
+
+    assert snapshot.workflow_telemetry["provider_health_summary"] == {
+        "openai": {
+            "models": ["gpt-4o"],
+            "status_counts": {"degraded": 1},
+            "last_outcome_counts": {"failure": 1},
+            "circuit_open_count": 0,
+            "retryable_failure_count": 1,
+            "active_health_check_count": 0,
+            "last_error_types": {"ProviderTransientError": 1},
+        }
+    }
+
+
 def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_failure_policy="continue")
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -315,7 +376,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
     )
     primary_provider = OpenAIProvider(
         primary_config,
-        client=build_openai_client(health_error=RuntimeError("openai health down")),
+        client=build_openai_client(health_error=TimeoutError("openai health down")),
     )
     fallback_provider = AnthropicProvider(
         KYCortexConfig(

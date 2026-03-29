@@ -46,6 +46,15 @@ def test_config_sets_default_ollama_base_url(tmp_path):
     assert config.base_url == "http://localhost:11434"
 
 
+def test_config_initialization_does_not_create_output_dir(tmp_path):
+    output_dir = tmp_path / "output"
+
+    config = KYCortexConfig(output_dir=str(output_dir))
+
+    assert config.output_dir == str(output_dir)
+    assert not output_dir.exists()
+
+
 def test_config_rejects_invalid_timeout(tmp_path):
     with pytest.raises(ConfigValidationError, match="timeout_seconds must be greater than zero"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=0)
@@ -365,6 +374,11 @@ def test_config_rejects_invalid_execution_sandbox_cpu_limit(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_max_cpu_seconds=0)
 
 
+def test_config_rejects_invalid_execution_sandbox_wall_clock_limit(tmp_path):
+    with pytest.raises(ConfigValidationError, match="execution_sandbox_max_wall_clock_seconds must be greater than zero"):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_max_wall_clock_seconds=0)
+
+
 def test_config_rejects_invalid_execution_sandbox_memory_limit(tmp_path):
     with pytest.raises(ConfigValidationError, match="execution_sandbox_max_memory_mb must be greater than zero"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_max_memory_mb=0)
@@ -377,6 +391,7 @@ def test_config_builds_execution_sandbox_policy(tmp_path):
         execution_sandbox_allow_network=False,
         execution_sandbox_allow_subprocesses=False,
         execution_sandbox_max_cpu_seconds=12,
+        execution_sandbox_max_wall_clock_seconds=18,
         execution_sandbox_max_memory_mb=256,
         execution_sandbox_temp_root=str(tmp_path),
     )
@@ -387,6 +402,7 @@ def test_config_builds_execution_sandbox_policy(tmp_path):
     assert policy.allow_network is False
     assert policy.allow_subprocesses is False
     assert policy.max_cpu_seconds == 12
+    assert policy.max_wall_clock_seconds == 18
     assert policy.max_memory_mb == 256
     assert policy.temp_root == str(tmp_path)
 

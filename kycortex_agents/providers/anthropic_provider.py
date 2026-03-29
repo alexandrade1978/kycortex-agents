@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from time import perf_counter
 from typing import Any, Optional
 
@@ -27,6 +28,30 @@ class AnthropicProvider(BaseLLMProvider):
     def _health_check_timeout(self) -> float:
         return min(self.config.timeout_seconds, 5.0)
 
+    def _listed_model_ids(self, payload: Any) -> set[str]:
+        data = getattr(payload, "data", payload)
+        if isinstance(data, dict):
+            entries: Iterable[Any] = data.get("data", [])
+        elif isinstance(data, Iterable) and not isinstance(data, (str, bytes)):
+            entries = data
+        else:
+            entries = ()
+
+        model_ids: set[str] = set()
+        for entry in entries:
+            if isinstance(entry, str) and entry:
+                model_ids.add(entry)
+                continue
+            entry_id = getattr(entry, "id", None)
+            if isinstance(entry_id, str) and entry_id:
+                model_ids.add(entry_id)
+                continue
+            if isinstance(entry, dict):
+                dict_id = entry.get("id") or entry.get("name")
+                if isinstance(dict_id, str) and dict_id:
+                    model_ids.add(dict_id)
+        return model_ids
+
     def health_check(self) -> dict[str, Any]:
         client = self._get_client()
         models_api = getattr(client, "models", None)
@@ -37,7 +62,7 @@ class AnthropicProvider(BaseLLMProvider):
         timeout_seconds = self._health_check_timeout()
         started_at = perf_counter()
         try:
-            list_models(timeout=timeout_seconds)
+            models_payload = list_models(timeout=timeout_seconds)
         except Exception as exc:
             self._last_call_metadata = None
             if is_transient_provider_exception(exc):
@@ -45,11 +70,30 @@ class AnthropicProvider(BaseLLMProvider):
             raise AgentExecutionError("Anthropic provider health check was rejected") from exc
 
         completed_at = perf_counter()
+        model_ids = self._listed_model_ids(models_payload)
+        if self.config.llm_model not in model_ids:
+            return {
+                "provider": self.config.llm_provider,
+                "model": self.config.llm_model,
+                "status": "failing",
+                "active_check": True,
+                "retryable": False,
+                "backend_reachable": True,
+                "model_ready": False,
+                "error_type": "AgentExecutionError",
+                "error_message": (
+                    f"Anthropic provider health check did not confirm configured model '{self.config.llm_model}'"
+                ),
+                "timeout_seconds": round(timeout_seconds, 6),
+                "latency_ms": round((completed_at - started_at) * 1000, 3),
+            }
         return {
             "provider": self.config.llm_provider,
             "model": self.config.llm_model,
             "status": "healthy",
             "active_check": True,
+            "backend_reachable": True,
+            "model_ready": True,
             "timeout_seconds": round(timeout_seconds, 6),
             "latency_ms": round((completed_at - started_at) * 1000, 3),
         }
@@ -88,8 +132,13 @@ class AnthropicProvider(BaseLLMProvider):
 
     def _extract_metadata(self, response: Any) -> Optional[dict[str, Any]]:
         usage = getattr(response, "usage", None)
+        metadata: dict[str, Any] = {
+            "requested_max_tokens": self.config.max_tokens,
+            "stop_reason": getattr(response, "stop_reason", None),
+            "stop_type": getattr(response, "stop_type", None),
+        }
         if usage is None:
-            return None
+            return metadata
         input_tokens = getattr(usage, "input_tokens", None)
         output_tokens = getattr(usage, "output_tokens", None)
         cache_creation_input_tokens = getattr(usage, "cache_creation_input_tokens", None)
@@ -97,15 +146,14 @@ class AnthropicProvider(BaseLLMProvider):
         total_tokens = None
         if input_tokens is not None or output_tokens is not None:
             total_tokens = (input_tokens or 0) + (output_tokens or 0)
-        return {
-            "usage": {
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": total_tokens,
-                "cache_creation_input_tokens": cache_creation_input_tokens,
-                "cache_read_input_tokens": cache_read_input_tokens,
-            }
+        metadata["usage"] = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+            "cache_creation_input_tokens": cache_creation_input_tokens,
+            "cache_read_input_tokens": cache_read_input_tokens,
         }
+        return metadata
 
     def get_last_call_metadata(self) -> Optional[dict[str, Any]]:
         if self._last_call_metadata is None:

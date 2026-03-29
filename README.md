@@ -7,8 +7,9 @@ KYCortex is an open-source framework that simulates an entire AI software house 
 ## Features
 
 - **Orchestrator**: Coordinates all agents, manages workflow state, and ensures tasks are completed in order
-- **Multi-provider runtime**: Supports OpenAI, Anthropic, and Ollama through a shared provider interface
+- **Multi-provider runtime**: Supports OpenAI, Anthropic, and Ollama through a shared provider interface with preflight backend and model-readiness checks
 - **Workflow resilience**: Supports task dependencies, topological ordering, configurable failure policies, and resumable execution after interruptions or failed runs
+- **Completion-aware validation**: Detects likely truncated code or test outputs, enforces task-level size and shape constraints, and feeds structured repair evidence into follow-up attempts
 - **Deterministic validation context**: Derives API, test, and dependency-manifest checks from generated artifacts so downstream agents can review against concrete signals instead of prompt text alone
 - **Specialized Agents**:
   - **Architect**: Designs software architecture and module structure
@@ -63,6 +64,8 @@ orch.execute_workflow(project)
 
 See `examples/` for complete examples, including `example_provider_matrix_validation.py` for resume-enabled empirical provider validation across the supported runtimes.
 
+Provider preflight validation now distinguishes backend reachability from model readiness. In practice, this means cloud providers must expose the configured model through their model-listing API before generation starts, and Ollama must expose both a reachable `/api/tags` endpoint and the configured local model.
+
 ## Configuration
 
 Choose a provider and either pass credentials directly or rely on the provider-specific environment variable:
@@ -70,6 +73,8 @@ Choose a provider and either pass credentials directly or rely on the provider-s
 - OpenAI: `OPENAI_API_KEY`
 - Anthropic: `ANTHROPIC_API_KEY`
 - Ollama: no API key required; defaults to `http://localhost:11434`
+
+The built-in runtime now performs a provider health probe before generation. A provider can be reachable but still fail fast if the configured model is not ready for that backend.
 
 OpenAI example:
 
@@ -115,6 +120,7 @@ config = KYCortexConfig(
     llm_model="gpt-4o-mini",
     workflow_failure_policy="continue",
     workflow_resume_policy="resume_failed",
+    workflow_max_repair_cycles=1,
     project_name="my-project",
     output_dir="./output"
 )
@@ -124,6 +130,7 @@ config = KYCortexConfig(
 - `workflow_failure_policy="continue"`: allow independent work to continue while dependency-blocked descendants are skipped.
 - `workflow_resume_policy="interrupted_only"`: resume only tasks that were in flight when execution stopped.
 - `workflow_resume_policy="resume_failed"`: re-queue failed tasks and dependency-skipped descendants for another run.
+- `workflow_max_repair_cycles=1`: bound corrective reruns when `resume_failed` is active.
 
 Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow graph, as shown in `examples/example_simple_project.py`.
 
@@ -143,9 +150,21 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | `provider_timeout_seconds` | `{}` | Optional per-provider timeout overrides keyed by provider name, used for primary and fallback provider runtime configs. |
 | `workflow_failure_policy` | `"fail_fast"` | Controls whether workflow execution stops immediately or continues while skipping blocked descendants. |
 | `workflow_resume_policy` | `"interrupted_only"` | Controls whether resume only re-queues interrupted tasks or also re-queues failed and dependency-skipped tasks. |
+| `workflow_max_repair_cycles` | `1` | Maximum bounded repair cycles allowed when failed tasks are resumed with corrective context. |
+| `provider_health_check_cooldown_seconds` | `0.0` | Reuses a recent unhealthy health snapshot during the cooldown window instead of probing the same failing backend again immediately. |
+| `execution_sandbox_max_cpu_seconds` | `30.0` | CPU-time budget for generated test execution inside the sandbox. |
+| `execution_sandbox_max_wall_clock_seconds` | `60.0` | Wall-clock timeout for generated test execution, independent from the CPU-time budget. |
+| `execution_sandbox_max_memory_mb` | `512` | Memory ceiling for generated test execution inside the sandbox. |
 | `project_name` | `"kycortex-project"` | Human-readable project name persisted into workflow state and snapshots. |
-| `output_dir` | `"./output"` | Output directory created during configuration initialization and used to persist artifact files emitted by agents. |
+| `output_dir` | `"./output"` | Output root used for persisted artifacts and validation files. The directory is created lazily when the runtime first writes to it. |
 | `log_level` | `"INFO"` | Public log-level setting reserved for orchestrator and runtime logging configuration. |
+
+### Runtime Hardening Notes
+
+- Built-in providers now expose model-readiness health snapshots that distinguish `backend_reachable` from `model_ready`.
+- Provider metadata now preserves requested token budgets plus backend-specific stop reasons such as OpenAI `finish_reason`, Anthropic `stop_reason`, and Ollama `done_reason` when available.
+- Generated code and tests are validated against task-level budgets derived from task text, including optional line limits, CLI entrypoint requirements, test-count limits, fixture budgets, and completion diagnostics for likely truncated outputs.
+- Artifact persistence rejects relative-path escapes, including writes that would leave `output_dir` through symlinked directories.
 
 ## Architecture
 

@@ -146,6 +146,32 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     }
 
 
+def test_build_full_workflow_config_uses_larger_completion_budget_for_full_generation(tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_config
+
+    config = build_full_workflow_config("openai", "gpt-4o-mini", str(tmp_path / "output"))
+
+    assert config.max_tokens == 3200
+
+
+def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_project
+
+    project = build_full_workflow_project(str(tmp_path / "output"), "anthropic")
+
+    code_task = project.get_task("code")
+    tests_task = project.get_task("tests")
+
+    assert code_task is not None
+    assert tests_task is not None
+    assert "under 300 lines" in code_task.description
+    assert "Avoid extra helper layers" in code_task.description
+    assert "under 150 lines" in tests_task.description
+    assert "at most 7 top-level test functions" in tests_task.description
+    assert "Use the direct intake or validation surface for the validation-failure scenario" in tests_task.description
+    assert "Do not add standalone caplog or raw logging-output assertions" in tests_task.description
+
+
 def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

@@ -8,6 +8,11 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Added
 
+- Completion-aware output diagnostics that combine provider token-limit metadata with structural EOF heuristics and feed those signals into persisted repair summaries for generated code and tests.
+- Task-derived validation budgets for generated outputs, including optional line limits, required CLI entrypoints, exact or maximum top-level test counts, fixture budgets, undefined local-name checks, and richer call-arity validation.
+- Model-readiness health snapshots for OpenAI, Anthropic, and Ollama providers, exposing `backend_reachable` and `model_ready` alongside the existing provider-health states.
+- Explicit wall-clock limits in the execution sandbox policy so generated pytest runs can enforce a timeout independent from CPU budgeting.
+- Artifact-persistence guards that reject writes resolving outside `output_dir`, including symlink-based output-path escapes.
 - Active preflight health checks for OpenAI and Anthropic providers, including transient-vs-deterministic classification aligned with generation-time provider failures.
 - Provider-health cooldown caching so repeated unhealthy readiness probes can reuse a recent degraded/failing snapshot instead of repeatedly probing the same backend.
 - Persisted provider-budget summaries in task failures, task details, provider-matrix summaries, and workflow inspection paths.
@@ -27,6 +32,18 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 - `BaseAgent` now preserves compatibility with injected legacy providers that do not implement `health_check()` by recording a passive ready snapshot instead of failing before generation.
 - Provider and workflow runtime documentation plus snapshot-inspection examples now describe the current resilience and observability behavior, including cooldown caching, fallback metadata, workflow-level aggregate telemetry, and the new acceptance/resume/repair rollups.
 - `examples/example_snapshot_inspection.py` now prints the explicit workflow `progress_summary` and `provider_health_summary` views so the Phase 10 observability surface is demonstrated directly instead of only through the raw aggregate telemetry dictionary.
+- `KYCortexConfig` no longer creates `output_dir` during initialization; artifact and validation writes now create the directory lazily at first use.
+- Provider metadata now preserves requested completion budgets and backend-specific stop signals such as OpenAI `finish_reason`, Anthropic `stop_reason`, and Ollama `done_reason`.
+- Provider-matrix validation now uses larger generation budgets together with tighter code and test task constraints so repair cycles target truncation and scope drift more deterministically.
+- QA repair guidance now keeps validation failures on direct intake surfaces by default, keeps batch scenarios structurally valid unless the contract requires mixed-validity behavior, and avoids speculative logging assertions unless log output is explicitly observable.
+
+### Fixed
+
+- Transient-provider classification now treats timeout and connection failures as retryable without incorrectly classifying arbitrary unknown exception objects as transient.
+- Provider-health cooldown caching is now keyed by credential identity so unhealthy snapshots are not reused across different API keys for the same provider/model tuple.
+- OpenAI and Anthropic health probes now fail deterministically when the configured model is not present in the provider model listing instead of treating backend reachability alone as success.
+- Ollama health probes now validate both `/api/tags` reachability and model availability, surfacing a deterministic failure when the configured local model is not installed.
+- Empirical cloud-provider full-workflow validation recovered the current strongest baseline: OpenAI completed at the latest checkpoint with zero repair cycles, Anthropic completed after one repair cycle, and Ollama remains contingent on local runtime reachability.
 
 ## 1.0.10 - 2026-03-25
 

@@ -1187,7 +1187,11 @@ class ProjectState:
                             health_summary["last_error_types"].get(last_error_type, 0) + 1
                         )
                     last_health_check = raw_health_entry.get("last_health_check")
-                    if isinstance(last_health_check, dict) and last_health_check.get("active_check") is True:
+                    if (
+                        isinstance(last_health_check, dict)
+                        and last_health_check.get("active_check") is True
+                        and last_health_check.get("cooldown_cached") is not True
+                    ):
                         health_summary["active_health_check_count"] += 1
 
             if provider_call.get("success") is False:

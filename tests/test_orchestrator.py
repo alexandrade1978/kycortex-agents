@@ -134,32 +134,67 @@ def supports_user_xattrs(target_path: pathlib.Path) -> bool:
     return attribute_name in listed_names and loaded_value == attribute_value
 
 
-def build_openai_client(response=None, error=None):
+def build_openai_client(response=None, error=None, health_response=None, health_error=None):
     def create(**kwargs):
         if error is not None:
             raise error
         return response
 
-    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    def list_models(**kwargs):
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
-def build_anthropic_client(response=None, error=None):
+def build_anthropic_client(response=None, error=None, health_response=None, health_error=None):
     def create(**kwargs):
         if error is not None:
             raise error
         return response
 
-    return SimpleNamespace(messages=SimpleNamespace(create=create))
+    def list_models(**kwargs):
+        if health_error is not None:
+            raise health_error
+        return health_response if health_response is not None else []
+
+    return SimpleNamespace(
+        messages=SimpleNamespace(create=create),
+        models=SimpleNamespace(list=list_models),
+    )
 
 
-def build_ollama_opener(payload=None, error=None):
-    calls = 0
+def build_ollama_opener(
+    payload=None,
+    error=None,
+    health_payload='{"models": [{"name": "llama3:latest"}]}',
+    health_error=None,
+):
+    health_calls = 0
+    generate_calls = 0
+
+    def current_value(value, index):
+        if isinstance(value, list):
+            return value[min(index, len(value) - 1)]
+        return value
 
     def open_request(request, timeout=None):
-        nonlocal calls
-        current_payload = payload[min(calls, len(payload) - 1)] if isinstance(payload, list) else payload
-        current_error = error[min(calls, len(error) - 1)] if isinstance(error, list) else error
-        calls += 1
+        nonlocal health_calls, generate_calls
+        url = getattr(request, "full_url", None)
+        if url is None and hasattr(request, "get_full_url"):
+            url = request.get_full_url()
+        if isinstance(url, str) and url.endswith("/api/tags"):
+            current_payload = current_value(health_payload if health_payload is not None else payload, health_calls)
+            current_error = current_value(health_error if health_error is not None else error, health_calls)
+            health_calls += 1
+        else:
+            current_payload = current_value(payload, generate_calls)
+            current_error = current_value(error, generate_calls)
+            generate_calls += 1
         if current_error is not None:
             raise current_error
         return FakeHTTPResponse(current_payload)
@@ -523,6 +558,69 @@ def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_p
     assert "pytest failed: generated tests failed" in message
 
 
+def test_validate_code_output_rejects_missing_required_cli_entrypoint(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="code", raw_content="def run() -> int:\n    return 1\n")
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write one module with a CLI demo entrypoint.",
+        assigned_to="code_engineer",
+    )
+
+    with pytest.raises(AgentExecutionError, match="missing required CLI entrypoint"):
+        orchestrator._validate_code_output(output, task=task)
+
+
+def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="tests",
+        raw_content="def test_one():\n    assert True\n\n\ndef test_two():\n    assert True\n",
+    )
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests under 3 lines.",
+        assigned_to="qa_tester",
+    )
+
+    monkeypatch.setattr(orchestrator, "_analyze_test_module", lambda *args, **kwargs: {"syntax_ok": True})
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_tests",
+        lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
+    )
+
+    with pytest.raises(AgentExecutionError, match="line count 6 exceeds maximum 3"):
+        orchestrator._validate_test_output(
+            {
+                "module_name": "code_implementation",
+                "code": "def ok():\n    return 1",
+            },
+            output,
+            task=task,
+        )
+
+
+def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="repair",
+        title="Repair",
+        description="Write one module with a CLI demo entrypoint.",
+        assigned_to="code_reviewer",
+        repair_context={"repair_owner": "code_engineer"},
+    )
+    output = AgentOutput(summary="code", raw_content="def run() -> int:\n    return 1\n")
+
+    with pytest.raises(AgentExecutionError, match="missing required CLI entrypoint"):
+        orchestrator._validate_task_output(task, {}, output)
+
+
 def test_classify_task_failure_returns_workflow_definition_for_definition_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -628,12 +726,18 @@ def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
     }
 
 
-def test_execute_generated_tests_reports_timeout(tmp_path, monkeypatch):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=2)
+def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monkeypatch):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        timeout_seconds=2,
+        execution_sandbox_max_wall_clock_seconds=7,
+    )
     orchestrator = Orchestrator(config)
+    captured_timeout: dict[str, float] = {}
 
     def raise_timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=args[0], timeout=2)
+        captured_timeout["value"] = kwargs["timeout"]
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs["timeout"])
 
     monkeypatch.setattr(orchestrator_module.subprocess, "run", raise_timeout)
 
@@ -648,8 +752,9 @@ def test_execute_generated_tests_reports_timeout(tmp_path, monkeypatch):
         "available": True,
         "ran": True,
         "returncode": -1,
-        "summary": "pytest timed out after 2 seconds",
+        "summary": "pytest timed out after 7 seconds",
     }
+    assert captured_timeout["value"] == 7
 
 
 def test_sanitize_generated_filename_appends_default_suffix_when_missing(tmp_path):
@@ -687,6 +792,30 @@ def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
     assert artifacts[0].path == "ignored.txt"
     assert artifacts[1].path == "reports/final_draft.md"
     assert persisted_path.read_text(encoding="utf-8") == "hello"
+
+
+def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    escaped_root = tmp_path / "escaped"
+    escaped_root.mkdir()
+    (tmp_path / "output").mkdir()
+    linked_dir = tmp_path / "output" / "artifacts"
+    linked_dir.symlink_to(escaped_root, target_is_directory=True)
+    artifacts = [
+        ArtifactRecord(
+            name="Report Draft",
+            artifact_type=ArtifactType.DOCUMENT,
+            content="hello",
+            path="artifacts/final.md",
+        )
+    ]
+
+    with pytest.raises(AgentExecutionError, match="resolves outside the output directory"):
+        orchestrator._persist_artifacts(artifacts)
+
+    assert not (escaped_root / "final.md").exists()
+    assert artifacts[0].path == "artifacts/final.md"
 
 
 def test_sanitize_artifact_relative_path_rejects_invalid_segments_and_empty_paths(tmp_path):
@@ -860,6 +989,26 @@ def test_build_code_validation_summary_omits_optional_fields_when_missing(tmp_pa
     summary = orchestrator._build_code_validation_summary({"syntax_ok": True, "third_party_imports": []}, "")
 
     assert summary == "Generated code validation:\n- Syntax OK: yes\n- Third-party imports: none"
+
+
+def test_build_code_validation_summary_includes_line_count_and_cli_requirement(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_validation_summary(
+        {
+            "syntax_ok": True,
+            "third_party_imports": [],
+            "line_count": 176,
+            "line_budget": 260,
+            "has_main_guard": False,
+            "main_guard_required": True,
+        },
+        "",
+    )
+
+    assert "Line count: 176/260" in summary
+    assert "CLI entrypoint present: no (required by task)" in summary
 
 
 def test_build_repair_validation_summary_falls_back_when_validation_payload_shape_is_unusable(tmp_path):
@@ -1180,6 +1329,9 @@ def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(
         {
             "name": "public_async",
             "params": ["value"],
+            "min_args": 1,
+            "max_args": 1,
+            "return_annotation": None,
             "signature": "public_async(value)",
             "async": True,
         }
@@ -1189,9 +1341,19 @@ def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(
         "bases": [],
         "is_enum": False,
         "fields": [],
-        "attributes": ["status"],
+        "attributes": ["request_id", "status"],
         "constructor_params": ["request_id"],
+        "constructor_min_args": 1,
+        "constructor_max_args": 1,
         "methods": ["run(self, payload)"],
+        "method_signatures": {
+            "run": {
+                "params": ["payload"],
+                "min_args": 1,
+                "max_args": 1,
+                "return_annotation": None,
+            }
+        },
     }
     assert analysis["symbols"] == ["Service", "public_async"]
 
@@ -1474,12 +1636,16 @@ def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_
         "missing_function_imports": [],
         "unknown_module_symbols": [],
         "invalid_member_references": [],
+        "call_arity_mismatches": [],
         "constructor_arity_mismatches": [],
         "payload_contract_violations": [],
         "non_batch_sequence_calls": [],
         "undefined_fixtures": [],
+        "undefined_local_names": [],
         "imported_entrypoint_symbols": [],
         "unsafe_entrypoint_calls": [],
+        "top_level_test_count": 0,
+        "fixture_count": 0,
     }
     assert syntax_error_analysis["syntax_ok"] is False
     assert syntax_error_analysis["syntax_error"] == "invalid syntax at line 1"
@@ -1500,6 +1666,7 @@ def test_analyze_test_module_tracks_invalid_member_references_for_non_enum_class
                 "attributes": ["status"],
                 "constructor_params": ["request_id"],
                 "methods": [],
+                "method_signatures": {},
             }
         },
         "imports": [],
@@ -1516,6 +1683,107 @@ def test_analyze_test_module_tracks_invalid_member_references_for_non_enum_class
     analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
 
     assert analysis["invalid_member_references"] == ["Payload.missing (line 5)"]
+
+
+def test_analyze_test_module_allows_existing_class_methods(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "Validator": {
+                "name": "Validator",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["validate(self, payload)"],
+                "method_signatures": {
+                    "validate": {
+                        "params": ["payload"],
+                        "min_args": 1,
+                        "max_args": 1,
+                        "return_annotation": None,
+                    }
+                },
+            }
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["Validator"],
+    }
+    test_content = (
+        "from module_under_test import Validator\n\n"
+        "def test_validator():\n"
+        "    assert Validator.validate({'ok': True}) is not None\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["invalid_member_references"] == []
+
+
+def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "ComplianceRequest": {
+                "name": "ComplianceRequest",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": ["request_id", "status"],
+                "constructor_params": ["request_id", "data", "timestamp", "status"],
+                "constructor_min_args": 3,
+                "constructor_max_args": 4,
+                "methods": [],
+                "method_signatures": {},
+            },
+            "ComplianceIntakeService": {
+                "name": "ComplianceIntakeService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["intake_request(self, request_data)"],
+                "method_signatures": {
+                    "intake_request": {
+                        "params": ["request_data"],
+                        "min_args": 1,
+                        "max_args": 1,
+                        "return_annotation": "ComplianceRequest",
+                    }
+                },
+            },
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["ComplianceIntakeService", "ComplianceRequest"],
+    }
+    test_content = (
+        "from module_under_test import ComplianceIntakeService\n\n"
+        "def test_service_usage():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    request = service.intake_request('req-1', {'ok': True})\n"
+        "    assert request.id == 'req-1'\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["call_arity_mismatches"] == [
+        "ComplianceIntakeService.intake_request expects 1 args but test uses 2 at line 5"
+    ]
+    assert analysis["invalid_member_references"] == ["ComplianceRequest.id (line 6)"]
 
 
 def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(tmp_path):
@@ -1572,6 +1840,98 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
         "validate_request payload missing required fields: email at line 2",
     ]
     assert non_batch_calls == ["helper does not accept batch/list inputs at line 4"]
+
+
+def test_analyze_test_behavior_contracts_ignores_negative_validation_expectations(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    tree = ast.parse(
+        "import pytest\n\n"
+        "def test_case():\n"
+        "    with pytest.raises(ValueError):\n"
+        "        intake_request('req-1', {'name': 'Ada'})\n"
+        "    assert validate_request({'name': 'Ada'}) is False\n"
+        "    assert not validate_request({'name': 'Ada'})\n"
+    )
+
+    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+        tree,
+        {"intake_request": ["name", "email"], "validate_request": ["name", "email"]},
+        {},
+        {},
+        set(),
+        {},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_allows_partial_invalid_batch_when_result_count_is_explicit(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    requests = [\n"
+        "        {'request_id': 'req-1', 'name': 'Ada', 'email': 'ada@example.com'},\n"
+        "        {'request_id': 'req-2', 'name': 'Bob'},\n"
+        "    ]\n"
+        "    results = process_batch(requests)\n"
+        "    assert len(results) == 1\n"
+    )
+
+    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+        tree,
+        {},
+        {},
+        {
+            "process_batch": {
+                "fields": ["request_id", "name", "email"],
+                "request_key": None,
+                "wrapper_key": None,
+            }
+        },
+        {"process_batch"},
+        {},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
+def test_analyze_test_module_allows_optional_constructor_arguments(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "ComplianceRequest": {
+                "name": "ComplianceRequest",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": ["request_id", "data", "timestamp", "status"],
+                "constructor_min_args": 3,
+                "constructor_max_args": 4,
+                "methods": [],
+            }
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["ComplianceRequest"],
+    }
+    test_content = (
+        "from module_under_test import ComplianceRequest\n\n"
+        "def test_request_defaults():\n"
+        "    request = ComplianceRequest('req-1', {'name': 'Ada'}, '2024-01-01T00:00:00Z')\n"
+        "    assert request is not None\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["constructor_arity_mismatches"] == []
 
 
 def test_analyze_test_behavior_contracts_ignores_unresolved_payloads_and_supported_values(tmp_path):
@@ -1675,10 +2035,36 @@ def test_literal_helpers_cover_missing_keys_nested_data_and_non_string_values(tm
         is None
     )
     assert orchestrator._extract_literal_dict_keys(ast.Name("request_obj"), bindings, class_map) == {"email"}
-    assert orchestrator._extract_literal_field_values(ast.Dict(keys=[ast.Constant("status")], values=[ast.Constant("approved")]), {}, "missing", class_map) == []
-    assert orchestrator._extract_literal_field_values(ast.Name("request_obj"), bindings, "email", class_map) == ["ada@example.com"]
+    assert orchestrator._extract_literal_field_values(
+        ast.Dict(keys=[ast.Constant("status")], values=[ast.Constant("approved")]),
+        {},
+        "missing",
+        class_map,
+    ) == []
+    assert orchestrator._extract_literal_field_values(ast.Name("request_obj"), bindings, "email", class_map) == [
+        "ada@example.com"
+    ]
     assert orchestrator._extract_string_literals(ast.Constant(123), {}) == []
-    assert orchestrator._extract_literal_field_values(ast.Call(func=ast.Name("Request"), args=[], keywords=[]), {}, "email", class_map) == []
+    assert orchestrator._extract_literal_dict_keys(
+        ast.Subscript(
+            value=ast.Dict(
+                keys=[ast.Constant("data")],
+                values=[ast.Dict(keys=[ast.Constant("email")], values=[ast.Constant("ada@example.com")])],
+            ),
+            slice=ast.Constant("data"),
+        ),
+        bindings,
+        class_map,
+    ) == {"email"}
+    assert (
+        orchestrator._extract_literal_field_values(
+            ast.Call(func=ast.Name("Request"), args=[], keywords=[]),
+            {},
+            "email",
+            class_map,
+        )
+        == []
+    )
     assert (
         orchestrator._extract_literal_dict_keys(
             ast.Subscript(value=ast.Name("request_obj"), slice=ast.Constant("missing")),
@@ -1687,6 +2073,68 @@ def test_literal_helpers_cover_missing_keys_nested_data_and_non_string_values(tm
         )
         is None
     )
+
+
+def test_validate_test_output_rejects_top_level_test_count_mismatch(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="tests",
+        raw_content="def test_one():\n    assert True\n\n\ndef test_two():\n    assert True\n",
+    )
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write exactly 3 top-level test functions.",
+        assigned_to="qa_tester",
+    )
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_tests",
+        lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
+    )
+
+    with pytest.raises(AgentExecutionError, match="top-level test count 2 does not match required 3"):
+        orchestrator._validate_test_output(
+            {
+                "module_name": "code_implementation",
+                "code": "def ok():\n    return 1",
+            },
+            output,
+            task=task,
+        )
+
+
+def test_validate_test_output_rejects_top_level_test_count_maximum(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="tests",
+        raw_content="def test_one():\n    assert True\n\n\ndef test_two():\n    assert True\n",
+    )
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write at most 1 top-level test function.",
+        assigned_to="qa_tester",
+    )
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_tests",
+        lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
+    )
+
+    with pytest.raises(AgentExecutionError, match="top-level test count 2 exceeds maximum 1"):
+        orchestrator._validate_test_output(
+            {
+                "module_name": "code_implementation",
+                "code": "def ok():\n    return 1",
+            },
+            output,
+            task=task,
+        )
 
 
 def test_call_argument_value_handles_keywords_constructors_and_non_name_callables(tmp_path):
@@ -1731,9 +2179,9 @@ def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_viol
     assert violations == [
         "process_batch expects dict-like batch items, but test uses Constant at line 1",
         "process_batch batch item missing required key: request_id at line 1",
+        "process_batch batch item nested `payload` missing required fields: email at line 1",
         "process_batch batch item missing nested payload `payload` at line 1",
-        "process_batch batch item missing nested payload `payload` at line 1",
-        "process_batch batch item missing nested payload `payload` at line 1",
+        "process_batch batch item nested `payload` missing required fields: email at line 1",
     ]
     no_batch_call = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Constant("not-a-list")], keywords=[]))
     assert orchestrator._validate_batch_call(no_batch_call, {}, "process_batch", batch_rule) == []
@@ -1868,7 +2316,25 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
 
-    assert orchestrator._build_test_validation_summary({"syntax_ok": False, "syntax_error": "invalid syntax"}) == "Test syntax error: invalid syntax"
+    syntax_summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": False,
+            "syntax_error": "invalid syntax",
+            "line_count": 176,
+            "line_budget": 90,
+            "top_level_test_count": 0,
+            "fixture_count": 0,
+        },
+        completion_diagnostics={
+            "requested_max_tokens": 1600,
+            "output_tokens": 1600,
+            "finish_reason": None,
+            "stop_reason": "max_tokens",
+            "done_reason": None,
+            "hit_token_limit": True,
+            "likely_truncated": True,
+        },
+    )
 
     unavailable_summary = orchestrator._build_test_validation_summary(
         {"syntax_ok": True},
@@ -1880,12 +2346,27 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
             "imported_module_symbols": ["add"],
             "missing_function_imports": ["add (line 2)"],
         },
-        {"available": True, "ran": True, "returncode": 1, "summary": "1 failed"},
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": "FAILED tests_tests.py::test_add - assert 1 == 2\n",
+        },
     )
 
+    assert "Syntax OK: no" in syntax_summary
+    assert "Syntax error: invalid syntax" in syntax_summary
+    assert "Line count: 176/90" in syntax_summary
+    assert "Top-level test functions: 0" in syntax_summary
+    assert "Fixture count: 0" in syntax_summary
+    assert "Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, stop_reason=max_tokens, tokens=1600/1600" in syntax_summary
+    assert syntax_summary.endswith("- Verdict: FAIL")
     assert "- Pytest execution: unavailable (pytest missing)" in unavailable_summary
     assert unavailable_summary.endswith("- Verdict: PASS")
     assert "- Pytest execution: FAIL" in failed_summary
+    assert "Call arity mismatches: none" in failed_summary
+    assert "Pytest failure details: FAILED tests_tests.py::test_add - assert 1 == 2" in failed_summary
     assert "- Pytest summary: 1 failed" in failed_summary
     assert failed_summary.endswith("- Verdict: FAIL")
 
@@ -4996,6 +5477,74 @@ def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_fixtures(tm
     assert validation["undefined_fixtures"] == ["sample_case (line 3)"]
 
 
+def test_analyze_test_module_treats_parametrize_arguments_as_bound_names(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    analysis = orchestrator._analyze_test_module(
+        "import pytest\n"
+        "from module_under_test import batch_process\n\n"
+        "@pytest.mark.parametrize(\"requests, expected\", [([1], [1])])\n"
+        "def test_batch_process(requests, expected):\n"
+        "    assert batch_process(requests) == expected\n",
+        "module_under_test",
+        {"syntax_ok": True, "functions": [{"name": "batch_process"}], "classes": {}, "symbols": ["batch_process"]},
+    )
+
+    assert analysis["undefined_fixtures"] == []
+    assert analysis["undefined_local_names"] == []
+
+
+def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_local_names(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def run():\n    return 1\n",
+            output_payload={
+                "summary": "def run():",
+                "raw_content": "def run():\n    return 1\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def run():\n    return 1\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import run\n\n"
+        "def test_run():\n"
+        "    assert run() == expected_result\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"undefined local names: expected_result \(line 4\)"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["undefined_local_names"] == ["expected_result (line 4)"]
+
+
 def test_run_task_fails_qa_tester_when_generated_tests_call_entrypoints_directly(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -5138,7 +5687,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_violate_payload_contract(
         "            raise ValueError('Invalid request data')\n"
         "        return data\n\n"
         "    def validate_request(self, data):\n"
-        "        required_fields = ['name', 'email', 'compliance_type']\n"
+        "        required_fields = {'name', 'email', 'compliance_type'}\n"
         "        return all(field in data for field in required_fields)\n\n"
         "    def process_batch(self, requests):\n"
         "        for req in requests:\n"
@@ -5199,7 +5748,6 @@ def test_run_task_fails_qa_tester_when_generated_tests_violate_payload_contract(
 
     validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
     assert validation["payload_contract_violations"] == [
-        "intake_request payload missing required fields: name, email, compliance_type at line 11",
         "process_batch batch item missing required fields: name, email, compliance_type at line 14",
     ]
 
@@ -5407,7 +5955,7 @@ def test_code_artifact_context_includes_behavior_contract(tmp_path):
                 "            raise ValueError('Invalid request data')\n"
                 "        return data\n\n"
                 "    def validate_request(self, data):\n"
-                "        required_fields = ['name', 'email', 'compliance_type']\n"
+                "        required_fields = {'name', 'email', 'compliance_type'}\n"
                 "        return all(field in data for field in required_fields)\n\n"
                 "    def process_batch(self, requests):\n"
                 "        for req in requests:\n"
@@ -5422,7 +5970,7 @@ def test_code_artifact_context_includes_behavior_contract(tmp_path):
                     "            raise ValueError('Invalid request data')\n"
                     "        return data\n\n"
                     "    def validate_request(self, data):\n"
-                    "        required_fields = ['name', 'email', 'compliance_type']\n"
+                    "        required_fields = {'name', 'email', 'compliance_type'}\n"
                     "        return all(field in data for field in required_fields)\n\n"
                     "    def process_batch(self, requests):\n"
                     "        for req in requests:\n"
@@ -5440,7 +5988,7 @@ def test_code_artifact_context_includes_behavior_contract(tmp_path):
                             "            raise ValueError('Invalid request data')\n"
                             "        return data\n\n"
                             "    def validate_request(self, data):\n"
-                            "        required_fields = ['name', 'email', 'compliance_type']\n"
+                            "        required_fields = {'name', 'email', 'compliance_type'}\n"
                             "        return all(field in data for field in required_fields)\n\n"
                             "    def process_batch(self, requests):\n"
                             "        for req in requests:\n"
@@ -5522,7 +6070,8 @@ def test_code_artifact_context_includes_field_value_contracts(tmp_path):
                     response=SimpleNamespace(
                         choices=[SimpleNamespace(message=SimpleNamespace(content="# No external runtime dependencies"))],
                         usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-                    )
+                    ),
+                    health_response=[SimpleNamespace(id="gpt-4o-mini")],
                 ),
             ),
         ),
@@ -5539,7 +6088,8 @@ def test_code_artifact_context_includes_field_value_contracts(tmp_path):
                     response=SimpleNamespace(
                         content=[SimpleNamespace(type="text", text="# No external runtime dependencies")],
                         usage=SimpleNamespace(input_tokens=12, output_tokens=8),
-                    )
+                    ),
+                    health_response=[SimpleNamespace(id="claude-3-5-sonnet-latest")],
                 ),
             ),
         ),
@@ -5554,9 +6104,9 @@ def test_code_artifact_context_includes_field_value_contracts(tmp_path):
                 ),
                 request_opener=build_ollama_opener(
                     payload=[
-                        '{"models": []}',
                         '{"response": "# No external runtime dependencies", "prompt_eval_count": 10, "eval_count": 5}',
-                    ]
+                    ],
+                    health_payload='{"models": [{"name": "llama3:latest"}]}'
                 ),
             ),
         ),
@@ -5847,6 +6397,47 @@ def test_run_task_rejects_absolute_artifact_path(tmp_path):
 
     assert project.tasks[0].status == TaskStatus.FAILED.value
     assert not (tmp_path / "absolute.md").exists()
+
+
+def test_run_task_rejects_artifact_output_escape_through_symlinked_directory(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    escaped_root = tmp_path / "escaped"
+    escaped_root.mkdir()
+    (tmp_path / "output").mkdir()
+    linked_dir = tmp_path / "output" / "artifacts"
+    linked_dir.symlink_to(escaped_root, target_is_directory=True)
+
+    class SymlinkedArtifactAgent:
+        def execute(self, agent_input) -> AgentOutput:
+            return AgentOutput(
+                summary="Architecture summary",
+                raw_content="ARCHITECTURE DOC",
+                artifacts=[
+                    ArtifactRecord(
+                        name="architecture_doc",
+                        artifact_type=ArtifactType.DOCUMENT,
+                        path="artifacts/architecture.md",
+                        content="# escaped",
+                    )
+                ],
+            )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": SymlinkedArtifactAgent()}))
+
+    with pytest.raises(AgentExecutionError, match="resolves outside the output directory"):
+        orchestrator.run_task(project.tasks[0], project)
+
+    assert project.tasks[0].status == TaskStatus.FAILED.value
+    assert not (escaped_root / "architecture.md").exists()
 
 
 def test_run_task_persists_provider_call_metadata_from_base_agent(tmp_path):
@@ -6887,6 +7478,15 @@ def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
             "decisions": [],
             "metadata": {
                 "validation": {
+                    "completion_diagnostics": {
+                        "requested_max_tokens": 900,
+                        "output_tokens": 900,
+                        "finish_reason": "length",
+                        "stop_reason": None,
+                        "done_reason": None,
+                        "hit_token_limit": True,
+                        "likely_truncated": True,
+                    },
                     "test_analysis": {
                         "syntax_ok": True,
                         "imported_module_symbols": ["missing"],
@@ -6895,6 +7495,7 @@ def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
                         "invalid_member_references": [],
                         "constructor_arity_mismatches": [],
                         "undefined_fixtures": [],
+                        "undefined_local_names": [],
                         "imported_entrypoint_symbols": [],
                         "unsafe_entrypoint_calls": [],
                     },
@@ -6912,8 +7513,112 @@ def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
     summary = orchestrator._build_repair_validation_summary(task, FailureCategory.TEST_VALIDATION.value)
 
     assert "Missing function imports: add (line 4)" in summary
+    assert "Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, finish_reason=length, tokens=900/900" in summary
     assert "Pytest execution: FAIL" in summary
     assert summary.endswith("Verdict: FAIL")
+
+
+def test_build_code_validation_summary_includes_completion_diagnostics(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_validation_summary(
+        {
+            "syntax_ok": False,
+            "syntax_error": "'[' was never closed at line 96",
+            "third_party_imports": [],
+        },
+        "Generated code validation failed: syntax error '[' was never closed at line 96; output likely truncated at the completion token limit",
+        {
+            "requested_max_tokens": 900,
+            "output_tokens": 900,
+            "finish_reason": "length",
+            "stop_reason": None,
+            "done_reason": None,
+            "hit_token_limit": True,
+            "likely_truncated": True,
+        },
+    )
+
+    assert "Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, finish_reason=length, tokens=900/900" in summary
+
+
+def test_completion_diagnostics_marks_syntax_invalid_length_limited_output_as_truncated(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    diagnostics = orchestrator._completion_diagnostics_from_provider_call(
+        {
+            "requested_max_tokens": 900,
+            "finish_reason": "length",
+            "usage": {"output_tokens": 900},
+        },
+        syntax_ok=False,
+    )
+
+    assert diagnostics == {
+        "requested_max_tokens": 900,
+        "output_tokens": 900,
+        "finish_reason": "length",
+        "stop_reason": None,
+        "done_reason": None,
+        "hit_token_limit": True,
+        "likely_truncated": True,
+    }
+
+
+def test_completion_diagnostics_marks_structurally_incomplete_output_as_truncated(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    diagnostics = orchestrator._completion_diagnostics_from_provider_call(
+        {
+            "requested_max_tokens": 3200,
+            "usage": {"output_tokens": 508},
+        },
+        raw_content=(
+            "def main():\n"
+            "    batch_data = [\n"
+            "        {'request_id': 'req-1'},\n"
+        ),
+        syntax_ok=False,
+        syntax_error="'[' was never closed at line 2",
+    )
+
+    assert diagnostics == {
+        "requested_max_tokens": 3200,
+        "output_tokens": 508,
+        "finish_reason": None,
+        "stop_reason": None,
+        "done_reason": None,
+        "hit_token_limit": False,
+        "likely_truncated": True,
+    }
+
+
+def test_build_code_validation_summary_describes_structural_truncation(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_validation_summary(
+        {
+            "syntax_ok": False,
+            "syntax_error": "'[' was never closed at line 96",
+            "third_party_imports": [],
+        },
+        "Generated code validation failed: syntax error '[' was never closed at line 96; output likely truncated before the file ended cleanly",
+        {
+            "requested_max_tokens": 3200,
+            "output_tokens": 508,
+            "finish_reason": None,
+            "stop_reason": None,
+            "done_reason": None,
+            "hit_token_limit": False,
+            "likely_truncated": True,
+        },
+    )
+
+    assert "Completion diagnostics: likely truncated before the file ended cleanly, tokens=508/3200" in summary
 
 
 def test_execute_workflow_fails_when_repair_budget_is_exhausted(tmp_path):

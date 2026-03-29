@@ -48,7 +48,7 @@ def build_openai_client(
             health_captured_kwargs.append(kwargs)
         if health_error is not None:
             raise health_error
-        return health_response if health_response is not None else []
+        return health_response if health_response is not None else [SimpleNamespace(id="gpt-4o")]
 
     return SimpleNamespace(
         chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
@@ -76,7 +76,7 @@ def build_anthropic_client(
             health_captured_kwargs.append(kwargs)
         if health_error is not None:
             raise health_error
-        return health_response if health_response is not None else []
+        return health_response if health_response is not None else [SimpleNamespace(id="claude-3-5-sonnet")]
 
     return SimpleNamespace(
         messages=SimpleNamespace(create=create),
@@ -98,14 +98,33 @@ class FakeHTTPResponse:
         return False
 
 
-def build_ollama_opener(payload=None, error=None):
-    calls = 0
+def build_ollama_opener(
+    payload=None,
+    error=None,
+    health_payload='{"models": [{"name": "llama3:latest"}]}',
+    health_error=None,
+):
+    health_calls = 0
+    generate_calls = 0
+
+    def current_value(value, index):
+        if isinstance(value, list):
+            return value[min(index, len(value) - 1)]
+        return value
 
     def open_request(request, timeout=None):
-        nonlocal calls
-        current_payload = payload[min(calls, len(payload) - 1)] if isinstance(payload, list) else payload
-        current_error = error[min(calls, len(error) - 1)] if isinstance(error, list) else error
-        calls += 1
+        nonlocal health_calls, generate_calls
+        url = getattr(request, "full_url", None)
+        if url is None and hasattr(request, "get_full_url"):
+            url = request.get_full_url()
+        if isinstance(url, str) and url.endswith("/api/tags"):
+            current_payload = current_value(health_payload if health_payload is not None else payload, health_calls)
+            current_error = current_value(health_error if health_error is not None else error, health_calls)
+            health_calls += 1
+        else:
+            current_payload = current_value(payload, generate_calls)
+            current_error = current_value(error, generate_calls)
+            generate_calls += 1
         if current_error is not None:
             raise current_error
         return FakeHTTPResponse(current_payload)
@@ -209,7 +228,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
             "openai",
             OpenAIProvider(
                 KYCortexConfig(output_dir="./output_test", llm_provider="openai", api_key="token", llm_model="gpt-4o"),
-                client=build_openai_client(error=RuntimeError("openai down")),
+                client=build_openai_client(error=TimeoutError("openai down")),
             ),
             "failed to call the model API",
             1,
@@ -218,7 +237,7 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
             "anthropic",
             AnthropicProvider(
                 KYCortexConfig(output_dir="./output_test", llm_provider="anthropic", api_key="token", llm_model="claude-3-5-sonnet"),
-                client=build_anthropic_client(error=RuntimeError("anthropic down")),
+                client=build_anthropic_client(error=TimeoutError("anthropic down")),
             ),
             "failed to call the model API",
             1,
@@ -352,7 +371,7 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
     )
     primary_provider = OpenAIProvider(
         primary_config,
-        client=build_openai_client(error=RuntimeError("openai down")),
+        client=build_openai_client(error=TimeoutError("openai down")),
     )
     fallback_provider = AnthropicProvider(
         KYCortexConfig(
@@ -415,7 +434,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
     )
     primary_provider = OpenAIProvider(
         primary_config,
-        client=build_openai_client(health_error=RuntimeError("openai health down")),
+        client=build_openai_client(health_error=TimeoutError("openai health down")),
     )
     fallback_provider = AnthropicProvider(
         KYCortexConfig(
@@ -460,6 +479,64 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
     ]
     assert metadata["provider_health"]["openai"]["status"] == "degraded"
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"
+    assert metadata["provider_health"]["anthropic"]["status"] == "healthy"
+
+
+def test_execute_falls_back_to_secondary_provider_after_primary_model_readiness_failure(monkeypatch):
+    primary_config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        api_key="token",
+        llm_model="gpt-4.1",
+        provider_max_attempts=1,
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+    primary_provider = OpenAIProvider(
+        primary_config,
+        client=build_openai_client(health_response=[SimpleNamespace(id="gpt-4o")]),
+    )
+    fallback_provider = AnthropicProvider(
+        KYCortexConfig(
+            output_dir="./output_test",
+            llm_provider="anthropic",
+            api_key="token",
+            llm_model="claude-3-5-sonnet",
+        ),
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            response=SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="FALLBACK RESULT")],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=8),
+            ),
+        ),
+    )
+
+    def create_fallback_provider(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        assert runtime_config.llm_model == "claude-3-5-sonnet"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+    agent = ProviderBackedAgent(primary_provider, primary_config)
+
+    result = agent.execute(build_agent_input())
+
+    metadata = result.metadata["provider_call"]
+    assert result.raw_content == "FALLBACK RESULT"
+    assert metadata["provider"] == "anthropic"
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "status": "failed_health_check",
+            "error_type": "AgentExecutionError",
+            "error_message": "OpenAI provider health check did not confirm configured model 'gpt-4.1'",
+            "retryable": False,
+        }
+    ]
+    assert metadata["provider_health"]["openai"]["status"] == "failing"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["model_ready"] is False
     assert metadata["provider_health"]["anthropic"]["status"] == "healthy"
 
 

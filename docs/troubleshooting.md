@@ -22,10 +22,12 @@ Common configuration failures include:
 - unsupported `llm_provider` values
 - missing `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
 - invalid `workflow_failure_policy` or `workflow_resume_policy`
-- invalid `temperature`, `max_tokens`, or `timeout_seconds`
+- invalid `temperature`, `max_tokens`, `timeout_seconds`, or execution-sandbox limits such as `execution_sandbox_max_wall_clock_seconds`
 - empty required fields such as `project_name`, `llm_model`, or `output_dir`
 
 If configuration is created successfully but provider-specific credentials are still missing, call `validate_runtime()` to surface the failure immediately.
+
+An absent `output_dir` on disk immediately after configuration creation is normal. The runtime now creates that directory lazily when artifacts or generated validation files are first written.
 
 ## Provider And Agent Failures
 
@@ -35,11 +37,14 @@ Typical causes:
 
 - the provider call failed or timed out
 - the backend returned an invalid or empty response
+- the backend was reachable but the configured model was not ready for that provider
 - the agent returned empty text
 - the agent returned a value that cannot be normalized into `AgentOutput`
 - required context keys were missing for the agent
 
 Built-in agents and custom `BaseAgent` subclasses both flow through the same normalization and validation path.
+
+Built-in provider health probes now distinguish backend reachability from model readiness. A failed readiness probe with `backend_reachable=True` and `model_ready=False` is deterministic and usually means the configured model name is wrong, unavailable to the current account, or not installed locally in Ollama.
 
 ## Unknown Agents And Invalid Workflows
 
@@ -80,6 +85,22 @@ Relevant controls:
 
 Use `workflow_resume_policy="resume_failed"` when later reruns should re-queue failed tasks and dependency-skipped descendants from persisted state.
 
+## Generated Output Validation Failures
+
+Not every workflow failure comes from a provider outage. The orchestrator also rejects generated artifacts that fail deterministic validation.
+
+Common generated-output failure causes include:
+
+- syntax-invalid or structurally incomplete code or test files
+- likely truncated outputs detected from provider token-limit metadata plus end-of-file heuristics
+- code tasks that exceeded explicit line budgets or omitted a required CLI entrypoint
+- test tasks that exceeded explicit line, fixture, or top-level test-count budgets
+- undefined pytest fixtures or undefined local names in generated tests
+- payload-contract or batch-shape mismatches between tests and the generated implementation
+- artifact paths that would resolve outside `output_dir`, including symlink-based path escapes
+
+When these failures happen, inspect the task's persisted validation metadata or repair summary first. Those summaries now include static validation findings, pytest results when available, and completion diagnostics for likely truncation.
+
 ## Persistence Failures
 
 State save/load problems surface as `StatePersistenceError`.
@@ -117,6 +138,8 @@ Practical recovery steps depend on the failure class:
 3. `AgentExecutionError` with retry budget left: rerun normally and let the orchestrator retry.
 4. `AgentExecutionError` on a terminal failed workflow: rerun from persisted state with `workflow_resume_policy="resume_failed"` when appropriate.
 5. `StatePersistenceError`: fix the state-file path or payload integrity before resuming execution.
+
+If the failure summary mentions likely truncation, reduce task scope, tighten the requested size budget, increase `max_tokens` when justified, or rerun with bounded repair enabled so the corrective task receives the persisted completion diagnostics.
 
 ## Audit Trail Signals
 

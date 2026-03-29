@@ -34,11 +34,19 @@ This file tracks the current repository-owned release state for KYCortex during 
 - The immediately preceding published state `v1.0.9` had `Release #11` succeed while `CI #23` still failed in `Full Test Suite (3.10)`.
 - Expected attached assets remain `kycortex_agents-1.0.10-py3-none-any.whl` and `kycortex_agents-1.0.10.tar.gz`.
 
+## Current Unreleased Validation Snapshot
+
+- Focused hardening regressions covering provider health, output validation, prompt constraints, and provider-matrix task templates are passing on the current maintenance branch.
+- The strongest current cloud-provider empirical checkpoints are OpenAI completing the full provider-matrix workflow with zero repair cycles and Anthropic completing the same workflow with one repair cycle.
+- Local-model validation through Ollama still depends on a reachable local `/api/tags` endpoint and the configured model being installed before the empirical matrix can treat it as available.
+
 ## Release Outcome
 
 The 1.0.10 maintenance-development state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs.
 
 The repository's public licensing guidance now documents the AGPL open-source distribution together with a separate commercial licensing path.
+
+The current maintenance branch also documents provider model-readiness checks, completion-aware output validation, bounded repair guidance, and the empirical provider-matrix checkpoints used to track cloud-provider stability.
 
 Use the following repository-owned references when validating follow-up maintenance releases:
 

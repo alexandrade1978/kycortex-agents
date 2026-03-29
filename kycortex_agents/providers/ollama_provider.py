@@ -36,12 +36,12 @@ class OllamaProvider(BaseLLMProvider):
     def _health_check_timeout(self) -> float:
         return min(self.config.timeout_seconds, 5.0)
 
-    def _ensure_server_reachable(self) -> None:
+    def _read_health_payload(self) -> dict[str, Any]:
         timeout_seconds = self._health_check_timeout()
         request = Request(self._health_endpoint(), method="GET")
         try:
             with self._request_opener(request, timeout=timeout_seconds) as response:
-                response.read()
+                raw_payload = response.read().decode("utf-8")
         except HTTPError as exc:
             self._last_call_metadata = None
             error_type = ProviderTransientError if is_retryable_http_status(exc.code) else AgentExecutionError
@@ -58,16 +58,64 @@ class OllamaProvider(BaseLLMProvider):
             raise ProviderTransientError(
                 f"Ollama server is not responding at {self.config.base_url}"
             ) from exc
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError as exc:
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama health check returned an invalid JSON response at {self.config.base_url}"
+            ) from exc
+        if not isinstance(payload, dict):
+            self._last_call_metadata = None
+            raise AgentExecutionError(
+                f"Ollama health check returned an invalid payload shape at {self.config.base_url}"
+            )
+        return payload
+
+    def _ensure_server_reachable(self) -> None:
+        self._read_health_payload()
+
+    def _model_is_available(self, available_model_name: str) -> bool:
+        configured_model = self.config.llm_model
+        return available_model_name == configured_model or available_model_name.startswith(f"{configured_model}:")
 
     def health_check(self) -> dict[str, Any]:
         started_at = perf_counter()
-        self._ensure_server_reachable()
+        payload = self._read_health_payload()
         completed_at = perf_counter()
+        model_entries = payload.get("models", [])
+        model_names: list[str] = []
+        for entry in model_entries:
+            if not isinstance(entry, dict):
+                continue
+            model_name = entry.get("name")
+            if isinstance(model_name, str):
+                model_names.append(model_name)
+        model_ready = any(self._model_is_available(model_name) for model_name in model_names)
+        if not model_ready:
+            return {
+                "provider": self.config.llm_provider,
+                "model": self.config.llm_model,
+                "status": "failing",
+                "active_check": True,
+                "retryable": False,
+                "backend_reachable": True,
+                "model_ready": False,
+                "base_url": self.config.base_url,
+                "error_type": "AgentExecutionError",
+                "error_message": (
+                    f"Ollama health check did not confirm configured model '{self.config.llm_model}'"
+                ),
+                "timeout_seconds": round(self._health_check_timeout(), 6),
+                "latency_ms": round((completed_at - started_at) * 1000, 3),
+            }
         return {
             "provider": self.config.llm_provider,
             "model": self.config.llm_model,
             "status": "healthy",
             "active_check": True,
+            "backend_reachable": True,
+            "model_ready": True,
             "base_url": self.config.base_url,
             "timeout_seconds": round(self._health_check_timeout(), 6),
             "latency_ms": round((completed_at - started_at) * 1000, 3),
@@ -135,6 +183,8 @@ class OllamaProvider(BaseLLMProvider):
         total_duration_ns = payload.get("total_duration")
         load_duration_ns = payload.get("load_duration")
         return {
+            "requested_max_tokens": self.config.max_tokens,
+            "done_reason": payload.get("done_reason"),
             "usage": {
                 "input_tokens": prompt_eval_count,
                 "output_tokens": eval_count,

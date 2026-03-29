@@ -100,6 +100,28 @@ Runtime behavior:
 
 This behavior is useful when provider or validation failures are expected to be transient.
 
+## Output Validation And Repair Context
+
+Generated code and test artifacts are validated before the workflow treats them as successful outputs.
+
+Code validation can enforce:
+
+- Python syntax validity
+- task-derived line budgets such as `under 300 lines`
+- required CLI entrypoints when the task explicitly asks for a CLI or `__main__` path
+- completion diagnostics that combine provider token-limit metadata with structural end-of-file heuristics to detect likely truncated outputs
+
+Test validation can additionally enforce:
+
+- exact or maximum top-level test counts parsed from task text
+- fixture-count budgets parsed from task text
+- import, call-arity, constructor-arity, payload-contract, and batch-shape checks derived from the generated implementation
+- undefined fixture and undefined local-name detection inside generated tests
+- safe pytest execution inside the execution sandbox
+- completion diagnostics for likely truncated test files
+
+When a failed task is resumed under `workflow_resume_policy="resume_failed"`, the runtime can materialize corrective repair work up to `workflow_max_repair_cycles`. The repair context includes the failing artifact content plus a structured validation summary so the next attempt can address concrete blockers instead of guessing from prompt text alone.
+
 ## Failure Policies
 
 Workflow-level failure behavior is controlled by `workflow_failure_policy` in `KYCortexConfig`.
@@ -137,6 +159,8 @@ The runtime persists state after:
 - task failures
 - task completions
 - workflow terminal transitions
+
+Artifact files themselves are written under `output_dir` only when a task actually produces persisted content. Configuration no longer creates that directory eagerly during `KYCortexConfig` initialization.
 
 This design ensures retries, failures, artifacts, decisions, provider metadata, and execution events survive restarts.
 
@@ -204,3 +228,5 @@ When a workflow does not progress as expected, inspect these areas first:
 5. downstream tasks were intentionally skipped by the `continue` failure policy
 
 The persisted `ProjectState`, execution events, and workflow summary usually provide enough information to diagnose the cause.
+
+For empirical full-workflow validation across providers, use `examples/example_provider_matrix_validation.py` with `workflow_failure_policy="continue"`, `workflow_resume_policy="resume_failed"`, and a bounded repair budget. That is the canonical repository-owned path for comparing provider behavior against the same task graph.

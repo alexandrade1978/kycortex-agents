@@ -293,11 +293,19 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     result = agent.execute(agent_input)
 
     assert "Module name: module" in agent.last_user_message
+    assert "Implementation code:" in agent.last_user_message
     assert "Public API outline:" in agent.last_user_message
     assert "Public API contract:" in agent.last_user_message
     assert "Do not duplicate the implementation code in the tests." in agent.last_user_message
+    assert "Respect the task's line budget and requested scenario count exactly." in agent.last_user_message
+    assert "stay on the main service or batch API" in agent.last_user_message
+    assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
+    assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
     assert "Import every called production function explicitly" in agent.last_user_message
     assert "Return only raw Python test code." in agent.last_system_prompt
+    assert "do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities" in agent.last_system_prompt
+    assert "Do not add caplog assertions or raw logging-text expectations" in agent.last_system_prompt
+    assert "Task-specific scope, test-count, and size limits override these defaults." in agent.last_system_prompt
     assert result.artifacts[0].artifact_type == ArtifactType.TEST
     assert result.artifacts[0].name == "tests_tests"
 
@@ -316,6 +324,7 @@ def test_code_engineer_agent_prompt_demands_raw_python_output(tmp_path):
     agent.execute(agent_input)
 
     assert "Return only raw Python source code." in agent.last_system_prompt
+    assert "Task-specific scope and size limits override generic polish." in agent.last_system_prompt
     assert "Do not include markdown fences" in agent.last_system_prompt
     assert "Target module: code_implementation.py" in agent.last_user_message
 

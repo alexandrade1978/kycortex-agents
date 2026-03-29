@@ -33,7 +33,7 @@ def build_response(content):
 
 def build_response_with_usage(content, prompt_tokens=10, completion_tokens=5, total_tokens=15):
     return SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content), finish_reason="stop")],
         usage=SimpleNamespace(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -161,7 +161,10 @@ def test_is_retryable_http_status_matches_retry_policy(status_code, expected):
 @pytest.mark.parametrize(
     ("exc", "expected"),
     [
-        (SimpleNamespace(), True),
+        (SimpleNamespace(), False),
+        (TimeoutError("timed out"), True),
+        (OSError("connection dropped"), True),
+        (type("APIConnectionError", (Exception,), {})("down"), True),
         (SimpleNamespace(status_code=503), True),
         (SimpleNamespace(response=SimpleNamespace(status_code=429)), True),
         (SimpleNamespace(code=400), False),
@@ -207,6 +210,44 @@ def test_create_provider_requires_runtime_credentials(tmp_path):
 
     with pytest.raises(ProviderConfigurationError, match="Missing API key"):
         create_provider(config)
+
+
+def test_openai_provider_metadata_includes_finish_reason_and_requested_max_tokens(tmp_path):
+    captured_kwargs = []
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token", max_tokens=321)
+    provider = OpenAIProvider(config, client=build_client(response=build_response_with_usage("ok"), captured_kwargs=captured_kwargs))
+
+    assert provider.generate("system", "message") == "ok"
+    metadata = provider.get_last_call_metadata()
+
+    assert captured_kwargs[0]["max_tokens"] == 321
+    assert metadata["requested_max_tokens"] == 321
+    assert metadata["finish_reason"] == "stop"
+
+
+def test_anthropic_provider_metadata_includes_stop_reason_and_requested_max_tokens(tmp_path):
+    captured_kwargs = []
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="ok")],
+        stop_reason="max_tokens",
+        stop_type="message_delta",
+        usage=SimpleNamespace(
+            input_tokens=10,
+            output_tokens=11,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        ),
+    )
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token", max_tokens=654)
+    provider = AnthropicProvider(config, client=build_anthropic_client(response=response, captured_kwargs=captured_kwargs))
+
+    assert provider.generate("system", "message") == "ok"
+    metadata = provider.get_last_call_metadata()
+
+    assert captured_kwargs[0]["max_tokens"] == 654
+    assert metadata["requested_max_tokens"] == 654
+    assert metadata["stop_reason"] == "max_tokens"
+    assert metadata["stop_type"] == "message_delta"
 
 
 def test_create_provider_wraps_runtime_validation_error_cause(tmp_path):
@@ -347,6 +388,46 @@ def test_probe_provider_health_caches_unhealthy_snapshot_during_cooldown(tmp_pat
     assert second_snapshot["cooldown_remaining_seconds"] > 0
 
 
+def test_probe_provider_health_does_not_share_unhealthy_cache_across_credentials(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    first_config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token-a",
+        provider_health_check_cooldown_seconds=30.0,
+    )
+    second_config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token-b",
+        provider_health_check_cooldown_seconds=30.0,
+    )
+    provider_calls: list[str] = []
+
+    class UnhealthyProvider(BaseLLMProvider):
+        def __init__(self, api_key: str):
+            self.api_key = api_key
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+        def health_check(self) -> dict[str, object]:
+            provider_calls.append(self.api_key)
+            raise ProviderTransientError("temporary outage")
+
+    monkeypatch.setattr(
+        "kycortex_agents.providers.factory.create_provider",
+        lambda runtime_config: UnhealthyProvider(runtime_config.api_key),
+    )
+
+    first_snapshot = probe_provider_health(first_config)
+    second_snapshot = probe_provider_health(second_config)
+
+    assert provider_calls == ["token-a", "token-b"]
+    assert first_snapshot["cooldown_cached"] is False
+    assert second_snapshot["cooldown_cached"] is False
+
+
 def test_probe_provider_health_does_not_cache_ready_snapshot(tmp_path, monkeypatch):
     provider_factory._HEALTH_PROBE_CACHE.clear()
     config = KYCortexConfig(
@@ -400,13 +481,15 @@ def test_openai_provider_captures_usage_metadata(tmp_path):
     provider.generate("system", "message")
 
     assert provider.get_last_call_metadata() == {
+        "requested_max_tokens": 4096,
+        "finish_reason": "stop",
         "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
     }
 
 
 def test_openai_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    provider = OpenAIProvider(config, client=build_client(error=RuntimeError("down")))
+    provider = OpenAIProvider(config, client=build_client(error=TimeoutError("down")))
 
     with pytest.raises(ProviderTransientError, match="failed to call the model API"):
         provider.generate("system", "message")
@@ -438,8 +521,27 @@ def test_openai_provider_health_check_returns_structured_success_snapshot(tmp_pa
     assert snapshot["model"] == "gpt-4o"
     assert snapshot["status"] == "healthy"
     assert snapshot["active_check"] is True
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is True
     assert snapshot["timeout_seconds"] == 5.0
     assert snapshot["latency_ms"] >= 0
+
+
+def test_openai_provider_health_check_reports_configured_model_not_ready(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_model="gpt-4.1")
+    provider = OpenAIProvider(
+        config,
+        client=build_client(health_response=[SimpleNamespace(id="gpt-4o")]),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["status"] == "failing"
+    assert snapshot["retryable"] is False
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is False
+    assert snapshot["error_type"] == "AgentExecutionError"
+    assert "did not confirm configured model 'gpt-4.1'" in snapshot["error_message"]
 
 
 def test_openai_provider_health_check_passes_capped_timeout_to_sdk(tmp_path):
@@ -562,6 +664,9 @@ def test_anthropic_provider_captures_usage_metadata(tmp_path):
     provider.generate("system", "message")
 
     assert provider.get_last_call_metadata() == {
+        "requested_max_tokens": 4096,
+        "stop_reason": None,
+        "stop_type": None,
         "usage": {
             "input_tokens": 12,
             "output_tokens": 8,
@@ -595,7 +700,7 @@ def test_anthropic_provider_preserves_none_total_tokens_when_usage_counts_are_mi
 
 def test_anthropic_provider_wraps_api_error(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
-    provider = AnthropicProvider(config, client=build_anthropic_client(error=RuntimeError("down")))
+    provider = AnthropicProvider(config, client=build_anthropic_client(error=TimeoutError("down")))
 
     with pytest.raises(ProviderTransientError, match="failed to call the model API"):
         provider.generate("system", "message")
@@ -616,7 +721,12 @@ def test_anthropic_provider_passes_configured_timeout_to_sdk(tmp_path):
 
 
 def test_anthropic_provider_health_check_returns_structured_success_snapshot(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", timeout_seconds=14.0)
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="anthropic",
+        llm_model="claude-3-5-sonnet",
+        timeout_seconds=14.0,
+    )
     provider = AnthropicProvider(
         config,
         client=build_anthropic_client(health_response=[SimpleNamespace(id="claude-3-5-sonnet")]),
@@ -625,11 +735,34 @@ def test_anthropic_provider_health_check_returns_structured_success_snapshot(tmp
     snapshot = provider.health_check()
 
     assert snapshot["provider"] == "anthropic"
-    assert snapshot["model"] == "gpt-4o"
+    assert snapshot["model"] == "claude-3-5-sonnet"
     assert snapshot["status"] == "healthy"
     assert snapshot["active_check"] is True
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is True
     assert snapshot["timeout_seconds"] == 5.0
     assert snapshot["latency_ms"] >= 0
+
+
+def test_anthropic_provider_health_check_reports_configured_model_not_ready(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="anthropic",
+        llm_model="claude-4-opus",
+    )
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(health_response=[SimpleNamespace(id="claude-3-5-sonnet")]),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["status"] == "failing"
+    assert snapshot["retryable"] is False
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is False
+    assert snapshot["error_type"] == "AgentExecutionError"
+    assert "did not confirm configured model 'claude-4-opus'" in snapshot["error_message"]
 
 
 def test_anthropic_provider_health_check_passes_capped_timeout_to_sdk(tmp_path):
@@ -702,7 +835,7 @@ def test_ollama_provider_health_check_returns_structured_success_snapshot(tmp_pa
     )
     provider = OllamaProvider(
         config,
-        request_opener=build_ollama_opener(payload='{"models": []}'),
+        request_opener=build_ollama_opener(payload='{"models": [{"name": "llama3:latest"}]}'),
     )
 
     snapshot = provider.health_check()
@@ -711,9 +844,32 @@ def test_ollama_provider_health_check_returns_structured_success_snapshot(tmp_pa
     assert snapshot["model"] == "llama3"
     assert snapshot["status"] == "healthy"
     assert snapshot["active_check"] is True
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is True
     assert snapshot["base_url"] == "http://localhost:11434"
     assert snapshot["timeout_seconds"] == 5.0
     assert snapshot["latency_ms"] >= 0
+
+
+def test_ollama_provider_health_check_reports_configured_model_not_ready(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="llama3",
+    )
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload='{"models": [{"name": "mistral:latest"}]}'),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["status"] == "failing"
+    assert snapshot["retryable"] is False
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is False
+    assert snapshot["error_type"] == "AgentExecutionError"
+    assert "did not confirm configured model 'llama3'" in snapshot["error_message"]
 
 
 def test_anthropic_provider_treats_client_4xx_errors_as_deterministic(tmp_path):
@@ -798,6 +954,8 @@ def test_ollama_provider_captures_usage_metadata(tmp_path):
     provider.generate("system", "message")
 
     assert provider.get_last_call_metadata() == {
+        "requested_max_tokens": 4096,
+        "done_reason": None,
         "usage": {"input_tokens": 14, "output_tokens": 9, "total_tokens": 23},
         "timing": {"total_duration_ms": 125.0, "load_duration_ms": 25.0},
     }

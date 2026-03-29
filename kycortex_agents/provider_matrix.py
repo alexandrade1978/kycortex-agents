@@ -110,7 +110,7 @@ def build_full_workflow_config(
         llm_provider=provider,
         llm_model=model,
         temperature=0.0,
-        max_tokens=900,
+        max_tokens=3200,
         timeout_seconds=180.0,
         workflow_failure_policy=workflow_failure_policy,
         workflow_resume_policy=workflow_resume_policy,
@@ -151,9 +151,10 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
             id="code",
             title="Implementation",
             description=(
-                "Write one Python module under 260 lines that implements the planned compliance intake service. "
+                "Write one Python module under 300 lines that implements only the planned compliance intake service. "
                 "Use only the standard library. Include typed models, validation, risk scoring, batch processing, "
-                "audit logging, and a CLI demo entrypoint. Return raw Python only."
+                "audit logging, and a CLI demo entrypoint. Prefer the smallest complete design that satisfies those requirements. "
+                "Avoid extra helper layers, exhaustive docstrings, and optional abstractions. Return raw Python only."
             ),
             assigned_to="code_engineer",
             dependencies=["arch"],
@@ -176,8 +177,11 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
             id="tests",
             title="Tests",
             description=(
-                "Write a compact pytest module for the generated compliance intake service. "
-                "Cover one happy path, one validation failure, and one batch-processing scenario. Return raw Python only."
+                "Write one compact raw pytest module under 150 lines for the generated compliance intake service. "
+                "Use at most 3 fixtures and at most 7 top-level test functions. Include at least one happy path, one validation failure, and one batch-processing scenario. "
+                "Use the direct intake or validation surface for the validation-failure scenario and keep the batch-processing scenario fully valid unless the implementation contract explicitly requires partially invalid batch items. "
+                "Do not add standalone caplog or raw logging-output assertions unless externally observable logging behavior is explicitly required. "
+                "Prefer direct assertions over exhaustive permutations or class-based test suites. Return raw Python only."
             ),
             assigned_to="qa_tester",
             dependencies=["code", "deps"],

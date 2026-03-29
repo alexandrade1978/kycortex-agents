@@ -4,6 +4,13 @@ from typing import Optional
 
 
 _RETRYABLE_HTTP_STATUS_CODES = {408, 409, 425, 429}
+_TRANSIENT_PROVIDER_EXCEPTION_TYPES = (TimeoutError, ConnectionError, OSError)
+_TRANSIENT_PROVIDER_EXCEPTION_NAMES = {
+    "APIConnectionError",
+    "APITimeoutError",
+    "ConnectTimeout",
+    "ReadTimeout",
+}
 
 
 def extract_http_status_code(exc: Exception) -> Optional[int]:
@@ -30,6 +37,6 @@ def is_retryable_http_status(status_code: int) -> bool:
 
 def is_transient_provider_exception(exc: Exception) -> bool:
     status_code = extract_http_status_code(exc)
-    if status_code is None:
-        return True
-    return is_retryable_http_status(status_code)
+    if status_code is not None:
+        return is_retryable_http_status(status_code)
+    return isinstance(exc, _TRANSIENT_PROVIDER_EXCEPTION_TYPES) or type(exc).__name__ in _TRANSIENT_PROVIDER_EXCEPTION_NAMES

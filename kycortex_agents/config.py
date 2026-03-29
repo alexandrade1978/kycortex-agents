@@ -57,6 +57,7 @@ class KYCortexConfig:
     execution_sandbox_allow_network: bool = False
     execution_sandbox_allow_subprocesses: bool = False
     execution_sandbox_max_cpu_seconds: float = 30.0
+    execution_sandbox_max_wall_clock_seconds: float = 60.0
     execution_sandbox_max_memory_mb: int = 512
     execution_sandbox_temp_root: Optional[str] = None
     project_name: str = "kycortex-project"
@@ -92,7 +93,6 @@ class KYCortexConfig:
         if self.base_url is None:
             self.base_url = DEFAULT_PROVIDER_BASE_URLS.get(self.llm_provider)
         self._validate_static_config()
-        os.makedirs(self.output_dir, exist_ok=True)
 
     def _resolve_api_key(self) -> str:
         """Resolve the configured provider API key from the matching environment variable."""
@@ -219,6 +219,8 @@ class KYCortexConfig:
             raise ConfigValidationError("provider_health_check_cooldown_seconds must be zero or greater")
         if self.execution_sandbox_max_cpu_seconds <= 0:
             raise ConfigValidationError("execution_sandbox_max_cpu_seconds must be greater than zero")
+        if self.execution_sandbox_max_wall_clock_seconds <= 0:
+            raise ConfigValidationError("execution_sandbox_max_wall_clock_seconds must be greater than zero")
         if self.execution_sandbox_max_memory_mb <= 0:
             raise ConfigValidationError("execution_sandbox_max_memory_mb must be greater than zero")
         if (
@@ -252,6 +254,7 @@ class KYCortexConfig:
             allow_network=self.execution_sandbox_allow_network,
             allow_subprocesses=self.execution_sandbox_allow_subprocesses,
             max_cpu_seconds=self.execution_sandbox_max_cpu_seconds,
+            max_wall_clock_seconds=self.execution_sandbox_max_wall_clock_seconds,
             max_memory_mb=self.execution_sandbox_max_memory_mb,
             temp_root=self.execution_sandbox_temp_root,
             disable_pytest_plugin_autoload=True,

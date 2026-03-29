@@ -1,5 +1,6 @@
 from pathlib import Path
 import importlib
+import os
 import re
 import subprocess
 import sys
@@ -14,9 +15,15 @@ import kycortex_agents
 
 def _refresh_generated_egg_info() -> Path:
     project_root = Path(__file__).resolve().parents[1]
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not (key.startswith("COV_CORE_") or key.startswith("COVERAGE"))
+    }
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "--quiet"],
         cwd=project_root,
+        env=env,
         check=True,
         capture_output=True,
         text=True,

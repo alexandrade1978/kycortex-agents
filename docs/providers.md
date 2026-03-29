@@ -39,7 +39,7 @@ Supported values are:
 
 `create_provider()` validates runtime configuration first and then resolves the configured provider through the built-in provider map.
 
-`probe_provider_health()` is the matching public helper when callers need a structured provider-readiness snapshot before generation. Providers that do not implement an active probe return a passive `ready` snapshot, while built-in providers can report active reachability results and unhealthy snapshots. The runtime also reuses cached unhealthy health snapshots during a configured cooldown window so repeated calls do not keep probing a backend that already failed moments earlier.
+`probe_provider_health()` is the matching public helper when callers need a structured provider-readiness snapshot before generation. Providers that do not implement an active probe return a passive `ready` snapshot, while built-in providers can report active reachability results, explicit model-readiness outcomes, and unhealthy snapshots. The runtime also reuses cached unhealthy health snapshots during a configured cooldown window so repeated calls do not keep probing the same failing backend again immediately.
 
 ## Runtime Resilience Controls
 
@@ -63,7 +63,8 @@ Use the OpenAI provider when `llm_provider="openai"`.
 - Environment variable fallback: `OPENAI_API_KEY`
 - Required runtime fields: valid API key, model name
 - API style: OpenAI chat completions
-- Metadata captured: prompt, completion, and total token counts when the backend returns usage information
+- Metadata captured: requested token budget, prompt/completion/total token counts, and `finish_reason` when the backend returns usage information
+- Health probe behavior: validates backend reachability and confirms the configured model is present in the provider model list before generation begins
 
 Example:
 
@@ -87,7 +88,8 @@ Use the Anthropic provider when `llm_provider="anthropic"`.
 - Environment variable fallback: `ANTHROPIC_API_KEY`
 - Required runtime fields: valid API key, model name
 - API style: Anthropic messages API
-- Metadata captured: input, output, total, and cache-related token counts when the backend returns usage information
+- Metadata captured: requested token budget, input/output/total/cache token counts, plus `stop_reason` and `stop_type` when the backend returns them
+- Health probe behavior: validates backend reachability and confirms the configured model is present in the provider model list before generation begins
 
 Example:
 
@@ -112,7 +114,8 @@ Use the Ollama provider when `llm_provider="ollama"`.
 - Default base URL: `http://localhost:11434`
 - Required runtime fields: model name plus a valid base URL when the default is overridden
 - API style: HTTP POST to the Ollama `/api/generate` endpoint
-- Metadata captured: prompt/output token counts plus timing information derived from Ollama duration fields
+- Metadata captured: requested token budget, prompt/output token counts, `done_reason`, and timing information derived from Ollama duration fields
+- Health probe behavior: queries `/api/tags`, validates the local endpoint is reachable, and confirms the configured model name is installed before generation begins
 
 Example:
 
@@ -143,16 +146,20 @@ These checks are intentionally centralized in configuration so provider instanti
 
 The built-in providers expose different metadata shapes, but they all flow back through the same runtime path into task state and snapshots.
 
-- OpenAI: usage token counts
-- Anthropic: usage token counts plus cache token details when present
-- Ollama: usage token counts plus duration metrics converted to milliseconds
+- OpenAI: requested token budget, usage token counts, and `finish_reason`
+- Anthropic: requested token budget, usage token counts, cache token details, `stop_reason`, and `stop_type`
+- Ollama: requested token budget, usage token counts, `done_reason`, and duration metrics converted to milliseconds
 
 Health probes also flow through a shared shape:
 
 - `status`: `ready`, `healthy`, `degraded`, or `failing`
 - `active_check`: whether the provider performed a real probe instead of returning passive readiness
+- `backend_reachable`: whether the health probe reached the backend successfully
+- `model_ready`: whether the configured model is confirmed ready on that backend
 - `retryable`: whether a failed probe indicates a transient condition
 - `latency_ms`: elapsed probe latency for readiness checks
+
+When a provider is reachable but the configured model is unavailable, the built-in providers report `status="failing"`, `backend_reachable=True`, and `model_ready=False`. This is treated as a deterministic failure so the runtime can fail fast or move to a fallback provider without burning transient retry budget.
 
 Cached unhealthy health snapshots additionally expose:
 
@@ -169,6 +176,8 @@ The agent runtime also emits higher-level provider execution metadata such as:
 
 This metadata is later attached to task outputs, execution events, provider-matrix summaries, and persisted project state for post-run inspection. Provider-matrix summaries now also embed the aggregate workflow-level `workflow_telemetry` payload so comparative runs can inspect acceptance, progress, resume, repair, provider behavior, and aggregated provider health states from the same compact report.
 
+The current empirical maintenance baseline treats cloud-provider full-workflow runs as the primary comparison surface. OpenAI and Anthropic are currently tracked through that matrix, while Ollama validation still depends on a reachable local `/api/tags` endpoint and the configured model being installed on the local machine.
+
 ## Error Handling
 
 The provider layer normalizes backend problems into runtime-safe failures, but not into a single exception type:
@@ -177,6 +186,7 @@ The provider layer normalizes backend problems into runtime-safe failures, but n
 - empty backend responses become `AgentExecutionError`
 - deterministic client-side request rejections such as 4xx validation failures become `AgentExecutionError`
 - retryable backend failures such as 429s, transient 5xx responses, timeouts, and transport errors become `ProviderTransientError`
+- deterministic model-readiness failures reported by health checks remain `AgentExecutionError`
 
 This distinction is what allows the runtime to retry only retryable failures, open circuits only on transient failure streaks, and fail fast on deterministic invalid requests.
 

@@ -1,5 +1,7 @@
 import ast
+import builtins
 import importlib.util
+import io
 import logging
 import os
 import re
@@ -7,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import tokenize
 from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
@@ -64,6 +67,39 @@ _PYTEST_BUILTIN_FIXTURES = {
     "tmpdir",
     "tmpdir_factory",
 }
+_LINE_BUDGET_PATTERNS = (
+    re.compile(r"\bunder\s+(\d+)\s+lines?\b"),
+    re.compile(r"\bwithin\s+(\d+)\s+lines?\b"),
+    re.compile(r"\bat\s+most\s+(\d+)\s+lines?\b"),
+    re.compile(r"\bno\s+more\s+than\s+(\d+)\s+lines?\b"),
+)
+_EXACT_TEST_COUNT_PATTERN = re.compile(r"\bexactly\s+(\d+)\s+top-level\s+test\s+functions?\b")
+_MAX_TEST_COUNT_PATTERN = re.compile(r"\bat\s+most\s+(\d+)\s+top-level\s+test\s+functions?\b")
+_FIXTURE_BUDGET_PATTERN = re.compile(r"\bat\s+most\s+(\d+)\s+fixtures?\b")
+_LIKELY_TRUNCATED_SYNTAX_MARKERS = (
+    "was never closed",
+    "unexpected eof while parsing",
+    "unterminated string literal",
+    "unterminated triple-quoted string literal",
+    "eof while scanning triple-quoted string literal",
+    "eol while scanning string literal",
+    "expected an indented block",
+)
+_LIKELY_TRUNCATED_TAIL_SUFFIXES = (
+    "(",
+    "[",
+    "{",
+    ",",
+    ".",
+    "=",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "\\",
+    ":",
+)
 
 _SANDBOX_SITECUSTOMIZE = """
 import asyncio
@@ -785,12 +821,12 @@ class Orchestrator:
         return normalized_output.raw_content
 
     def _validate_task_output(self, task: Task, context: Dict[str, Any], output: AgentOutput) -> None:
-        normalized_role = AgentRegistry.normalize_key(task.assigned_to)
+        normalized_role = AgentRegistry.normalize_key(self._execution_agent_name(task))
         if normalized_role == "code_engineer":
-            self._validate_code_output(output)
+            self._validate_code_output(output, task=task)
             return
         if normalized_role == "qa_tester":
-            self._validate_test_output(context, output)
+            self._validate_test_output(context, output, task=task)
             return
         if normalized_role != "dependency_manager":
             return
@@ -805,20 +841,39 @@ class Orchestrator:
             f"Dependency manifest validation failed: missing manifest entries for {missing_entries}"
         )
 
-    def _validate_code_output(self, output: AgentOutput) -> None:
+    def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
         code_artifact_content = self._artifact_content(output, ArtifactType.CODE)
         code_content = code_artifact_content or output.raw_content
         if not self._should_validate_code_content(code_content, has_typed_artifact=bool(code_artifact_content)):
             return
         code_analysis = self._analyze_python_module(code_content)
-        self._record_output_validation(output, "code_analysis", code_analysis)
-        if code_analysis.get("syntax_ok", True):
-            return
-        raise AgentExecutionError(
-            f"Generated code validation failed: syntax error {code_analysis.get('syntax_error') or 'unknown syntax error'}"
+        code_analysis["line_count"] = self._output_line_count(code_content)
+        line_budget = self._task_line_budget(task)
+        if line_budget is not None:
+            code_analysis["line_budget"] = line_budget
+        if self._task_requires_cli_entrypoint(task):
+            code_analysis["main_guard_required"] = True
+        completion_diagnostics = self._completion_diagnostics_from_output(
+            output,
+            raw_content=code_content,
+            syntax_ok=code_analysis.get("syntax_ok", True),
+            syntax_error=code_analysis.get("syntax_error"),
         )
+        self._record_output_validation(output, "code_analysis", code_analysis)
+        self._record_output_validation(output, "completion_diagnostics", completion_diagnostics)
+        validation_issues: list[str] = []
+        if not code_analysis.get("syntax_ok", True):
+            validation_issues.append(f"syntax error {code_analysis.get('syntax_error') or 'unknown syntax error'}")
+        if isinstance(line_budget, int) and code_analysis["line_count"] > line_budget:
+            validation_issues.append(f"line count {code_analysis['line_count']} exceeds maximum {line_budget}")
+        if code_analysis.get("main_guard_required") and not code_analysis.get("has_main_guard"):
+            validation_issues.append("missing required CLI entrypoint")
+        if completion_diagnostics.get("likely_truncated"):
+            validation_issues.append(self._completion_validation_issue(completion_diagnostics))
+        if validation_issues:
+            raise AgentExecutionError(f"Generated code validation failed: {'; '.join(validation_issues)}")
 
-    def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput) -> None:
+    def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:
         raw_code_analysis = context.get("code_analysis")
         code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
         if code_analysis and not code_analysis.get("syntax_ok", True):
@@ -848,21 +903,57 @@ class Orchestrator:
             code_analysis,
             code_behavior_contract if isinstance(code_behavior_contract, str) else "",
         )
+        test_analysis["line_count"] = self._output_line_count(test_content)
+        line_budget = self._task_line_budget(task)
+        if line_budget is not None:
+            test_analysis["line_budget"] = line_budget
+        exact_test_count = self._task_exact_top_level_test_count(task)
+        if exact_test_count is not None:
+            test_analysis["expected_top_level_test_count"] = exact_test_count
+        max_test_count = self._task_max_top_level_test_count(task)
+        if max_test_count is not None:
+            test_analysis["max_top_level_test_count"] = max_test_count
+        fixture_budget = self._task_fixture_budget(task)
+        if fixture_budget is not None:
+            test_analysis["fixture_budget"] = fixture_budget
         test_execution = self._execute_generated_tests(module_filename, code_content, test_filename, test_content)
+        completion_diagnostics = self._completion_diagnostics_from_output(
+            output,
+            raw_content=test_content,
+            syntax_ok=test_analysis.get("syntax_ok", True),
+            syntax_error=test_analysis.get("syntax_error"),
+        )
         self._record_output_validation(output, "test_analysis", test_analysis)
         self._record_output_validation(output, "test_execution", test_execution)
+        self._record_output_validation(output, "completion_diagnostics", completion_diagnostics)
 
         validation_issues: list[str] = []
         if not test_analysis.get("syntax_ok", True):
             validation_issues.append(f"test syntax error {test_analysis.get('syntax_error') or 'unknown syntax error'}")
+        if isinstance(line_budget, int) and test_analysis["line_count"] > line_budget:
+            validation_issues.append(f"line count {test_analysis['line_count']} exceeds maximum {line_budget}")
+        if isinstance(exact_test_count, int) and test_analysis.get("top_level_test_count") != exact_test_count:
+            validation_issues.append(
+                f"top-level test count {test_analysis.get('top_level_test_count')} does not match required {exact_test_count}"
+            )
+        if isinstance(max_test_count, int) and test_analysis.get("top_level_test_count", 0) > max_test_count:
+            validation_issues.append(
+                f"top-level test count {test_analysis.get('top_level_test_count')} exceeds maximum {max_test_count}"
+            )
+        if isinstance(fixture_budget, int) and test_analysis.get("fixture_count", 0) > fixture_budget:
+            validation_issues.append(
+                f"fixture count {test_analysis.get('fixture_count')} exceeds maximum {fixture_budget}"
+            )
         for issue_key, label in (
             ("missing_function_imports", "missing function imports"),
             ("unknown_module_symbols", "unknown module symbols"),
             ("invalid_member_references", "invalid member references"),
+            ("call_arity_mismatches", "call arity mismatches"),
             ("constructor_arity_mismatches", "constructor arity mismatches"),
             ("payload_contract_violations", "payload contract violations"),
             ("non_batch_sequence_calls", "non-batch sequence calls"),
             ("undefined_fixtures", "undefined test fixtures"),
+            ("undefined_local_names", "undefined local names"),
             ("imported_entrypoint_symbols", "imported entrypoint symbols"),
             ("unsafe_entrypoint_calls", "unsafe entrypoint calls"),
         ):
@@ -873,8 +964,57 @@ class Orchestrator:
         if test_execution.get("ran") and test_execution.get("returncode") not in (None, 0):
             validation_issues.append(f"pytest failed: {test_execution.get('summary') or 'generated tests failed'}")
 
+        if completion_diagnostics.get("likely_truncated"):
+            validation_issues.append(self._completion_validation_issue(completion_diagnostics))
+
         if validation_issues:
             raise AgentExecutionError(f"Generated test validation failed: {'; '.join(validation_issues)}")
+
+    def _output_line_count(self, raw_content: str) -> int:
+        if not raw_content:
+            return 0
+        return len(raw_content.splitlines())
+
+    def _task_line_budget(self, task: Optional[Task]) -> Optional[int]:
+        if task is None or not isinstance(task.description, str):
+            return None
+        description = task.description.lower()
+        for pattern in _LINE_BUDGET_PATTERNS:
+            match = pattern.search(description)
+            if match is None:
+                continue
+            return int(match.group(1))
+        return None
+
+    def _task_requires_cli_entrypoint(self, task: Optional[Task]) -> bool:
+        if task is None or not isinstance(task.description, str):
+            return False
+        description = task.description.lower()
+        return any(keyword in description for keyword in ("cli", "entrypoint", "__main__", "command-line"))
+
+    def _task_exact_top_level_test_count(self, task: Optional[Task]) -> Optional[int]:
+        if task is None or not isinstance(task.description, str):
+            return None
+        match = _EXACT_TEST_COUNT_PATTERN.search(task.description.lower())
+        if match is None:
+            return None
+        return int(match.group(1))
+
+    def _task_max_top_level_test_count(self, task: Optional[Task]) -> Optional[int]:
+        if task is None or not isinstance(task.description, str):
+            return None
+        match = _MAX_TEST_COUNT_PATTERN.search(task.description.lower())
+        if match is None:
+            return None
+        return int(match.group(1))
+
+    def _task_fixture_budget(self, task: Optional[Task]) -> Optional[int]:
+        if task is None or not isinstance(task.description, str):
+            return None
+        match = _FIXTURE_BUDGET_PATTERN.search(task.description.lower())
+        if match is None:
+            return None
+        return int(match.group(1))
 
     def _classify_task_failure(self, task: Task, exc: Exception) -> str:
         normalized_role = AgentRegistry.normalize_key(self._execution_agent_name(task))
@@ -971,6 +1111,7 @@ class Orchestrator:
             return result
 
         sandbox_policy = self.config.execution_sandbox_policy()
+        wall_clock_seconds = sandbox_policy.max_wall_clock_seconds
         with tempfile.TemporaryDirectory(
             prefix="kycortex-tests-",
             dir=sandbox_policy.temp_root,
@@ -999,7 +1140,7 @@ class Orchestrator:
                     cwd=tmp_path,
                     capture_output=True,
                     text=True,
-                    timeout=max(self.config.timeout_seconds, 1.0),
+                    timeout=wall_clock_seconds,
                     env=env,
                     preexec_fn=self._sandbox_preexec_fn(sandbox_policy),
                     check=False,
@@ -1008,7 +1149,7 @@ class Orchestrator:
                 result["ran"] = True
                 result["returncode"] = -1
                 result["summary"] = (
-                    f"pytest timed out after {self.config.timeout_seconds:g} seconds"
+                    f"pytest timed out after {wall_clock_seconds:g} seconds"
                 )
                 return result
 
@@ -1022,6 +1163,7 @@ class Orchestrator:
             "allow_network": sandbox_policy.allow_network,
             "allow_subprocesses": sandbox_policy.allow_subprocesses,
             "max_cpu_seconds": sandbox_policy.max_cpu_seconds,
+            "max_wall_clock_seconds": sandbox_policy.max_wall_clock_seconds,
             "max_memory_mb": sandbox_policy.max_memory_mb,
         }
         return result
@@ -1215,7 +1357,9 @@ class Orchestrator:
             if not isinstance(content, str) or not content.strip():
                 continue
             target_path = self._resolve_artifact_output_path(artifact)
+            self._validate_artifact_output_path(target_path)
             target_path.parent.mkdir(parents=True, exist_ok=True)
+            self._validate_artifact_output_path(target_path)
             target_path.write_text(content, encoding="utf-8")
             artifact.path = self._artifact_record_path(target_path)
 
@@ -1225,6 +1369,16 @@ class Orchestrator:
             artifact.path if artifact.path else self._default_artifact_path(artifact)
         )
         return output_root / relative_path
+
+    def _validate_artifact_output_path(self, target_path: Path) -> None:
+        output_root = Path(self.config.output_dir).resolve()
+        resolved_target = target_path.resolve(strict=False)
+        try:
+            resolved_target.relative_to(output_root)
+        except ValueError as exc:
+            raise AgentExecutionError(
+                "Artifact persistence failed: artifact path resolves outside the output directory"
+            ) from exc
 
     def _sanitize_artifact_relative_path(self, artifact_path: str) -> Path:
         candidate = Path(artifact_path)
@@ -1370,12 +1524,187 @@ class Orchestrator:
         raw_content = task.output_payload.get("raw_content")
         return raw_content if isinstance(raw_content, str) else (task.output or "")
 
-    def _build_code_validation_summary(self, code_analysis: Dict[str, Any], fallback_message: str) -> str:
+    def _completion_diagnostics_from_output(
+        self,
+        output: AgentOutput,
+        *,
+        raw_content: str = "",
+        syntax_ok: bool,
+        syntax_error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        provider_call = output.metadata.get("provider_call") if isinstance(output.metadata, dict) else None
+        return self._completion_diagnostics_from_provider_call(
+            provider_call,
+            raw_content=raw_content,
+            syntax_ok=syntax_ok,
+            syntax_error=syntax_error,
+        )
+
+    def _completion_diagnostics_from_provider_call(
+        self,
+        provider_call: Any,
+        *,
+        raw_content: str = "",
+        syntax_ok: bool,
+        syntax_error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        diagnostics: Dict[str, Any] = {
+            "requested_max_tokens": None,
+            "output_tokens": None,
+            "finish_reason": None,
+            "stop_reason": None,
+            "done_reason": None,
+            "hit_token_limit": False,
+            "likely_truncated": False,
+        }
+        if not isinstance(provider_call, dict):
+            return diagnostics
+
+        usage = provider_call.get("usage")
+        output_tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
+        requested_max_tokens = provider_call.get("requested_max_tokens")
+        finish_reason = provider_call.get("finish_reason")
+        stop_reason = provider_call.get("stop_reason")
+        done_reason = provider_call.get("done_reason")
+
+        hit_token_limit = (
+            isinstance(output_tokens, int)
+            and isinstance(requested_max_tokens, int)
+            and requested_max_tokens > 0
+            and output_tokens >= requested_max_tokens
+        )
+        likely_truncated = bool(
+            (not syntax_ok)
+            and (
+                hit_token_limit
+                or finish_reason == "length"
+                or stop_reason == "max_tokens"
+                or done_reason == "length"
+                or self._looks_structurally_truncated(raw_content, syntax_error)
+            )
+        )
+        diagnostics.update(
+            {
+                "requested_max_tokens": requested_max_tokens,
+                "output_tokens": output_tokens,
+                "finish_reason": finish_reason,
+                "stop_reason": stop_reason,
+                "done_reason": done_reason,
+                "hit_token_limit": hit_token_limit,
+                "likely_truncated": likely_truncated,
+            }
+        )
+        return diagnostics
+
+    def _looks_structurally_truncated(self, raw_content: str, syntax_error: Optional[str]) -> bool:
+        if not isinstance(raw_content, str) or not raw_content.strip():
+            return False
+
+        try:
+            list(tokenize.generate_tokens(io.StringIO(raw_content).readline))
+        except tokenize.TokenError as exc:
+            message = str(exc).lower()
+            if "eof in multi-line statement" in message or "eof in multi-line string" in message:
+                return True
+
+        normalized_error = syntax_error.lower() if isinstance(syntax_error, str) else ""
+        if not normalized_error or not any(marker in normalized_error for marker in _LIKELY_TRUNCATED_SYNTAX_MARKERS):
+            return False
+
+        last_non_empty_line = next(
+            (line.strip() for line in reversed(raw_content.splitlines()) if line.strip()),
+            "",
+        )
+        if not last_non_empty_line:
+            return False
+        if last_non_empty_line.endswith(_LIKELY_TRUNCATED_TAIL_SUFFIXES):
+            return True
+        if normalized_error.startswith("expected an indented block") and last_non_empty_line.endswith(":"):
+            return True
+        if last_non_empty_line.count('"') % 2 == 1 or last_non_empty_line.count("'") % 2 == 1:
+            return True
+        return False
+
+    def _completion_hit_limit(self, completion_diagnostics: Dict[str, Any]) -> bool:
+        return bool(
+            completion_diagnostics.get("hit_token_limit")
+            or completion_diagnostics.get("finish_reason") == "length"
+            or completion_diagnostics.get("stop_reason") == "max_tokens"
+            or completion_diagnostics.get("done_reason") == "length"
+        )
+
+    def _completion_validation_issue(self, completion_diagnostics: Dict[str, Any]) -> str:
+        if self._completion_hit_limit(completion_diagnostics):
+            return "output likely truncated at the completion token limit"
+        return "output likely truncated before the file ended cleanly"
+
+    def _completion_diagnostics_summary(self, completion_diagnostics: Dict[str, Any]) -> str:
+        if not completion_diagnostics:
+            return "none"
+        details: list[str] = []
+        if completion_diagnostics.get("likely_truncated"):
+            if self._completion_hit_limit(completion_diagnostics):
+                details.append("likely truncated at completion limit")
+            else:
+                details.append("likely truncated before the file ended cleanly")
+        if completion_diagnostics.get("hit_token_limit"):
+            details.append("output_tokens reached requested_max_tokens")
+        if completion_diagnostics.get("finish_reason"):
+            details.append(f"finish_reason={completion_diagnostics['finish_reason']}")
+        if completion_diagnostics.get("stop_reason"):
+            details.append(f"stop_reason={completion_diagnostics['stop_reason']}")
+        if completion_diagnostics.get("done_reason"):
+            details.append(f"done_reason={completion_diagnostics['done_reason']}")
+        requested_max_tokens = completion_diagnostics.get("requested_max_tokens")
+        output_tokens = completion_diagnostics.get("output_tokens")
+        if requested_max_tokens is not None or output_tokens is not None:
+            details.append(
+                f"tokens={output_tokens if output_tokens is not None else 'unknown'}/{requested_max_tokens if requested_max_tokens is not None else 'unknown'}"
+            )
+        return ", ".join(details) if details else "none"
+
+    def _pytest_failure_details(self, test_execution: Optional[Dict[str, Any]], limit: int = 3) -> list[str]:
+        if not isinstance(test_execution, dict):
+            return []
+        output_lines: list[str] = []
+        for field_name in ("stdout", "stderr"):
+            value = test_execution.get(field_name)
+            if isinstance(value, str) and value.strip():
+                output_lines.extend(value.splitlines())
+
+        failed_lines = [line.strip() for line in output_lines if line.strip().startswith("FAILED ")]
+        if failed_lines:
+            return failed_lines[:limit]
+
+        error_lines = [line.strip()[4:] for line in output_lines if line.strip().startswith("E   ")]
+        return error_lines[:limit]
+
+    def _build_code_validation_summary(
+        self,
+        code_analysis: Dict[str, Any],
+        fallback_message: str,
+        completion_diagnostics: Optional[Dict[str, Any]] = None,
+    ) -> str:
         lines = ["Generated code validation:"]
         lines.append(f"- Syntax OK: {'yes' if code_analysis.get('syntax_ok', True) else 'no'}")
         syntax_error = code_analysis.get('syntax_error')
         if syntax_error:
             lines.append(f"- Syntax error: {syntax_error}")
+        line_count = code_analysis.get("line_count")
+        line_budget = code_analysis.get("line_budget")
+        if isinstance(line_count, int):
+            if isinstance(line_budget, int):
+                lines.append(f"- Line count: {line_count}/{line_budget}")
+            else:
+                lines.append(f"- Line count: {line_count}")
+        if code_analysis.get("main_guard_required"):
+            lines.append(
+                f"- CLI entrypoint present: {'yes' if code_analysis.get('has_main_guard') else 'no'} (required by task)"
+            )
+        if isinstance(completion_diagnostics, dict):
+            lines.append(
+                f"- Completion diagnostics: {self._completion_diagnostics_summary(completion_diagnostics)}"
+            )
         third_party_imports = code_analysis.get('third_party_imports') or []
         lines.append(f"- Third-party imports: {', '.join(third_party_imports or ['none'])}")
         if fallback_message:
@@ -1388,14 +1717,21 @@ class Orchestrator:
         if failure_category == FailureCategory.CODE_VALIDATION.value:
             code_analysis = validation.get("code_analysis")
             if isinstance(code_analysis, dict):
-                return self._build_code_validation_summary(code_analysis, fallback_message)
+                completion_diagnostics = validation.get("completion_diagnostics")
+                return self._build_code_validation_summary(
+                    code_analysis,
+                    fallback_message,
+                    completion_diagnostics if isinstance(completion_diagnostics, dict) else None,
+                )
         if failure_category == FailureCategory.TEST_VALIDATION.value:
             test_analysis = validation.get("test_analysis")
             test_execution = validation.get("test_execution")
             if isinstance(test_analysis, dict):
+                completion_diagnostics = validation.get("completion_diagnostics")
                 return self._build_test_validation_summary(
                     test_analysis,
                     test_execution if isinstance(test_execution, dict) else None,
+                    completion_diagnostics if isinstance(completion_diagnostics, dict) else None,
                 )
         if failure_category == FailureCategory.DEPENDENCY_VALIDATION.value:
             dependency_analysis = validation.get("dependency_analysis")
@@ -1726,11 +2062,14 @@ class Orchestrator:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name.startswith("_"):
                     continue
-                params = [arg.arg for arg in node.args.args]
+                signature = self._call_signature_details(node)
                 functions.append({
                     "name": node.name,
-                    "params": params,
-                    "signature": f"{node.name}({', '.join(params)})",
+                    "params": signature["params"],
+                    "min_args": signature["min_args"],
+                    "max_args": signature["max_args"],
+                    "return_annotation": signature["return_annotation"],
+                    "signature": f"{node.name}({', '.join(signature['params'])})",
                     "async": isinstance(node, ast.AsyncFunctionDef),
                 })
                 continue
@@ -1753,7 +2092,10 @@ class Orchestrator:
             field_names: list[str] = []
             class_attributes: list[str] = []
             init_params: list[str] = []
+            constructor_min_args: Optional[int] = None
+            constructor_max_args: Optional[int] = None
             methods: list[str] = []
+            method_signatures: Dict[str, Dict[str, Any]] = {}
             bases = [self._ast_name(base) for base in node.bases]
             is_enum = any(base.endswith("Enum") for base in bases)
 
@@ -1765,10 +2107,16 @@ class Orchestrator:
                         if isinstance(target, ast.Name):  # pragma: no branch
                             class_attributes.append(target.id)
                 elif isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
-                    init_params = [arg.arg for arg in stmt.args.args if arg.arg != "self"]
+                    signature = self._call_signature_details(stmt, skip_first_param=True)
+                    init_params = signature["params"]
+                    constructor_min_args = signature["min_args"]
+                    constructor_max_args = signature["max_args"]
+                    class_attributes.extend(self._self_assigned_attributes(stmt))
                 elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and not stmt.name.startswith("_"):  # pragma: no branch
-                    params = [arg.arg for arg in stmt.args.args]
+                    signature = self._call_signature_details(stmt, skip_first_param=True)
+                    params = ["self", *signature["params"]]
                     methods.append(f"{stmt.name}({', '.join(params)})")
+                    method_signatures[stmt.name] = signature
 
             constructor_params = init_params or field_names
             classes[node.name] = {
@@ -1776,9 +2124,12 @@ class Orchestrator:
                 "bases": bases,
                 "is_enum": is_enum,
                 "fields": field_names,
-                "attributes": class_attributes,
+                "attributes": sorted(set(class_attributes)),
                 "constructor_params": constructor_params,
+                "constructor_min_args": constructor_min_args if constructor_min_args is not None else len(constructor_params),
+                "constructor_max_args": constructor_max_args if constructor_max_args is not None else len(constructor_params),
                 "methods": methods,
+                "method_signatures": method_signatures,
             }
 
         analysis["functions"] = functions
@@ -1944,7 +2295,7 @@ class Orchestrator:
                 continue
             if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
                 continue
-            if stmt.targets[0].id != "required_fields" or not isinstance(stmt.value, ast.List):
+            if stmt.targets[0].id != "required_fields" or not isinstance(stmt.value, (ast.List, ast.Set, ast.Tuple)):
                 continue
             fields: list[str] = []
             for element in stmt.value.elts:
@@ -2090,12 +2441,16 @@ class Orchestrator:
             "missing_function_imports": [],
             "unknown_module_symbols": [],
             "invalid_member_references": [],
+            "call_arity_mismatches": [],
             "constructor_arity_mismatches": [],
             "payload_contract_violations": [],
             "non_batch_sequence_calls": [],
             "undefined_fixtures": [],
+            "undefined_local_names": [],
             "imported_entrypoint_symbols": [],
             "unsafe_entrypoint_calls": [],
+            "top_level_test_count": 0,
+            "fixture_count": 0,
         }
         if not raw_content.strip():
             return analysis
@@ -2108,16 +2463,30 @@ class Orchestrator:
 
         module_symbols = set(code_analysis.get("symbols") or [])
         function_names = {item["name"] for item in code_analysis.get("functions") or []}
+        function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
+        module_defined_names = self._collect_module_defined_names(tree)
         entrypoint_names = self._entrypoint_function_names(code_analysis)
         validation_rules, field_value_rules, batch_rules = self._parse_behavior_contract(code_behavior_contract)
+        analysis["top_level_test_count"] = sum(
+            1
+            for stmt in tree.body
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_")
+        )
+        analysis["fixture_count"] = sum(
+            1
+            for stmt in tree.body
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and self._is_pytest_fixture(stmt)
+        )
 
         imported_symbols: set[str] = set()
         called_names: list[tuple[str, int]] = []
         attribute_refs: list[tuple[str, str, int]] = []
         constructor_calls: list[tuple[str, int, int]] = []
+        call_arity_mismatches: list[str] = []
         defined_fixtures: set[str] = set()
         referenced_fixtures: list[tuple[str, int]] = []
+        undefined_local_names: set[str] = set()
         unsafe_entrypoint_calls: list[str] = []
 
         for node in ast.walk(tree):
@@ -2128,8 +2497,13 @@ class Orchestrator:
                 if self._is_pytest_fixture(node):
                     defined_fixtures.add(node.name)
                 if node.name.startswith("test_"):
-                    for arg in node.args.args:
-                        referenced_fixtures.append((arg.arg, node.lineno))
+                    parametrized_arguments = self._collect_parametrized_argument_names(node)
+                    for arg_name in self._function_argument_names(node):
+                        if arg_name not in parametrized_arguments:
+                            referenced_fixtures.append((arg_name, node.lineno))
+                    undefined_local_names.update(
+                        self._collect_undefined_local_names(node, module_defined_names)
+                    )
             elif isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Name):
                     called_names.append((node.func.id, node.lineno))
@@ -2159,17 +2533,41 @@ class Orchestrator:
             allowed = set(class_info.get("attributes") or [])
             if not class_info.get("is_enum"):
                 allowed.update(class_info.get("fields") or [])
+            allowed.update((class_info.get("method_signatures") or {}).keys())
             if member not in allowed:
                 invalid_member_refs.append(f"{owner}.{member} (line {lineno})")
 
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
+                continue
+            local_types = self._collect_test_local_types(node, class_map, function_map)
+            typed_invalid_refs, typed_arity_mismatches = self._analyze_typed_test_member_usage(
+                node,
+                local_types,
+                class_map,
+            )
+            invalid_member_refs.extend(typed_invalid_refs)
+            call_arity_mismatches.extend(typed_arity_mismatches)
+
         arity_mismatches: list[str] = []
         for class_name, actual_count, lineno in constructor_calls:
-            expected_params = class_map.get(class_name, {}).get("constructor_params") or []
-            expected_count = len(expected_params)
-            if expected_count != actual_count:
+            class_info = class_map.get(class_name, {})
+            expected_params = class_info.get("constructor_params") or []
+            min_expected = class_info.get("constructor_min_args")
+            max_expected = class_info.get("constructor_max_args")
+            if not isinstance(min_expected, int) or not isinstance(max_expected, int):
+                min_expected = len(expected_params)
+                max_expected = len(expected_params)
+            if min_expected <= actual_count <= max_expected:
+                continue
+            if min_expected == max_expected:
                 arity_mismatches.append(
-                    f"{class_name} expects {expected_count} args but test uses {actual_count} at line {lineno}"
+                    f"{class_name} expects {max_expected} args but test uses {actual_count} at line {lineno}"
                 )
+                continue
+            arity_mismatches.append(
+                f"{class_name} expects {min_expected}-{max_expected} args but test uses {actual_count} at line {lineno}"
+            )
 
         undefined_fixtures = sorted(
             {
@@ -2192,10 +2590,12 @@ class Orchestrator:
         analysis["missing_function_imports"] = missing_imports
         analysis["unknown_module_symbols"] = unknown_symbols
         analysis["invalid_member_references"] = sorted(set(invalid_member_refs))
+        analysis["call_arity_mismatches"] = sorted(set(call_arity_mismatches))
         analysis["constructor_arity_mismatches"] = sorted(set(arity_mismatches))
         analysis["payload_contract_violations"] = payload_contract_violations
         analysis["non_batch_sequence_calls"] = non_batch_sequence_calls
         analysis["undefined_fixtures"] = undefined_fixtures
+        analysis["undefined_local_names"] = sorted(undefined_local_names)
         analysis["imported_entrypoint_symbols"] = imported_entrypoint_symbols
         analysis["unsafe_entrypoint_calls"] = sorted(set(unsafe_entrypoint_calls))
         return analysis
@@ -2279,12 +2679,14 @@ class Orchestrator:
                 continue
 
             bindings = self._collect_local_bindings(node)
+            parent_map = self._parent_map(node)
             for child in ast.walk(node):
                 if not isinstance(child, ast.Call):
                     continue
                 callable_name = self._callable_name(child)
                 if not callable_name:
                     continue
+                negative_expectation = self._call_has_negative_expectation(child, parent_map)
 
                 if callable_name in validation_rules:
                     payload_arg = self._payload_argument_for_validation(child, callable_name)
@@ -2292,7 +2694,7 @@ class Orchestrator:
                     payload_keys = self._extract_literal_dict_keys(payload_node, bindings, class_map)
                     if payload_keys is not None:
                         missing_fields = [field for field in validation_rules[callable_name] if field not in payload_keys]
-                        if missing_fields:  # pragma: no branch
+                        if missing_fields and not negative_expectation:  # pragma: no branch
                             payload_violations.add(
                                 f"{callable_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
                             )
@@ -2303,13 +2705,24 @@ class Orchestrator:
                     for field_name, allowed_values in field_value_rules[callable_name].items():
                         observed_values = self._extract_literal_field_values(payload_node, bindings, field_name, class_map)
                         invalid_values = [value for value in observed_values if value not in allowed_values]
-                        if invalid_values:
+                        if invalid_values and not negative_expectation:
                             payload_violations.add(
                                 f"{callable_name} field `{field_name}` uses unsupported values: {', '.join(invalid_values)} at line {child.lineno}"
                             )
 
                 if callable_name in batch_rules:
-                    batch_violations = self._validate_batch_call(child, bindings, callable_name, batch_rules[callable_name])
+                    batch_allows_partial_invalid = self._batch_call_allows_partial_invalid_items(
+                        node,
+                        child,
+                        bindings,
+                        parent_map,
+                    )
+                    batch_violations = [] if negative_expectation or batch_allows_partial_invalid else self._validate_batch_call(
+                        child,
+                        bindings,
+                        callable_name,
+                        batch_rules[callable_name],
+                    )
                     payload_violations.update(batch_violations)
                     continue
 
@@ -2323,6 +2736,148 @@ class Orchestrator:
 
         return sorted(payload_violations), sorted(non_batch_calls)
 
+    def _parent_map(self, root: ast.AST) -> Dict[ast.AST, ast.AST]:
+        return {
+            child: parent
+            for parent in ast.walk(root)
+            for child in ast.iter_child_nodes(parent)
+        }
+
+    def _call_has_negative_expectation(self, node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> bool:
+        current: Optional[ast.AST] = node
+        while current is not None:
+            parent = parent_map.get(current)
+            if parent is None:
+                return False
+            if isinstance(parent, ast.Assert) and self._assert_expects_false(parent, node):
+                return True
+            if isinstance(parent, (ast.With, ast.AsyncWith)) and self._with_uses_pytest_raises(parent):
+                return True
+            current = parent
+        return False
+
+    def _batch_call_allows_partial_invalid_items(
+        self,
+        test_node: ast.FunctionDef | ast.AsyncFunctionDef,
+        call_node: ast.Call,
+        bindings: Dict[str, ast.AST],
+        parent_map: Dict[ast.AST, ast.AST],
+    ) -> bool:
+        batch_items = self._extract_literal_list_items(self._first_call_argument(call_node), bindings)
+        if batch_items is None or len(batch_items) <= 1:
+            return False
+
+        result_name = self._assigned_name_for_call(call_node, parent_map)
+        batch_size = len(batch_items)
+        for child in ast.walk(test_node):
+            if not isinstance(child, ast.Assert):
+                continue
+            if self._assert_limits_batch_result(child.test, result_name, call_node, batch_size):
+                return True
+        return False
+
+    def _assigned_name_for_call(self, call_node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> Optional[str]:
+        parent = parent_map.get(call_node)
+        if isinstance(parent, ast.Assign) and len(parent.targets) == 1 and isinstance(parent.targets[0], ast.Name):
+            return parent.targets[0].id
+        if isinstance(parent, ast.AnnAssign) and isinstance(parent.target, ast.Name):
+            return parent.target.id
+        return None
+
+    def _assert_limits_batch_result(
+        self,
+        test: ast.AST,
+        result_name: Optional[str],
+        call_node: ast.Call,
+        batch_size: int,
+    ) -> bool:
+        if not isinstance(test, ast.Compare) or len(test.ops) != 1 or len(test.comparators) != 1:
+            return False
+        op = test.ops[0]
+
+        if self._len_call_matches_batch_result(test.left, result_name, call_node):
+            compared_value = self._int_constant_value(test.comparators[0])
+            return self._comparison_implies_partial_batch_result(op, compared_value, batch_size)
+
+        if self._len_call_matches_batch_result(test.comparators[0], result_name, call_node):
+            compared_value = self._int_constant_value(test.left)
+            reversed_op = {
+                ast.Lt: ast.Gt,
+                ast.LtE: ast.GtE,
+                ast.Gt: ast.Lt,
+                ast.GtE: ast.LtE,
+            }.get(type(op), type(op))
+            return self._comparison_implies_partial_batch_result(reversed_op(), compared_value, batch_size)
+
+        return False
+
+    def _len_call_matches_batch_result(
+        self,
+        node: ast.AST,
+        result_name: Optional[str],
+        call_node: ast.Call,
+    ) -> bool:
+        if not isinstance(node, ast.Call):
+            return False
+        if not isinstance(node.func, ast.Name) or node.func.id != "len" or len(node.args) != 1:
+            return False
+        candidate = node.args[0]
+        if result_name is not None and isinstance(candidate, ast.Name) and candidate.id == result_name:
+            return True
+        return candidate is call_node
+
+    def _int_constant_value(self, node: ast.AST) -> Optional[int]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return node.value
+        return None
+
+    def _comparison_implies_partial_batch_result(
+        self,
+        op: ast.cmpop,
+        compared_value: Optional[int],
+        batch_size: int,
+    ) -> bool:
+        if compared_value is None:
+            return False
+        if isinstance(op, ast.Eq):
+            return compared_value < batch_size
+        if isinstance(op, ast.Lt):
+            return compared_value <= batch_size
+        if isinstance(op, ast.LtE):
+            return compared_value < batch_size
+        return False
+
+    def _assert_expects_false(self, node: ast.Assert, call_node: ast.Call) -> bool:
+        test = node.test
+        if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+            return self._ast_contains_node(test.operand, call_node)
+        if not isinstance(test, ast.Compare):
+            return False
+
+        def false_constant(item: ast.AST) -> bool:
+            return isinstance(item, ast.Constant) and item.value is False
+
+        if self._ast_contains_node(test.left, call_node):
+            return any(false_constant(comparator) for comparator in test.comparators) and any(
+                isinstance(op, (ast.Is, ast.Eq)) for op in test.ops
+            )
+        if any(self._ast_contains_node(comparator, call_node) for comparator in test.comparators):
+            return false_constant(test.left) and any(isinstance(op, (ast.Is, ast.Eq)) for op in test.ops)
+        return False
+
+    def _with_uses_pytest_raises(self, node: ast.With | ast.AsyncWith) -> bool:
+        for item in node.items:
+            context_expr = item.context_expr
+            if not isinstance(context_expr, ast.Call):
+                continue
+            callable_name = self._callable_name(context_expr)
+            if callable_name == "raises":
+                return True
+        return False
+
+    def _ast_contains_node(self, root: ast.AST, target: ast.AST) -> bool:
+        return any(candidate is target for candidate in ast.walk(root))
+
     def _collect_local_bindings(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, ast.AST]:
         bindings: Dict[str, ast.AST] = {}
         for stmt in node.body:
@@ -2331,6 +2886,281 @@ class Orchestrator:
             elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value is not None:
                 bindings[stmt.target.id] = stmt.value
         return bindings
+
+    def _collect_module_defined_names(self, tree: ast.AST) -> set[str]:
+        if not isinstance(tree, ast.Module):
+            return set()
+
+        names: set[str] = set()
+        for stmt in tree.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(stmt.name)
+            elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                for alias in stmt.names:
+                    if alias.name != "*":
+                        names.add(alias.asname or alias.name.split(".")[0])
+            elif isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    names.update(self._bound_target_names(target))
+            elif isinstance(stmt, ast.AnnAssign):
+                names.update(self._bound_target_names(stmt.target))
+        return names
+
+    def _function_argument_names(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+        names = {
+            arg.arg
+            for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+        }
+        if node.args.vararg is not None:
+            names.add(node.args.vararg.arg)
+        if node.args.kwarg is not None:
+            names.add(node.args.kwarg.arg)
+        return names
+
+    def _collect_parametrized_argument_names(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> set[str]:
+        names: set[str] = set()
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            func = decorator.func
+            if not isinstance(func, ast.Attribute) or func.attr != "parametrize":
+                continue
+            parent = func.value
+            if not (
+                (isinstance(parent, ast.Attribute) and parent.attr == "mark")
+                or (isinstance(parent, ast.Name) and parent.id == "mark")
+            ):
+                continue
+            names.update(self._extract_parametrize_argument_names(decorator))
+        return names
+
+    def _extract_parametrize_argument_names(self, decorator: ast.Call) -> set[str]:
+        argnames_node: Optional[ast.AST] = decorator.args[0] if decorator.args else None
+        if argnames_node is None:
+            for keyword in decorator.keywords:
+                if keyword.arg == "argnames":
+                    argnames_node = keyword.value
+                    break
+        if isinstance(argnames_node, ast.Constant) and isinstance(argnames_node.value, str):
+            return {name.strip() for name in argnames_node.value.split(",") if name.strip()}
+        if isinstance(argnames_node, (ast.List, ast.Tuple)):
+            return {
+                element.value.strip()
+                for element in argnames_node.elts
+                if isinstance(element, ast.Constant)
+                and isinstance(element.value, str)
+                and element.value.strip()
+            }
+        return set()
+
+    def _collect_undefined_local_names(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        module_defined_names: set[str],
+    ) -> list[str]:
+        allowed_names = set(dir(builtins))
+        allowed_names.update(module_defined_names)
+        allowed_names.update(self._collect_local_name_bindings(node))
+
+        undefined_names: set[str] = set()
+        for stmt in node.body:
+            for child in self._iter_relevant_test_body_nodes(stmt):
+                if not isinstance(child, ast.Name) or not isinstance(child.ctx, ast.Load):
+                    continue
+                if child.id in allowed_names:
+                    continue
+                undefined_names.add(f"{child.id} (line {child.lineno})")
+        return sorted(undefined_names)
+
+    def _collect_local_name_bindings(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+        names = self._function_argument_names(node)
+        names.update(self._collect_parametrized_argument_names(node))
+
+        for stmt in node.body:
+            for child in self._iter_relevant_test_body_nodes(stmt):
+                if isinstance(child, ast.Assign):
+                    for target in child.targets:
+                        names.update(self._bound_target_names(target))
+                elif isinstance(child, ast.AnnAssign):
+                    names.update(self._bound_target_names(child.target))
+                elif isinstance(child, ast.AugAssign):
+                    names.update(self._bound_target_names(child.target))
+                elif isinstance(child, (ast.For, ast.AsyncFor)):
+                    names.update(self._bound_target_names(child.target))
+                elif isinstance(child, (ast.With, ast.AsyncWith)):
+                    for item in child.items:
+                        if item.optional_vars is not None:
+                            names.update(self._bound_target_names(item.optional_vars))
+                elif isinstance(child, ast.ExceptHandler) and child.name:
+                    names.add(child.name)
+                elif isinstance(child, ast.NamedExpr):
+                    names.update(self._bound_target_names(child.target))
+                elif isinstance(child, ast.comprehension):
+                    names.update(self._bound_target_names(child.target))
+                elif isinstance(child, (ast.Import, ast.ImportFrom)):
+                    for alias in child.names:
+                        if alias.name != "*":
+                            names.add(alias.asname or alias.name.split(".")[0])
+        return names
+
+    def _call_signature_details(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        *,
+        skip_first_param: bool = False,
+    ) -> Dict[str, Any]:
+        positional_params = [arg.arg for arg in (*node.args.posonlyargs, *node.args.args)]
+        if skip_first_param and positional_params:
+            positional_params = positional_params[1:]
+        keyword_only_params = [arg.arg for arg in node.args.kwonlyargs]
+        params = [*positional_params, *keyword_only_params]
+        optional_positional = len(node.args.defaults)
+        optional_kwonly = sum(default is not None for default in node.args.kw_defaults)
+        max_args = len(params)
+        min_args = max(0, max_args - optional_positional - optional_kwonly)
+        return {
+            "params": params,
+            "min_args": min_args,
+            "max_args": max_args,
+            "return_annotation": self._ast_name(node.returns) if node.returns is not None else None,
+        }
+
+    def _self_assigned_attributes(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+        attributes: list[str] = []
+        for child in ast.walk(node):
+            targets: list[ast.AST] = []
+            if isinstance(child, ast.Assign):
+                targets.extend(child.targets)
+            elif isinstance(child, ast.AnnAssign):
+                targets.append(child.target)
+            else:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
+                    attributes.append(target.attr)
+        return attributes
+
+    def _call_argument_count(self, node: ast.Call) -> int:
+        return len(node.args) + sum(1 for keyword in node.keywords if keyword.arg is not None)
+
+    def _collect_test_local_types(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        class_map: Dict[str, Any],
+        function_map: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, str]:
+        local_types: Dict[str, str] = {}
+        for stmt in node.body:
+            for child in ast.walk(stmt):
+                if isinstance(child, ast.Assign):
+                    inferred_type = self._infer_call_result_type(child.value, local_types, class_map, function_map)
+                    if inferred_type is None:
+                        continue
+                    for target in child.targets:
+                        for name in self._bound_target_names(target):
+                            local_types[name] = inferred_type
+                elif isinstance(child, ast.AnnAssign):
+                    inferred_type = self._infer_call_result_type(child.value, local_types, class_map, function_map)
+                    if inferred_type is None:
+                        continue
+                    for name in self._bound_target_names(child.target):
+                        local_types[name] = inferred_type
+        return local_types
+
+    def _infer_call_result_type(
+        self,
+        node: Optional[ast.AST],
+        local_types: Dict[str, str],
+        class_map: Dict[str, Any],
+        function_map: Dict[str, Dict[str, Any]],
+    ) -> Optional[str]:
+        if not isinstance(node, ast.Call):
+            return None
+        if isinstance(node.func, ast.Name):
+            if node.func.id in class_map:
+                return node.func.id
+            function_info = function_map.get(node.func.id)
+            if not isinstance(function_info, dict):
+                return None
+            return_annotation = function_info.get("return_annotation")
+            return return_annotation if isinstance(return_annotation, str) and return_annotation in class_map else None
+        if not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Name):
+            return None
+        owner_type = local_types.get(node.func.value.id)
+        if owner_type not in class_map:
+            return None
+        method_info = (class_map.get(owner_type, {}).get("method_signatures") or {}).get(node.func.attr)
+        if not isinstance(method_info, dict):
+            return None
+        return_annotation = method_info.get("return_annotation")
+        return return_annotation if isinstance(return_annotation, str) and return_annotation in class_map else None
+
+    def _analyze_typed_test_member_usage(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        local_types: Dict[str, str],
+        class_map: Dict[str, Any],
+    ) -> tuple[list[str], list[str]]:
+        invalid_member_refs: set[str] = set()
+        call_arity_mismatches: set[str] = set()
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and isinstance(child.func.value, ast.Name):
+                owner_type = local_types.get(child.func.value.id)
+                if owner_type not in class_map:
+                    continue
+                method_info = (class_map.get(owner_type, {}).get("method_signatures") or {}).get(child.func.attr)
+                if not isinstance(method_info, dict):
+                    invalid_member_refs.add(f"{owner_type}.{child.func.attr} (line {child.lineno})")
+                    continue
+                actual_count = self._call_argument_count(child)
+                min_expected = method_info.get("min_args")
+                max_expected = method_info.get("max_args")
+                if not isinstance(min_expected, int) or not isinstance(max_expected, int):
+                    continue
+                if min_expected <= actual_count <= max_expected:
+                    continue
+                if min_expected == max_expected:
+                    call_arity_mismatches.add(
+                        f"{owner_type}.{child.func.attr} expects {max_expected} args but test uses {actual_count} at line {child.lineno}"
+                    )
+                else:
+                    call_arity_mismatches.add(
+                        f"{owner_type}.{child.func.attr} expects {min_expected}-{max_expected} args but test uses {actual_count} at line {child.lineno}"
+                    )
+            elif isinstance(child, ast.Attribute) and isinstance(child.value, ast.Name):
+                owner_type = local_types.get(child.value.id)
+                if owner_type not in class_map:
+                    continue
+                class_info = class_map.get(owner_type, {})
+                allowed = set(class_info.get("attributes") or [])
+                if not class_info.get("is_enum"):
+                    allowed.update(class_info.get("fields") or [])
+                allowed.update((class_info.get("method_signatures") or {}).keys())
+                if child.attr not in allowed:
+                    invalid_member_refs.add(f"{owner_type}.{child.attr} (line {child.lineno})")
+        return sorted(invalid_member_refs), sorted(call_arity_mismatches)
+
+    def _iter_relevant_test_body_nodes(self, node: ast.AST):
+        yield node
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                continue
+            yield from self._iter_relevant_test_body_nodes(child)
+
+    def _bound_target_names(self, target: ast.AST) -> set[str]:
+        if isinstance(target, ast.Name):
+            return {target.id}
+        if isinstance(target, ast.Starred):
+            return self._bound_target_names(target.value)
+        if isinstance(target, (ast.List, ast.Tuple)):
+            names: set[str] = set()
+            for element in target.elts:
+                names.update(self._bound_target_names(element))
+            return names
+        return set()
 
     def _callable_name(self, node: ast.Call) -> str:
         if isinstance(node.func, ast.Name):
@@ -2387,7 +3217,6 @@ class Orchestrator:
             return keys
         if (
             isinstance(resolved, ast.Subscript)
-            and isinstance(resolved.value, ast.Name)
             and isinstance(resolved.slice, ast.Constant)
             and isinstance(resolved.slice.value, str)
         ):
@@ -2536,41 +3365,80 @@ class Orchestrator:
         self,
         test_analysis: Dict[str, Any],
         test_execution: Optional[Dict[str, Any]] = None,
+        completion_diagnostics: Optional[Dict[str, Any]] = None,
     ) -> str:
-        if not test_analysis.get("syntax_ok", True):
-            return f"Test syntax error: {test_analysis.get('syntax_error') or 'unknown syntax error'}"
-
         lines = ["Generated test validation:"]
-        lines.append(
-            f"- Imported module symbols: {', '.join(test_analysis.get('imported_module_symbols') or ['none'])}"
-        )
-        lines.append(
-            f"- Missing function imports: {', '.join(test_analysis.get('missing_function_imports') or ['none'])}"
-        )
-        lines.append(
-            f"- Unknown module symbols: {', '.join(test_analysis.get('unknown_module_symbols') or ['none'])}"
-        )
-        lines.append(
-            f"- Invalid member references: {', '.join(test_analysis.get('invalid_member_references') or ['none'])}"
-        )
-        lines.append(
-            f"- Constructor arity mismatches: {', '.join(test_analysis.get('constructor_arity_mismatches') or ['none'])}"
-        )
-        lines.append(
-            f"- Payload contract violations: {', '.join(test_analysis.get('payload_contract_violations') or ['none'])}"
-        )
-        lines.append(
-            f"- Non-batch sequence calls: {', '.join(test_analysis.get('non_batch_sequence_calls') or ['none'])}"
-        )
-        lines.append(
-            f"- Undefined test fixtures: {', '.join(test_analysis.get('undefined_fixtures') or ['none'])}"
-        )
-        lines.append(
-            f"- Imported entrypoint symbols: {', '.join(test_analysis.get('imported_entrypoint_symbols') or ['none'])}"
-        )
-        lines.append(
-            f"- Unsafe entrypoint calls: {', '.join(test_analysis.get('unsafe_entrypoint_calls') or ['none'])}"
-        )
+        syntax_ok = test_analysis.get("syntax_ok", True)
+        lines.append(f"- Syntax OK: {'yes' if syntax_ok else 'no'}")
+        syntax_error = test_analysis.get("syntax_error")
+        if syntax_error:
+            lines.append(f"- Syntax error: {syntax_error}")
+        line_count = test_analysis.get("line_count")
+        line_budget = test_analysis.get("line_budget")
+        if isinstance(line_count, int):
+            if isinstance(line_budget, int):
+                lines.append(f"- Line count: {line_count}/{line_budget}")
+            else:
+                lines.append(f"- Line count: {line_count}")
+        top_level_test_count = test_analysis.get("top_level_test_count")
+        expected_top_level_test_count = test_analysis.get("expected_top_level_test_count")
+        max_top_level_test_count = test_analysis.get("max_top_level_test_count")
+        if isinstance(top_level_test_count, int):
+            if isinstance(expected_top_level_test_count, int):
+                lines.append(f"- Top-level test functions: {top_level_test_count}/{expected_top_level_test_count}")
+            elif isinstance(max_top_level_test_count, int):
+                lines.append(f"- Top-level test functions: {top_level_test_count}/{max_top_level_test_count} max")
+            else:
+                lines.append(f"- Top-level test functions: {top_level_test_count}")
+        fixture_count = test_analysis.get("fixture_count")
+        fixture_budget = test_analysis.get("fixture_budget")
+        if isinstance(fixture_count, int):
+            if isinstance(fixture_budget, int):
+                lines.append(f"- Fixture count: {fixture_count}/{fixture_budget}")
+            else:
+                lines.append(f"- Fixture count: {fixture_count}")
+        if syntax_ok:
+            lines.append(
+                f"- Imported module symbols: {', '.join(test_analysis.get('imported_module_symbols') or ['none'])}"
+            )
+            lines.append(
+                f"- Missing function imports: {', '.join(test_analysis.get('missing_function_imports') or ['none'])}"
+            )
+            lines.append(
+                f"- Unknown module symbols: {', '.join(test_analysis.get('unknown_module_symbols') or ['none'])}"
+            )
+            lines.append(
+                f"- Invalid member references: {', '.join(test_analysis.get('invalid_member_references') or ['none'])}"
+            )
+            lines.append(
+                f"- Call arity mismatches: {', '.join(test_analysis.get('call_arity_mismatches') or ['none'])}"
+            )
+            lines.append(
+                f"- Constructor arity mismatches: {', '.join(test_analysis.get('constructor_arity_mismatches') or ['none'])}"
+            )
+            lines.append(
+                f"- Payload contract violations: {', '.join(test_analysis.get('payload_contract_violations') or ['none'])}"
+            )
+            lines.append(
+                f"- Non-batch sequence calls: {', '.join(test_analysis.get('non_batch_sequence_calls') or ['none'])}"
+            )
+            lines.append(
+                f"- Undefined test fixtures: {', '.join(test_analysis.get('undefined_fixtures') or ['none'])}"
+            )
+            lines.append(
+                f"- Undefined local names: {', '.join(test_analysis.get('undefined_local_names') or ['none'])}"
+            )
+        if isinstance(completion_diagnostics, dict):
+            lines.append(
+                f"- Completion diagnostics: {self._completion_diagnostics_summary(completion_diagnostics)}"
+            )
+        if syntax_ok:
+            lines.append(
+                f"- Imported entrypoint symbols: {', '.join(test_analysis.get('imported_entrypoint_symbols') or ['none'])}"
+            )
+            lines.append(
+                f"- Unsafe entrypoint calls: {', '.join(test_analysis.get('unsafe_entrypoint_calls') or ['none'])}"
+            )
         if isinstance(test_execution, dict):
             if not test_execution.get("available", True):
                 lines.append(f"- Pytest execution: unavailable ({test_execution.get('summary') or 'pytest unavailable'})")
@@ -2579,17 +3447,38 @@ class Orchestrator:
                     f"- Pytest execution: {'PASS' if test_execution.get('returncode') == 0 else 'FAIL'}"
                 )
                 lines.append(f"- Pytest summary: {test_execution.get('summary') or 'none'}")
+                failure_details = self._pytest_failure_details(test_execution)
+                if failure_details:
+                    lines.append(f"- Pytest failure details: {'; '.join(failure_details)}")
 
-        has_static_issues = any(
+        has_static_issues = (not syntax_ok) or (
+            isinstance(line_count, int)
+            and isinstance(line_budget, int)
+            and line_count > line_budget
+        ) or (
+            isinstance(top_level_test_count, int)
+            and isinstance(expected_top_level_test_count, int)
+            and top_level_test_count != expected_top_level_test_count
+        ) or (
+            isinstance(top_level_test_count, int)
+            and isinstance(max_top_level_test_count, int)
+            and top_level_test_count > max_top_level_test_count
+        ) or (
+            isinstance(fixture_count, int)
+            and isinstance(fixture_budget, int)
+            and fixture_count > fixture_budget
+        ) or any(
             test_analysis.get(key)
             for key in (
                 "missing_function_imports",
                 "unknown_module_symbols",
                 "invalid_member_references",
+                "call_arity_mismatches",
                 "constructor_arity_mismatches",
                 "payload_contract_violations",
                 "non_batch_sequence_calls",
                 "undefined_fixtures",
+                "undefined_local_names",
                 "imported_entrypoint_symbols",
                 "unsafe_entrypoint_calls",
             )

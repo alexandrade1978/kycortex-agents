@@ -1,6 +1,9 @@
 import kycortex_agents
 import importlib
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 try:
     import tomllib
@@ -80,6 +83,29 @@ def test_public_api_exports_core_symbols():
     assert ProviderTransientError is not None
     assert probe_provider_health is not None
     assert WorkflowDefinitionError is not None
+
+
+def test_public_package_import_does_not_create_output_dir(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not (key.startswith("COV_CORE_") or key.startswith("COVERAGE"))
+    }
+    python_path = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(repo_root) if not python_path else f"{repo_root}{os.pathsep}{python_path}"
+
+    completed = subprocess.run(
+        [sys.executable, "-c", "import kycortex_agents"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert not (tmp_path / "output").exists()
 
 
 def test_public_api_exports_core_agent_types():

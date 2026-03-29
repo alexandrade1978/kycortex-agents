@@ -146,6 +146,7 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
         {
             "architecture": "Layered design",
             "existing_code": "def old():\n    return 1",
+            "repair_validation_summary": "Generated code validation:\n- Syntax OK: no\n- Completion diagnostics: likely truncated at completion limit",
             "module_name": "service_module",
             "module_filename": "service_module.py",
         },
@@ -156,10 +157,21 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "Target module: service_module.py" in agent.last_user_message
     assert "The file will be saved as `service_module.py` and imported as `service_module`." in agent.last_user_message
     assert "def old():" in agent.last_user_message
-    assert "Keep the module under 260 lines." in agent.last_user_message
+    assert "Previous validation summary:" in agent.last_user_message
+    assert "Completion diagnostics: likely truncated at completion limit" in agent.last_user_message
+    assert "hard blocker" in agent.last_user_message
+    assert "Respect the task's requested size budget exactly." in agent.last_user_message
+    assert "If the task does not specify one, keep the module under 260 lines." in agent.last_user_message
+    assert "if the task requires a CLI or demo entrypoint" in agent.last_user_message
+    assert "if __name__ == \"__main__\":" in agent.last_user_message
+    assert "rewrote the full module from the top instead of appending a partial continuation" in agent.last_user_message
     assert "every constructor call matches the constructor you defined" in agent.last_user_message
     assert "every opened string, bracket, parenthesis, and docstring is closed" in agent.last_user_message
+    assert "you reduced non-essential docstrings, comments, blank lines, and optional helpers" in agent.last_user_message
+    assert "If you are repairing a previously invalid or truncated file" in agent.last_system_prompt
     assert "Do not stop mid-function, mid-string, or mid-docstring." in agent.last_system_prompt
+    assert "remove non-essential docstrings, comments, blank lines, and optional helper layers" in agent.last_system_prompt
+    assert "Task-specific scope and size limits override generic polish" in agent.last_system_prompt
 
 
 def test_code_reviewer_run_uses_context_module_validation_fields(tmp_path):
@@ -202,6 +214,7 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
             "code_public_api": "Functions:\n- add(a, b)\nClasses:\n- none",
             "code_test_targets": "Test targets:\n- Functions to test: add(a, b)\n- Classes to test: none\n- Entry points to avoid in tests: none",
             "code_behavior_contract": "Behavior contract:\n- add accepts numeric operands",
+            "repair_validation_summary": "Generated test validation:\n- Completion diagnostics: likely truncated at completion limit",
         },
     )
 
@@ -214,19 +227,44 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Test targets:" in agent.last_user_message
     assert "Functions to test: add(a, b)" in agent.last_user_message
     assert "Behavior contract:" in agent.last_user_message
+    assert "Implementation code:" in agent.last_user_message
+    assert "def add(a, b): return a + b" in agent.last_user_message
     assert "add accepts numeric operands" in agent.last_user_message
+    assert "Previous validation summary:" in agent.last_user_message
+    assert "Completion diagnostics: likely truncated at completion limit" in agent.last_user_message
+    assert "hard blocker" in agent.last_user_message
     assert "def add(a, b):" in agent.last_user_message
     assert "Import from `math_utils`" in agent.last_user_message
     assert "Import every called production function explicitly" in agent.last_user_message
+    assert "Respect the task's line budget and requested scenario count exactly." in agent.last_user_message
+    assert "if the task asks for a fixed number of scenarios or tests" in agent.last_user_message
     assert "every imported production symbol exists in the API contract" in agent.last_user_message
     assert "every imported production symbol also appears in the listed test targets" in agent.last_user_message
     assert "every class instantiation uses only documented constructor arguments" in agent.last_user_message
     assert "every happy-path payload satisfies the listed behavior contract and validation rules" in agent.last_user_message
+    assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
+    assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
+    assert "Do not add standalone caplog or raw logging-output assertions" in agent.last_user_message
     assert "Write complete pytest code only; do not stop mid-test, mid-string, or mid-fixture." in agent.last_system_prompt
+    assert "keep the validation-failure coverage on the direct intake or validation surface" in agent.last_system_prompt
+    assert "Keep batch-processing scenarios structurally valid" in agent.last_system_prompt
+    assert "Do not add caplog assertions or raw logging-text expectations" in agent.last_system_prompt
+    assert "do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities" in agent.last_system_prompt
     assert "every non-built-in fixture used by a test is defined in the same file" in agent.last_user_message
+    assert "every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization" in agent.last_user_message
+    assert "every helper or expected-value name referenced inside a test body is imported, defined in the file, or introduced by the matching parametrization" in agent.last_user_message
+    assert "every happy-path batch item satisfies the same required fields as the single-request happy path" in agent.last_user_message
+    assert "you did not add caplog or raw logging-text assertions unless the behavior contract explicitly makes emitted log output observable" in agent.last_user_message
+    assert "rewrote the full pytest file from the top instead of appending a partial continuation" in agent.last_user_message
+    assert "you reduced non-essential comments, blank lines, optional fixtures, and helper scaffolding" in agent.last_user_message
+    assert "stay on the main service or batch API" in agent.last_user_message
     assert "no test imports entrypoints listed under \"Entry points to avoid in tests\"" in agent.last_user_message
     assert "no test calls main or CLI/demo entrypoints directly unless argv/input is explicitly controlled in the test" in agent.last_user_message
+    assert "Every test function argument must be a built-in pytest fixture" in agent.last_system_prompt
+    assert "If you are repairing a previously invalid or truncated test file" in agent.last_system_prompt
     assert "Do not reference pytest fixtures unless you define them in the same file" in agent.last_system_prompt
+    assert "remove non-essential comments, blank lines, extra fixtures, and optional helper scaffolding" in agent.last_system_prompt
+    assert "Task-specific scope, test-count, and size limits override these defaults" in agent.last_system_prompt
 
 
 def test_docs_writer_falls_back_to_code_for_summary(tmp_path):

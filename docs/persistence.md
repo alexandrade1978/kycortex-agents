@@ -14,6 +14,8 @@ This guide explains how workflow state is persisted in `kycortex-agents`, how th
 
 `ProjectState.save()` serializes that state through the configured state-store backend, and `ProjectState.load(path)` restores it into the current runtime dataclasses.
 
+The configured `output_dir` is related but separate: it is the root used for persisted task artifacts and validation files, and it is created lazily when the runtime first needs to write there.
+
 ## Backend Selection
 
 The built-in backend is selected by the `state_file` path extension through `resolve_state_store(path)`.
@@ -121,6 +123,8 @@ Current compatibility behavior includes:
 
 This keeps the persistence layer tolerant of earlier saved states while still exposing the current public snapshot model.
 
+When artifacts are persisted, the runtime also validates that every resolved artifact path stays inside `output_dir`, including through symlinked directories. This prevents persisted artifacts from escaping the configured output root.
+
 ## Failure Modes
 
 Persistence failures are normalized into `StatePersistenceError`.
@@ -139,5 +143,6 @@ These failures are intentional hard stops because continuing with corrupted work
 - Use JSON when human-readable local state matters most.
 - Use SQLite when you want durable local storage with transactional replacement semantics.
 - Set `state_file` explicitly instead of relying on the default filename when multiple workflows or tests may run in the same workspace.
+- Do not rely on `KYCortexConfig` initialization as an output-directory side effect; `output_dir` appears when the first persisted artifact or validation file is written.
 - Inspect persisted runs through `snapshot()` rather than directly decoding raw task payloads.
 - Combine a persisted state file with `workflow_resume_policy="resume_failed"` when workflows should recover from terminal task failures on a later run.

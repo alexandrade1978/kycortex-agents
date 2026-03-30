@@ -6,8 +6,13 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+## 1.0.11 - 2026-03-30
+
 ### Added
 
+- Explicit `ollama_num_ctx` runtime configuration together with provider-matrix CLI overrides for dedicated Ollama base URLs and context windows during empirical validation runs.
+- Generated-test validation now flags reserved fixture names, unsupported mock-style assertion bookkeeping on real objects, and CLI-wrapper imports as deterministic QA failures.
+- Code-repair flows now receive the failing pytest module as concrete `existing_tests` context so repairs can target the exact fixtures, inputs, and assertions that exposed the regression.
 - Completion-aware output diagnostics that combine provider token-limit metadata with structural EOF heuristics and feed those signals into persisted repair summaries for generated code and tests.
 - Task-derived validation budgets for generated outputs, including optional line limits, required CLI entrypoints, exact or maximum top-level test counts, fixture budgets, undefined local-name checks, and richer call-arity validation.
 - Model-readiness health snapshots for OpenAI, Anthropic, and Ollama providers, exposing `backend_reachable` and `model_ready` alongside the existing provider-health states.
@@ -28,6 +33,9 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Changed
 
+- The validated local Ollama baseline across docs, examples, provider-matrix defaults, and empirical validation now uses `qwen2.5-coder:7b` with `ollama_num_ctx=16384`.
+- QA repair prompts now repair the existing pytest file in place, preserve only contract-valid structure, and explicitly drop guessed helper-constructor wiring when constructor mismatches are reported.
+- Code-repair prompts now treat cited pytest assertions as exact behavior contracts and keep explicit repair headroom under line-constrained task budgets.
 - `BaseAgent` now performs provider preflight health checks before generation attempts, routes unhealthy providers into fail-fast or fallback behavior, and exposes the latest structured health snapshot per provider in provider metadata.
 - `BaseAgent` now preserves compatibility with injected legacy providers that do not implement `health_check()` by recording a passive ready snapshot instead of failing before generation.
 - Provider and workflow runtime documentation plus snapshot-inspection examples now describe the current resilience and observability behavior, including cooldown caching, fallback metadata, workflow-level aggregate telemetry, and the new acceptance/resume/repair rollups.
@@ -39,11 +47,18 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Fixed
 
+- Test-failure repair routing now chains code repair whenever pytest tracebacks point into generated code, even if the same suite also reports static QA issues, instead of spending the repair budget only on test regeneration.
+- Provider-matrix stabilization now completes on the strongest current checkpoint for all supported providers, with dedicated Anthropic and Ollama reruns also converging without repair cycles after the latest repair-routing hardening.
 - Transient-provider classification now treats timeout and connection failures as retryable without incorrectly classifying arbitrary unknown exception objects as transient.
 - Provider-health cooldown caching is now keyed by credential identity so unhealthy snapshots are not reused across different API keys for the same provider/model tuple.
 - OpenAI and Anthropic health probes now fail deterministically when the configured model is not present in the provider model listing instead of treating backend reachability alone as success.
 - Ollama health probes now validate both `/api/tags` reachability and model availability, surfacing a deterministic failure when the configured local model is not installed.
 - Empirical cloud-provider full-workflow validation recovered the current strongest baseline: OpenAI completed at the latest checkpoint with zero repair cycles, Anthropic completed after one repair cycle, and Ollama remains contingent on local runtime reachability.
+
+### Release Readiness Notes
+
+- Version `1.0.11` is now the released package baseline.
+- The latest empirical matrix checkpoint `output/provider_matrix_validation_step3o` completed for Anthropic, Ollama, and OpenAI, and the dedicated reruns `output/provider_matrix_validation_step3n_anthropic` plus `output/provider_matrix_validation_step3n_ollama` both completed with `repair_cycle_count=0`.
 
 ## 1.0.10 - 2026-03-25
 

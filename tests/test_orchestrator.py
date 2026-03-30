@@ -1477,6 +1477,29 @@ def test_build_code_test_targets_reports_invalid_syntax(tmp_path):
     assert summary == "Test targets unavailable because module syntax is invalid."
 
 
+def test_build_code_test_targets_excludes_cli_wrapper_classes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_test_targets(
+        {
+            "syntax_ok": True,
+            "functions": [
+                {"name": "main", "signature": "main()"},
+                {"name": "run_service", "signature": "run_service()"},
+            ],
+            "classes": {
+                "ComplianceCLI": {},
+                "ComplianceService": {},
+            },
+        }
+    )
+
+    assert "Functions to test: run_service()" in summary
+    assert "Classes to test: ComplianceService" in summary
+    assert "Entry points to avoid in tests: ComplianceCLI, main" in summary
+
+
 def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid_modules(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1681,10 +1704,12 @@ def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_
         "constructor_arity_mismatches": [],
         "payload_contract_violations": [],
         "non_batch_sequence_calls": [],
+        "reserved_fixture_names": [],
         "undefined_fixtures": [],
         "undefined_local_names": [],
         "imported_entrypoint_symbols": [],
         "unsafe_entrypoint_calls": [],
+        "unsupported_mock_assertions": [],
         "top_level_test_count": 0,
         "fixture_count": 0,
     }
@@ -1825,6 +1850,88 @@ def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs
         "ComplianceIntakeService.intake_request expects 1 args but test uses 2 at line 5"
     ]
     assert analysis["invalid_member_references"] == ["ComplianceRequest.id (line 6)"]
+
+
+def test_analyze_test_module_flags_mock_style_assertions_without_mock_setup(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [{"name": "log_audit"}],
+        "classes": {},
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["log_audit"],
+    }
+    test_content = (
+        "import logging\n"
+        "from module_under_test import log_audit\n\n"
+        "def test_log_audit():\n"
+        "    log_audit(1, 'scored', True)\n"
+        "    assert logging.getLogger().info.call_count == 1\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["unsupported_mock_assertions"] == [
+        "logging.getLogger().info.call_count (line 6)"
+    ]
+
+
+def test_analyze_test_module_allows_mock_style_assertions_with_explicit_mock_setup(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    test_content = (
+        "from unittest.mock import MagicMock\n\n"
+        "def test_logger_calls():\n"
+        "    mock_logger = MagicMock()\n"
+        "    mock_logger.info('ok')\n"
+        "    assert mock_logger.info.call_count == 1\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", {})
+
+    assert analysis["unsupported_mock_assertions"] == []
+
+
+def test_analyze_test_module_flags_reserved_request_fixture_and_missing_fixture_imports(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [{"name": "validate_request"}],
+        "classes": {
+            "ComplianceRequest": {
+                "name": "ComplianceRequest",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": ["id", "customer_id", "document_type", "document_data"],
+                "constructor_min_args": 4,
+                "constructor_max_args": 4,
+                "methods": [],
+                "method_signatures": {},
+            }
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["ComplianceRequest", "validate_request"],
+    }
+    test_content = (
+        "import pytest\n"
+        "from module_under_test import validate_request\n\n"
+        "@pytest.fixture\n"
+        "def request():\n"
+        "    return ComplianceRequest(1, 2, 'contract', {'document_data': 'x'})\n\n"
+        "def test_validate_request(request):\n"
+        "    assert validate_request(request)\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["reserved_fixture_names"] == ["request (line 5)"]
+    assert analysis["undefined_local_names"] == ["ComplianceRequest (line 6)"]
 
 
 def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(tmp_path):
@@ -2427,6 +2534,7 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
             "syntax_ok": True,
             "imported_module_symbols": ["add"],
             "missing_function_imports": ["add (line 2)"],
+            "unsupported_mock_assertions": ["logging.getLogger().info.call_count (line 6)"],
         },
         {
             "available": True,
@@ -2448,6 +2556,7 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
     assert unavailable_summary.endswith("- Verdict: PASS")
     assert "- Pytest execution: FAIL" in failed_summary
     assert "Call arity mismatches: none" in failed_summary
+    assert "Unsupported mock assertions: logging.getLogger().info.call_count (line 6)" in failed_summary
     assert "Pytest failure details: FAILED tests_tests.py::test_add - assert 1 == 2" in failed_summary
     assert "- Pytest summary: 1 failed" in failed_summary
     assert failed_summary.endswith("- Verdict: FAIL")
@@ -6142,6 +6251,79 @@ def test_run_task_fails_qa_tester_when_generated_tests_import_entrypoints(tmp_pa
     assert validation["imported_entrypoint_symbols"] == ["main"]
 
 
+def test_run_task_fails_qa_tester_when_generated_tests_import_cli_wrapper_classes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "class ComplianceService:\n"
+                "    def process(self):\n"
+                "        return 1\n\n"
+                "class ComplianceCLI:\n"
+                "    def run(self):\n"
+                "        return 1\n"
+            ),
+            output_payload={
+                "summary": "class ComplianceService:",
+                "raw_content": (
+                    "class ComplianceService:\n"
+                    "    def process(self):\n"
+                    "        return 1\n\n"
+                    "class ComplianceCLI:\n"
+                    "    def run(self):\n"
+                    "        return 1\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "class ComplianceService:\n"
+                            "    def process(self):\n"
+                            "        return 1\n\n"
+                            "class ComplianceCLI:\n"
+                            "    def run(self):\n"
+                            "        return 1\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceCLI\n\n"
+        "def test_cli_run():\n"
+        "    cli = ComplianceCLI()\n"
+        "    assert cli.run() == 1\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"imported entrypoint symbols: ComplianceCLI"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["imported_entrypoint_symbols"] == ["ComplianceCLI"]
+
+
 def test_run_task_fails_qa_tester_when_generated_tests_violate_payload_contract(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -7815,6 +7997,441 @@ def test_build_agent_input_includes_test_repair_context(tmp_path):
     assert agent_input.context["repair_context"]["repair_owner"] == "qa_tester"
     assert agent_input.context["existing_tests"] == "from code_implementation import missing_symbol"
     assert agent_input.context["test_validation_summary"].endswith("Verdict: FAIL")
+
+
+def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def add(a, b):\n    return a + b",
+            output_payload={
+                "summary": "def add(a, b):",
+                "raw_content": "def add(a, b):\n    return a + b",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def add(a, b):\n    return a + b",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Line count: 206/150\n"
+                    "- Top-level test functions: 14/7 max\n"
+                    "- Fixture count: 4/3\n"
+                    "- Unknown module symbols: batch_processing\n"
+                        "- Constructor arity mismatches: Validator expects 1 args but test uses 0 at line 12\n"
+                    "- Non-batch sequence calls: score_request does not accept batch/list inputs at line 46\n"
+                    "- Reserved fixture names: request (line 5)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "from code_implementation import batch_processing",
+                "failed_artifact_content": "from code_implementation import batch_processing",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(project.get_task("tests"), project)
+
+    assert "Repair priorities:" in agent_input.task_description
+    assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
+    assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
+    assert "Reduce scope aggressively: target 3 to 4 top-level tests" in agent_input.task_description
+    assert "Use only documented module symbols" in agent_input.task_description
+    assert "remove guessed helper wiring and rebuild the suite around the smallest documented public service or function surface" in agent_input.task_description
+    assert "Keep scalar functions scalar" in agent_input.task_description
+    assert "Never define a custom fixture named request." in agent_input.task_description
+    assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
+    assert "prefer stable invariants and type or shape assertions" in agent_input.task_description
+
+
+def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def add(a, b):\n    return a + b",
+            output_payload={
+                "summary": "def add(a, b):",
+                "raw_content": "def add(a, b):\n    return a + b",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def add(a, b):\n    return a + b",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: add\n"
+                    "- Unknown module symbols: none\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 1 passed in 0.01s\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "from code_implementation import add\n\ndef test_add():\n    assert add(1, 2) == 4",
+                "failed_artifact_content": "from code_implementation import add\n\ndef test_add():\n    assert add(1, 2) == 4",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(project.get_task("tests"), project)
+
+    assert "Repair priorities:" in agent_input.task_description
+    assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
+    assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
+    assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
+
+
+def test_build_agent_input_adds_targeted_code_repair_priorities_for_pytest_assertions(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it satisfies the existing valid pytest suite and the documented contract without shifting the failure onto the tests.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_threshold - AssertionError: assert False is True\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def score():\n    return False",
+                "failed_artifact_content": "def score():\n    return False",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(project.get_task("code"), project)
+
+    assert "Repair priorities:" in agent_input.task_description
+    assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
+    assert "change the implementation until that exact expectation holds" in agent_input.task_description
+    assert "Preserve the documented public API and repair the module behavior itself" in agent_input.task_description
+
+
+def test_test_failure_requires_code_repair_for_code_tracebacks_and_assertion_mismatches(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    code_failure_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        output_payload={
+            "summary": "tests",
+            "raw_content": "from code_implementation import risky",
+            "artifacts": [],
+            "decisions": [],
+            "metadata": {
+                "validation": {
+                    "module_filename": "code_implementation.py",
+                    "test_filename": "tests_tests.py",
+                    "test_analysis": {
+                        "syntax_ok": True,
+                        "imported_module_symbols": ["risky"],
+                        "missing_function_imports": [],
+                        "unknown_module_symbols": [],
+                        "invalid_member_references": [],
+                        "call_arity_mismatches": [],
+                        "constructor_arity_mismatches": ["Validator expects 1 args but test uses 0 at line 3"],
+                        "payload_contract_violations": [],
+                        "non_batch_sequence_calls": [],
+                        "undefined_fixtures": [],
+                        "undefined_local_names": [],
+                        "imported_entrypoint_symbols": [],
+                        "unsafe_entrypoint_calls": [],
+                    },
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "1 failed in 0.01s",
+                        "stdout": "FAILED tests_tests.py::test_risky - AttributeError: boom\ncode_implementation.py:2: AttributeError\n",
+                    },
+                }
+            },
+        },
+    )
+    test_failure_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        output_payload={
+            "summary": "tests",
+            "raw_content": "from code_implementation import risky",
+            "artifacts": [],
+            "decisions": [],
+            "metadata": {
+                "validation": {
+                    "module_filename": "code_implementation.py",
+                    "test_filename": "tests_tests.py",
+                    "test_analysis": {
+                        "syntax_ok": True,
+                        "imported_module_symbols": ["risky"],
+                        "missing_function_imports": [],
+                        "unknown_module_symbols": [],
+                        "invalid_member_references": [],
+                        "call_arity_mismatches": [],
+                        "constructor_arity_mismatches": [],
+                        "payload_contract_violations": [],
+                        "non_batch_sequence_calls": [],
+                        "undefined_fixtures": [],
+                        "undefined_local_names": [],
+                        "imported_entrypoint_symbols": [],
+                        "unsafe_entrypoint_calls": [],
+                    },
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "1 failed in 0.01s",
+                        "stdout": "FAILED tests_tests.py::test_risky - assert 0 == 1\ntests_tests.py:4: AssertionError\n",
+                    },
+                }
+            },
+        },
+    )
+    test_local_failure_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        output_payload={
+            "summary": "tests",
+            "raw_content": "from code_implementation import risky",
+            "artifacts": [],
+            "decisions": [],
+            "metadata": {
+                "validation": {
+                    "module_filename": "code_implementation.py",
+                    "test_filename": "tests_tests.py",
+                    "test_analysis": {
+                        "syntax_ok": True,
+                        "imported_module_symbols": ["risky"],
+                        "missing_function_imports": [],
+                        "unknown_module_symbols": [],
+                        "invalid_member_references": [],
+                        "call_arity_mismatches": [],
+                        "constructor_arity_mismatches": [],
+                        "payload_contract_violations": [],
+                        "non_batch_sequence_calls": [],
+                        "undefined_fixtures": [],
+                        "undefined_local_names": [],
+                        "imported_entrypoint_symbols": [],
+                        "unsafe_entrypoint_calls": [],
+                    },
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "1 failed in 0.01s",
+                        "stdout": "FAILED tests_tests.py::test_risky - NameError: name 'expected' is not defined\ntests_tests.py:4: NameError\n",
+                    },
+                }
+            },
+        },
+    )
+
+    assert orchestrator._test_failure_requires_code_repair(code_failure_task) is True
+    assert orchestrator._test_failure_requires_code_repair(test_failure_task) is True
+    assert orchestrator._test_failure_requires_code_repair(test_local_failure_task) is False
+
+
+def test_execute_workflow_resume_failed_repairs_code_before_rerunning_valid_tests(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="Architecture: expose risky() as a small API.",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write one Python module under 50 lines.",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+            status=TaskStatus.DONE.value,
+            output="def risky() -> int:\n    raise AttributeError('boom')",
+            output_payload={
+                "summary": "def risky() -> int:",
+                "raw_content": "def risky() -> int:\n    raise AttributeError('boom')",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def risky() -> int:\n    raise AttributeError('boom')",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write one compact raw pytest module under 50 lines. Use at most 2 top-level test functions.",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            status=TaskStatus.FAILED.value,
+            output="Generated test validation failed: pytest failed: 1 failed in 0.01s",
+            last_error="Generated test validation failed: pytest failed: 1 failed in 0.01s",
+            last_error_type="AgentExecutionError",
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            output_payload={
+                "summary": "tests",
+                "raw_content": "from code_implementation import risky\n\ndef test_risky():\n    assert risky() == 1",
+                "artifacts": [
+                    {
+                        "name": "tests_tests",
+                        "artifact_type": ArtifactType.TEST.value,
+                        "path": "artifacts/tests_tests.py",
+                        "content": "from code_implementation import risky\n\ndef test_risky():\n    assert risky() == 1",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {
+                    "validation": {
+                        "module_filename": "code_implementation.py",
+                        "test_filename": "tests_tests.py",
+                        "pytest_failure_origin": "code_under_test",
+                        "test_analysis": {
+                            "syntax_ok": True,
+                            "line_count": 4,
+                            "line_budget": 50,
+                            "top_level_test_count": 1,
+                            "max_top_level_test_count": 2,
+                            "fixture_count": 0,
+                            "imported_module_symbols": ["risky"],
+                            "missing_function_imports": [],
+                            "unknown_module_symbols": [],
+                            "invalid_member_references": [],
+                            "call_arity_mismatches": [],
+                            "constructor_arity_mismatches": [],
+                            "payload_contract_violations": [],
+                            "non_batch_sequence_calls": [],
+                            "undefined_fixtures": [],
+                            "undefined_local_names": [],
+                            "imported_entrypoint_symbols": [],
+                            "unsafe_entrypoint_calls": [],
+                        },
+                        "test_execution": {
+                            "available": True,
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "1 failed in 0.01s",
+                            "stdout": "FAILED tests_tests.py::test_risky - AttributeError: boom\ntests_tests.py:3: AssertionError\ncode_implementation.py:2: AttributeError\n",
+                        },
+                    }
+                },
+            },
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    engineer = RecordingAgent("def risky() -> int:\n    return 1")
+    tester = RecordingAgent("from code_implementation import risky\n\ndef test_risky():\n    assert risky() == 1")
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "architect": RecordingAgent("Architecture: expose risky() as a small API."),
+                "code_engineer": engineer,
+                "qa_tester": tester,
+            }
+        ),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    assert project.get_task("code").status == TaskStatus.DONE.value
+    assert project.get_task("tests").status == TaskStatus.DONE.value
+    assert project.get_task("code__repair_1").status == TaskStatus.DONE.value
+    assert project.get_task("tests__repair_1").status == TaskStatus.DONE.value
+    assert "code__repair_1" in project.get_task("tests__repair_1").dependencies
+    assert engineer.last_context["existing_code"] == "def risky() -> int:\n    raise AttributeError('boom')"
+    assert engineer.last_context["existing_tests"] == "from code_implementation import risky\n\ndef test_risky():\n    assert risky() == 1"
+    assert "Pytest failure details" in engineer.last_context["repair_validation_summary"]
+    assert tester.last_context["code"] == "def risky() -> int:\n    return 1"
 
 
 def test_build_context_includes_dependency_repair_manifest_and_summary(tmp_path):

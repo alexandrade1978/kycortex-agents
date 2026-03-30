@@ -122,14 +122,17 @@ class OllamaProvider(BaseLLMProvider):
         }
 
     def _build_payload(self, system_prompt: str, user_message: str) -> dict[str, Any]:
+        options: dict[str, Any] = {
+            "temperature": self.config.temperature,
+        }
+        if self.config.ollama_num_ctx is not None:
+            options["num_ctx"] = self.config.ollama_num_ctx
         return {
             "model": self.config.llm_model,
             "system": system_prompt,
             "prompt": user_message,
             "stream": False,
-            "options": {
-                "temperature": self.config.temperature,
-            },
+            "options": options,
         }
 
     def _extract_content(self, payload: dict[str, Any]) -> str:

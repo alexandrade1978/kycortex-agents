@@ -105,12 +105,17 @@ Ollama example:
 ```python
 config = KYCortexConfig(
     llm_provider="ollama",
-    llm_model="llama3",
+    llm_model="qwen2.5-coder:7b",
     base_url="http://localhost:11434",
+    ollama_num_ctx=16384,
     project_name="my-project",
     output_dir="./output"
 )
 ```
+
+For local Ollama runs, the repository's validated baseline is `qwen2.5-coder:7b` with `ollama_num_ctx=16384`.
+The framework talks to Ollama over HTTP, so local use only requires a running Ollama server plus that model installed on the machine that serves the endpoint.
+If your Ollama server is not exposed at the default `http://localhost:11434`, set `base_url` to the correct host and port.
 
 Workflow control example:
 
@@ -144,6 +149,7 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | `llm_model` | `"gpt-4o"` | Provider-specific model name used for agent execution. |
 | `api_key` | `None` | Optional explicit API key. When omitted, OpenAI and Anthropic fall back to `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`. |
 | `base_url` | `None` or Ollama default | Optional provider base URL. Ollama defaults to `http://localhost:11434`. |
+| `ollama_num_ctx` | `None` | Optional Ollama-specific context window override passed as `num_ctx` in generate requests. Useful for local repair-heavy workflows that need more than the runtime default context. |
 | `temperature` | `0.2` | Sampling temperature validated between `0` and `2`. |
 | `max_tokens` | `4096` | Maximum number of output tokens requested from the provider. |
 | `timeout_seconds` | `60.0` | Provider request timeout in seconds. |

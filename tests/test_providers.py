@@ -1,3 +1,4 @@
+import json
 import sys
 from types import SimpleNamespace
 from urllib.error import HTTPError
@@ -1106,6 +1107,40 @@ def test_ollama_provider_returns_content(tmp_path):
     result = provider.generate("system", "message")
 
     assert result == "ok"
+
+
+def test_ollama_provider_includes_num_ctx_when_configured(tmp_path):
+    captured_payloads: list[dict[str, object]] = []
+
+    def open_request(request, timeout=None):
+        url = getattr(request, "full_url", None)
+        if isinstance(url, str) and url.endswith("/api/tags"):
+            return FakeHTTPResponse('{"models": [{"name": "qwen2.5-coder:7b"}]}')
+        captured_payloads.append(json.loads(request.data.decode("utf-8")))
+        return FakeHTTPResponse('{"response": "ok"}')
+
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="qwen2.5-coder:7b",
+        ollama_num_ctx=16384,
+    )
+    provider = OllamaProvider(config, request_opener=open_request)
+
+    provider.generate("system", "message")
+
+    assert captured_payloads == [
+        {
+            "model": "qwen2.5-coder:7b",
+            "system": "system",
+            "prompt": "message",
+            "stream": False,
+            "options": {
+                "temperature": 0.2,
+                "num_ctx": 16384,
+            },
+        }
+    ]
 
 
 def test_ollama_provider_captures_usage_metadata(tmp_path):

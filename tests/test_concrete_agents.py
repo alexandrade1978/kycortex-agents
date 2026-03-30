@@ -298,13 +298,30 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "Public API contract:" in agent.last_user_message
     assert "Do not duplicate the implementation code in the tests." in agent.last_user_message
     assert "Respect the task's line budget and requested scenario count exactly." in agent.last_user_message
+    assert "stay comfortably under that ceiling" in agent.last_user_message
+    assert "Import every production class you instantiate or reference in a fixture or test body" in agent.last_user_message
     assert "stay on the main service or batch API" in agent.last_user_message
+    assert "merge overlapping checks instead of creating helper-specific extra tests" in agent.last_user_message
     assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
     assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
+    assert "If the public API exposes no dedicated batch helper" in agent.last_user_message
+    assert "Never define a custom fixture named `request`" in agent.last_user_message
+    assert "If you assert an exact numeric value, use trivially countable inputs" in agent.last_user_message
+    assert "never use prose sample text for that assertion" in agent.last_user_message
+    assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
+    assert "Treat the current implementation artifact and API contract as fixed ground truth during repair" in agent.last_user_message
     assert "Import every called production function explicitly" in agent.last_user_message
     assert "Return only raw Python test code." in agent.last_system_prompt
+    assert "Do not import `main`, CLI/demo entrypoints" in agent.last_system_prompt
+    assert "stay comfortably under that cap" in agent.last_system_prompt
+    assert "Do not hand-count prose strings to justify exact numeric assertions" in agent.last_system_prompt
+    assert "never use natural-language prose samples for that assertion" in agent.last_system_prompt
+    assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt
+    assert "Never define a custom fixture named `request`" in agent.last_system_prompt
     assert "do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities" in agent.last_system_prompt
     assert "Do not add caplog assertions or raw logging-text expectations" in agent.last_system_prompt
+    assert "Do not use mock-style bookkeeping assertions such as `.call_count` or `.assert_called_once()`" in agent.last_system_prompt
+    assert "Treat the current implementation artifact and API contract as fixed ground truth during repair" in agent.last_system_prompt
     assert "Task-specific scope, test-count, and size limits override these defaults." in agent.last_system_prompt
     assert result.artifacts[0].artifact_type == ArtifactType.TEST
     assert result.artifacts[0].name == "tests_tests"
@@ -325,8 +342,11 @@ def test_code_engineer_agent_prompt_demands_raw_python_output(tmp_path):
 
     assert "Return only raw Python source code." in agent.last_system_prompt
     assert "Task-specific scope and size limits override generic polish." in agent.last_system_prompt
+    assert "stay comfortably under that ceiling so imports, the main guard, and any required repairs still fit" in agent.last_system_prompt
+    assert "Treat the architecture as guidance for required behavior" in agent.last_system_prompt
     assert "Do not include markdown fences" in agent.last_system_prompt
     assert "Target module: code_implementation.py" in agent.last_user_message
+    assert "stay comfortably under that ceiling instead of aiming for the exact limit" in agent.last_user_message
 
 
 def test_code_reviewer_agent_prompt_includes_tests_and_module_name(tmp_path):

@@ -46,6 +46,18 @@ def test_config_sets_default_ollama_base_url(tmp_path):
     assert config.base_url == "http://localhost:11434"
 
 
+def test_config_rejects_non_positive_ollama_num_ctx(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="ollama_num_ctx must be greater than zero when provided",
+    ):
+        KYCortexConfig(
+            llm_provider="ollama",
+            output_dir=str(tmp_path / "output"),
+            ollama_num_ctx=0,
+        )
+
+
 def test_config_initialization_does_not_create_output_dir(tmp_path):
     output_dir = tmp_path / "output"
 

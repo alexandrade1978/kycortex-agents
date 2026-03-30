@@ -100,6 +100,17 @@ _LIKELY_TRUNCATED_TAIL_SUFFIXES = (
     "\\",
     ":",
 )
+_MOCK_ASSERTION_ATTRIBUTES = {"call_count"}
+_MOCK_ASSERTION_METHODS = {
+    "assert_any_call",
+    "assert_called",
+    "assert_called_once",
+    "assert_called_once_with",
+    "assert_called_with",
+    "assert_has_calls",
+    "assert_not_called",
+}
+_RESERVED_FIXTURE_NAMES = {"request"}
 
 _SANDBOX_SITECUSTOMIZE = """
 import asyncio
@@ -926,6 +937,13 @@ class Orchestrator:
         self._record_output_validation(output, "test_analysis", test_analysis)
         self._record_output_validation(output, "test_execution", test_execution)
         self._record_output_validation(output, "completion_diagnostics", completion_diagnostics)
+        self._record_output_validation(output, "module_filename", module_filename)
+        self._record_output_validation(output, "test_filename", test_filename)
+        self._record_output_validation(
+            output,
+            "pytest_failure_origin",
+            self._pytest_failure_origin(test_execution, module_filename, test_filename),
+        )
 
         validation_issues: list[str] = []
         if not test_analysis.get("syntax_ok", True):
@@ -952,10 +970,12 @@ class Orchestrator:
             ("constructor_arity_mismatches", "constructor arity mismatches"),
             ("payload_contract_violations", "payload contract violations"),
             ("non_batch_sequence_calls", "non-batch sequence calls"),
+            ("reserved_fixture_names", "reserved fixture names"),
             ("undefined_fixtures", "undefined test fixtures"),
             ("undefined_local_names", "undefined local names"),
             ("imported_entrypoint_symbols", "imported entrypoint symbols"),
             ("unsafe_entrypoint_calls", "unsafe entrypoint calls"),
+            ("unsupported_mock_assertions", "unsupported mock assertions"),
         ):
             issues = test_analysis.get(issue_key) or []
             if issues:
@@ -1462,12 +1482,15 @@ class Orchestrator:
             validation_summary = repair_context.get("validation_summary")
             if isinstance(validation_summary, str) and validation_summary.strip():
                 ctx["repair_validation_summary"] = validation_summary
+            existing_tests = repair_context.get("existing_tests")
             failed_artifact_content = repair_context.get("failed_artifact_content")
             failed_output = repair_context.get("failed_output")
             repair_content = failed_artifact_content if isinstance(failed_artifact_content, str) and failed_artifact_content.strip() else failed_output
             normalized_execution_agent = AgentRegistry.normalize_key(execution_agent_name)
             if normalized_execution_agent == "code_engineer" and isinstance(repair_content, str) and repair_content.strip():
                 ctx["existing_code"] = repair_content
+            if normalized_execution_agent == "code_engineer" and isinstance(existing_tests, str) and existing_tests.strip():
+                ctx["existing_tests"] = existing_tests
             if normalized_execution_agent == "qa_tester":
                 if isinstance(repair_content, str) and repair_content.strip():
                     ctx["existing_tests"] = repair_content
@@ -1677,6 +1700,107 @@ class Orchestrator:
         error_lines = [line.strip()[4:] for line in output_lines if line.strip().startswith("E   ")]
         return error_lines[:limit]
 
+    def _pytest_failure_origin(
+        self,
+        test_execution: Optional[Dict[str, Any]],
+        module_filename: Optional[str],
+        test_filename: Optional[str],
+    ) -> str:
+        if not isinstance(test_execution, dict):
+            return "unknown"
+        output_lines: list[str] = []
+        for field_name in ("stdout", "stderr"):
+            value = test_execution.get(field_name)
+            if isinstance(value, str) and value.strip():
+                output_lines.extend(value.splitlines())
+
+        module_marker = f"{module_filename}:" if isinstance(module_filename, str) and module_filename else None
+        if module_marker and any(module_marker in line for line in output_lines):
+            return "code_under_test"
+
+        test_marker = f"{test_filename}:" if isinstance(test_filename, str) and test_filename else None
+        if test_marker and any(test_marker in line for line in output_lines):
+            return "tests"
+
+        return "unknown"
+
+    def _pytest_failure_is_semantic_assertion_mismatch(
+        self,
+        test_execution: Optional[Dict[str, Any]],
+    ) -> bool:
+        failure_details = self._pytest_failure_details(test_execution, limit=10)
+        if not failure_details:
+            return False
+
+        joined_details = "\n".join(failure_details)
+        if any(
+            marker in joined_details
+            for marker in (
+                "NameError",
+                "ImportError",
+                "ModuleNotFoundError",
+                "SyntaxError",
+                "fixture ",
+                "fixture'",
+                "fixture\"",
+            )
+        ):
+            return False
+
+        return "AssertionError" in joined_details or " - assert " in joined_details
+
+    def _test_validation_has_static_issues(self, validation: Dict[str, Any]) -> bool:
+        test_analysis = validation.get("test_analysis")
+        if not isinstance(test_analysis, dict):
+            return True
+
+        if not test_analysis.get("syntax_ok", True):
+            return True
+
+        line_count = test_analysis.get("line_count")
+        line_budget = test_analysis.get("line_budget")
+        if isinstance(line_count, int) and isinstance(line_budget, int) and line_count > line_budget:
+            return True
+
+        top_level_test_count = test_analysis.get("top_level_test_count")
+        expected_top_level_test_count = test_analysis.get("expected_top_level_test_count")
+        max_top_level_test_count = test_analysis.get("max_top_level_test_count")
+        if (
+            isinstance(top_level_test_count, int)
+            and isinstance(expected_top_level_test_count, int)
+            and top_level_test_count != expected_top_level_test_count
+        ):
+            return True
+        if (
+            isinstance(top_level_test_count, int)
+            and isinstance(max_top_level_test_count, int)
+            and top_level_test_count > max_top_level_test_count
+        ):
+            return True
+
+        fixture_count = test_analysis.get("fixture_count")
+        fixture_budget = test_analysis.get("fixture_budget")
+        if isinstance(fixture_count, int) and isinstance(fixture_budget, int) and fixture_count > fixture_budget:
+            return True
+
+        for issue_key in (
+            "missing_function_imports",
+            "unknown_module_symbols",
+            "invalid_member_references",
+            "call_arity_mismatches",
+            "constructor_arity_mismatches",
+            "payload_contract_violations",
+            "non_batch_sequence_calls",
+            "undefined_fixtures",
+            "undefined_local_names",
+            "imported_entrypoint_symbols",
+            "unsafe_entrypoint_calls",
+        ):
+            if test_analysis.get(issue_key):
+                return True
+
+        return False
+
     def _build_code_validation_summary(
         self,
         code_analysis: Dict[str, Any],
@@ -1737,6 +1861,75 @@ class Orchestrator:
                 return self._build_dependency_validation_summary(dependency_analysis)
         return fallback_message
 
+    def _test_failure_requires_code_repair(self, task: Task) -> bool:
+        if AgentRegistry.normalize_key(task.assigned_to) != "qa_tester":
+            return False
+        if task.last_error_category != FailureCategory.TEST_VALIDATION.value:
+            return False
+
+        validation = self._validation_payload(task)
+        if not validation:
+            return False
+
+        test_execution = validation.get("test_execution")
+        if not isinstance(test_execution, dict):
+            return False
+        if not test_execution.get("ran") or test_execution.get("returncode") in (None, 0):
+            return False
+
+        failure_origin = validation.get("pytest_failure_origin")
+        if not isinstance(failure_origin, str) or not failure_origin:
+            failure_origin = self._pytest_failure_origin(
+                test_execution,
+                validation.get("module_filename") if isinstance(validation.get("module_filename"), str) else None,
+                validation.get("test_filename") if isinstance(validation.get("test_filename"), str) else None,
+            )
+
+        if failure_origin == "code_under_test":
+            return True
+
+        if self._test_validation_has_static_issues(validation):
+            return False
+
+        return (
+            failure_origin == "tests"
+            and self._pytest_failure_is_semantic_assertion_mismatch(test_execution)
+        )
+
+    def _upstream_code_task_for_test_failure(self, project: ProjectState, task: Task) -> Optional[Task]:
+        for dependency_id in task.dependencies:
+            dependency = project.get_task(dependency_id)
+            if dependency is None:
+                continue
+            if AgentRegistry.normalize_key(dependency.assigned_to) == "code_engineer":
+                return dependency
+        return None
+
+    def _build_code_repair_context_from_test_failure(
+        self,
+        code_task: Task,
+        test_task: Task,
+        cycle: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "cycle": cycle.get("cycle"),
+            "failure_category": FailureCategory.CODE_VALIDATION.value,
+            "failure_message": test_task.last_error or test_task.output or "",
+            "failure_error_type": test_task.last_error_type,
+            "repair_owner": "code_engineer",
+            "original_assigned_to": code_task.assigned_to,
+            "instruction": "Repair the generated Python module so it satisfies the existing valid pytest suite and the documented contract without shifting the failure onto the tests.",
+            "validation_summary": self._build_repair_validation_summary(
+                test_task,
+                FailureCategory.TEST_VALIDATION.value,
+            ),
+            "existing_tests": self._failed_artifact_content(test_task, ArtifactType.TEST),
+            "failed_output": code_task.output or "",
+            "failed_artifact_content": self._failed_artifact_content(code_task, ArtifactType.CODE),
+            "provider_call": code_task.last_provider_call,
+            "source_failure_task_id": test_task.id,
+        }
+
     def _active_repair_cycle(self, project: ProjectState) -> Optional[Dict[str, Any]]:
         if not project.repair_history:
             return None
@@ -1784,8 +1977,7 @@ class Orchestrator:
         if self._has_repair_task_for_cycle(project, task.id, cycle_number):
             return False
 
-        repair_context = self._build_repair_context(task, current_cycle)
-        project._plan_task_repair(task.id, repair_context)
+        self._configure_repair_attempts(project, [task.id], current_cycle)
         repair_task_ids = self._repair_task_ids_for_cycle(project, [task.id])
         if not repair_task_ids:
             return False
@@ -1823,11 +2015,27 @@ class Orchestrator:
         return self._failed_artifact_content(task)
 
     def _configure_repair_attempts(self, project: ProjectState, failed_task_ids: list[str], cycle: Dict[str, Any]) -> None:
-        for task in project.tasks:
-            if task.id not in failed_task_ids:
+        planned_task_ids: set[str] = set()
+        for failed_task_id in failed_task_ids:
+            task = project.get_task(failed_task_id)
+            if task is None:
                 continue
+
+            if self._test_failure_requires_code_repair(task):
+                code_task = self._upstream_code_task_for_test_failure(project, task)
+                if code_task is not None and code_task.id not in planned_task_ids:
+                    project._plan_task_repair(
+                        code_task.id,
+                        self._build_code_repair_context_from_test_failure(code_task, task, cycle),
+                    )
+                    planned_task_ids.add(code_task.id)
+
+            if task.id in planned_task_ids:
+                continue
+
             repair_context = self._build_repair_context(task, cycle)
             project._plan_task_repair(task.id, repair_context)
+            planned_task_ids.add(task.id)
 
     def _repair_task_ids_for_cycle(self, project: ProjectState, failed_task_ids: list[str]) -> list[str]:
         repair_task_ids: list[str] = []
@@ -1835,10 +2043,23 @@ class Orchestrator:
             task = project.get_task(task_id)
             if task is None:
                 continue
+
+            code_repair_task: Optional[Task] = None
+            if self._test_failure_requires_code_repair(task):
+                code_task = self._upstream_code_task_for_test_failure(project, task)
+                if code_task is not None:
+                    code_repair_context = code_task.repair_context if isinstance(code_task.repair_context, dict) else {}
+                    code_repair_owner = self._execution_agent_name(code_task)
+                    code_repair_task = project._create_repair_task(code_task.id, code_repair_owner, code_repair_context)
+                    if code_repair_task is not None and code_repair_task.id not in repair_task_ids:
+                        repair_task_ids.append(code_repair_task.id)
+
             repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
             repair_owner = self._execution_agent_name(task)
             repair_task = project._create_repair_task(task_id, repair_owner, repair_context)
             if repair_task is not None:
+                if code_repair_task is not None and code_repair_task.id not in repair_task.dependencies:
+                    repair_task.dependencies.append(code_repair_task.id)
                 repair_task_ids.append(repair_task.id)
         return repair_task_ids
 
@@ -2203,17 +2424,32 @@ class Orchestrator:
             if name == "main" or name.startswith("cli_") or name.endswith("_cli") or name.endswith("_demo")
         }
 
+    def _entrypoint_class_names(self, code_analysis: Dict[str, Any]) -> set[str]:
+        class_names = set((code_analysis.get("classes") or {}).keys())
+        return {
+            name
+            for name in class_names
+            if name.lower().endswith("cli") or name.lower().endswith("_cli") or name.lower().endswith("demo")
+        }
+
+    def _entrypoint_symbol_names(self, code_analysis: Dict[str, Any]) -> set[str]:
+        return self._entrypoint_function_names(code_analysis) | self._entrypoint_class_names(code_analysis)
+
     def _build_code_test_targets(self, code_analysis: Dict[str, Any]) -> str:
         if not code_analysis.get("syntax_ok", True):
             return "Test targets unavailable because module syntax is invalid."
 
-        entrypoint_names = self._entrypoint_function_names(code_analysis)
+        entrypoint_names = self._entrypoint_symbol_names(code_analysis)
         testable_functions = [
             item["signature"]
             for item in code_analysis.get("functions") or []
             if item["name"] not in entrypoint_names
         ]
-        classes = sorted((code_analysis.get("classes") or {}).keys())
+        classes = sorted(
+            name
+            for name in (code_analysis.get("classes") or {}).keys()
+            if name not in entrypoint_names
+        )
         lines = ["Test targets:"]
         lines.append(f"- Functions to test: {', '.join(testable_functions or ['none'])}")
         lines.append(f"- Classes to test: {', '.join(classes or ['none'])}")
@@ -2443,10 +2679,12 @@ class Orchestrator:
             "constructor_arity_mismatches": [],
             "payload_contract_violations": [],
             "non_batch_sequence_calls": [],
+            "reserved_fixture_names": [],
             "undefined_fixtures": [],
             "undefined_local_names": [],
             "imported_entrypoint_symbols": [],
             "unsafe_entrypoint_calls": [],
+            "unsupported_mock_assertions": [],
             "top_level_test_count": 0,
             "fixture_count": 0,
         }
@@ -2464,7 +2702,7 @@ class Orchestrator:
         function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
         module_defined_names = self._collect_module_defined_names(tree)
-        entrypoint_names = self._entrypoint_function_names(code_analysis)
+        entrypoint_names = self._entrypoint_symbol_names(code_analysis)
         validation_rules, field_value_rules, batch_rules = self._parse_behavior_contract(code_behavior_contract)
         analysis["top_level_test_count"] = sum(
             1
@@ -2483,6 +2721,7 @@ class Orchestrator:
         constructor_calls: list[tuple[str, int, int]] = []
         call_arity_mismatches: list[str] = []
         defined_fixtures: set[str] = set()
+        reserved_fixture_names: list[str] = []
         referenced_fixtures: list[tuple[str, int]] = []
         undefined_local_names: set[str] = set()
         unsafe_entrypoint_calls: list[str] = []
@@ -2494,6 +2733,11 @@ class Orchestrator:
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if self._is_pytest_fixture(node):
                     defined_fixtures.add(node.name)
+                    undefined_local_names.update(
+                        self._collect_undefined_local_names(node, module_defined_names)
+                    )
+                    if node.name in _RESERVED_FIXTURE_NAMES:
+                        reserved_fixture_names.append(f"{node.name} (line {node.lineno})")
                 if node.name.startswith("test_"):
                     parametrized_arguments = self._collect_parametrized_argument_names(node)
                     for arg_name in self._function_argument_names(node):
@@ -2524,6 +2768,7 @@ class Orchestrator:
         unknown_symbols = sorted(symbol for symbol in imported_symbols if symbol not in module_symbols)
 
         invalid_member_refs: list[str] = []
+        unsupported_mock_assertions: list[str] = []
         for owner, member, lineno in attribute_refs:
             if owner not in imported_symbols or owner not in class_map:
                 continue
@@ -2546,6 +2791,9 @@ class Orchestrator:
             )
             invalid_member_refs.extend(typed_invalid_refs)
             call_arity_mismatches.extend(typed_arity_mismatches)
+            unsupported_mock_assertions.extend(
+                self._find_unsupported_mock_assertions(node, local_types, class_map)
+            )
 
         arity_mismatches: list[str] = []
         for class_name, actual_count, lineno in constructor_calls:
@@ -2592,10 +2840,12 @@ class Orchestrator:
         analysis["constructor_arity_mismatches"] = sorted(set(arity_mismatches))
         analysis["payload_contract_violations"] = payload_contract_violations
         analysis["non_batch_sequence_calls"] = non_batch_sequence_calls
+        analysis["reserved_fixture_names"] = sorted(set(reserved_fixture_names))
         analysis["undefined_fixtures"] = undefined_fixtures
         analysis["undefined_local_names"] = sorted(undefined_local_names)
         analysis["imported_entrypoint_symbols"] = imported_entrypoint_symbols
         analysis["unsafe_entrypoint_calls"] = sorted(set(unsafe_entrypoint_calls))
+        analysis["unsupported_mock_assertions"] = sorted(set(unsupported_mock_assertions))
         return analysis
 
     def _parse_behavior_contract(
@@ -3068,6 +3318,173 @@ class Orchestrator:
                         local_types[name] = inferred_type
         return local_types
 
+    def _find_unsupported_mock_assertions(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        local_types: Dict[str, str],
+        class_map: Dict[str, Any],
+    ) -> list[str]:
+        mock_bindings, patched_targets = self._collect_mock_support(node)
+        issues: set[str] = set()
+
+        for child in ast.walk(node):
+            member_node: Optional[ast.Attribute] = None
+            target_node: Optional[ast.AST] = None
+
+            if isinstance(child, ast.Attribute) and child.attr in _MOCK_ASSERTION_ATTRIBUTES:
+                member_node = child
+                target_node = child.value
+            elif (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr in _MOCK_ASSERTION_METHODS
+            ):
+                member_node = child.func
+                target_node = child.func.value
+
+            if member_node is None or target_node is None:
+                continue
+            if self._known_type_allows_member(member_node, local_types, class_map):
+                continue
+            if self._supports_mock_assertion_target(target_node, mock_bindings, patched_targets):
+                continue
+            issues.add(f"{self._render_expression(child)} (line {getattr(child, 'lineno', '?')})")
+
+        return sorted(issues)
+
+    def _collect_mock_support(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> tuple[set[str], set[str]]:
+        mock_bindings = {
+            name
+            for name in self._function_argument_names(node)
+            if name == "mocker" or name.startswith("mock")
+        }
+        patched_targets: set[str] = set()
+
+        for stmt in node.body:
+            for child in self._iter_relevant_test_body_nodes(stmt):
+                if isinstance(child, ast.Assign):
+                    value = child.value
+                    if self._is_mock_factory_call(value) or self._is_patch_call(value):
+                        for target in child.targets:
+                            mock_bindings.update(self._bound_target_names(target))
+                    if isinstance(value, ast.Call) and self._is_patch_call(value):
+                        patched_target = self._patched_target_name_from_call(value)
+                        if patched_target:
+                            patched_targets.add(patched_target)
+                elif isinstance(child, ast.AnnAssign) and child.value is not None:
+                    value = child.value
+                    if self._is_mock_factory_call(value) or self._is_patch_call(value):
+                        mock_bindings.update(self._bound_target_names(child.target))
+                    if isinstance(value, ast.Call) and self._is_patch_call(value):
+                        patched_target = self._patched_target_name_from_call(value)
+                        if patched_target:
+                            patched_targets.add(patched_target)
+                elif isinstance(child, (ast.With, ast.AsyncWith)):
+                    for item in child.items:
+                        context_expr = item.context_expr
+                        if not isinstance(context_expr, ast.Call) or not self._is_patch_call(context_expr):
+                            continue
+                        patched_target = self._patched_target_name_from_call(context_expr)
+                        if patched_target:
+                            patched_targets.add(patched_target)
+                        if item.optional_vars is not None:
+                            mock_bindings.update(self._bound_target_names(item.optional_vars))
+
+        return mock_bindings, patched_targets
+
+    def _supports_mock_assertion_target(
+        self,
+        node: ast.AST,
+        mock_bindings: set[str],
+        patched_targets: set[str],
+    ) -> bool:
+        target_name = self._attribute_chain(node)
+        root_name = self._expression_root_name(node)
+        if root_name and (root_name in mock_bindings or root_name.startswith("mock")):
+            return True
+        if target_name and target_name in patched_targets:
+            return True
+        return False
+
+    def _known_type_allows_member(
+        self,
+        node: ast.Attribute,
+        local_types: Dict[str, str],
+        class_map: Dict[str, Any],
+    ) -> bool:
+        if not isinstance(node.value, ast.Name):
+            return False
+        owner_name = node.value.id
+        owner_type = local_types.get(owner_name)
+        if owner_type not in class_map and owner_name in class_map:
+            owner_type = owner_name
+        if owner_type not in class_map:
+            return False
+        class_info = class_map.get(owner_type, {})
+        allowed = set(class_info.get("attributes") or [])
+        if not class_info.get("is_enum"):
+            allowed.update(class_info.get("fields") or [])
+        allowed.update((class_info.get("method_signatures") or {}).keys())
+        return node.attr in allowed
+
+    def _is_mock_factory_call(self, node: ast.AST) -> bool:
+        if not isinstance(node, ast.Call):
+            return False
+        callable_name = self._attribute_chain(node.func)
+        if not callable_name:
+            return False
+        return callable_name in {"Mock", "MagicMock", "AsyncMock", "create_autospec"} or any(
+            callable_name.endswith(suffix)
+            for suffix in (
+                ".Mock",
+                ".MagicMock",
+                ".AsyncMock",
+                ".create_autospec",
+            )
+        )
+
+    def _is_patch_call(self, node: ast.AST) -> bool:
+        if not isinstance(node, ast.Call):
+            return False
+        callable_name = self._attribute_chain(node.func)
+        if not callable_name:
+            return False
+        return (
+            callable_name == "patch"
+            or callable_name.endswith(".patch")
+            or callable_name == "patch.object"
+            or callable_name.endswith(".patch.object")
+        )
+
+    def _patched_target_name_from_call(self, node: ast.Call) -> Optional[str]:
+        callable_name = self._attribute_chain(node.func)
+        if not callable_name:
+            return None
+        if callable_name == "patch.object" or callable_name.endswith(".patch.object"):
+            target_node = node.args[0] if len(node.args) >= 1 else None
+            attribute_node = node.args[1] if len(node.args) >= 2 else None
+            if target_node is None:
+                for keyword in node.keywords:
+                    if keyword.arg == "target":
+                        target_node = keyword.value
+                    elif keyword.arg in {"attribute", "name", "attr"}:
+                        attribute_node = keyword.value
+            target_name = self._attribute_chain(target_node) if target_node is not None else ""
+            if (
+                target_name
+                and isinstance(attribute_node, ast.Constant)
+                and isinstance(attribute_node.value, str)
+            ):
+                return f"{target_name}.{attribute_node.value}"
+            return None
+        target_node = self._first_call_argument(node)
+        if isinstance(target_node, ast.Constant) and isinstance(target_node.value, str):
+            return target_node.value
+        return None
+
     def _infer_call_result_type(
         self,
         node: Optional[ast.AST],
@@ -3167,14 +3584,45 @@ class Orchestrator:
             return node.func.attr
         return ""
 
-    def _first_call_argument(self, node: ast.Call) -> Optional[ast.AST]:
+    def _attribute_chain(self, node: Optional[ast.AST]) -> str:
+        if node is None:
+            return ""
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            base = self._attribute_chain(node.value)
+            return f"{base}.{node.attr}" if base else node.attr
+        if isinstance(node, ast.Call):
+            base = self._attribute_chain(node.func)
+            return f"{base}()" if base else ""
+        return ""
+
+    def _expression_root_name(self, node: ast.AST) -> Optional[str]:
+        current = node
+        while isinstance(current, ast.Attribute):
+            current = current.value
+        if isinstance(current, ast.Call):
+            current = current.func
+            while isinstance(current, ast.Attribute):
+                current = current.value
+        if isinstance(current, ast.Name):
+            return current.id
+        return None
+
+    def _render_expression(self, node: ast.AST) -> str:
+        try:
+            return ast.unparse(node)
+        except Exception:  # pragma: no cover - ast.unparse is available on supported versions
+            return self._attribute_chain(node) or node.__class__.__name__
+
+    def _first_call_argument(self, node: ast.Call) -> Optional[ast.expr]:
         if node.args:
             return node.args[0]
         if node.keywords:
             return node.keywords[0].value
         return None
 
-    def _payload_argument_for_validation(self, node: ast.Call, callable_name: str) -> Optional[ast.AST]:
+    def _payload_argument_for_validation(self, node: ast.Call, callable_name: str) -> Optional[ast.expr]:
         if callable_name == "validate_request":
             return self._first_call_argument(node)
         if len(node.args) >= 2:
@@ -3421,6 +3869,9 @@ class Orchestrator:
                 f"- Non-batch sequence calls: {', '.join(test_analysis.get('non_batch_sequence_calls') or ['none'])}"
             )
             lines.append(
+                f"- Reserved fixture names: {', '.join(test_analysis.get('reserved_fixture_names') or ['none'])}"
+            )
+            lines.append(
                 f"- Undefined test fixtures: {', '.join(test_analysis.get('undefined_fixtures') or ['none'])}"
             )
             lines.append(
@@ -3436,6 +3887,9 @@ class Orchestrator:
             )
             lines.append(
                 f"- Unsafe entrypoint calls: {', '.join(test_analysis.get('unsafe_entrypoint_calls') or ['none'])}"
+            )
+            lines.append(
+                f"- Unsupported mock assertions: {', '.join(test_analysis.get('unsupported_mock_assertions') or ['none'])}"
             )
         if isinstance(test_execution, dict):
             if not test_execution.get("available", True):
@@ -3475,10 +3929,12 @@ class Orchestrator:
                 "constructor_arity_mismatches",
                 "payload_contract_violations",
                 "non_batch_sequence_calls",
+                "reserved_fixture_names",
                 "undefined_fixtures",
                 "undefined_local_names",
                 "imported_entrypoint_symbols",
                 "unsafe_entrypoint_calls",
+                "unsupported_mock_assertions",
             )
         )
         execution_failed = isinstance(test_execution, dict) and test_execution.get("ran") and test_execution.get("returncode") not in (None, 0)
@@ -3503,6 +3959,10 @@ class Orchestrator:
             validation_summary = repair_context.get("validation_summary")
             if isinstance(validation_summary, str) and validation_summary.strip():
                 repair_lines.extend(["", "Validation summary:", validation_summary])
+            repair_focus_lines = self._repair_focus_lines(repair_context)
+            if repair_focus_lines:
+                repair_lines.extend(["", "Repair priorities:"])
+                repair_lines.extend(f"- {line}" for line in repair_focus_lines)
             task_description = "\n".join(repair_lines)
         return AgentInput(
             task_id=task.id,
@@ -3512,6 +3972,71 @@ class Orchestrator:
             project_goal=project.goal,
             context=self._build_context(task, project),
         )
+
+    def _repair_focus_lines(self, repair_context: Dict[str, Any]) -> list[str]:
+        failure_category = repair_context.get("failure_category")
+        validation_summary = repair_context.get("validation_summary")
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return []
+
+        summary_lower = validation_summary.lower()
+        lines: list[str] = []
+        if failure_category == FailureCategory.CODE_VALIDATION.value:
+            if "pytest failure details:" in summary_lower:
+                lines.append(
+                    "Treat the listed pytest failures as exact behavior requirements for the implementation. Fix the module so each cited assertion passes without changing the valid test surface."
+                )
+            if "assertionerror" in summary_lower or " - assert " in summary_lower:
+                lines.append(
+                    "When the summary shows an exact boolean, numeric, or returned-value mismatch, change the implementation until that exact expectation holds; do not stop at a nearby constant tweak if the same assertion would still fail."
+                )
+            if "pytest execution: fail" in summary_lower or "pytest failed:" in summary_lower:
+                lines.append(
+                    "Preserve the documented public API and repair the module behavior itself instead of renaming helpers, reshaping return values, or shifting the failure onto the tests."
+                )
+            if "line count:" in summary_lower:
+                lines.append("Rewrite the full module smaller and leave clear headroom below the reported line ceiling.")
+            return lines
+
+        if failure_category != FailureCategory.TEST_VALIDATION.value:
+            return lines
+
+        lines.append(
+            "Rewrite the full pytest module from the top, but treat the current implementation artifact and API contract as fixed ground truth. Remove any test, fixture, or helper that is not required by the documented scenarios."
+        )
+        lines.append(
+            "Do not invent replacement classes, functions, validators, return-wrapper types, helper names, or alternate constructor signatures during repair."
+        )
+        if any(marker in summary_lower for marker in ("line count:", "top-level test functions:", "fixture count:")):
+            lines.append(
+                "Reduce scope aggressively: target 3 to 4 top-level tests and no more than 2 fixtures unless the contract explicitly requires more."
+            )
+        if any(marker in summary_lower for marker in ("unknown module symbols:", "missing function imports:", "undefined local names:")):
+            lines.append(
+                "Use only documented module symbols and explicitly import every production class or function you reference in tests or fixtures."
+            )
+        if "constructor arity mismatches:" in summary_lower and "constructor arity mismatches: none" not in summary_lower:
+            lines.append(
+                "When constructor arity mismatches are reported, remove guessed helper wiring and rebuild the suite around the smallest documented public service or function surface using only listed constructor signatures."
+            )
+        if "non-batch sequence calls:" in summary_lower:
+            lines.append(
+                "Keep scalar functions scalar: do not pass lists into single-request validators or scorers. Use the real batch API or iterate over valid single items."
+            )
+        if "reserved fixture names:" in summary_lower:
+            lines.append("Never define a custom fixture named request.")
+        if "unsupported mock assertions:" in summary_lower:
+            lines.append(
+                "Do not use mock-style assertion bookkeeping unless the same test installs the exact mock or patch target first."
+            )
+        if "pytest execution: fail" in summary_lower or "pytest failed:" in summary_lower:
+            lines.append(
+                "If the previous suite already passed static validation, preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton unless the validation summary explicitly says one of those pieces is wrong."
+            )
+            lines.append(
+                "When behavior is uncertain, prefer stable invariants and type or shape assertions over guessed exact numeric values."
+            )
+        return lines
 
     def _execute_agent(self, agent: Any, agent_input: AgentInput) -> Any:
         if hasattr(agent, "execute"):

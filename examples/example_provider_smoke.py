@@ -7,7 +7,7 @@ from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
 DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
     "anthropic": "claude-haiku-4-5-20251001",
-    "ollama": "llama3",
+    "ollama": "qwen2.5-coder:7b",
 }
 
 
@@ -37,6 +37,7 @@ def build_config(provider: str, model: str, output_dir: str) -> KYCortexConfig:
     config = KYCortexConfig(
         llm_provider=provider,
         llm_model=model,
+        ollama_num_ctx=16384 if provider == "ollama" else None,
         temperature=0.0,
         max_tokens=250,
         timeout_seconds=90.0,

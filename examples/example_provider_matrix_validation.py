@@ -56,6 +56,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional custom path for the aggregated matrix summary JSON.",
     )
+    parser.add_argument(
+        "--ollama-base-url",
+        default=None,
+        help="Optional Ollama base URL override used for Ollama availability checks, model resolution, and workflow execution.",
+    )
+    parser.add_argument(
+        "--ollama-num-ctx",
+        type=int,
+        default=16384,
+        help="Explicit Ollama num_ctx to request during empirical Ollama runs.",
+    )
     return parser
 
 
@@ -77,8 +88,13 @@ def run_provider(
     failure_policy: str,
     resume_policy: str,
     max_repair_cycles: int,
+    ollama_base_url: str | None = None,
+    ollama_num_ctx: int | None = 16384,
 ) -> dict:
-    availability = get_provider_availability(provider)
+    if provider == "ollama":
+        availability = get_provider_availability(provider, ollama_base_url=ollama_base_url)
+    else:
+        availability = get_provider_availability(provider)
     result = {
         "provider": provider,
         "available": availability["available"],
@@ -88,16 +104,31 @@ def run_provider(
         result["status"] = "skipped"
         return result
 
-    model = resolve_model(provider, None)
+    if provider == "ollama":
+        model = resolve_model(provider, None, ollama_base_url=ollama_base_url)
+    else:
+        model = resolve_model(provider, None)
     output_dir = str(Path(output_root) / provider)
-    config = build_full_workflow_config(
-        provider,
-        model,
-        output_dir,
-        workflow_failure_policy=failure_policy,
-        workflow_resume_policy=resume_policy,
-        workflow_max_repair_cycles=max_repair_cycles,
-    )
+    if provider == "ollama":
+        config = build_full_workflow_config(
+            provider,
+            model,
+            output_dir,
+            ollama_base_url=ollama_base_url,
+            ollama_num_ctx=ollama_num_ctx,
+            workflow_failure_policy=failure_policy,
+            workflow_resume_policy=resume_policy,
+            workflow_max_repair_cycles=max_repair_cycles,
+        )
+    else:
+        config = build_full_workflow_config(
+            provider,
+            model,
+            output_dir,
+            workflow_failure_policy=failure_policy,
+            workflow_resume_policy=resume_policy,
+            workflow_max_repair_cycles=max_repair_cycles,
+        )
     project = build_full_workflow_project(output_dir, provider)
 
     try:
@@ -130,6 +161,8 @@ def main() -> None:
             failure_policy=args.failure_policy,
             resume_policy=args.resume_policy,
             max_repair_cycles=args.max_repair_cycles,
+            ollama_base_url=args.ollama_base_url,
+            ollama_num_ctx=args.ollama_num_ctx,
         )
         for provider in providers
     ]
@@ -139,6 +172,8 @@ def main() -> None:
         "failure_policy": args.failure_policy,
         "resume_policy": args.resume_policy,
         "max_repair_cycles": args.max_repair_cycles,
+        "ollama_base_url": args.ollama_base_url,
+        "ollama_num_ctx": args.ollama_num_ctx,
         "output_root": output_root,
     }
     summary_path = args.summary_json or str(Path(output_root) / "provider_matrix_summary.json")

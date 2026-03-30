@@ -32,6 +32,7 @@ class KYCortexConfig:
     llm_model: str = "gpt-4o"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    ollama_num_ctx: Optional[int] = None
     temperature: float = 0.2
     max_tokens: int = 4096
     timeout_seconds: float = 60.0
@@ -130,6 +131,8 @@ class KYCortexConfig:
                 )
         if self.base_url is not None and not self.base_url.strip():
             raise ConfigValidationError("base_url must not be empty when provided")
+        if self.ollama_num_ctx is not None and self.ollama_num_ctx <= 0:
+            raise ConfigValidationError("ollama_num_ctx must be greater than zero when provided")
         if self.workflow_failure_policy not in {"fail_fast", "continue"}:
             raise ConfigValidationError("workflow_failure_policy must be 'fail_fast' or 'continue'")
         if self.workflow_resume_policy not in {"interrupted_only", "resume_failed"}:

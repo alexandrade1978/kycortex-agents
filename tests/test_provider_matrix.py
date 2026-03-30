@@ -154,6 +154,21 @@ def test_build_full_workflow_config_uses_larger_completion_budget_for_full_gener
     assert config.max_tokens == 3200
 
 
+def test_build_full_workflow_config_applies_ollama_runtime_overrides(tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_config
+
+    config = build_full_workflow_config(
+        "ollama",
+        "qwen2.5-coder:7b",
+        str(tmp_path / "output"),
+        ollama_base_url="http://localhost:11435",
+        ollama_num_ctx=16384,
+    )
+
+    assert config.base_url == "http://localhost:11435"
+    assert config.ollama_num_ctx == 16384
+
+
 def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tmp_path):
     from kycortex_agents.provider_matrix import build_full_workflow_project
 
@@ -165,11 +180,21 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert code_task is not None
     assert tests_task is not None
     assert "under 300 lines" in code_task.description
+    assert "Target roughly 240 to 280 lines" in code_task.description
+    assert "Implement only the minimal core flow" in code_task.description
     assert "Avoid extra helper layers" in code_task.description
     assert "under 150 lines" in tests_task.description
     assert "at most 7 top-level test functions" in tests_task.description
+    assert "Prefer 3 to 5 top-level tests" in tests_task.description
     assert "Use the direct intake or validation surface for the validation-failure scenario" in tests_task.description
+    assert "If the implementation exposes no dedicated batch helper" in tests_task.description
+    assert "Do not import or test `main`, CLI/demo entrypoints" in tests_task.description
+    assert "Do not spend standalone tests on simple logging or audit helpers" in tests_task.description
     assert "Do not add standalone caplog or raw logging-output assertions" in tests_task.description
+    assert "Never define a custom fixture named `request`" in tests_task.description
+    assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in tests_task.description
+    assert "use trivially countable inputs rather than prose strings" in tests_task.description
+    assert "use repeated-character or similarly obvious inputs rather than natural-language sample text" in tests_task.description
 
 
 def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
@@ -262,6 +287,8 @@ def test_provider_matrix_resolve_model_handles_override_and_ollama_probe(monkeyp
     assert resolve_model("openai", None) == "gpt-4o-mini"
     assert resolve_model("ollama", "custom-model") == "custom-model"
 
+    seen_urls: list[str] = []
+
     class Response:
         def __enter__(self):
             return self
@@ -272,9 +299,12 @@ def test_provider_matrix_resolve_model_handles_override_and_ollama_probe(monkeyp
         def read(self):
             return json.dumps({"models": [{"name": "llama3.2:latest"}]}).encode("utf-8")
 
-    monkeypatch.setattr("kycortex_agents.provider_matrix.urlopen", lambda *args, **kwargs: Response())
+    def fake_urlopen(request, *args, **kwargs):
+        seen_urls.append(request.full_url)
+        return Response()
 
-    assert resolve_model("ollama", None) == "llama3.2:latest"
+    assert resolve_model("ollama", None, ollama_base_url="http://localhost:11435", urlopen_fn=fake_urlopen) == "llama3.2:latest"
+    assert seen_urls == ["http://localhost:11435/api/tags"]
 
 
 def test_provider_matrix_resolve_model_prefers_default_when_installed(monkeypatch):
@@ -288,11 +318,11 @@ def test_provider_matrix_resolve_model_prefers_default_when_installed(monkeypatc
             return False
 
         def read(self):
-            return json.dumps({"models": [{"name": "llama3"}, {"name": "llama3.2:latest"}]}).encode("utf-8")
+            return json.dumps({"models": [{"name": "qwen2.5-coder:7b"}, {"name": "llama3.2:latest"}]}).encode("utf-8")
 
     monkeypatch.setattr("kycortex_agents.provider_matrix.urlopen", lambda *args, **kwargs: Response())
 
-    assert resolve_model("ollama", None) == "llama3"
+    assert resolve_model("ollama", None) == "qwen2.5-coder:7b"
 
 
 def test_provider_matrix_resolve_model_falls_back_when_probe_returns_no_models(monkeypatch):
@@ -310,7 +340,7 @@ def test_provider_matrix_resolve_model_falls_back_when_probe_returns_no_models(m
 
     monkeypatch.setattr("kycortex_agents.provider_matrix.urlopen", lambda *args, **kwargs: Response())
 
-    assert resolve_model("ollama", None) == "llama3"
+    assert resolve_model("ollama", None) == "qwen2.5-coder:7b"
 
 
 def test_provider_matrix_resolve_model_falls_back_to_default_when_ollama_probe_fails(monkeypatch):
@@ -321,7 +351,7 @@ def test_provider_matrix_resolve_model_falls_back_to_default_when_ollama_probe_f
         lambda *args, **kwargs: (_ for _ in ()).throw(URLError("offline")),
     )
 
-    assert resolve_model("ollama", None) == "llama3"
+    assert resolve_model("ollama", None) == "qwen2.5-coder:7b"
 
 
 def test_provider_matrix_resolve_model_falls_back_to_default_when_ollama_probe_raises_oserror(monkeypatch):
@@ -332,7 +362,39 @@ def test_provider_matrix_resolve_model_falls_back_to_default_when_ollama_probe_r
         lambda *args, **kwargs: (_ for _ in ()).throw(ConnectionRefusedError("offline")),
     )
 
-    assert resolve_model("ollama", None) == "llama3"
+    assert resolve_model("ollama", None) == "qwen2.5-coder:7b"
+
+
+def test_provider_matrix_availability_uses_custom_ollama_base_url():
+    from kycortex_agents.provider_matrix import get_provider_availability
+
+    seen_urls: list[str] = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(request, timeout=5):
+        seen_urls.append(request.full_url)
+        return Response()
+
+    availability = get_provider_availability(
+        "ollama",
+        ollama_base_url="http://localhost:11435",
+        urlopen_fn=fake_urlopen,
+    )
+
+    assert availability == {
+        "provider": "ollama",
+        "available": True,
+        "reason": None,
+    }
+    assert seen_urls == ["http://localhost:11435/api/tags"]
 
 
 def test_provider_matrix_availability_uses_env_vars_and_ollama_probe(monkeypatch):
@@ -446,6 +508,27 @@ def test_provider_matrix_parser_defaults_to_all_supported_providers():
 
     assert args.providers == []
     assert module.resolve_requested_providers(args.providers) == ["anthropic", "ollama", "openai"]
+
+
+def test_provider_matrix_parser_accepts_ollama_runtime_overrides():
+    module = _load_example_module(
+        "example_provider_matrix_validation_parser_ollama_override_test",
+        "examples/example_provider_matrix_validation.py",
+    )
+
+    args = module.build_parser().parse_args(
+        [
+            "ollama",
+            "--ollama-base-url",
+            "http://localhost:11435",
+            "--ollama-num-ctx",
+            "16384",
+        ]
+    )
+
+    assert args.providers == ["ollama"]
+    assert args.ollama_base_url == "http://localhost:11435"
+    assert args.ollama_num_ctx == 16384
 
 
 def test_provider_matrix_parser_rejects_unsupported_provider():

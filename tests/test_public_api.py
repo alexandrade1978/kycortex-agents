@@ -519,8 +519,9 @@ def test_multi_provider_example_documents_supported_provider_switching():
     assert 'llm_provider="ollama"' in example
     assert 'llm_model="gpt-4o-mini"' in example
     assert 'llm_model="claude-haiku-4-5-20251001"' in example
-    assert 'llm_model="llama3"' in example
+    assert 'llm_model="qwen2.5-coder:7b"' in example
     assert 'base_url="http://localhost:11434"' in example
+    assert 'ollama_num_ctx=16384' in example
     assert 'dependencies=["arch"]' in example
     assert 'Use one of these configurations with Orchestrator(config).execute_workflow(project).' in example
 

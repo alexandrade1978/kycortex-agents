@@ -44,8 +44,9 @@ def build_provider_configs() -> dict[str, KYCortexConfig]:
         ),
         "ollama": KYCortexConfig(
             llm_provider="ollama",
-            llm_model="llama3",
+            llm_model="qwen2.5-coder:7b",
             base_url="http://localhost:11434",
+            ollama_num_ctx=16384,
             project_name="multi-provider-ollama",
             output_dir="./output_multi_provider/ollama",
         ),

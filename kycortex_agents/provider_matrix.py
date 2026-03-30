@@ -10,11 +10,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
+from kycortex_agents.config import DEFAULT_PROVIDER_BASE_URLS
 
 DEFAULT_PROVIDER_MODELS = {
     "openai": "gpt-4o-mini",
     "anthropic": "claude-haiku-4-5-20251001",
-    "ollama": "llama3",
+    "ollama": "qwen2.5-coder:7b",
 }
 
 PROVIDER_CREDENTIAL_ENV_VARS = {
@@ -36,7 +37,18 @@ def _provider_budget_summary(provider_call: Mapping[str, Any] | None) -> dict[st
     }
 
 
-def resolve_model(provider: str, model_override: str | None) -> str:
+def _ollama_base_url(base_url_override: str | None) -> str:
+    base_url = base_url_override or DEFAULT_PROVIDER_BASE_URLS["ollama"]
+    return base_url.rstrip("/")
+
+
+def resolve_model(
+    provider: str,
+    model_override: str | None,
+    *,
+    ollama_base_url: str | None = None,
+    urlopen_fn: Callable[..., Any] | None = None,
+) -> str:
     """Resolve the concrete model to use for a provider validation run."""
 
     provider = provider.strip().lower()
@@ -44,9 +56,10 @@ def resolve_model(provider: str, model_override: str | None) -> str:
         return model_override or DEFAULT_PROVIDER_MODELS[provider]
 
     default_model = DEFAULT_PROVIDER_MODELS[provider]
-    request = Request("http://localhost:11434/api/tags", method="GET")
+    urlopen_impl = urlopen if urlopen_fn is None else urlopen_fn
+    request = Request(f"{_ollama_base_url(ollama_base_url)}/api/tags", method="GET")
     try:
-        with urlopen(request, timeout=5) as response:
+        with urlopen_impl(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError):
         return default_model
@@ -63,7 +76,8 @@ def get_provider_availability(
     provider: str,
     *,
     environ: Mapping[str, str] | None = None,
-    urlopen_fn: Callable[..., Any] = urlopen,
+    urlopen_fn: Callable[..., Any] | None = None,
+    ollama_base_url: str | None = None,
 ) -> dict[str, Any]:
     """Return whether the provider is runnable in the current environment."""
 
@@ -81,9 +95,10 @@ def get_provider_availability(
             "reason": None if available else f"missing {env_var}",
         }
 
-    request = Request("http://localhost:11434/api/tags", method="GET")
+    urlopen_impl = urlopen if urlopen_fn is None else urlopen_fn
+    request = Request(f"{_ollama_base_url(ollama_base_url)}/api/tags", method="GET")
     try:
-        with urlopen_fn(request, timeout=5) as response:
+        with urlopen_impl(request, timeout=5) as response:
             available = getattr(response, "status", 200) == 200
     except (HTTPError, URLError, TimeoutError, OSError):
         available = False
@@ -100,6 +115,8 @@ def build_full_workflow_config(
     model: str,
     output_dir: str,
     *,
+    ollama_base_url: str | None = None,
+    ollama_num_ctx: int | None = 16384,
     workflow_failure_policy: str = "continue",
     workflow_resume_policy: str = "resume_failed",
     workflow_max_repair_cycles: int = 1,
@@ -109,6 +126,8 @@ def build_full_workflow_config(
     config = KYCortexConfig(
         llm_provider=provider,
         llm_model=model,
+        base_url=_ollama_base_url(ollama_base_url) if provider == "ollama" else None,
+        ollama_num_ctx=ollama_num_ctx if provider == "ollama" else None,
         temperature=0.0,
         max_tokens=3200,
         timeout_seconds=180.0,
@@ -154,6 +173,8 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
                 "Write one Python module under 300 lines that implements only the planned compliance intake service. "
                 "Use only the standard library. Include typed models, validation, risk scoring, batch processing, "
                 "audit logging, and a CLI demo entrypoint. Prefer the smallest complete design that satisfies those requirements. "
+                "Target roughly 240 to 280 lines when the requested behavior fits there so the hard 300-line cap keeps repair headroom. "
+                "Implement only the minimal core flow rather than mirroring every optional architecture layer or future extension point. "
                 "Avoid extra helper layers, exhaustive docstrings, and optional abstractions. Return raw Python only."
             ),
             assigned_to="code_engineer",
@@ -179,8 +200,16 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
             description=(
                 "Write one compact raw pytest module under 150 lines for the generated compliance intake service. "
                 "Use at most 3 fixtures and at most 7 top-level test functions. Include at least one happy path, one validation failure, and one batch-processing scenario. "
+                "Prefer 3 to 5 top-level tests when those requested scenarios fit within that budget, and merge overlapping checks instead of adding helper-specific extras. "
                 "Use the direct intake or validation surface for the validation-failure scenario and keep the batch-processing scenario fully valid unless the implementation contract explicitly requires partially invalid batch items. "
+                "If the implementation exposes no dedicated batch helper, express the batch scenario as a short list of individually valid items processed one by one instead of passing a list into scalar-only validators or scorers. "
+                "Do not import or test `main`, CLI/demo entrypoints, or other symbols explicitly listed as entry points to avoid in tests. "
+                "Do not spend standalone tests on simple logging or audit helpers unless the public contract makes them independently observable. "
                 "Do not add standalone caplog or raw logging-output assertions unless externally observable logging behavior is explicitly required. "
+                "Never define a custom fixture named `request`; pytest reserves that name. Use inline setup or a specific fixture name instead. "
+                "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test installs the exact mock or patch target first. "
+                "If you need an exact numeric assertion, use trivially countable inputs rather than prose strings; otherwise prefer stable non-exact assertions. "
+                "If an exact numeric assertion depends on string length, modulo, or counts, use repeated-character or similarly obvious inputs rather than natural-language sample text. "
                 "Prefer direct assertions over exhaustive permutations or class-based test suites. Return raw Python only."
             ),
             assigned_to="qa_tester",

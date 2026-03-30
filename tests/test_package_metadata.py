@@ -803,6 +803,8 @@ def test_readme_documents_all_supported_provider_configuration_paths():
     assert "OPENAI_API_KEY" in readme
     assert "ANTHROPIC_API_KEY" in readme
     assert "http://localhost:11434" in readme
+    assert "qwen2.5-coder:7b" in readme
+    assert "ollama_num_ctx=16384" in readme
     assert 'llm_provider="openai"' in readme
     assert 'llm_provider="anthropic"' in readme
     assert 'llm_provider="ollama"' in readme

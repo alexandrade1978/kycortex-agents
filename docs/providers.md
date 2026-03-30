@@ -113,6 +113,8 @@ Use the Ollama provider when `llm_provider="ollama"`.
 - No API key required by default
 - Default base URL: `http://localhost:11434`
 - Required runtime fields: model name plus a valid base URL when the default is overridden
+- Optional runtime field: `ollama_num_ctx` to request an explicit `num_ctx` value for larger-context local workflows
+- Repository-local empirical baseline: `qwen2.5-coder:7b` with `ollama_num_ctx=16384`
 - API style: HTTP POST to the Ollama `/api/generate` endpoint
 - Metadata captured: requested token budget, prompt/output token counts, `done_reason`, and timing information derived from Ollama duration fields
 - Health probe behavior: queries `/api/tags`, validates the local endpoint is reachable, and confirms the configured model name is installed before generation begins
@@ -125,12 +127,17 @@ from kycortex_agents.providers import create_provider
 
 config = KYCortexConfig(
     llm_provider="ollama",
-    llm_model="llama3",
+    llm_model="qwen2.5-coder:7b",
     base_url="http://localhost:11434",
+    ollama_num_ctx=16384,
 )
 
 provider = create_provider(config)
 ```
+
+The framework does not need Python-side GPU packages for Ollama usage because inference stays behind the Ollama HTTP API.
+In practice, local usage only needs a reachable Ollama endpoint and the expected model installed on that Ollama instance.
+If Ollama is running on another host or port, point `base_url` to that endpoint instead of the default.
 
 ## Runtime Validation Rules
 

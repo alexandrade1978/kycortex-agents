@@ -178,6 +178,7 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
                 "Avoid extra helper layers, exhaustive docstrings, and optional abstractions. "
                 "Implement real validation and scoring behavior instead of constant-success validators or placeholder constant scores. "
                 "If you derive a numeric risk score from request data, prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds unless the architecture explicitly requires them. "
+                "If a boolean or toggle-like request field influences behavior, use its truth value rather than mere field presence unless the architecture explicitly defines presence-only semantics. "
                 "Return raw Python only."
             ),
             assigned_to="code_engineer",

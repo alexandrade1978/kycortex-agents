@@ -26,6 +26,7 @@ If you define a helper to accept a domain object, every caller must pass that do
 Avoid placeholder demo logic that contradicts your own type hints or public API.
 If the task includes validation, implement concrete reject conditions for clearly invalid input rather than returning a constant success placeholder.
 If the task includes scoring or other numeric derivation, use a transparent deterministic formula and avoid hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them.
+If a boolean or toggle-like field influences validation, scoring, or routing, read the field's actual truth value instead of treating mere key presence as a positive signal unless the task explicitly defines presence-only semantics.
 If repair context suggests truncation or incomplete output, remove non-essential docstrings, comments, blank lines, and optional helper layers before dropping any required behavior.
 When repair context includes failing pytest assertions from a valid test suite, treat those assertions as exact behavioral requirements for the module.
 Make the smallest code change that makes every cited assertion pass, but do not stop at a nearby constant tweak or branch edit if the cited predicate would still fail afterward.
@@ -85,6 +86,7 @@ Before you finalize, verify this checklist against your own output:
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require
 - if the task includes validation, your validator rejects at least one clearly invalid input shape instead of returning a constant success placeholder
 - if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
+- if boolean or toggle-like fields influence behavior, you used the field's truth value rather than mere key presence unless the contract explicitly defines presence-only semantics
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - every constructor call matches the constructor you defined
@@ -132,6 +134,7 @@ Before you finalize, verify this checklist against your own output:
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require
 - if the task includes validation, your validator rejects at least one clearly invalid input shape instead of returning a constant success placeholder
 - if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
+- if boolean or toggle-like fields influence behavior, you used the field's truth value rather than mere key presence unless the contract explicitly defines presence-only semantics
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - every constructor call matches the constructor you defined

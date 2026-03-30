@@ -187,8 +187,10 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "do not stop at a nearby constant tweak or branch edit" in agent.last_system_prompt
     assert "implement concrete reject conditions for clearly invalid input" in agent.last_system_prompt
     assert "use a transparent deterministic formula and avoid hidden caps" in agent.last_system_prompt
+    assert "read the field's actual truth value instead of treating mere key presence as a positive signal" in agent.last_system_prompt
     assert "your validator rejects at least one clearly invalid input shape" in agent.last_user_message
     assert "the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds" in agent.last_user_message
+    assert "you used the field's truth value rather than mere key presence" in agent.last_user_message
 
 
 def test_code_reviewer_run_uses_context_module_validation_fields(tmp_path):

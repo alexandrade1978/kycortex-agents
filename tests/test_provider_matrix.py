@@ -185,6 +185,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "Avoid extra helper layers" in code_task.description
     assert "Implement real validation and scoring behavior instead of constant-success validators" in code_task.description
     assert "prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds" in code_task.description
+    assert "use its truth value rather than mere field presence" in code_task.description
     assert "under 150 lines" in tests_task.description
     assert "at most 7 top-level test functions" in tests_task.description
     assert "Prefer 3 to 5 top-level tests" in tests_task.description

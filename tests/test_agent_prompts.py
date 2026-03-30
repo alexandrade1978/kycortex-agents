@@ -185,6 +185,10 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "Task-specific scope and size limits override generic polish" in agent.last_system_prompt
     assert "treat those assertions as exact behavioral requirements for the module" in agent.last_system_prompt
     assert "do not stop at a nearby constant tweak or branch edit" in agent.last_system_prompt
+    assert "implement concrete reject conditions for clearly invalid input" in agent.last_system_prompt
+    assert "use a transparent deterministic formula and avoid hidden caps" in agent.last_system_prompt
+    assert "your validator rejects at least one clearly invalid input shape" in agent.last_user_message
+    assert "the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds" in agent.last_user_message
 
 
 def test_code_reviewer_run_uses_context_module_validation_fields(tmp_path):
@@ -252,6 +256,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Import every production class you instantiate or reference in a fixture or test body" in agent.last_user_message
     assert "Do not hand-wire validator, scorer, logger, batch-processor, dataclass, or similar helper objects into a service fixture" in agent.last_user_message
     assert "Respect the task's line budget and requested scenario count exactly." in agent.last_user_message
+    assert "If the task sets a fixture maximum, count fixtures before you finalize" in agent.last_user_message
+    assert "Do not assert exact categorical score bands or labels at boundary values" in agent.last_user_message
     assert "stay comfortably under that ceiling" in agent.last_user_message
     assert "if the task asks for a fixed number of scenarios or tests" in agent.last_user_message
     assert "merge overlapping checks instead of creating helper-specific extra tests" in agent.last_user_message
@@ -262,8 +268,10 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "every class instantiation uses only documented constructor arguments" in agent.last_user_message
     assert "if the previous validation summary lists constructor arity mismatches" in agent.last_user_message
     assert "every happy-path payload satisfies the listed behavior contract and validation rules" in agent.last_user_message
+    assert "you stayed at or under it and inlined one-off setup instead of adding a borderline extra fixture" in agent.last_user_message
     assert "you did not add standalone helper or logging tests" in agent.last_user_message
     assert "every exact numeric assertion is supported by an explicit contract or formula" in agent.last_user_message
+    assert "if you asserted derived categorical levels or score bands" in agent.last_user_message
     assert "you used repeated-character or similarly obvious inputs rather than prose sample text" in agent.last_user_message
     assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
     assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
@@ -278,8 +286,10 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Do not import `main`, CLI/demo entrypoints" in agent.last_system_prompt
     assert "Treat CLI wrapper classes such as names ending in `CLI` or `Cli` as entrypoint surfaces to avoid in tests" in agent.last_system_prompt
     assert "stay comfortably under that cap" in agent.last_system_prompt
+    assert "Count fixtures before finalizing" in agent.last_system_prompt
     assert "Do not hand-count prose strings to justify exact numeric assertions" in agent.last_system_prompt
     assert "never use natural-language prose samples for that assertion" in agent.last_system_prompt
+    assert "Do not assert exact categorical score bands or labels at boundary values" in agent.last_system_prompt
     assert "keep the validation-failure coverage on the direct intake or validation surface" in agent.last_system_prompt
     assert "Keep batch-processing scenarios structurally valid" in agent.last_system_prompt
     assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt

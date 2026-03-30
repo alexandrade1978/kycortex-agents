@@ -183,9 +183,12 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "Target roughly 240 to 280 lines" in code_task.description
     assert "Implement only the minimal core flow" in code_task.description
     assert "Avoid extra helper layers" in code_task.description
+    assert "Implement real validation and scoring behavior instead of constant-success validators" in code_task.description
+    assert "prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds" in code_task.description
     assert "under 150 lines" in tests_task.description
     assert "at most 7 top-level test functions" in tests_task.description
     assert "Prefer 3 to 5 top-level tests" in tests_task.description
+    assert "Stay comfortably under the fixture limit" in tests_task.description
     assert "Use the direct intake or validation surface for the validation-failure scenario" in tests_task.description
     assert "If the implementation exposes no dedicated batch helper" in tests_task.description
     assert "Do not import or test `main`, CLI/demo entrypoints" in tests_task.description
@@ -194,6 +197,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "Never define a custom fixture named `request`" in tests_task.description
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in tests_task.description
     assert "use trivially countable inputs rather than prose strings" in tests_task.description
+    assert "avoid threshold boundary values unless the contract explicitly defines those cutoffs" in tests_task.description
     assert "use repeated-character or similarly obvious inputs rather than natural-language sample text" in tests_task.description
 
 

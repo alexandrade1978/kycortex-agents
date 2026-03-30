@@ -175,7 +175,10 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
                 "audit logging, and a CLI demo entrypoint. Prefer the smallest complete design that satisfies those requirements. "
                 "Target roughly 240 to 280 lines when the requested behavior fits there so the hard 300-line cap keeps repair headroom. "
                 "Implement only the minimal core flow rather than mirroring every optional architecture layer or future extension point. "
-                "Avoid extra helper layers, exhaustive docstrings, and optional abstractions. Return raw Python only."
+                "Avoid extra helper layers, exhaustive docstrings, and optional abstractions. "
+                "Implement real validation and scoring behavior instead of constant-success validators or placeholder constant scores. "
+                "If you derive a numeric risk score from request data, prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds unless the architecture explicitly requires them. "
+                "Return raw Python only."
             ),
             assigned_to="code_engineer",
             dependencies=["arch"],
@@ -201,6 +204,7 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
                 "Write one compact raw pytest module under 150 lines for the generated compliance intake service. "
                 "Use at most 3 fixtures and at most 7 top-level test functions. Include at least one happy path, one validation failure, and one batch-processing scenario. "
                 "Prefer 3 to 5 top-level tests when those requested scenarios fit within that budget, and merge overlapping checks instead of adding helper-specific extras. "
+                "Stay comfortably under the fixture limit; inline one-off setup instead of adding a borderline extra fixture. "
                 "Use the direct intake or validation surface for the validation-failure scenario and keep the batch-processing scenario fully valid unless the implementation contract explicitly requires partially invalid batch items. "
                 "If the implementation exposes no dedicated batch helper, express the batch scenario as a short list of individually valid items processed one by one instead of passing a list into scalar-only validators or scorers. "
                 "Do not import or test `main`, CLI/demo entrypoints, or other symbols explicitly listed as entry points to avoid in tests. "
@@ -209,6 +213,7 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
                 "Never define a custom fixture named `request`; pytest reserves that name. Use inline setup or a specific fixture name instead. "
                 "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test installs the exact mock or patch target first. "
                 "If you need an exact numeric assertion, use trivially countable inputs rather than prose strings; otherwise prefer stable non-exact assertions. "
+                "If you assert derived categorical score bands or levels, avoid threshold boundary values unless the contract explicitly defines those cutoffs; use comfortably in-band inputs or non-boundary assertions instead. "
                 "If an exact numeric assertion depends on string length, modulo, or counts, use repeated-character or similarly obvious inputs rather than natural-language sample text. "
                 "Prefer direct assertions over exhaustive permutations or class-based test suites. Return raw Python only."
             ),

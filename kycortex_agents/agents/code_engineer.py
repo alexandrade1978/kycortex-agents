@@ -24,6 +24,8 @@ Treat the architecture as guidance for required behavior, not as a requirement t
 Keep constructor signatures, helper function parameters, and internal call sites mutually consistent.
 If you define a helper to accept a domain object, every caller must pass that domain object; if you need a scalar helper, define it that way explicitly.
 Avoid placeholder demo logic that contradicts your own type hints or public API.
+If the task includes validation, implement concrete reject conditions for clearly invalid input rather than returning a constant success placeholder.
+If the task includes scoring or other numeric derivation, use a transparent deterministic formula and avoid hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them.
 If repair context suggests truncation or incomplete output, remove non-essential docstrings, comments, blank lines, and optional helper layers before dropping any required behavior.
 When repair context includes failing pytest assertions from a valid test suite, treat those assertions as exact behavioral requirements for the module.
 Make the smallest code change that makes every cited assertion pass, but do not stop at a nearby constant tweak or branch edit if the cited predicate would still fail afterward.
@@ -81,6 +83,8 @@ Before you finalize, verify this checklist against your own output:
 - if the previous file was syntax-invalid or truncated, you rewrote the full module from the top instead of appending a partial continuation
 - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential docstrings, comments, blank lines, and optional helpers so the whole module fits cleanly in one response
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require
+- if the task includes validation, your validator rejects at least one clearly invalid input shape instead of returning a constant success placeholder
+- if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - every constructor call matches the constructor you defined
@@ -126,6 +130,8 @@ Before you finalize, verify this checklist against your own output:
 - if the previous file was syntax-invalid or truncated, you rewrote the full module from the top instead of appending a partial continuation
 - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential docstrings, comments, blank lines, and optional helpers so the whole module fits cleanly in one response
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require
+- if the task includes validation, your validator rejects at least one clearly invalid input shape instead of returning a constant success placeholder
+- if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - every constructor call matches the constructor you defined

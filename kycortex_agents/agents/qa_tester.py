@@ -23,9 +23,11 @@ If behavior is exposed as a class method, instantiate the class and call the met
 Write complete pytest code only; do not stop mid-test, mid-string, or mid-fixture.
 Keep tests compact and execution-safe: prefer a few correct tests over broad but speculative coverage.
 When a task gives only a maximum number of top-level tests, plan the full suite before writing and stay comfortably under that cap unless an exact count is explicitly required.
+Count fixtures before finalizing. If the task sets a maximum fixture budget, stay comfortably under it and inline one-off setup instead of adding a borderline extra fixture.
 For compact scenario-driven tasks, merge overlapping checks into the smallest set of tests that covers the requested happy path, validation failure, and batch flow. Do not spend separate top-level tests on logging helpers, audit wrappers, or helper-level variants unless the contract explicitly requires those behaviors to be tested independently.
 Do not hand-count prose strings to justify exact numeric assertions. If an exact numeric result is contractually required, use trivially countable inputs such as repeated characters or small literals; otherwise prefer stable invariants, ranges, or state transitions over guessed exact scores.
 If an exact numeric assertion depends on string length, modulo, counts, or collection size, never use natural-language prose samples for that assertion. Use repeated-character literals, small digit strings, or similarly obvious inputs whose size can be verified at a glance.
+Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. For derived levels such as low, medium, or high, use values comfortably inside a band or assert relative ordering when the exact boundary is not part of the contract.
 When a constructor or callable signature is listed in the API contract, use exactly that signature in every test.
 Do not instantiate helper validators, scorers, loggers, dataclasses, or batch processors merely to wire a higher-level service fixture unless the public API contract explicitly requires that direct setup.
 When repairing a previously generated suite that already passed static validation, preserve the existing imported symbols, constructor shapes, fixture payload structure, and scenario skeleton unless the validation summary explicitly identifies one of those pieces as invalid.
@@ -107,6 +109,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
     If the task sets only a maximum number of top-level tests, stay comfortably under that ceiling unless the documented contract explicitly requires more coverage.
+    If the task sets a fixture maximum, count fixtures before you finalize and inline one-off setup instead of adding a borderline extra fixture.
     If the task only names high-level workflow scenarios, stay on the main service or batch API and do not add separate unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities unless the task explicitly requests them.
     For compact scenario-driven suites, merge overlapping checks instead of creating helper-specific extra tests. Do not spend standalone tests on simple logging or audit helpers unless the contract makes them independently observable.
     If the task requires both a validation-failure scenario and a batch-processing scenario, use the direct intake or validation surface for the failure case unless the behavior contract explicitly requires a batch-level failure scenario.
@@ -117,6 +120,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first.
     If you assert an exact numeric value, use trivially countable inputs and do so only when the behavior contract or implementation clearly defines the exact formula; otherwise prefer stable non-exact assertions.
     If an exact numeric assertion depends on string length, modulo, counts, or collection size, never use prose sample text for that assertion. Use repeated-character literals or similarly obvious inputs.
+    Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. Use comfortably in-band inputs or non-boundary assertions for derived levels.
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
     Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
@@ -128,6 +132,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - if the previous validation summary lists constructor arity mismatches, you removed guessed helper wiring and rebuilt the scenario around the smallest documented public API surface
     - every assertion matches behavior reachable from the provided implementation summary
     - every happy-path payload satisfies the listed behavior contract and validation rules
+    - if the task sets a fixture maximum, you stayed at or under it and inlined one-off setup instead of adding a borderline extra fixture
     - if the task sets only a maximum number of top-level tests, you stayed comfortably under that ceiling unless the documented contract explicitly required more coverage
     - if the task requires both a validation-failure scenario and a batch scenario, the validation failure stays on the direct intake or validation surface unless the behavior contract explicitly requires a batch-level failure case
     - every happy-path batch item satisfies the same required fields as the single-request happy path unless the behavior contract explicitly documents a different batch shape
@@ -142,6 +147,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - you did not add caplog or raw logging-text assertions unless the behavior contract explicitly makes emitted log output observable
     - you did not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first
     - every exact numeric assertion is supported by an explicit contract or formula and uses trivially countable input; otherwise you used stable non-exact assertions
+    - if you asserted derived categorical levels or score bands, you used comfortably in-band inputs or non-boundary assertions unless the contract explicitly defined the thresholds
     - if an exact numeric assertion depends on string length, modulo, counts, or collection size, you used repeated-character or similarly obvious inputs rather than prose sample text
     - you did not invent replacement API names, response-wrapper classes, alternate validators, or alternate constructor signatures during repair
     - if the previous test file was syntax-invalid or truncated, you rewrote the full pytest file from the top instead of appending a partial continuation
@@ -201,6 +207,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
     If the task sets only a maximum number of top-level tests, stay comfortably under that ceiling unless the documented contract explicitly requires more coverage.
+    If the task sets a fixture maximum, count fixtures before you finalize and inline one-off setup instead of adding a borderline extra fixture.
     If the task only names high-level workflow scenarios, stay on the main service or batch API and do not add separate unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities unless the task explicitly requests them.
     For compact scenario-driven suites, merge overlapping checks instead of creating helper-specific extra tests. Do not spend standalone tests on simple logging or audit helpers unless the contract makes them independently observable.
     If the task requires both a validation-failure scenario and a batch-processing scenario, use the direct intake or validation surface for the failure case unless the behavior contract explicitly requires a batch-level failure scenario.
@@ -211,6 +218,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first.
     If you assert an exact numeric value, use trivially countable inputs and do so only when the behavior contract or implementation clearly defines the exact formula; otherwise prefer stable non-exact assertions.
     If an exact numeric assertion depends on string length, modulo, counts, or collection size, never use prose sample text for that assertion. Use repeated-character literals or similarly obvious inputs.
+    Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. Use comfortably in-band inputs or non-boundary assertions for derived levels.
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
     Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.

@@ -2677,6 +2677,10 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     assert orchestrator._assert_expects_false(plain_assert, plain_assert.test) is False
     unrelated_compare = ast.parse("assert other_result == False").body[0]
     assert orchestrator._assert_expects_false(unrelated_compare, call_node) is False
+    invalid_status_assert = ast.parse("assert request.status == 'Invalid'").body[0]
+    assert orchestrator._assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
+    false_result_assert = ast.parse("assert result is False").body[0]
+    assert orchestrator._assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = ast.parse("with context_manager:\n    validate_request(data)\n").body[0]
     assert orchestrator._with_uses_pytest_raises(with_node) is False
     warns_with_node = ast.parse("with pytest.warns(ValueError):\n    validate_request(data)\n").body[0]
@@ -6585,6 +6589,74 @@ def test_run_task_fails_qa_tester_when_generated_tests_use_unsupported_field_lit
     ]
 
 
+def test_run_task_allows_missing_required_fields_for_intentional_invalid_status_assertion(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, data):\n"
+        "        self.request_id = request_id\n"
+        "        self.data = data\n"
+        "        self.status = 'Pending'\n\n"
+        "    def validate(self):\n"
+        "        required_fields = {'name', 'amount', 'risk_factor'}\n"
+        "        return all(field in self.data for field in required_fields)\n\n"
+        "def process_request(request):\n"
+        "    if not request.validate():\n"
+        "        request.status = 'Invalid'\n"
+        "        return\n"
+        "    request.status = 'Processed'\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, process_request\n\n"
+        "def test_process_request_validation_failure():\n"
+        "    request = ComplianceRequest('req-1', {'name': 'Test', 'amount': 200})\n"
+        "    process_request(request)\n"
+        "    assert request.status == 'Invalid'\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["payload_contract_violations"] == []
+    assert project.tasks[1].status == TaskStatus.DONE.value
+
+
 def test_code_artifact_context_includes_behavior_contract(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -8062,6 +8134,8 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
     assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
     assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
     assert "Reduce scope aggressively: target 3 to 4 top-level tests" in agent_input.task_description
+    assert "Count top-level tests and total lines before finalizing" in agent_input.task_description
+    assert "Drop validator, scorer, serialization, logger, and other helper-level tests" in agent_input.task_description
     assert "Use only documented module symbols" in agent_input.task_description
     assert "remove guessed helper wiring and rebuild the suite around the smallest documented public service or function surface" in agent_input.task_description
     assert "Keep scalar functions scalar" in agent_input.task_description
@@ -8167,6 +8241,40 @@ def test_build_agent_input_adds_targeted_code_repair_priorities_for_pytest_asser
     assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
     assert "change the implementation until that exact expectation holds" in agent_input.task_description
     assert "Preserve the documented public API and repair the module behavior itself" in agent_input.task_description
+
+
+def test_build_agent_input_adds_code_line_budget_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated code validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Line count: 312/300\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def run():\n    return 1",
+                "failed_artifact_content": "def run():\n    return 1",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(project.get_task("code"), project)
+
+    assert "Repair priorities:" in agent_input.task_description
+    assert "Rewrite the full module smaller and leave clear headroom below the reported line ceiling" in agent_input.task_description
+    assert "Remove optional helper layers, repeated convenience wrappers, and non-essential docstrings" in agent_input.task_description
 
 
 def test_test_failure_requires_code_repair_for_code_tracebacks_and_assertion_mismatches(tmp_path):

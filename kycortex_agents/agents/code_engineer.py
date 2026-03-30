@@ -9,6 +9,7 @@ Add docstrings, logging, and explicit error handling when they materially improv
 Follow PEP8. Write modular code with clear separation of concerns.
 Task-specific scope and size limits override generic polish. When the task is line-constrained, prefer the smallest complete implementation over extra helper layers, repetitive docstrings, or optional abstractions.
 When the task gives a hard line cap, plan the full module before writing and stay comfortably under that ceiling so imports, the main guard, and any required repairs still fit.
+Leave visible headroom below the ceiling; if the draft is still within roughly 10 to 15 lines of the cap, compress it further before finalizing.
 Do NOT include placeholder comments like # TODO without implementation.
 Return only raw Python source code.
 Do not include markdown fences, file trees, headings, or explanatory prose.
@@ -75,12 +76,14 @@ The file will be saved as `{module_filename}` and imported as `{module_name}`.
 Do not rely on any files other than this module unless the task explicitly requires that dependency.
 Do not add third-party imports such as numpy or pandas unless the task explicitly requires them.
 Respect the task's requested size budget exactly. If the task does not specify one, keep the module under 260 lines. When the task gives a hard line cap, stay comfortably under that ceiling instead of aiming for the exact limit. Prefer one small cohesive API over optional manager classes, wrappers, per-method docstrings, or verbose CLI plumbing when the task is compact.
+If the draft is still within roughly 10 to 15 lines of the ceiling, compress it further by removing optional helper layers, repeated convenience wrappers, and non-essential docstrings before finalizing.
 If the previous validation summary includes pytest failures, treat each listed failing assertion as an exact behavior contract for this module and update the implementation until those cited assertions would pass.
 Do not stop at a nearby constant tweak, renamed helper, or signature change if the same listed assertion would still fail after that edit.
 Before you finalize, verify this checklist against your own output:
 - the file starts with valid imports or declarations and ends cleanly with no truncated block
 - every opened string, bracket, parenthesis, and docstring is closed
 - if the task is line-constrained, you stayed comfortably under the ceiling rather than using the full budget
+- if the task is line-constrained, you left visible headroom below the ceiling; if the draft was still within roughly 10 to 15 lines of the cap, you compressed it further before finalizing
 - if the previous file was syntax-invalid or truncated, you rewrote the full module from the top instead of appending a partial continuation
 - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential docstrings, comments, blank lines, and optional helpers so the whole module fits cleanly in one response
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require
@@ -123,12 +126,14 @@ Write the complete Python code for this task as a single raw Python file.
 The file will be saved as `{module_filename}` and imported as `{module_name}`.
 Do not add third-party imports such as numpy or pandas unless the task explicitly requires them.
 Respect the task's requested size budget exactly. If the task does not specify one, keep the module under 260 lines. When the task gives a hard line cap, stay comfortably under that ceiling instead of aiming for the exact limit. Prefer one small cohesive API over optional manager classes, wrappers, per-method docstrings, or verbose CLI plumbing when the task is compact.
+If the draft is still within roughly 10 to 15 lines of the ceiling, compress it further by removing optional helper layers, repeated convenience wrappers, and non-essential docstrings before finalizing.
 If the previous validation summary includes pytest failures, treat each listed failing assertion as an exact behavior contract for this module and update the implementation until those cited assertions would pass.
 Do not stop at a nearby constant tweak, renamed helper, or signature change if the same listed assertion would still fail after that edit.
 Before you finalize, verify this checklist against your own output:
 - the file starts with valid imports or declarations and ends cleanly with no truncated block
 - every opened string, bracket, parenthesis, and docstring is closed
 - if the task is line-constrained, you stayed comfortably under the ceiling rather than using the full budget
+- if the task is line-constrained, you left visible headroom below the ceiling; if the draft was still within roughly 10 to 15 lines of the cap, you compressed it further before finalizing
 - if the previous file was syntax-invalid or truncated, you rewrote the full module from the top instead of appending a partial continuation
 - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential docstrings, comments, blank lines, and optional helpers so the whole module fits cleanly in one response
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require

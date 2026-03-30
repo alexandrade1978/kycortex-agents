@@ -183,6 +183,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert tests_task is not None
     assert "under 300 lines" in code_task.description
     assert "Target roughly 240 to 280 lines" in code_task.description
+    assert "Leave at least 15 lines of headroom under the hard cap" in code_task.description
     assert "Implement only the minimal core flow" in code_task.description
     assert "Avoid extra helper layers" in code_task.description
     assert "Implement real validation and scoring behavior instead of constant-success validators" in code_task.description
@@ -191,12 +192,16 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "under 150 lines" in tests_task.description
     assert "at most 7 top-level test functions" in tests_task.description
     assert "Prefer 3 to 5 top-level tests" in tests_task.description
+    assert "Leave at least one full test of headroom below the stated maximum" in tests_task.description
     assert "Stay comfortably under the fixture limit" in tests_task.description
     assert "Use the direct intake or validation surface for the validation-failure scenario" in tests_task.description
+    assert "omit only the field under test and keep the rest of that payload valid" in tests_task.description
     assert "If the implementation exposes no dedicated batch helper" in tests_task.description
     assert "Do not import or test `main`, CLI/demo entrypoints" in tests_task.description
     assert "Do not spend standalone tests on simple logging or audit helpers" in tests_task.description
+    assert "do not spend top-level tests on validator units, scorers, dataclass serialization, audit loggers" in tests_task.description
     assert "Do not add standalone caplog or raw logging-output assertions" in tests_task.description
+    assert "assert only records for actions actually exercised in the scenario" in tests_task.description
     assert "Never define a custom fixture named `request`" in tests_task.description
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in tests_task.description
     assert "use trivially countable inputs rather than prose strings" in tests_task.description

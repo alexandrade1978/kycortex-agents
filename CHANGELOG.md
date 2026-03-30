@@ -12,15 +12,18 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Changed
 
-- No unreleased changes yet.
+- Provider-matrix code-generation guidance now requires visible line-budget headroom during compact module generation and repair instead of merely aiming near the hard ceiling.
+- Provider-matrix QA guidance, repair priorities, and task descriptions now require leaving explicit test-budget headroom, counting top-level tests and total lines before finalizing, and cutting helper-only coverage before required workflow scenarios.
+- Compact high-level workflow suites now explicitly avoid spending scarce top-level tests on validator, scorer, dataclass-serialization, and audit-logger helper coverage unless those helpers are requested directly.
 
 ### Fixed
 
-- No unreleased changes yet.
+- The post-`1.0.12` Anthropic provider-matrix checkpoint no longer fails the workflow on over-budget code and test outputs after compactness repair guidance was tightened for both generation and repair paths.
 
 ### Release Readiness Notes
 
 - Current package version remains `1.0.12` until the next maintenance update is released.
+- Focused prompt/provider-matrix/orchestrator regressions passed with `366` tests, `mypy` passed, and the dedicated empirical rerun `output/provider_matrix_validation_step3u_anthropic` completed with `repair_cycle_count=1` after the earlier `step3t` Anthropic workflow failure.
 
 ## 1.0.12 - 2026-03-30
 

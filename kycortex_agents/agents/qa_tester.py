@@ -23,6 +23,8 @@ If behavior is exposed as a class method, instantiate the class and call the met
 Write complete pytest code only; do not stop mid-test, mid-string, or mid-fixture.
 Keep tests compact and execution-safe: prefer a few correct tests over broad but speculative coverage.
 When a task gives only a maximum number of top-level tests, plan the full suite before writing and stay comfortably under that cap unless an exact count is explicitly required.
+Leave at least one top-level test of headroom below a stated maximum unless the task explicitly requires the maximum count.
+Before finalizing a compact suite, count top-level tests and total lines yourself. If the file is at or above any stated limit, delete the lowest-value helper coverage and merge overlapping assertions until the suite is back under budget.
 Count fixtures before finalizing. If the task sets a maximum fixture budget, stay comfortably under it and inline one-off setup instead of adding a borderline extra fixture.
 For compact scenario-driven tasks, merge overlapping checks into the smallest set of tests that covers the requested happy path, validation failure, and batch flow. Do not spend separate top-level tests on logging helpers, audit wrappers, or helper-level variants unless the contract explicitly requires those behaviors to be tested independently.
 Do not hand-count prose strings to justify exact numeric assertions. If an exact numeric result is contractually required, use trivially countable inputs such as repeated characters or small literals; otherwise prefer stable invariants, ranges, or state transitions over guessed exact scores.
@@ -41,10 +43,13 @@ Do not call `main()`, CLI/demo entrypoints, or `argparse`-driven functions direc
 If the module exposes a CLI wrapper class or `run()` method for command-line flow, leave it out of the suite unless the task explicitly requires CLI testing and you fully control argv or input.
 For happy-path tests, derive input payloads from the implementation summary so they satisfy the module's own validation rules.
 When the task names only high-level workflow scenarios, keep the suite on the main service or batch surface and do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities unless the task explicitly asks for them.
+In compact high-level workflow suites, do not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly names those helpers.
 When the task requires both a validation-failure scenario and a batch-processing scenario, keep the validation-failure coverage on the direct intake or validation surface unless the behavior contract explicitly requires batch-level failure coverage.
+If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface so the test isolates one clear contract violation.
 Keep batch-processing scenarios structurally valid unless the behavior contract explicitly says partially invalid batch items are expected and defines the expected outcome.
 If the public API exposes no dedicated batch helper, express the batch scenario as a short list of individually valid items processed one by one. Do not pass a list into scalar-only validators or scorers.
 Do not add caplog assertions or raw logging-text expectations unless the behavior contract explicitly states that emitted log output is part of the observable contract. If audit behavior must be checked, prefer deterministic assertions on returned state or audit records exposed by the service.
+If you assert audit records, assert only the actions exercised in that same scenario. Do not expect document-upload, status-change, or similar audit events unless the test performs that action directly.
 Never define a custom fixture named `request`; pytest reserves that name. Use inline setup or a specific fixture name such as `sample_request` instead.
 Do not use mock-style bookkeeping assertions such as `.call_count` or `.assert_called_once()` on logging objects, production callables, or other real objects unless the same test first installs a real `Mock`, `MagicMock`, or `patch` target for that exact object.
 If repair context suggests truncation or incomplete output, remove non-essential comments, blank lines, extra fixtures, and optional helper scaffolding before dropping any required scenario.
@@ -109,13 +114,18 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
     If the task sets only a maximum number of top-level tests, stay comfortably under that ceiling unless the documented contract explicitly requires more coverage.
+    Leave at least one top-level test of headroom below a stated maximum unless the task explicitly requires the maximum count.
+    Before you finalize, count top-level tests and total lines explicitly. If the suite is at or above any stated limit, merge or delete the lowest-value helper coverage until the file is back under budget.
     If the task sets a fixture maximum, count fixtures before you finalize and inline one-off setup instead of adding a borderline extra fixture.
     If the task only names high-level workflow scenarios, stay on the main service or batch API and do not add separate unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities unless the task explicitly requests them.
+    In compact high-level workflow suites, do not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly names those helpers.
     For compact scenario-driven suites, merge overlapping checks instead of creating helper-specific extra tests. Do not spend standalone tests on simple logging or audit helpers unless the contract makes them independently observable.
     If the task requires both a validation-failure scenario and a batch-processing scenario, use the direct intake or validation surface for the failure case unless the behavior contract explicitly requires a batch-level failure scenario.
+    If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface.
     Keep the batch-processing scenario structurally valid unless the behavior contract explicitly says partially invalid batch items are expected.
     If the public API exposes no dedicated batch helper, express the batch scenario by iterating over a short list of valid items one by one instead of passing a list into scalar-only validators or scorers.
     Do not add standalone caplog or raw logging-output assertions unless the behavior contract explicitly makes log output observable. If audit behavior matters, prefer deterministic assertions on service state or audit records exposed by the service.
+    If you assert audit records, assert only actions exercised in that same scenario. Do not expect document-upload, status-change, or similar audit events unless the test performs that action directly.
     Never define a custom fixture named `request`; pytest reserves that name. Use inline setup or a specific fixture name such as `sample_request` instead.
     Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first.
     If you assert an exact numeric value, use trivially countable inputs and do so only when the behavior contract or implementation clearly defines the exact formula; otherwise prefer stable non-exact assertions.
@@ -134,17 +144,22 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - every happy-path payload satisfies the listed behavior contract and validation rules
     - if the task sets a fixture maximum, you stayed at or under it and inlined one-off setup instead of adding a borderline extra fixture
     - if the task sets only a maximum number of top-level tests, you stayed comfortably under that ceiling unless the documented contract explicitly required more coverage
+    - if the task sets only a maximum number of top-level tests, you left at least one top-level test of headroom below that maximum unless an exact count was explicitly required
+    - before you finalized, you counted top-level tests and total lines and removed lowest-value helper coverage until the file sat safely under every stated cap
     - if the task requires both a validation-failure scenario and a batch scenario, the validation failure stays on the direct intake or validation surface unless the behavior contract explicitly requires a batch-level failure case
+    - if the validation-failure scenario omits a required field, it omits only the field under test and keeps the rest of that payload valid for the same surface
     - every happy-path batch item satisfies the same required fields as the single-request happy path unless the behavior contract explicitly documents a different batch shape
     - if the public API exposes no dedicated batch helper, the batch scenario iterates over individual items rather than passing a list into a scalar-only function
     - if the task asks for a fixed number of scenarios or tests, you did not add extra cases beyond that request
     - you did not add standalone helper or logging tests that duplicate behavior already covered by the requested scenarios
+    - in a compact high-level workflow suite, you did not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly named them
     - if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure unless the validation summary explicitly marked them invalid
     - you did not define a custom fixture named `request`
     - every non-built-in fixture used by a test is defined in the same file
     - every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization
     - every helper or expected-value name referenced inside a test body is imported, defined in the file, or introduced by the matching parametrization
     - you did not add caplog or raw logging-text assertions unless the behavior contract explicitly makes emitted log output observable
+    - if you asserted audit records, every asserted action is exercised in that same scenario rather than guessed from unrelated workflow steps
     - you did not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first
     - every exact numeric assertion is supported by an explicit contract or formula and uses trivially countable input; otherwise you used stable non-exact assertions
     - if you asserted derived categorical levels or score bands, you used comfortably in-band inputs or non-boundary assertions unless the contract explicitly defined the thresholds
@@ -207,13 +222,18 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
     If the task sets only a maximum number of top-level tests, stay comfortably under that ceiling unless the documented contract explicitly requires more coverage.
+    Leave at least one top-level test of headroom below a stated maximum unless the task explicitly requires the maximum count.
+    Before you finalize, count top-level tests and total lines explicitly. If the suite is at or above any stated limit, merge or delete the lowest-value helper coverage until the file is back under budget.
     If the task sets a fixture maximum, count fixtures before you finalize and inline one-off setup instead of adding a borderline extra fixture.
     If the task only names high-level workflow scenarios, stay on the main service or batch API and do not add separate unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities unless the task explicitly requests them.
+    In compact high-level workflow suites, do not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly names those helpers.
     For compact scenario-driven suites, merge overlapping checks instead of creating helper-specific extra tests. Do not spend standalone tests on simple logging or audit helpers unless the contract makes them independently observable.
     If the task requires both a validation-failure scenario and a batch-processing scenario, use the direct intake or validation surface for the failure case unless the behavior contract explicitly requires a batch-level failure scenario.
+    If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface.
     Keep the batch-processing scenario structurally valid unless the behavior contract explicitly says partially invalid batch items are expected.
     If the public API exposes no dedicated batch helper, express the batch scenario by iterating over a short list of valid items one by one instead of passing a list into scalar-only validators or scorers.
     Do not add standalone caplog or raw logging-output assertions unless the behavior contract explicitly makes log output observable. If audit behavior matters, prefer deterministic assertions on service state or audit records exposed by the service.
+    If you assert audit records, assert only actions exercised in that same scenario. Do not expect document-upload, status-change, or similar audit events unless the test performs that action directly.
     Never define a custom fixture named `request`; pytest reserves that name. Use inline setup or a specific fixture name such as `sample_request` instead.
     Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first.
     If you assert an exact numeric value, use trivially countable inputs and do so only when the behavior contract or implementation clearly defines the exact formula; otherwise prefer stable non-exact assertions.
@@ -231,17 +251,22 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - every assertion matches behavior reachable from the provided implementation summary
     - every happy-path payload satisfies the listed behavior contract and validation rules
     - if the task sets only a maximum number of top-level tests, you stayed comfortably under that ceiling unless the documented contract explicitly required more coverage
+    - if the task sets only a maximum number of top-level tests, you left at least one top-level test of headroom below that maximum unless an exact count was explicitly required
+    - before you finalized, you counted top-level tests and total lines and removed lowest-value helper coverage until the file sat safely under every stated cap
     - if the task requires both a validation-failure scenario and a batch scenario, the validation failure stays on the direct intake or validation surface unless the behavior contract explicitly requires a batch-level failure case
+    - if the validation-failure scenario omits a required field, it omits only the field under test and keeps the rest of that payload valid for the same surface
     - every happy-path batch item satisfies the same required fields as the single-request happy path unless the behavior contract explicitly documents a different batch shape
     - if the public API exposes no dedicated batch helper, the batch scenario iterates over individual items rather than passing a list into a scalar-only function
     - if the task asks for a fixed number of scenarios or tests, you did not add extra cases beyond that request
     - you did not add standalone helper or logging tests that duplicate behavior already covered by the requested scenarios
+    - in a compact high-level workflow suite, you did not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly named them
     - if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure unless the validation summary explicitly marked them invalid
     - you did not define a custom fixture named `request`
     - every non-built-in fixture used by a test is defined in the same file
     - every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization
     - every helper or expected-value name referenced inside a test body is imported, defined in the file, or introduced by the matching parametrization
     - you did not add caplog or raw logging-text assertions unless the behavior contract explicitly makes emitted log output observable
+    - if you asserted audit records, every asserted action is exercised in that same scenario rather than guessed from unrelated workflow steps
     - you did not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first
     - every exact numeric assertion is supported by an explicit contract or formula and uses trivially countable input; otherwise you used stable non-exact assertions
     - if an exact numeric assertion depends on string length, modulo, counts, or collection size, you used repeated-character or similarly obvious inputs rather than prose sample text

@@ -299,8 +299,11 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "Do not duplicate the implementation code in the tests." in agent.last_user_message
     assert "Respect the task's line budget and requested scenario count exactly." in agent.last_user_message
     assert "stay comfortably under that ceiling" in agent.last_user_message
+    assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_user_message
+    assert "count top-level tests and total lines explicitly" in agent.last_user_message
     assert "Import every production class you instantiate or reference in a fixture or test body" in agent.last_user_message
     assert "stay on the main service or batch API" in agent.last_user_message
+    assert "validator units, scorer units, dataclass serialization, audit logger wrappers" in agent.last_user_message
     assert "merge overlapping checks instead of creating helper-specific extra tests" in agent.last_user_message
     assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
     assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
@@ -314,6 +317,8 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "Return only raw Python test code." in agent.last_system_prompt
     assert "Do not import `main`, CLI/demo entrypoints" in agent.last_system_prompt
     assert "stay comfortably under that cap" in agent.last_system_prompt
+    assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_system_prompt
+    assert "count top-level tests and total lines yourself" in agent.last_system_prompt
     assert "Do not hand-count prose strings to justify exact numeric assertions" in agent.last_system_prompt
     assert "never use natural-language prose samples for that assertion" in agent.last_system_prompt
     assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt
@@ -347,6 +352,7 @@ def test_code_engineer_agent_prompt_demands_raw_python_output(tmp_path):
     assert "Do not include markdown fences" in agent.last_system_prompt
     assert "Target module: code_implementation.py" in agent.last_user_message
     assert "stay comfortably under that ceiling instead of aiming for the exact limit" in agent.last_user_message
+    assert "within roughly 10 to 15 lines of the ceiling" in agent.last_user_message
 
 
 def test_code_reviewer_agent_prompt_includes_tests_and_module_name(tmp_path):

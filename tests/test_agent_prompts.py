@@ -167,11 +167,13 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "Respect the task's requested size budget exactly." in agent.last_user_message
     assert "If the task does not specify one, keep the module under 260 lines." in agent.last_user_message
     assert "stay comfortably under that ceiling instead of aiming for the exact limit" in agent.last_user_message
+    assert "within roughly 10 to 15 lines of the ceiling" in agent.last_user_message
     assert "treat each listed failing assertion as an exact behavior contract for this module" in agent.last_user_message
     assert "Do not stop at a nearby constant tweak, renamed helper, or signature change" in agent.last_user_message
     assert "if the task requires a CLI or demo entrypoint" in agent.last_user_message
     assert "if __name__ == \"__main__\":" in agent.last_user_message
     assert "you stayed comfortably under the ceiling rather than using the full budget" in agent.last_user_message
+    assert "you left visible headroom below the ceiling" in agent.last_user_message
     assert "you implemented only the required behavior from the architecture" in agent.last_user_message
     assert "rewrote the full module from the top instead of appending a partial continuation" in agent.last_user_message
     assert "every constructor call matches the constructor you defined" in agent.last_user_message
@@ -180,6 +182,7 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "If you are repairing a previously invalid or truncated file" in agent.last_system_prompt
     assert "Do not stop mid-function, mid-string, or mid-docstring." in agent.last_system_prompt
     assert "stay comfortably under that ceiling so imports, the main guard, and any required repairs still fit" in agent.last_system_prompt
+    assert "within roughly 10 to 15 lines of the cap" in agent.last_system_prompt
     assert "remove non-essential docstrings, comments, blank lines, and optional helper layers" in agent.last_system_prompt
     assert "Treat the architecture as guidance for required behavior" in agent.last_system_prompt
     assert "Task-specific scope and size limits override generic polish" in agent.last_system_prompt
@@ -261,6 +264,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "If the task sets a fixture maximum, count fixtures before you finalize" in agent.last_user_message
     assert "Do not assert exact categorical score bands or labels at boundary values" in agent.last_user_message
     assert "stay comfortably under that ceiling" in agent.last_user_message
+    assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_user_message
+    assert "count top-level tests and total lines explicitly" in agent.last_user_message
     assert "if the task asks for a fixed number of scenarios or tests" in agent.last_user_message
     assert "merge overlapping checks instead of creating helper-specific extra tests" in agent.last_user_message
     assert "If you assert an exact numeric value, use trivially countable inputs" in agent.last_user_message
@@ -276,9 +281,11 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "if you asserted derived categorical levels or score bands" in agent.last_user_message
     assert "you used repeated-character or similarly obvious inputs rather than prose sample text" in agent.last_user_message
     assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
+    assert "omit only the field under test and keep the rest of that payload valid" in agent.last_user_message
     assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
     assert "If the public API exposes no dedicated batch helper" in agent.last_user_message
     assert "Do not add standalone caplog or raw logging-output assertions" in agent.last_user_message
+    assert "assert only actions exercised in that same scenario" in agent.last_user_message
     assert "Never define a custom fixture named `request`" in agent.last_user_message
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
     assert "Do not import or instantiate CLI wrapper classes such as names ending in `CLI` or `Cli`" in agent.last_user_message
@@ -293,9 +300,13 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "never use natural-language prose samples for that assertion" in agent.last_system_prompt
     assert "Do not assert exact categorical score bands or labels at boundary values" in agent.last_system_prompt
     assert "keep the validation-failure coverage on the direct intake or validation surface" in agent.last_system_prompt
+    assert "omit only the field under test and keep the rest of that payload valid" in agent.last_system_prompt
     assert "Keep batch-processing scenarios structurally valid" in agent.last_system_prompt
+    assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_system_prompt
+    assert "count top-level tests and total lines yourself" in agent.last_system_prompt
     assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt
     assert "Do not add caplog assertions or raw logging-text expectations" in agent.last_system_prompt
+    assert "assert only the actions exercised in that same scenario" in agent.last_system_prompt
     assert "Never define a custom fixture named `request`" in agent.last_system_prompt
     assert "Do not use mock-style bookkeeping assertions such as `.call_count` or `.assert_called_once()`" in agent.last_system_prompt
     assert "When repairing a previously generated suite that already passed static validation" in agent.last_system_prompt
@@ -305,8 +316,12 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization" in agent.last_user_message
     assert "every helper or expected-value name referenced inside a test body is imported, defined in the file, or introduced by the matching parametrization" in agent.last_user_message
     assert "every happy-path batch item satisfies the same required fields as the single-request happy path" in agent.last_user_message
+    assert "if the validation-failure scenario omits a required field" in agent.last_user_message
+    assert "before you finalized, you counted top-level tests and total lines" in agent.last_user_message
     assert "you did not add caplog or raw logging-text assertions unless the behavior contract explicitly makes emitted log output observable" in agent.last_user_message
+    assert "if you asserted audit records, every asserted action is exercised in that same scenario" in agent.last_user_message
     assert "you did not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
+    assert "validator units, scorer units, dataclass serialization, audit logger wrappers" in agent.last_user_message
     assert "if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure" in agent.last_user_message
     assert "you did not invent replacement API names, response-wrapper classes, alternate validators, or alternate constructor signatures during repair" in agent.last_user_message
     assert "rewrote the full pytest file from the top instead of appending a partial continuation" in agent.last_user_message

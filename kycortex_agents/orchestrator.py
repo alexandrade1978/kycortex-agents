@@ -2935,6 +2935,11 @@ class Orchestrator:
                 if not callable_name:
                     continue
                 negative_expectation = self._call_has_negative_expectation(child, parent_map)
+                invalid_outcome_expectation = negative_expectation or self._call_expects_invalid_outcome(
+                    node,
+                    child,
+                    parent_map,
+                )
 
                 if callable_name in validation_rules:
                     payload_arg = self._payload_argument_for_validation(child, callable_name)
@@ -2942,7 +2947,7 @@ class Orchestrator:
                     payload_keys = self._extract_literal_dict_keys(payload_node, bindings, class_map)
                     if payload_keys is not None:
                         missing_fields = [field for field in validation_rules[callable_name] if field not in payload_keys]
-                        if missing_fields and not negative_expectation:  # pragma: no branch
+                        if missing_fields and not invalid_outcome_expectation:  # pragma: no branch
                             payload_violations.add(
                                 f"{callable_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
                             )
@@ -2953,7 +2958,7 @@ class Orchestrator:
                     for field_name, allowed_values in field_value_rules[callable_name].items():
                         observed_values = self._extract_literal_field_values(payload_node, bindings, field_name, class_map)
                         invalid_values = [value for value in observed_values if value not in allowed_values]
-                        if invalid_values and not negative_expectation:
+                        if invalid_values and not invalid_outcome_expectation:
                             payload_violations.add(
                                 f"{callable_name} field `{field_name}` uses unsupported values: {', '.join(invalid_values)} at line {child.lineno}"
                             )
@@ -3003,6 +3008,76 @@ class Orchestrator:
                 return True
             current = parent
         return False
+
+    def _call_expects_invalid_outcome(
+        self,
+        test_node: ast.FunctionDef | ast.AsyncFunctionDef,
+        call_node: ast.Call,
+        parent_map: Dict[ast.AST, ast.AST],
+    ) -> bool:
+        result_name = self._assigned_name_for_call(call_node, parent_map)
+        payload_arg = self._first_call_argument(call_node)
+        payload_name = payload_arg.id if isinstance(payload_arg, ast.Name) else None
+
+        for child in ast.walk(test_node):
+            if not isinstance(child, ast.Assert) or getattr(child, "lineno", 0) <= getattr(call_node, "lineno", 0):
+                continue
+            if self._assert_expects_invalid_outcome(child.test, result_name, payload_name):
+                return True
+        return False
+
+    def _assert_expects_invalid_outcome(
+        self,
+        node: ast.AST,
+        result_name: Optional[str],
+        payload_name: Optional[str],
+    ) -> bool:
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return self._invalid_outcome_subject_matches(node.operand, result_name, payload_name)
+
+        if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+            return False
+        if not isinstance(node.ops[0], (ast.Eq, ast.Is)):
+            return False
+
+        left = node.left
+        right = node.comparators[0]
+        return (
+            self._invalid_outcome_subject_matches(left, result_name, payload_name)
+            and self._invalid_outcome_marker_matches(right)
+        ) or (
+            self._invalid_outcome_subject_matches(right, result_name, payload_name)
+            and self._invalid_outcome_marker_matches(left)
+        )
+
+    def _invalid_outcome_subject_matches(
+        self,
+        node: ast.AST,
+        result_name: Optional[str],
+        payload_name: Optional[str],
+    ) -> bool:
+        if result_name and isinstance(node, ast.Name) and node.id == result_name:
+            return True
+        return (
+            payload_name is not None
+            and isinstance(node, ast.Attribute)
+            and node.attr in {"status", "state", "outcome", "result", "valid", "is_valid", "success", "accepted"}
+            and isinstance(node.value, ast.Name)
+            and node.value.id == payload_name
+        )
+
+    def _invalid_outcome_marker_matches(self, node: ast.AST) -> bool:
+        if not isinstance(node, ast.Constant):
+            return False
+        if node.value is False or node.value is None:
+            return True
+        return isinstance(node.value, str) and node.value.strip().lower() in {
+            "invalid",
+            "failed",
+            "error",
+            "rejected",
+            "reject",
+        }
 
     def _batch_call_allows_partial_invalid_items(
         self,
@@ -3995,7 +4070,9 @@ class Orchestrator:
                     "Preserve the documented public API and repair the module behavior itself instead of renaming helpers, reshaping return values, or shifting the failure onto the tests."
                 )
             if "line count:" in summary_lower:
-                lines.append("Rewrite the full module smaller and leave clear headroom below the reported line ceiling.")
+                lines.append(
+                    "Rewrite the full module smaller and leave clear headroom below the reported line ceiling. Remove optional helper layers, repeated convenience wrappers, and non-essential docstrings before touching required behavior."
+                )
             return lines
 
         if failure_category != FailureCategory.TEST_VALIDATION.value:
@@ -4009,7 +4086,10 @@ class Orchestrator:
         )
         if any(marker in summary_lower for marker in ("line count:", "top-level test functions:", "fixture count:")):
             lines.append(
-                "Reduce scope aggressively: target 3 to 4 top-level tests and no more than 2 fixtures unless the contract explicitly requires more."
+                "Reduce scope aggressively: target 3 to 4 top-level tests and no more than 2 fixtures unless the contract explicitly requires more. Count top-level tests and total lines before finalizing, and if you are still over budget, delete helper-only coverage first."
+            )
+            lines.append(
+                "Keep only the minimum required scenarios: one happy path, one validation failure, and one batch or audit/integration path unless the contract explicitly requires more. Drop validator, scorer, serialization, logger, and other helper-level tests before cutting any required scenario."
             )
         if any(marker in summary_lower for marker in ("unknown module symbols:", "missing function imports:", "undefined local names:")):
             lines.append(

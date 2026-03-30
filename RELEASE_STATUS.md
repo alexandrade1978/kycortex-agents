@@ -1,12 +1,12 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.11 maintenance release.
+This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.12 maintenance release.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.11`
-- Latest released version: `1.0.11`
-- Release tag for this version: `v1.0.11`
+- Package version in `pyproject.toml`: `1.0.12`
+- Latest released version: `1.0.12`
+- Release tag for this version: `v1.0.12`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -30,23 +30,25 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Latest Published Release Verification
 
-- `v1.0.11` is the current release tag associated with this repository-owned release state.
-- The immediately preceding published state `v1.0.10` is now the previous maintenance baseline.
-- Expected attached assets remain `kycortex_agents-1.0.11-py3-none-any.whl` and `kycortex_agents-1.0.11.tar.gz`.
+- `v1.0.12` is the current release tag associated with this repository-owned release state.
+- The immediately preceding published state `v1.0.11` is now the previous maintenance baseline.
+- Expected attached assets remain `kycortex_agents-1.0.12-py3-none-any.whl` and `kycortex_agents-1.0.12.tar.gz`.
 
 ## Current Release Validation Snapshot
 
 - The strongest current full provider-matrix checkpoint `output/provider_matrix_validation_step3o` completed for Anthropic, Ollama, and OpenAI on the current maintenance branch.
 - Dedicated provider reruns `output/provider_matrix_validation_step3n_anthropic` and `output/provider_matrix_validation_step3n_ollama` both completed with `repair_cycle_count=0` after the latest repair-routing hardening.
+- The focused empirical rerun `output/provider_matrix_validation_step3r_openai` completed with `repair_cycle_count=0`, closing the remaining residual OpenAI repair observed after `step3q`.
 - Public docs and examples now align on the validated local Ollama baseline `qwen2.5-coder:7b` with `ollama_num_ctx=16384`, using explicit HTTP endpoint overrides when the runtime is not exposed at the default local URL.
+- Clean-environment GitHub Actions validation is restored after the provider-matrix budget regression test was updated to inject its own fake OpenAI credential instead of depending on ambient developer-shell secrets.
 
 ## Release Outcome
 
-The 1.0.11 maintenance-development state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs.
+The 1.0.12 maintenance-development state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs.
 
 The repository's public licensing guidance continues to document the AGPL open-source distribution together with a separate commercial licensing path.
 
-The current maintenance branch now documents and validates explicit Ollama runtime overrides, the dedicated local Ollama empirical baseline, stronger QA/test repair constraints, and code-repair routing that consumes the failing pytest suite as concrete repair evidence.
+The current maintenance branch now documents and validates explicit Ollama runtime overrides, the dedicated local Ollama empirical baseline, stronger QA/test repair constraints, code-repair routing that consumes the failing pytest suite as concrete repair evidence, and deterministic clean-environment CI validation for the provider-matrix budget regression surface.
 
 Use the following repository-owned references when validating follow-up maintenance releases:
 

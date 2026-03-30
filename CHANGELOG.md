@@ -6,17 +6,45 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+### Added
+
+- No unreleased changes yet.
+
+### Changed
+
+- No unreleased changes yet.
+
+### Fixed
+
+- No unreleased changes yet.
+
+### Release Readiness Notes
+
+- Current package version remains `1.0.12` until the next maintenance update is released.
+
+## 1.0.12 - 2026-03-30
+
 ### Changed
 
 - Provider-matrix code-generation guidance now explicitly rejects constant-success validators, placeholder constant scores, and hidden score caps unless the behavior contract requires them.
 - Provider-matrix QA guidance and task descriptions now require staying comfortably under fixture budgets and avoiding exact categorical score assertions at threshold boundaries unless the contract defines those cutoffs.
 - Provider-matrix code-generation guidance now also requires boolean and toggle-like fields to influence behavior by their truth value rather than by mere key presence unless the contract explicitly defines presence-only semantics.
 
+### Fixed
+
+- The provider-matrix budget regression test no longer depends on an ambient `OPENAI_API_KEY` in the developer shell and now injects its own fake credential explicitly, keeping clean-environment GitHub runners aligned with local validation.
+- GitHub Actions `Coverage Gate` and tagged release validation are green again on a clean runner after removing the hidden credential dependency from the regression suite.
+
 ### Validation Notes
 
 - Focused prompt and provider-matrix regressions passed with `44` tests after the guidance hardening.
 - The focused empirical rerun `output/provider_matrix_validation_step3q` completed for OpenAI and Ollama, improving Ollama from `repair_cycle_count=1` in `step3o` to `repair_cycle_count=0` while leaving a single residual OpenAI repair tied to code-side boolean-flag truthiness during batch scoring.
 - The focused empirical rerun `output/provider_matrix_validation_step3r_openai` completed with `repair_cycle_count=0`, closing the remaining residual OpenAI repair from `step3q`.
+- The exact clean-environment coverage-gate command passed locally with `849 passed` and `97.96%` coverage before the `v1.0.12` release tag was created.
+
+### Release Readiness Notes
+
+- Version `1.0.12` is now the released package baseline.
 
 ## 1.0.11 - 2026-03-30
 

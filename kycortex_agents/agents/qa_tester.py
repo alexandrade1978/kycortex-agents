@@ -35,6 +35,7 @@ When a constructor or callable signature is listed in the API contract, use exac
 Do not instantiate helper validators, scorers, loggers, dataclasses, or batch processors merely to wire a higher-level service fixture unless the public API contract explicitly requires that direct setup.
 When repairing a previously generated suite that already passed static validation, preserve the existing imported symbols, constructor shapes, fixture payload structure, and scenario skeleton unless the validation summary explicitly identifies one of those pieces as invalid.
 When the previous validation summary reports constructor arity mismatches, treat those constructor calls as invalid and remove or rewrite them instead of preserving them from the earlier suite.
+If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in the rewritten file. In a compact suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
 Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
 Do not invent alternate field names, sample payload shapes, return structures, or exception messages.
 Do not reference pytest fixtures unless you define them in the same file or they are standard built-in pytest fixtures.
@@ -47,9 +48,12 @@ When the task names only high-level workflow scenarios, keep the suite on the ma
 In compact high-level workflow suites, do not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly names those helpers.
 When the task requires both a validation-failure scenario and a batch-processing scenario, keep the validation-failure coverage on the direct intake or validation surface unless the behavior contract explicitly requires batch-level failure coverage.
 If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface so the test isolates one clear contract violation.
+If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid instead of raising, assert that state on the same object you passed into the call.
 Keep batch-processing scenarios structurally valid unless the behavior contract explicitly says partially invalid batch items are expected and defines the expected outcome.
 If the provided test targets list batch-capable functions, use one of those functions for the batch scenario instead of inventing batch behavior for unrelated helpers.
 If the public API exposes no dedicated batch helper, express the batch scenario as a short list of individually valid items processed one by one. Do not pass a list into scalar-only validators or scorers.
+Example: if the module exposes only process_request(request) and no process_batch(...), write a short loop over two valid requests and assert the documented result of each process_request call instead of switching to logger, repository, scorer, or audit helpers.
+If a batch helper returns None or constructs its own domain objects from raw items, do not instantiate fresh objects after the batch call and assume they inherited internal mutations. Assert only directly observable outcomes, caller-owned object mutations, or behavior you explicitly patch in that test.
 Prefer the highest-level public service or top-level workflow functions for the requested scenarios. Do not import repository, logger, scorer, validator, or similar helper services directly unless the API contract makes them the primary surface under test.
 Do not add caplog assertions or raw logging-text expectations unless the behavior contract explicitly states that emitted log output is part of the observable contract. If audit behavior must be checked, prefer deterministic assertions on returned state or audit records exposed by the service.
 If you assert audit records, assert only the actions exercised in that same scenario. Do not expect document-upload, status-change, or similar audit events unless the test performs that action directly.
@@ -126,9 +130,12 @@ Import from `{module_name}` and test the actual public functions and classes fro
     For compact scenario-driven suites, merge overlapping checks instead of creating helper-specific extra tests. Do not spend standalone tests on simple logging or audit helpers unless the contract makes them independently observable.
     If the task requires both a validation-failure scenario and a batch-processing scenario, use the direct intake or validation surface for the failure case unless the behavior contract explicitly requires a batch-level failure scenario.
     If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface.
+    If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid instead of raising, assert that state on the same object you passed into the call.
     Keep the batch-processing scenario structurally valid unless the behavior contract explicitly says partially invalid batch items are expected.
     If the provided test targets list batch-capable functions, use one of those functions for the batch scenario instead of inventing batch behavior for unrelated helpers.
     If the public API exposes no dedicated batch helper, express the batch scenario by iterating over a short list of valid items one by one instead of passing a list into scalar-only validators or scorers.
+    Example: if the module exposes only process_request(request) and no process_batch(...), write a short loop over two valid requests and assert the documented result of each process_request call instead of switching to logger, repository, scorer, or audit helpers.
+    If a batch helper returns None or constructs its own domain objects from raw items, do not instantiate fresh objects after the batch call and assume they inherited internal mutations. Assert only directly observable outcomes, caller-owned object mutations, or behavior you explicitly patch in that test.
     Prefer the highest-level public service or top-level workflow functions for the requested scenarios. Do not import repository, logger, scorer, validator, or similar helper services directly unless the API contract makes them the primary surface under test.
     Do not add standalone caplog or raw logging-output assertions unless the behavior contract explicitly makes log output observable. If audit behavior matters, prefer deterministic assertions on service state or audit records exposed by the service.
     If you assert audit records, assert only actions exercised in that same scenario. Do not expect document-upload, status-change, or similar audit events unless the test performs that action directly.
@@ -139,6 +146,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. Use comfortably in-band inputs or non-boundary assertions for derived levels.
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
+    If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in this rewritten file. In a compact workflow suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
     Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
     Before you finalize, verify this checklist against your own output:
     - every imported production symbol exists in the API contract
@@ -154,13 +162,17 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - before you finalized, you counted top-level tests and total lines and removed lowest-value helper coverage until the file sat safely under every stated cap
     - if the task requires both a validation-failure scenario and a batch scenario, the validation failure stays on the direct intake or validation surface unless the behavior contract explicitly requires a batch-level failure case
     - if the validation-failure scenario omits a required field, it omits only the field under test and keeps the rest of that payload valid for the same surface
+    - if the validation-failure path keeps the same caller-owned object in a non-success state such as pending or invalid, you asserted that state on the same object you passed into the call
     - every happy-path batch item satisfies the same required fields as the single-request happy path unless the behavior contract explicitly documents a different batch shape
     - if the listed test targets name batch-capable functions, the batch scenario uses one of those functions instead of inventing batch behavior for unrelated helpers
     - if the public API exposes no dedicated batch helper, the batch scenario iterates over individual items rather than passing a list into a scalar-only function
+    - if the public API exposes no dedicated batch helper, you kept the batch scenario on the main request-processing surface instead of switching to logger, repository, scorer, or audit helpers
+    - if a batch helper returns None or constructs its own domain objects internally, you did not create fresh objects after the batch call and assume they inherited internal mutations
     - if the task asks for a fixed number of scenarios or tests, you did not add extra cases beyond that request
     - you did not add standalone helper or logging tests that duplicate behavior already covered by the requested scenarios
     - in a compact high-level workflow suite, you did not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly named them
     - if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure unless the validation summary explicitly marked them invalid
+    - if the validation summary reported undefined local names or undefined fixtures, you removed or rewrote those tests unless you explicitly imported or defined the missing names
     - you did not define a custom fixture named `request`
     - every non-built-in fixture used by a test is defined in the same file
     - every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization
@@ -238,9 +250,12 @@ Import from `{module_name}` and test the actual public functions and classes fro
     For compact scenario-driven suites, merge overlapping checks instead of creating helper-specific extra tests. Do not spend standalone tests on simple logging or audit helpers unless the contract makes them independently observable.
     If the task requires both a validation-failure scenario and a batch-processing scenario, use the direct intake or validation surface for the failure case unless the behavior contract explicitly requires a batch-level failure scenario.
     If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface.
+    If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid instead of raising, assert that state on the same object you passed into the call.
     Keep the batch-processing scenario structurally valid unless the behavior contract explicitly says partially invalid batch items are expected.
     If the provided test targets list batch-capable functions, use one of those functions for the batch scenario instead of inventing batch behavior for unrelated helpers.
     If the public API exposes no dedicated batch helper, express the batch scenario by iterating over a short list of valid items one by one instead of passing a list into scalar-only validators or scorers.
+    Example: if the module exposes only process_request(request) and no process_batch(...), write a short loop over two valid requests and assert the documented result of each process_request call instead of switching to logger, repository, scorer, or audit helpers.
+    If a batch helper returns None or constructs its own domain objects from raw items, do not instantiate fresh objects after the batch call and assume they inherited internal mutations. Assert only directly observable outcomes, caller-owned object mutations, or behavior you explicitly patch in that test.
     Prefer the highest-level public service or top-level workflow functions for the requested scenarios. Do not import repository, logger, scorer, validator, or similar helper services directly unless the API contract makes them the primary surface under test.
     Do not add standalone caplog or raw logging-output assertions unless the behavior contract explicitly makes log output observable. If audit behavior matters, prefer deterministic assertions on service state or audit records exposed by the service.
     If you assert audit records, assert only actions exercised in that same scenario. Do not expect document-upload, status-change, or similar audit events unless the test performs that action directly.
@@ -251,6 +266,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. Use comfortably in-band inputs or non-boundary assertions for derived levels.
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
+    If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in this rewritten file. In a compact workflow suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
     Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
     Before you finalize, verify this checklist against your own output:
     - every imported production symbol exists in the API contract
@@ -265,13 +281,17 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - before you finalized, you counted top-level tests and total lines and removed lowest-value helper coverage until the file sat safely under every stated cap
     - if the task requires both a validation-failure scenario and a batch scenario, the validation failure stays on the direct intake or validation surface unless the behavior contract explicitly requires a batch-level failure case
     - if the validation-failure scenario omits a required field, it omits only the field under test and keeps the rest of that payload valid for the same surface
+    - if the validation-failure path keeps the same caller-owned object in a non-success state such as pending or invalid, you asserted that state on the same object you passed into the call
     - every happy-path batch item satisfies the same required fields as the single-request happy path unless the behavior contract explicitly documents a different batch shape
     - if the listed test targets name batch-capable functions, the batch scenario uses one of those functions instead of inventing batch behavior for unrelated helpers
     - if the public API exposes no dedicated batch helper, the batch scenario iterates over individual items rather than passing a list into a scalar-only function
+    - if the public API exposes no dedicated batch helper, you kept the batch scenario on the main request-processing surface instead of switching to logger, repository, scorer, or audit helpers
+    - if a batch helper returns None or constructs its own domain objects internally, you did not create fresh objects after the batch call and assume they inherited internal mutations
     - if the task asks for a fixed number of scenarios or tests, you did not add extra cases beyond that request
     - you did not add standalone helper or logging tests that duplicate behavior already covered by the requested scenarios
     - in a compact high-level workflow suite, you did not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly named them
     - if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure unless the validation summary explicitly marked them invalid
+    - if the validation summary reported undefined local names or undefined fixtures, you removed or rewrote those tests unless you explicitly imported or defined the missing names
     - you did not define a custom fixture named `request`
     - every non-built-in fixture used by a test is defined in the same file
     - every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization

@@ -196,7 +196,10 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "Stay comfortably under the fixture limit" in tests_task.description
     assert "Use the direct intake or validation surface for the validation-failure scenario" in tests_task.description
     assert "omit only the field under test and keep the rest of that payload valid" in tests_task.description
+    assert "If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid" in tests_task.description
     assert "If the implementation exposes no dedicated batch helper" in tests_task.description
+    assert "If the implementation exposes only a single-request surface such as process_request(request) and no process_batch(...)" in tests_task.description
+    assert "If a batch helper returns None or constructs its own domain objects from raw items" in tests_task.description
     assert "Do not import or test `main`, CLI/demo entrypoints" in tests_task.description
     assert "Do not spend standalone tests on simple logging or audit helpers" in tests_task.description
     assert "do not spend top-level tests on validator units, scorers, dataclass serialization, audit loggers" in tests_task.description
@@ -204,6 +207,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "assert only records for actions actually exercised in the scenario" in tests_task.description
     assert "Never define a custom fixture named `request`" in tests_task.description
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in tests_task.description
+    assert "If repair feedback reports undefined local names or undefined fixtures" in tests_task.description
     assert "use trivially countable inputs rather than prose strings" in tests_task.description
     assert "avoid threshold boundary values unless the contract explicitly defines those cutoffs" in tests_task.description
     assert "use repeated-character or similarly obvious inputs rather than natural-language sample text" in tests_task.description

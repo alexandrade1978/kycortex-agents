@@ -962,6 +962,12 @@ class Orchestrator:
             validation_issues.append(
                 f"fixture count {test_analysis.get('fixture_count')} exceeds maximum {fixture_budget}"
             )
+        if test_analysis.get("helper_surface_usages") and (
+            isinstance(line_budget, int) or isinstance(max_test_count, int) or isinstance(fixture_budget, int)
+        ):
+            validation_issues.append(
+                f"helper surface usages: {', '.join(test_analysis.get('helper_surface_usages') or [])}"
+            )
         for issue_key, label in (
             ("missing_function_imports", "missing function imports"),
             ("unknown_module_symbols", "unknown module symbols"),
@@ -2442,6 +2448,8 @@ class Orchestrator:
             return "Test targets unavailable because module syntax is invalid."
 
         entrypoint_names = self._entrypoint_symbol_names(code_analysis)
+        preferred_classes = self._preferred_test_class_names(code_analysis)
+        helper_classes_to_avoid = self._helper_classes_to_avoid(code_analysis, preferred_classes)
         batch_capable_functions = [
             item["signature"]
             for item in code_analysis.get("functions") or []
@@ -2467,8 +2475,50 @@ class Orchestrator:
         lines.append(f"- Batch-capable functions: {', '.join(batch_capable_functions or ['none'])}")
         lines.append(f"- Scalar-only functions: {', '.join(scalar_functions or ['none'])}")
         lines.append(f"- Classes to test: {', '.join(classes or ['none'])}")
+        lines.append(f"- Preferred workflow classes: {', '.join(preferred_classes or ['none'])}")
+        lines.append(
+            f"- Helper classes to avoid in compact workflow tests: {', '.join(helper_classes_to_avoid or ['none'])}"
+        )
         lines.append(f"- Entry points to avoid in tests: {', '.join(sorted(entrypoint_names) or ['none'])}")
         return "\n".join(lines)
+
+    def _preferred_test_class_names(self, code_analysis: Dict[str, Any]) -> list[str]:
+        entrypoint_names = self._entrypoint_symbol_names(code_analysis)
+        workflow_method_prefixes = (
+            "process_",
+            "validate_",
+            "intake_",
+            "handle_",
+            "submit_",
+            "batch_",
+            "export_",
+        )
+        preferred: list[str] = []
+        for class_name, class_info in sorted((code_analysis.get("classes") or {}).items()):
+            if class_name in entrypoint_names:
+                continue
+            method_names = list((class_info.get("method_signatures") or {}).keys())
+            if any(method_name.startswith(workflow_method_prefixes) for method_name in method_names):
+                preferred.append(class_name)
+        return preferred
+
+    def _helper_classes_to_avoid(
+        self,
+        code_analysis: Dict[str, Any],
+        preferred_classes: Optional[list[str]] = None,
+    ) -> list[str]:
+        preferred = set(preferred_classes or self._preferred_test_class_names(code_analysis))
+        if not preferred:
+            return []
+        entrypoint_names = self._entrypoint_symbol_names(code_analysis)
+        helper_suffixes = ("service", "repository", "logger")
+        helper_names: list[str] = []
+        for class_name in sorted((code_analysis.get("classes") or {}).keys()):
+            if class_name in entrypoint_names or class_name in preferred:
+                continue
+            if class_name.lower().endswith(helper_suffixes):
+                helper_names.append(class_name)
+        return helper_names
 
     def _build_code_behavior_contract(self, raw_content: str) -> str:
         if not raw_content.strip():
@@ -2747,6 +2797,7 @@ class Orchestrator:
             "constructor_arity_mismatches": [],
             "payload_contract_violations": [],
             "non_batch_sequence_calls": [],
+            "helper_surface_usages": [],
             "reserved_fixture_names": [],
             "undefined_fixtures": [],
             "undefined_local_names": [],
@@ -2769,6 +2820,7 @@ class Orchestrator:
         function_names = {item["name"] for item in code_analysis.get("functions") or []}
         function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
+        helper_classes_to_avoid = set(self._helper_classes_to_avoid(code_analysis))
         module_defined_names = self._collect_module_defined_names(tree)
         entrypoint_names = self._entrypoint_symbol_names(code_analysis)
         validation_rules, field_value_rules, batch_rules, sequence_input_functions = self._parse_behavior_contract(
@@ -2893,6 +2945,14 @@ class Orchestrator:
             }
         )
         imported_entrypoint_symbols = sorted(symbol for symbol in imported_symbols if symbol in entrypoint_names)
+        helper_surface_usages = sorted(
+            {symbol for symbol in imported_symbols if symbol in helper_classes_to_avoid}
+            | {
+                f"{name} (line {lineno})"
+                for name, lineno in called_names
+                if name in helper_classes_to_avoid
+            }
+        )
         payload_contract_violations, non_batch_sequence_calls = self._analyze_test_behavior_contracts(
             tree,
             validation_rules,
@@ -2911,6 +2971,7 @@ class Orchestrator:
         analysis["constructor_arity_mismatches"] = sorted(set(arity_mismatches))
         analysis["payload_contract_violations"] = payload_contract_violations
         analysis["non_batch_sequence_calls"] = non_batch_sequence_calls
+        analysis["helper_surface_usages"] = helper_surface_usages
         analysis["reserved_fixture_names"] = sorted(set(reserved_fixture_names))
         analysis["undefined_fixtures"] = undefined_fixtures
         analysis["undefined_local_names"] = sorted(undefined_local_names)
@@ -3156,6 +3217,7 @@ class Orchestrator:
             "invalid",
             "failed",
             "error",
+            "pending",
             "rejected",
             "reject",
         }
@@ -4034,6 +4096,9 @@ class Orchestrator:
             )
             lines.append(
                 f"- Non-batch sequence calls: {', '.join(test_analysis.get('non_batch_sequence_calls') or ['none'])}"
+            )
+            lines.append(
+                f"- Helper surface usages: {', '.join(test_analysis.get('helper_surface_usages') or ['none'])}"
             )
             lines.append(
                 f"- Reserved fixture names: {', '.join(test_analysis.get('reserved_fixture_names') or ['none'])}"

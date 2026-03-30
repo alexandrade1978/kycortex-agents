@@ -282,9 +282,12 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "you used repeated-character or similarly obvious inputs rather than prose sample text" in agent.last_user_message
     assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
     assert "omit only the field under test and keep the rest of that payload valid" in agent.last_user_message
+    assert "If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid" in agent.last_user_message
     assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
     assert "If the provided test targets list batch-capable functions" in agent.last_user_message
     assert "If the public API exposes no dedicated batch helper" in agent.last_user_message
+    assert "Example: if the module exposes only process_request(request) and no process_batch(...)" in agent.last_user_message
+    assert "If a batch helper returns None or constructs its own domain objects from raw items" in agent.last_user_message
     assert "Prefer the highest-level public service or top-level workflow functions" in agent.last_user_message
     assert "Do not add standalone caplog or raw logging-output assertions" in agent.last_user_message
     assert "assert only actions exercised in that same scenario" in agent.last_user_message
@@ -292,6 +295,7 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
     assert "Do not import or instantiate CLI wrapper classes such as names ending in `CLI` or `Cli`" in agent.last_user_message
     assert "If the previous suite already passed static validation and only failed at pytest runtime" in agent.last_user_message
+    assert "If the previous validation summary reports undefined local names or undefined fixtures" in agent.last_user_message
     assert "Treat the current implementation artifact and API contract as fixed ground truth during repair" in agent.last_user_message
     assert "Write complete pytest code only; do not stop mid-test, mid-string, or mid-fixture." in agent.last_system_prompt
     assert "Do not import `main`, CLI/demo entrypoints" in agent.last_system_prompt
@@ -303,17 +307,21 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Do not assert exact categorical score bands or labels at boundary values" in agent.last_system_prompt
     assert "keep the validation-failure coverage on the direct intake or validation surface" in agent.last_system_prompt
     assert "omit only the field under test and keep the rest of that payload valid" in agent.last_system_prompt
+    assert "If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid" in agent.last_system_prompt
     assert "Keep batch-processing scenarios structurally valid" in agent.last_system_prompt
     assert "If the provided test targets list batch-capable functions" in agent.last_system_prompt
     assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_system_prompt
     assert "count top-level tests and total lines yourself" in agent.last_system_prompt
     assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt
+    assert "Example: if the module exposes only process_request(request) and no process_batch(...)" in agent.last_system_prompt
+    assert "If a batch helper returns None or constructs its own domain objects from raw items" in agent.last_system_prompt
     assert "Prefer the highest-level public service or top-level workflow functions" in agent.last_system_prompt
     assert "Do not add caplog assertions or raw logging-text expectations" in agent.last_system_prompt
     assert "assert only the actions exercised in that same scenario" in agent.last_system_prompt
     assert "Never define a custom fixture named `request`" in agent.last_system_prompt
     assert "Do not use mock-style bookkeeping assertions such as `.call_count` or `.assert_called_once()`" in agent.last_system_prompt
     assert "When repairing a previously generated suite that already passed static validation" in agent.last_system_prompt
+    assert "If the previous validation summary reports undefined local names or undefined fixtures" in agent.last_system_prompt
     assert "Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types" in agent.last_system_prompt
     assert "do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities" in agent.last_system_prompt
     assert "every non-built-in fixture used by a test is defined in the same file" in agent.last_user_message

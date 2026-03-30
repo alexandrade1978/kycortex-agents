@@ -1513,6 +1513,32 @@ def test_build_code_test_targets_excludes_cli_wrapper_classes(tmp_path):
     assert "Entry points to avoid in tests: ComplianceCLI, main" in summary
 
 
+def test_build_code_test_targets_marks_preferred_and_helper_classes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_test_targets(
+        {
+            "syntax_ok": True,
+            "functions": [],
+            "classes": {
+                "ComplianceService": {
+                    "method_signatures": {
+                        "validate_request": {},
+                        "process_request": {},
+                    }
+                },
+                "RiskScoringService": {"method_signatures": {"score_request": {}}},
+                "ComplianceRepository": {"method_signatures": {"store_request": {}}},
+                "ComplianceCLI": {"method_signatures": {"run": {}}},
+            },
+        }
+    )
+
+    assert "Preferred workflow classes: ComplianceService" in summary
+    assert "Helper classes to avoid in compact workflow tests: ComplianceRepository, RiskScoringService" in summary
+
+
 def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid_modules(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1717,6 +1743,7 @@ def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_
         "constructor_arity_mismatches": [],
         "payload_contract_violations": [],
         "non_batch_sequence_calls": [],
+        "helper_surface_usages": [],
         "reserved_fixture_names": [],
         "undefined_fixtures": [],
         "undefined_local_names": [],
@@ -1804,6 +1831,73 @@ def test_analyze_test_module_allows_existing_class_methods(tmp_path):
     analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
 
     assert analysis["invalid_member_references"] == []
+
+
+def test_analyze_test_module_flags_helper_surface_usages_when_workflow_class_exists(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "ComplianceService": {
+                "name": "ComplianceService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["process_request(self, request)", "validate_request(self, request)"],
+                "method_signatures": {
+                    "process_request": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                    "validate_request": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+            "RiskScoringService": {
+                "name": "RiskScoringService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["score_request(self, request)"],
+                "method_signatures": {
+                    "score_request": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+            "ComplianceRepository": {
+                "name": "ComplianceRepository",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["store_request(self, request)"],
+                "method_signatures": {
+                    "store_request": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["ComplianceService", "RiskScoringService", "ComplianceRepository"],
+    }
+    test_content = (
+        "from module_under_test import ComplianceService, RiskScoringService, ComplianceRepository\n\n"
+        "def test_service_flow():\n"
+        "    service = ComplianceService()\n"
+        "    assert service is not None\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["helper_surface_usages"] == ["ComplianceRepository", "RiskScoringService"]
 
 
 def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs(tmp_path):
@@ -2607,6 +2701,83 @@ def test_build_test_validation_summary_includes_exact_limits_and_fixture_budget(
     assert "Top-level test functions: 2/3 max" in max_summary
 
 
+def test_run_task_fails_qa_tester_when_compact_suite_imports_helper_surfaces(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self):\n"
+        "        self.status = 'pending'\n\n"
+        "class ComplianceService:\n"
+        "    def validate_request(self, request):\n"
+        "        return True\n\n"
+        "    def process_request(self, request):\n"
+        "        request.status = 'processed'\n"
+        "        return request\n\n"
+        "class RiskScoringService:\n"
+        "    def score_request(self, request):\n"
+        "        return 1\n\n"
+        "class ComplianceRepository:\n"
+        "    def store_request(self, request):\n"
+        "        return None\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceService:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write one compact raw pytest module under 150 lines. Use at most 3 fixtures and at most 7 top-level test functions.",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, ComplianceService, RiskScoringService, ComplianceRepository\n\n"
+        "def test_service_flow():\n"
+        "    request = ComplianceRequest()\n"
+        "    service = ComplianceService()\n"
+        "    helper = RiskScoringService()\n"
+        "    repo = ComplianceRepository()\n"
+        "    assert service.process_request(request) is request\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match=r"helper surface usages"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["helper_surface_usages"] == [
+        "ComplianceRepository",
+        "ComplianceRepository (line 7)",
+        "RiskScoringService",
+        "RiskScoringService (line 6)",
+    ]
+
+
 def test_output_and_task_budget_helpers_handle_empty_and_optional_inputs(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -2696,6 +2867,8 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     assert orchestrator._assert_expects_false(unrelated_compare, call_node) is False
     invalid_status_assert = ast.parse("assert request.status == 'Invalid'").body[0]
     assert orchestrator._assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
+    pending_status_assert = ast.parse("assert request.status == 'Pending'").body[0]
+    assert orchestrator._assert_expects_invalid_outcome(pending_status_assert.test, None, "request") is True
     false_result_assert = ast.parse("assert result is False").body[0]
     assert orchestrator._assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = ast.parse("with context_manager:\n    validate_request(data)\n").body[0]
@@ -6738,6 +6911,73 @@ def test_run_task_allows_missing_required_fields_for_intentional_invalid_status_
         "    request = ComplianceRequest('req-1', {'name': 'Test', 'amount': 200})\n"
         "    process_request(request)\n"
         "    assert request.status == 'Invalid'\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    orchestrator.run_task(project.tasks[1], project)
+
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["payload_contract_violations"] == []
+    assert project.tasks[1].status == TaskStatus.DONE.value
+
+
+def test_run_task_allows_missing_required_fields_for_intentional_pending_status_assertion(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, data):\n"
+        "        self.request_id = request_id\n"
+        "        self.data = data\n"
+        "        self.status = 'Pending'\n\n"
+        "    def validate(self):\n"
+        "        required_fields = {'name', 'amount', 'risk_factor'}\n"
+        "        return all(field in self.data for field in required_fields)\n\n"
+        "def process_request(request):\n"
+        "    if not request.validate():\n"
+        "        return\n"
+        "    request.status = 'Processed'\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, process_request\n\n"
+        "def test_process_request_validation_failure():\n"
+        "    request = ComplianceRequest('req-1', {'name': 'Test', 'amount': 200})\n"
+        "    process_request(request)\n"
+        "    assert request.status == 'Pending'\n"
     )
     orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
 

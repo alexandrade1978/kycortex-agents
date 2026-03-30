@@ -208,6 +208,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "Never define a custom fixture named `request`" in tests_task.description
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in tests_task.description
     assert "If repair feedback reports undefined local names or undefined fixtures" in tests_task.description
+    assert "If repair feedback reports helper surface usages" in tests_task.description
     assert "use trivially countable inputs rather than prose strings" in tests_task.description
     assert "avoid threshold boundary values unless the contract explicitly defines those cutoffs" in tests_task.description
     assert "use repeated-character or similarly obvious inputs rather than natural-language sample text" in tests_task.description

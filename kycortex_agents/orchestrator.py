@@ -1488,6 +1488,14 @@ class Orchestrator:
             validation_summary = repair_context.get("validation_summary")
             if isinstance(validation_summary, str) and validation_summary.strip():
                 ctx["repair_validation_summary"] = validation_summary
+            helper_surface_usages = [
+                item.strip()
+                for item in repair_context.get("helper_surface_usages", [])
+                if isinstance(item, str) and item.strip()
+            ]
+            helper_surface_symbols = self._normalized_helper_surface_symbols(
+                repair_context.get("helper_surface_symbols") or helper_surface_usages
+            )
             existing_tests = repair_context.get("existing_tests")
             failed_artifact_content = repair_context.get("failed_artifact_content")
             failed_output = repair_context.get("failed_output")
@@ -1502,6 +1510,10 @@ class Orchestrator:
                     ctx["existing_tests"] = repair_content
                 if "test_validation_summary" not in ctx and isinstance(validation_summary, str) and validation_summary.strip():
                     ctx["test_validation_summary"] = validation_summary
+                if helper_surface_usages:
+                    ctx["repair_helper_surface_usages"] = helper_surface_usages
+                if helper_surface_symbols:
+                    ctx["repair_helper_surface_symbols"] = helper_surface_symbols
             if normalized_execution_agent == "dependency_manager":
                 if isinstance(repair_content, str) and repair_content.strip():
                     ctx["existing_dependency_manifest"] = repair_content
@@ -1946,7 +1958,7 @@ class Orchestrator:
 
     def _build_repair_context(self, task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
         failure_category = task.last_error_category or FailureCategory.UNKNOWN.value
-        return {
+        repair_context = {
             "cycle": cycle.get("cycle"),
             "failure_category": failure_category,
             "failure_message": task.last_error or task.output or "",
@@ -1959,6 +1971,44 @@ class Orchestrator:
             "failed_artifact_content": self._failed_artifact_content_for_category(task, failure_category),
             "provider_call": task.last_provider_call,
         }
+        helper_surface_usages = self._test_repair_helper_surface_usages(task, failure_category)
+        if helper_surface_usages:
+            repair_context["helper_surface_usages"] = helper_surface_usages
+            repair_context["helper_surface_symbols"] = self._normalized_helper_surface_symbols(
+                helper_surface_usages
+            )
+        return repair_context
+
+    def _test_repair_helper_surface_usages(self, task: Task, failure_category: str) -> list[str]:
+        if failure_category != FailureCategory.TEST_VALIDATION.value:
+            return []
+
+        validation = self._validation_payload(task)
+        test_analysis = validation.get("test_analysis")
+        if not isinstance(test_analysis, dict):
+            return []
+
+        raw_usages = test_analysis.get("helper_surface_usages")
+        if not isinstance(raw_usages, list):
+            return []
+
+        return [item.strip() for item in raw_usages if isinstance(item, str) and item.strip()]
+
+    def _normalized_helper_surface_symbols(self, raw_values: object) -> list[str]:
+        if not isinstance(raw_values, list):
+            return []
+
+        seen: set[str] = set()
+        symbols: list[str] = []
+        for value in raw_values:
+            if not isinstance(value, str):
+                continue
+            symbol = value.split(" (line ", 1)[0].strip()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            symbols.append(symbol)
+        return symbols
 
     def _has_repair_task_for_cycle(self, project: ProjectState, task_id: str, cycle_number: int) -> bool:
         for existing_task in project.tasks:
@@ -4251,6 +4301,29 @@ class Orchestrator:
         lines.append(
             "Do not invent replacement classes, functions, validators, return-wrapper types, helper names, or alternate constructor signatures during repair."
         )
+        helper_surface_symbols = self._normalized_helper_surface_symbols(
+            repair_context.get("helper_surface_symbols")
+        )
+        if not helper_surface_symbols:
+            helper_surface_symbols = self._normalized_helper_surface_symbols(
+                repair_context.get("helper_surface_usages")
+            )
+        if helper_surface_symbols:
+            lines.append(
+                "Delete every import, fixture, helper variable, and top-level test that references these flagged helper surfaces: "
+                f"{', '.join(helper_surface_symbols)}. Do not repair those helper-surface tests in place."
+            )
+            lines.append(
+                "Replace that coverage with the documented higher-level workflow or service surface from the test targets, and do not reintroduce "
+                f"{', '.join(helper_surface_symbols)} anywhere in the rewritten file unless the public API contract explicitly makes one of them the primary surface under test."
+            )
+        elif "helper surface usages:" in summary_lower:
+            lines.append(
+                "Delete every import, fixture, helper variable, and top-level test that references the flagged helper surfaces from the validation summary. Do not repair those helper-surface tests in place."
+            )
+            lines.append(
+                "Replace removed helper-surface coverage with the documented higher-level workflow or service surface from the test targets, and do not reintroduce the flagged helper names anywhere in the rewritten file."
+            )
         if any(marker in summary_lower for marker in ("line count:", "top-level test functions:", "fixture count:")):
             lines.append(
                 "Reduce scope aggressively: target 3 to 4 top-level tests and no more than 2 fixtures unless the contract explicitly requires more. Count top-level tests and total lines before finalizing, and if you are still over budget, delete helper-only coverage first."

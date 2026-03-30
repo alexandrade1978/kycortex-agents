@@ -8387,6 +8387,8 @@ def test_build_agent_input_includes_test_repair_context(tmp_path):
                 "repair_owner": "qa_tester",
                 "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
                 "validation_summary": "Generated test validation:\n- Imported module symbols: add\n- Verdict: FAIL",
+                "helper_surface_usages": ["RiskScoringService (line 33)"],
+                "helper_surface_symbols": ["RiskScoringService"],
                 "failed_output": "from code_implementation import missing_symbol",
                 "failed_artifact_content": "from code_implementation import missing_symbol",
             },
@@ -8400,6 +8402,8 @@ def test_build_agent_input_includes_test_repair_context(tmp_path):
     assert agent_input.context["repair_context"]["repair_owner"] == "qa_tester"
     assert agent_input.context["existing_tests"] == "from code_implementation import missing_symbol"
     assert agent_input.context["test_validation_summary"].endswith("Verdict: FAIL")
+    assert agent_input.context["repair_helper_surface_usages"] == ["RiskScoringService (line 33)"]
+    assert agent_input.context["repair_helper_surface_symbols"] == ["RiskScoringService"]
 
 
 def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
@@ -8446,13 +8450,17 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
                     "- Line count: 206/150\n"
                     "- Top-level test functions: 14/7 max\n"
                     "- Fixture count: 4/3\n"
+                    "- Helper surface usages: RiskScoringService (line 33)\n"
                     "- Unknown module symbols: batch_processing\n"
                         "- Constructor arity mismatches: Validator expects 1 args but test uses 0 at line 12\n"
+                    "- Undefined local names: RiskScoringService (line 33)\n"
                     "- Non-batch sequence calls: score_request does not accept batch/list inputs at line 46\n"
                     "- Reserved fixture names: request (line 5)\n"
                     "- Pytest execution: FAIL\n"
                     "- Verdict: FAIL"
                 ),
+                "helper_surface_usages": ["RiskScoringService (line 33)"],
+                "helper_surface_symbols": ["RiskScoringService"],
                 "failed_output": "from code_implementation import batch_processing",
                 "failed_artifact_content": "from code_implementation import batch_processing",
             },
@@ -8464,6 +8472,8 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
     assert "Repair priorities:" in agent_input.task_description
     assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
     assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
+    assert "Delete every import, fixture, helper variable, and top-level test that references these flagged helper surfaces: RiskScoringService." in agent_input.task_description
+    assert "do not reintroduce RiskScoringService anywhere in the rewritten file" in agent_input.task_description
     assert "Reduce scope aggressively: target 3 to 4 top-level tests" in agent_input.task_description
     assert "Count top-level tests and total lines before finalizing" in agent_input.task_description
     assert "Drop validator, scorer, serialization, logger, and other helper-level tests" in agent_input.task_description
@@ -8536,6 +8546,46 @@ def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
     assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
     assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
     assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
+
+
+def test_build_repair_context_extracts_helper_surface_names_from_test_validation(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        output="Generated test validation failed",
+        output_payload={
+            "summary": "tests",
+            "raw_content": "from code_implementation import ComplianceService",
+            "artifacts": [],
+            "decisions": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {
+                        "helper_surface_usages": [
+                            "RiskScoringService (line 33)",
+                            "ComplianceRepository",
+                        ]
+                    }
+                }
+            },
+        },
+    )
+
+    repair_context = orchestrator._build_repair_context(task, {"cycle": 1})
+
+    assert repair_context["helper_surface_usages"] == [
+        "RiskScoringService (line 33)",
+        "ComplianceRepository",
+    ]
+    assert repair_context["helper_surface_symbols"] == [
+        "RiskScoringService",
+        "ComplianceRepository",
+    ]
 
 
 def test_build_agent_input_adds_targeted_code_repair_priorities_for_pytest_assertions(tmp_path):

@@ -237,6 +237,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
             "code_test_targets": "Test targets:\n- Functions to test: add(a, b)\n- Classes to test: none\n- Entry points to avoid in tests: none",
             "code_behavior_contract": "Behavior contract:\n- add accepts numeric operands",
             "repair_validation_summary": "Generated test validation:\n- Completion diagnostics: likely truncated at completion limit",
+            "repair_helper_surface_usages": ["RiskScoringService (line 33)"],
+            "repair_helper_surface_symbols": ["RiskScoringService"],
         },
     )
 
@@ -254,6 +256,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "add accepts numeric operands" in agent.last_user_message
     assert "Previous validation summary:" in agent.last_user_message
     assert "Completion diagnostics: likely truncated at completion limit" in agent.last_user_message
+    assert "Flagged helper surfaces to remove during repair:" in agent.last_user_message
+    assert "Flagged helper-surface references from validation:" in agent.last_user_message
     assert "hard blocker" in agent.last_user_message
     assert "def add(a, b):" in agent.last_user_message
     assert "Import from `math_utils`" in agent.last_user_message
@@ -296,6 +300,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Do not import or instantiate CLI wrapper classes such as names ending in `CLI` or `Cli`" in agent.last_user_message
     assert "If the previous suite already passed static validation and only failed at pytest runtime" in agent.last_user_message
     assert "If the previous validation summary reports undefined local names or undefined fixtures" in agent.last_user_message
+    assert "If the previous validation summary reports helper surface usages" in agent.last_user_message
+    assert "If flagged helper surfaces are listed below" in agent.last_user_message
     assert "Treat the current implementation artifact and API contract as fixed ground truth during repair" in agent.last_user_message
     assert "Write complete pytest code only; do not stop mid-test, mid-string, or mid-fixture." in agent.last_system_prompt
     assert "Do not import `main`, CLI/demo entrypoints" in agent.last_system_prompt
@@ -322,6 +328,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Do not use mock-style bookkeeping assertions such as `.call_count` or `.assert_called_once()`" in agent.last_system_prompt
     assert "When repairing a previously generated suite that already passed static validation" in agent.last_system_prompt
     assert "If the previous validation summary reports undefined local names or undefined fixtures" in agent.last_system_prompt
+    assert "If the previous validation summary reports helper surface usages" in agent.last_system_prompt
+    assert "If flagged helper surfaces are provided separately in the repair context" in agent.last_system_prompt
     assert "Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types" in agent.last_system_prompt
     assert "do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities" in agent.last_system_prompt
     assert "every non-built-in fixture used by a test is defined in the same file" in agent.last_user_message
@@ -336,6 +344,8 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "validator units, scorer units, dataclass serialization, audit logger wrappers" in agent.last_user_message
     assert "if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure" in agent.last_user_message
     assert "you did not invent replacement API names, response-wrapper classes, alternate validators, or alternate constructor signatures during repair" in agent.last_user_message
+    assert "if the validation summary reported helper surface usages, you deleted every import, fixture, helper variable, and top-level test" in agent.last_user_message
+    assert "if flagged helper surfaces were listed below, none of those names reappear" in agent.last_user_message
     assert "rewrote the full pytest file from the top instead of appending a partial continuation" in agent.last_user_message
     assert "you reduced non-essential comments, blank lines, optional fixtures, and helper scaffolding" in agent.last_user_message
     assert "stay on the main service or batch API" in agent.last_user_message
@@ -478,6 +488,8 @@ def test_qa_tester_run_uses_context_module_contract(tmp_path):
             "code_outline": "def run():",
             "code_public_api": "Functions:\n- run()\nClasses:\n- none",
             "existing_tests": "def test_old():\n    assert True",
+            "repair_helper_surface_usages": ["RiskScoringService (line 33)"],
+            "repair_helper_surface_symbols": ["RiskScoringService"],
         },
     )
 
@@ -489,6 +501,7 @@ def test_qa_tester_run_uses_context_module_contract(tmp_path):
     assert "def test_old():" in agent.last_user_message
     assert "Repair the existing pytest file above when it is provided." in agent.last_user_message
     assert "remove or rewrite those constructor calls instead of preserving guessed helper wiring" in agent.last_user_message
+    assert "Flagged helper surfaces to remove during repair:" in agent.last_user_message
     assert "Import from `service_module`" in agent.last_user_message
     assert "If you assert an exact numeric value, use trivially countable inputs" in agent.last_user_message
     assert "never use prose sample text for that assertion" in agent.last_user_message

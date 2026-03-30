@@ -224,6 +224,7 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
                 "Never define a custom fixture named `request`; pytest reserves that name. Use inline setup or a specific fixture name instead. "
                 "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test installs the exact mock or patch target first. "
                 "If repair feedback reports undefined local names or undefined fixtures, remove or rewrite those offending helper tests instead of preserving them. "
+                "If repair feedback reports helper surface usages, delete those helper-surface imports, fixtures, helper variables, and top-level tests instead of preserving or repairing them in place. "
                 "If you need an exact numeric assertion, use trivially countable inputs rather than prose strings; otherwise prefer stable non-exact assertions. "
                 "If you assert derived categorical score bands or levels, avoid threshold boundary values unless the contract explicitly defines those cutoffs; use comfortably in-band inputs or non-boundary assertions instead. "
                 "If an exact numeric assertion depends on string length, modulo, or counts, use repeated-character or similarly obvious inputs rather than natural-language sample text. "

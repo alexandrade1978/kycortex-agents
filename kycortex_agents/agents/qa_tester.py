@@ -36,6 +36,8 @@ Do not instantiate helper validators, scorers, loggers, dataclasses, or batch pr
 When repairing a previously generated suite that already passed static validation, preserve the existing imported symbols, constructor shapes, fixture payload structure, and scenario skeleton unless the validation summary explicitly identifies one of those pieces as invalid.
 When the previous validation summary reports constructor arity mismatches, treat those constructor calls as invalid and remove or rewrite them instead of preserving them from the earlier suite.
 If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in the rewritten file. In a compact suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
+If the previous validation summary reports helper surface usages, delete every import, fixture, helper variable, and top-level test that references those helper surfaces. Do not repair those helper-surface tests in place.
+If flagged helper surfaces are provided separately in the repair context, treat those names as banned in the rewritten file unless the public API contract explicitly makes them the primary surface under test.
 Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
 Do not invent alternate field names, sample payload shapes, return structures, or exception messages.
 Do not reference pytest fixtures unless you define them in the same file or they are standard built-in pytest fixtures.
@@ -70,6 +72,42 @@ class QATesterAgent(BaseAgent):
     def __init__(self, config: KYCortexConfig):
         super().__init__("QATester", "Quality Assurance & Testing", config)
 
+    @staticmethod
+    def _normalized_helper_surface_symbols(raw_values: object) -> list[str]:
+        if not isinstance(raw_values, list):
+            return []
+
+        seen: set[str] = set()
+        symbols: list[str] = []
+        for value in raw_values:
+            if not isinstance(value, str):
+                continue
+            symbol = value.split(" (line ", 1)[0].strip()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            symbols.append(symbol)
+        return symbols
+
+    def _repair_helper_surface_block(self, context: dict) -> str:
+        raw_usages = context.get("repair_helper_surface_usages")
+        usages = [item.strip() for item in raw_usages if isinstance(item, str) and item.strip()] if isinstance(raw_usages, list) else []
+        symbols = self._normalized_helper_surface_symbols(context.get("repair_helper_surface_symbols"))
+        if not symbols:
+            symbols = self._normalized_helper_surface_symbols(usages)
+        if not usages and not symbols:
+            return ""
+
+        lines = ["", "Flagged helper surfaces to remove during repair:"]
+        if symbols:
+            lines.append(f"    {', '.join(symbols)}")
+        if usages:
+            lines.extend([
+                "Flagged helper-surface references from validation:",
+                f"    {', '.join(usages)}",
+            ])
+        return "\n".join(lines)
+
     def run_with_input(self, agent_input: AgentInput) -> str:
         implementation_code = self.require_context_value(agent_input, "code")
         existing_tests = agent_input.context.get("existing_tests", "")
@@ -81,6 +119,7 @@ class QATesterAgent(BaseAgent):
         code_test_targets = agent_input.context.get("code_test_targets", "")
         code_behavior_contract = agent_input.context.get("code_behavior_contract", "")
         repair_validation_summary = agent_input.context.get("repair_validation_summary", "")
+        repair_helper_surface_block = self._repair_helper_surface_block(agent_input.context)
         user_msg = f"""Project: {agent_input.project_name}
     Project goal: {agent_input.project_goal}
     Implementation summary: {code_summary}
@@ -101,7 +140,7 @@ Repair the existing pytest file above when it is provided. Preserve every valid 
 If the previous validation summary lists constructor arity mismatches, remove or rewrite those constructor calls instead of preserving guessed helper wiring from the old suite.
 
 Previous validation summary:
-    {repair_validation_summary}
+    {repair_validation_summary}{repair_helper_surface_block}
 
 If the previous validation summary lists any failures, treat every listed issue as a hard blocker and fix each one in this new file.
 
@@ -147,6 +186,8 @@ Import from `{module_name}` and test the actual public functions and classes fro
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
     If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in this rewritten file. In a compact workflow suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
+    If the previous validation summary reports helper surface usages, delete every import, fixture, helper variable, and top-level test that references those helper surfaces. Do not repair those helper-surface tests in place.
+    If flagged helper surfaces are listed below, treat those names as banned in the rewritten file unless the public API contract explicitly makes them the primary surface under test.
     Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
     Before you finalize, verify this checklist against your own output:
     - every imported production symbol exists in the API contract
@@ -173,6 +214,8 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - in a compact high-level workflow suite, you did not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly named them
     - if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure unless the validation summary explicitly marked them invalid
     - if the validation summary reported undefined local names or undefined fixtures, you removed or rewrote those tests unless you explicitly imported or defined the missing names
+    - if the validation summary reported helper surface usages, you deleted every import, fixture, helper variable, and top-level test that referenced those helper surfaces instead of preserving them
+    - if flagged helper surfaces were listed below, none of those names reappear in imports, fixtures, helper variables, or tests unless the API contract explicitly makes them the primary surface under test
     - you did not define a custom fixture named `request`
     - every non-built-in fixture used by a test is defined in the same file
     - every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization
@@ -203,6 +246,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
         code_test_targets = context.get("code_test_targets", "")
         code_behavior_contract = context.get("code_behavior_contract", "")
         repair_validation_summary = context.get("repair_validation_summary", "")
+        repair_helper_surface_block = self._repair_helper_surface_block(context)
         user_msg = f"""Implementation summary: {code_summary}
     Implementation code:
     {implementation_code}
@@ -221,7 +265,7 @@ Repair the existing pytest file above when it is provided. Preserve every valid 
 If the previous validation summary lists constructor arity mismatches, remove or rewrite those constructor calls instead of preserving guessed helper wiring from the old suite.
 
 Previous validation summary:
-    {repair_validation_summary}
+    {repair_validation_summary}{repair_helper_surface_block}
 
 If the previous validation summary lists any failures, treat every listed issue as a hard blocker and fix each one in this new file.
 
@@ -267,6 +311,8 @@ Import from `{module_name}` and test the actual public functions and classes fro
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
     If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in this rewritten file. In a compact workflow suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
+    If the previous validation summary reports helper surface usages, delete every import, fixture, helper variable, and top-level test that references those helper surfaces. Do not repair those helper-surface tests in place.
+    If flagged helper surfaces are listed below, treat those names as banned in the rewritten file unless the public API contract explicitly makes them the primary surface under test.
     Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
     Before you finalize, verify this checklist against your own output:
     - every imported production symbol exists in the API contract
@@ -292,6 +338,8 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - in a compact high-level workflow suite, you did not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly named them
     - if the previous suite already passed static validation, you preserved valid imports, constructor signatures, fixture payload shapes, and scenario structure unless the validation summary explicitly marked them invalid
     - if the validation summary reported undefined local names or undefined fixtures, you removed or rewrote those tests unless you explicitly imported or defined the missing names
+    - if the validation summary reported helper surface usages, you deleted every import, fixture, helper variable, and top-level test that referenced those helper surfaces instead of preserving them
+    - if flagged helper surfaces were listed below, none of those names reappear in imports, fixtures, helper variables, or tests unless the API contract explicitly makes them the primary surface under test
     - you did not define a custom fixture named `request`
     - every non-built-in fixture used by a test is defined in the same file
     - every test function argument is either a built-in fixture, a locally defined fixture, or a name introduced by the matching parametrization

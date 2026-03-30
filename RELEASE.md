@@ -1,11 +1,12 @@
 # Release Guide
 
-This document describes the repository-owned release procedure for KYCortex 1.0.0 and later maintenance releases.
+This document describes the repository-owned release procedure for KYCortex 1.0.0 and later maintenance releases, including alpha-style pre-releases.
 
 ## Preconditions
 
 - Work from a clean checkout of `main`.
 - Confirm the version in `pyproject.toml` is the version you intend to tag.
+- For alpha or other pre-releases, use a PEP 440 package version such as `1.0.13a1` and push the matching Git tag `v1.0.13a1`.
 - Confirm `CHANGELOG.md` and `MIGRATION.md` reflect the release you intend to publish.
 - Confirm `README.md`, `COMMERCIAL_LICENSE.md`, and related contributor guidance reflect any licensing-policy changes included in the release.
 - Confirm the current release checklist in `.local-docs/release-checklist.md` has been reviewed.
@@ -45,7 +46,7 @@ The release workflow at `.github/workflows/release.yml` will:
 1. Re-run repository validation.
 2. Build the wheel and source distribution.
 3. Upload the distribution artifacts.
-4. Publish the GitHub release for the pushed tag.
+4. Publish the GitHub release for the pushed tag, marking alpha, beta, and release-candidate tags as GitHub pre-releases.
 
 ## Post-Tag Verification
 

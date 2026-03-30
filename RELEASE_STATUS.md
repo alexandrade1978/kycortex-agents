@@ -1,12 +1,12 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.12 maintenance release.
+This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.13a1 alpha release.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.12`
-- Latest released version: `1.0.12`
-- Release tag for this version: `v1.0.12`
+- Package version in `pyproject.toml`: `1.0.13a1`
+- Latest released version: `1.0.13a1`
+- Release tag for this version: `v1.0.13a1`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -30,9 +30,9 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Latest Published Release Verification
 
-- `v1.0.12` is the current release tag associated with this repository-owned release state.
-- The immediately preceding published state `v1.0.11` is now the previous maintenance baseline.
-- Expected attached assets remain `kycortex_agents-1.0.12-py3-none-any.whl` and `kycortex_agents-1.0.12.tar.gz`.
+- `v1.0.13a1` is the current alpha release tag associated with this repository-owned release state.
+- The immediately preceding published state `v1.0.12` is now the previous maintenance baseline.
+- Expected attached assets remain `kycortex_agents-1.0.13a1-py3-none-any.whl` and `kycortex_agents-1.0.13a1.tar.gz`.
 
 ## Current Release Validation Snapshot
 
@@ -41,14 +41,15 @@ This file tracks the current repository-owned release state for KYCortex during 
 - The focused empirical rerun `output/provider_matrix_validation_step3r_openai` completed with `repair_cycle_count=0`, closing the remaining residual OpenAI repair observed after `step3q`.
 - Public docs and examples now align on the validated local Ollama baseline `qwen2.5-coder:7b` with `ollama_num_ctx=16384`, using explicit HTTP endpoint overrides when the runtime is not exposed at the default local URL.
 - Clean-environment GitHub Actions validation is restored after the provider-matrix budget regression test was updated to inject its own fake OpenAI credential instead of depending on ambient developer-shell secrets.
+- The live local smoke run `output/release_user_smoke_ollama_live` completed with `repair_cycle_count=0`, and a clean-install smoke of the released package also generated a valid artifact against the same local Ollama runtime.
 
 ## Release Outcome
 
-The 1.0.12 maintenance-development state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs.
+The 1.0.13a1 alpha-release state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs.
 
 The repository's public licensing guidance continues to document the AGPL open-source distribution together with a separate commercial licensing path.
 
-The current maintenance branch now documents and validates explicit Ollama runtime overrides, the dedicated local Ollama empirical baseline, stronger QA/test repair constraints, code-repair routing that consumes the failing pytest suite as concrete repair evidence, and deterministic clean-environment CI validation for the provider-matrix budget regression surface.
+The current alpha branch now documents and validates explicit Ollama runtime overrides, the dedicated local Ollama empirical baseline, stronger QA/test repair constraints, code-repair routing that consumes the failing pytest suite as concrete repair evidence, deterministic clean-environment CI validation for the provider-matrix budget regression surface, and a user-style live release smoke path.
 
 Use the following repository-owned references when validating follow-up maintenance releases:
 

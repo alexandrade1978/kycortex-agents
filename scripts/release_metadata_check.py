@@ -16,12 +16,25 @@ def _read_text(relative_path: str) -> str:
     return PROJECT_ROOT.joinpath(relative_path).read_text(encoding="utf-8")
 
 
-def _parse_semver(value: str) -> tuple[int, int, int]:
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", value)
+def _parse_version(value: str) -> tuple[int, int, int, int, int]:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?", value)
     if match is None:
-        raise ValueError(f"invalid semantic version: {value}")
+        raise ValueError(f"invalid package version: {value}")
 
-    return tuple(int(part) for part in match.groups())
+    major, minor, patch, prerelease_label, prerelease_number = match.groups()
+    prerelease_order = {
+        None: 3,
+        "rc": 2,
+        "b": 1,
+        "a": 0,
+    }
+    return (
+        int(major),
+        int(minor),
+        int(patch),
+        prerelease_order[prerelease_label],
+        int(prerelease_number) if prerelease_number is not None else 0,
+    )
 
 
 def main() -> int:
@@ -52,7 +65,7 @@ def main() -> int:
 
     if target_version_match is not None:
         target_version = target_version_match.group(1)
-        if _parse_semver(target_version) <= _parse_semver(project_version):
+        if _parse_version(target_version) <= _parse_version(project_version):
             raise ValueError(
                 f"release target {target_version} must be greater than current package version {project_version}"
             )

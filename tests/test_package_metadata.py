@@ -41,7 +41,7 @@ def test_pyproject_contains_expected_package_metadata():
     assert project["authors"] == [{"name": "Alexandre Andrade", "email": "alex@kycortex.com"}]
     assert project["license"] == "AGPL-3.0-only"
     assert project["license-files"] == ["LICENSE"]
-    assert "Development Status :: 5 - Production/Stable" in project["classifiers"]
+    assert "Development Status :: 3 - Alpha" in project["classifiers"]
     assert "Typing :: Typed" in project["classifiers"]
     assert "License :: OSI Approved :: GNU Affero General Public License v3" not in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
@@ -503,7 +503,10 @@ def test_changelog_documents_current_release_scope():
     assert "make release-metadata-check" in changelog
     assert "GitHub release automation" in changelog
     assert "Python 3.10 CI hardening" in changelog
-    assert f"Version `{version}` is now the released package baseline." in changelog
+    assert (
+        f"Version `{version}` is now the released alpha package baseline." in changelog
+        or f"Version `{version}` is now the released package baseline." in changelog
+    )
     assert "shipped `1.0.0` baseline" in changelog
     assert "commercial licensing path" in changelog
 
@@ -533,7 +536,7 @@ def test_release_metadata_check_script_validates_version_and_release_docs_alignm
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "release_metadata_check.py"
     script = script_path.read_text(encoding="utf-8")
 
-    assert "def _parse_semver" in script
+    assert "def _parse_version" in script
     assert '"pyproject.toml"' in script
     assert '"kycortex_agents/__init__.py"' in script
     assert '"RELEASE.md"' in script

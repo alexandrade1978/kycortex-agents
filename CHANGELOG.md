@@ -6,6 +6,16 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ## Unreleased
 
+### Changed
+
+- Provider-matrix code-generation guidance now explicitly rejects constant-success validators, placeholder constant scores, and hidden score caps unless the behavior contract requires them.
+- Provider-matrix QA guidance and task descriptions now require staying comfortably under fixture budgets and avoiding exact categorical score assertions at threshold boundaries unless the contract defines those cutoffs.
+
+### Validation Notes
+
+- Focused prompt and provider-matrix regressions passed with `44` tests after the guidance hardening.
+- The focused empirical rerun `output/provider_matrix_validation_step3q` completed for OpenAI and Ollama, improving Ollama from `repair_cycle_count=1` in `step3o` to `repair_cycle_count=0` while leaving a single residual OpenAI repair tied to code-side boolean-flag truthiness during batch scoring.
+
 ## 1.0.11 - 2026-03-30
 
 ### Added

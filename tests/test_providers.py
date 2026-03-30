@@ -465,6 +465,79 @@ def test_probe_provider_health_does_not_cache_ready_snapshot(tmp_path, monkeypat
     assert second_snapshot["cooldown_cached"] is False
 
 
+def test_probe_provider_health_rechecks_after_cached_snapshot_expires(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token",
+        provider_health_check_cooldown_seconds=10.0,
+    )
+    provider_calls: list[str] = []
+
+    class FlakyProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+        def health_check(self) -> dict[str, object]:
+            provider_calls.append("health")
+            if len(provider_calls) == 1:
+                raise ProviderTransientError("temporary outage")
+            return {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "status": "healthy",
+                "active_check": True,
+            }
+
+    monkeypatch.setattr(
+        "kycortex_agents.providers.factory.create_provider",
+        lambda runtime_config: FlakyProvider(),
+    )
+    timestamps = iter([100.0, 100.2, 111.0, 111.3])
+    monkeypatch.setattr("kycortex_agents.providers.factory.perf_counter", lambda: next(timestamps))
+
+    first_snapshot = probe_provider_health(config)
+    second_snapshot = probe_provider_health(config)
+
+    assert provider_calls == ["health", "health"]
+    assert first_snapshot["status"] == "degraded"
+    assert second_snapshot["status"] == "healthy"
+    assert second_snapshot["cooldown_cached"] is False
+
+
+def test_probe_provider_health_fills_missing_snapshot_defaults(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="openai", api_key="token")
+
+    class SparseProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+        def health_check(self) -> dict[str, object]:
+            return {
+                "provider": None,
+                "model": None,
+                "status": None,
+                "active_check": None,
+                "retryable": None,
+            }
+
+    monkeypatch.setattr(
+        "kycortex_agents.providers.factory.create_provider",
+        lambda runtime_config: SparseProvider(),
+    )
+
+    snapshot = probe_provider_health(config)
+
+    assert snapshot["provider"] == "openai"
+    assert snapshot["model"] == "gpt-4o"
+    assert snapshot["status"] == "ready"
+    assert snapshot["active_check"] is False
+    assert snapshot["retryable"] is False
+    assert snapshot["cooldown_cached"] is False
+
+
 def test_openai_provider_returns_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(response=build_response("ok")))
@@ -525,6 +598,38 @@ def test_openai_provider_health_check_returns_structured_success_snapshot(tmp_pa
     assert snapshot["model_ready"] is True
     assert snapshot["timeout_seconds"] == 5.0
     assert snapshot["latency_ms"] >= 0
+
+
+def test_openai_provider_lists_model_ids_from_multiple_payload_shapes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), api_key="token")
+    provider = OpenAIProvider(config, client=build_client(response=build_response("ok")))
+
+    assert provider._listed_model_ids(
+        SimpleNamespace(
+            data={
+                "data": [
+                    "gpt-4o",
+                    SimpleNamespace(id="gpt-4.1"),
+                    {"name": "gpt-4o-mini"},
+                    {"id": 3},
+                    object(),
+                ]
+            }
+        )
+    ) == {"gpt-4o", "gpt-4.1", "gpt-4o-mini"}
+    assert provider._listed_model_ids("gpt-4o") == set()
+
+
+def test_openai_provider_health_check_falls_back_to_base_snapshot_when_models_api_is_missing(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), api_key="token")
+    provider = OpenAIProvider(config, client=SimpleNamespace())
+
+    assert provider.health_check() == {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "status": "ready",
+        "active_check": False,
+    }
 
 
 def test_openai_provider_health_check_reports_configured_model_not_ready(tmp_path):
@@ -744,6 +849,38 @@ def test_anthropic_provider_health_check_returns_structured_success_snapshot(tmp
     assert snapshot["latency_ms"] >= 0
 
 
+def test_anthropic_provider_lists_model_ids_from_multiple_payload_shapes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token")
+    provider = AnthropicProvider(config, client=build_anthropic_client(response=SimpleNamespace()))
+
+    assert provider._listed_model_ids(
+        SimpleNamespace(
+            data={
+                "data": [
+                    "claude-3-5-sonnet",
+                    SimpleNamespace(id="claude-4-opus"),
+                    {"id": "claude-3-haiku"},
+                    {"name": 7},
+                    object(),
+                ]
+            }
+        )
+    ) == {"claude-3-5-sonnet", "claude-4-opus", "claude-3-haiku"}
+    assert provider._listed_model_ids(b"claude-3-5-sonnet") == set()
+
+
+def test_anthropic_provider_health_check_falls_back_to_base_snapshot_when_models_api_is_missing(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token")
+    provider = AnthropicProvider(config, client=SimpleNamespace())
+
+    assert provider.health_check() == {
+        "provider": "anthropic",
+        "model": "gpt-4o",
+        "status": "ready",
+        "active_check": False,
+    }
+
+
 def test_anthropic_provider_health_check_reports_configured_model_not_ready(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -870,6 +1007,35 @@ def test_ollama_provider_health_check_reports_configured_model_not_ready(tmp_pat
     assert snapshot["model_ready"] is False
     assert snapshot["error_type"] == "AgentExecutionError"
     assert "did not confirm configured model 'llama3'" in snapshot["error_message"]
+
+
+def test_ollama_provider_health_check_rejects_invalid_json_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(config, request_opener=build_ollama_opener(payload="not-json"))
+
+    with pytest.raises(AgentExecutionError, match="invalid JSON response"):
+        provider.health_check()
+
+
+def test_ollama_provider_health_check_rejects_non_mapping_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(config, request_opener=build_ollama_opener(payload='["not-a-dict"]'))
+
+    with pytest.raises(AgentExecutionError, match="invalid payload shape"):
+        provider.health_check()
+
+
+def test_ollama_provider_health_check_ignores_non_mapping_model_entries(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload='{"models": ["skip-me", {"name": 9}, {"name": "llama3:latest"}]}'),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["status"] == "healthy"
+    assert snapshot["model_ready"] is True
 
 
 def test_anthropic_provider_treats_client_4xx_errors_as_deterministic(tmp_path):

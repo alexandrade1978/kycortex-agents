@@ -621,6 +621,35 @@ def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
         orchestrator._validate_task_output(task, {}, output)
 
 
+def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="code", raw_content="def run():\n    return 1\n")
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write one module under 1 line.",
+        assigned_to="code_engineer",
+    )
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_analyze_python_module",
+        lambda *args, **kwargs: {"syntax_ok": True, "has_main_guard": True, "third_party_imports": []},
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_completion_diagnostics_from_output",
+        lambda *args, **kwargs: {"likely_truncated": True, "hit_token_limit": True},
+    )
+
+    with pytest.raises(
+        AgentExecutionError,
+        match="line count 2 exceeds maximum 1; output likely truncated at the completion token limit",
+    ):
+        orchestrator._validate_code_output(output, task=task)
+
+
 def test_classify_task_failure_returns_workflow_definition_for_definition_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1009,6 +1038,18 @@ def test_build_code_validation_summary_includes_line_count_and_cli_requirement(t
 
     assert "Line count: 176/260" in summary
     assert "CLI entrypoint present: no (required by task)" in summary
+
+
+def test_build_code_validation_summary_includes_line_count_without_budget(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_validation_summary(
+        {"syntax_ok": True, "line_count": 12, "third_party_imports": []},
+        "",
+    )
+
+    assert "Line count: 12" in summary
 
 
 def test_build_repair_validation_summary_falls_back_when_validation_payload_shape_is_unusable(tmp_path):
@@ -2137,6 +2178,47 @@ def test_validate_test_output_rejects_top_level_test_count_maximum(tmp_path, mon
         )
 
 
+def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="tests", raw_content="def test_one():\n    assert True\n")
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests with at most 1 fixture.",
+        assigned_to="qa_tester",
+    )
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_analyze_test_module",
+        lambda *args, **kwargs: {"syntax_ok": True, "top_level_test_count": 1, "fixture_count": 2},
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_tests",
+        lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_completion_diagnostics_from_output",
+        lambda *args, **kwargs: {"likely_truncated": True, "hit_token_limit": False},
+    )
+
+    with pytest.raises(
+        AgentExecutionError,
+        match="fixture count 2 exceeds maximum 1; output likely truncated before the file ended cleanly",
+    ):
+        orchestrator._validate_test_output(
+            {
+                "module_name": "code_implementation",
+                "code": "def ok():\n    return 1",
+            },
+            output,
+            task=task,
+        )
+
+
 def test_call_argument_value_handles_keywords_constructors_and_non_name_callables(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -2369,6 +2451,389 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
     assert "Pytest failure details: FAILED tests_tests.py::test_add - assert 1 == 2" in failed_summary
     assert "- Pytest summary: 1 failed" in failed_summary
     assert failed_summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_includes_exact_limits_and_fixture_budget(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    exact_summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 2,
+            "expected_top_level_test_count": 2,
+            "fixture_count": 1,
+            "fixture_budget": 1,
+        }
+    )
+    max_summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 2,
+            "max_top_level_test_count": 3,
+            "fixture_count": 1,
+            "fixture_budget": 2,
+        }
+    )
+
+    assert "Top-level test functions: 2/2" in exact_summary
+    assert "Fixture count: 1/1" in exact_summary
+    assert "Top-level test functions: 2/3 max" in max_summary
+
+
+def test_output_and_task_budget_helpers_handle_empty_and_optional_inputs(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._output_line_count("") == 0
+    assert orchestrator._task_requires_cli_entrypoint(None) is False
+    assert orchestrator._task_fixture_budget(
+        Task(id="tests", title="Tests", description="Write at most 3 fixtures.", assigned_to="qa_tester")
+    ) == 3
+
+
+def test_truncation_and_completion_helpers_cover_edge_cases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    class SplitlessStr(str):
+        def strip(self, chars=None):
+            return "content"
+
+        def splitlines(self, keepends=False):
+            return []
+
+    assert orchestrator._looks_structurally_truncated("", "was never closed") is False
+    assert orchestrator._looks_structurally_truncated("value = 1\n", "invalid syntax") is False
+    assert orchestrator._looks_structurally_truncated(SplitlessStr("placeholder"), "was never closed") is False
+    assert orchestrator._looks_structurally_truncated("return 1\n", "was never closed") is False
+    assert orchestrator._looks_structurally_truncated("label:\n", "expected an indented block") is True
+    assert orchestrator._looks_structurally_truncated('value = "unterminated\n', "unterminated string literal") is True
+    assert orchestrator._completion_validation_issue({"hit_token_limit": True}) == (
+        "output likely truncated at the completion token limit"
+    )
+    assert orchestrator._completion_validation_issue({"hit_token_limit": False}) == (
+        "output likely truncated before the file ended cleanly"
+    )
+    assert orchestrator._completion_diagnostics_summary({}) == "none"
+    assert orchestrator._completion_diagnostics_summary(
+        {"done_reason": "length", "requested_max_tokens": 10}
+    ) == "done_reason=length, tokens=unknown/10"
+    assert orchestrator._completion_diagnostics_summary({"done_reason": "stop"}) == "done_reason=stop"
+    assert orchestrator._completion_diagnostics_summary({"output_tokens": 7}) == "tokens=7/unknown"
+    assert orchestrator._pytest_failure_details(None) == []
+
+
+def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    call_node = ast.parse("process_batch(requests)", mode="eval").body
+
+    assert orchestrator._call_has_negative_expectation(None, {}) is False
+    assert orchestrator._call_has_negative_expectation(
+        call_node,
+        orchestrator._parent_map(ast.parse("process_batch(requests)")),
+    ) is False
+    assert orchestrator._batch_call_allows_partial_invalid_items(
+        ast.parse("def test_case():\n    result = process_batch(requests)\n").body[0],
+        ast.parse("process_batch(requests)", mode="eval").body,
+        {},
+        {},
+    ) is False
+    ann_assign_module = ast.parse("results: list[str] = process_batch(requests)")
+    ann_assign = ann_assign_module.body[0]
+    parent_map = orchestrator._parent_map(ann_assign_module)
+    assert orchestrator._assigned_name_for_call(ann_assign.value, parent_map) == "results"
+    assert orchestrator._assigned_name_for_call(call_node, {}) is None
+    assert orchestrator._assert_limits_batch_result(
+        ast.parse("1 > len(results)", mode="eval").body,
+        "results",
+        call_node,
+        3,
+    ) is True
+    assert orchestrator._assert_limits_batch_result(ast.parse("len(results)", mode="eval").body, "results", call_node, 3) is False
+    assert orchestrator._assert_limits_batch_result(ast.parse("count == 1", mode="eval").body, "results", call_node, 3) is False
+    assert orchestrator._len_call_matches_batch_result(ast.Name("results"), "results", call_node) is False
+    assert orchestrator._len_call_matches_batch_result(ast.parse("count(results)", mode="eval").body, "results", call_node) is False
+    direct_len = ast.parse("len(process_batch(requests))", mode="eval").body
+    assert orchestrator._len_call_matches_batch_result(direct_len, None, direct_len.args[0]) is True
+    assert orchestrator._int_constant_value(ast.Constant("x")) is None
+    assert orchestrator._comparison_implies_partial_batch_result(ast.Gt(), 1, 3) is False
+    assert orchestrator._comparison_implies_partial_batch_result(ast.Lt(), 3, 3) is True
+    assert orchestrator._comparison_implies_partial_batch_result(ast.LtE(), 2, 3) is True
+    assert orchestrator._comparison_implies_partial_batch_result(ast.Eq(), None, 3) is False
+    false_compare = ast.parse("assert False == validate_request(data)").body[0]
+    assert orchestrator._assert_expects_false(false_compare, false_compare.test.comparators[0]) is True
+    plain_assert = ast.parse("assert validate_request(data)").body[0]
+    assert orchestrator._assert_expects_false(plain_assert, plain_assert.test) is False
+    unrelated_compare = ast.parse("assert other_result == False").body[0]
+    assert orchestrator._assert_expects_false(unrelated_compare, call_node) is False
+    with_node = ast.parse("with context_manager:\n    validate_request(data)\n").body[0]
+    assert orchestrator._with_uses_pytest_raises(with_node) is False
+    warns_with_node = ast.parse("with pytest.warns(ValueError):\n    validate_request(data)\n").body[0]
+    assert orchestrator._with_uses_pytest_raises(warns_with_node) is False
+
+
+def test_batch_partial_invalid_detection_returns_false_when_asserts_do_not_limit_batch(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    tree = ast.parse(
+        "def test_batch():\n"
+        "    result = process_batch([1, 2, 3])\n"
+        "    assert len(other) == 3\n"
+    )
+    function_node = tree.body[0]
+    call_node = function_node.body[0].value
+    parent_map = orchestrator._parent_map(tree)
+
+    assert orchestrator._batch_call_allows_partial_invalid_items(function_node, call_node, {}, parent_map) is False
+
+
+def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    assert orchestrator._collect_module_defined_names(ast.Constant(1)) == set()
+    assert orchestrator._collect_module_defined_names(ast.parse("annotated_only: int\n")) == {"annotated_only"}
+    assert orchestrator._collect_module_defined_names(ast.parse("42\nannotated_only: int\n")) == {"annotated_only"}
+    module_tree = ast.parse(
+        "from pkg import *\n"
+        "import os as operating_system\n"
+        "value = 1\n"
+        "annotated: int = 2\n"
+        "holder.value: int = 3\n"
+    )
+    assert orchestrator._collect_module_defined_names(module_tree) == {"operating_system", "value", "annotated"}
+
+    function_node = ast.parse(
+        "@plain\n"
+        "@pytest.mark.skip(reason='ignored')\n"
+        "@custom.parametrize('ignored', [1])\n"
+        "@pytest.mark.parametrize(argnames=['left', 'right'], argvalues=[(1, 2)])\n"
+        "def test_sample(base, *args, **kwargs):\n"
+        "    total: int = 0\n"
+        "    total += 1\n"
+        "    for item in items:\n"
+        "        pass\n"
+        "    with manager() as handle:\n"
+        "        pass\n"
+        "    try:\n"
+        "        raise ValueError()\n"
+        "    except ValueError as err:\n"
+        "        pass\n"
+        "    if (captured := base):\n"
+        "        pass\n"
+        "    values = [entry for entry in source]\n"
+        "    import math as mathematics\n"
+        "    from os import path as os_path\n"
+        "    from os import *\n"
+        "    helper = lambda value: missing\n"
+        "    def nested():\n"
+        "        return missing\n"
+        "    class Nested:\n"
+        "        attr = missing\n"
+    ).body[0]
+    class_init = ast.parse(
+        "def __init__(self):\n"
+        "    self.value: int = 1\n"
+    ).body[0]
+    class_init_with_local = ast.parse(
+        "def __init__(self):\n"
+        "    self.value: int = 1\n"
+        "    local = 2\n"
+    ).body[0]
+
+    assert orchestrator._function_argument_names(function_node) == {"base", "args", "kwargs"}
+    assert orchestrator._collect_parametrized_argument_names(function_node) == {"left", "right"}
+    bindings = orchestrator._collect_local_name_bindings(function_node)
+    assert {
+        "total",
+        "item",
+        "handle",
+        "err",
+        "captured",
+        "entry",
+        "mathematics",
+        "os_path",
+        "values",
+    } <= bindings
+    assert "missing" not in orchestrator._collect_undefined_local_names(function_node, {"items", "manager", "source"})
+    assert orchestrator._self_assigned_attributes(class_init) == ["value"]
+    assert orchestrator._self_assigned_attributes(class_init_with_local) == ["value"]
+    starred_target = ast.parse("first, *rest = values").body[0].targets[0]
+    assert orchestrator._bound_target_names(starred_target) == {"first", "rest"}
+    assert orchestrator._bound_target_names(ast.Attribute(value=ast.Name("obj"), attr="field")) == set()
+
+
+def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    class_map = {
+        "Request": {
+            "attributes": ["request_id"],
+            "fields": [],
+            "is_enum": False,
+            "method_signatures": {},
+        },
+        "Service": {
+            "attributes": [],
+            "fields": [],
+            "is_enum": False,
+            "method_signatures": {
+                "fetch": {"min_args": 1, "max_args": 2, "return_annotation": "Request"},
+                "untyped": {"min_args": None, "max_args": None, "return_annotation": "Request"},
+                "range_fetch": {"min_args": 1, "max_args": 2, "return_annotation": "Request"},
+            },
+        },
+    }
+    function_map = {
+        "build_request": {"return_annotation": "Request"},
+        "build_text": {"return_annotation": "str"},
+    }
+    test_node = ast.parse(
+        "def test_case():\n"
+        "    request: Request = build_request()\n"
+        "    text: str = build_text()\n"
+        "    service = Service()\n"
+        "    returned = service.fetch({'request_id': 'req-1'})\n"
+        "    service.untyped('x')\n"
+        "    service.range_fetch(1, 2, 3)\n"
+        "    service.missing()\n"
+        "    assert returned.invalid == 1\n"
+    ).body[0]
+
+    local_types = orchestrator._collect_test_local_types(test_node, class_map, function_map)
+
+    assert local_types["request"] == "Request"
+    assert local_types["service"] == "Service"
+    assert local_types["returned"] == "Request"
+    assert "text" not in local_types
+    assert orchestrator._infer_call_result_type(
+        ast.parse("build_text()", mode="eval").body,
+        {},
+        class_map,
+        function_map,
+    ) is None
+    assert orchestrator._infer_call_result_type(
+        ast.parse("missing_factory()", mode="eval").body,
+        {},
+        class_map,
+        function_map,
+    ) is None
+    assert orchestrator._infer_call_result_type(
+        ast.parse("factory().fetch()", mode="eval").body,
+        {},
+        class_map,
+        function_map,
+    ) is None
+    assert orchestrator._infer_call_result_type(
+        ast.parse("service.fetch()", mode="eval").body,
+        {},
+        class_map,
+        function_map,
+    ) is None
+    assert orchestrator._infer_call_result_type(
+        ast.parse("service.unknown()", mode="eval").body,
+        {"service": "Service"},
+        class_map,
+        function_map,
+    ) is None
+
+    invalid_refs, arity_mismatches = orchestrator._analyze_typed_test_member_usage(test_node, local_types, class_map)
+
+    assert invalid_refs == ["Request.invalid (line 9)", "Service.missing (line 8)"]
+    assert arity_mismatches == ["Service.range_fetch expects 1-2 args but test uses 3 at line 7"]
+
+
+def test_analyze_typed_test_member_usage_treats_enum_fields_as_invalid_members(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    test_node = ast.parse(
+        "def test_enum_usage():\n"
+        "    status = Status()\n"
+        "    assert status.value == 'ok'\n"
+    ).body[0]
+    local_types = {"status": "Status"}
+    class_map = {
+        "Status": {
+            "attributes": [],
+            "fields": ["value"],
+            "is_enum": True,
+            "method_signatures": {},
+        }
+    }
+
+    invalid_refs, arity_mismatches = orchestrator._analyze_typed_test_member_usage(test_node, local_types, class_map)
+
+    assert invalid_refs == ["Status.value (line 3)"]
+    assert arity_mismatches == []
+
+
+def test_analyze_test_module_reports_constructor_arity_when_limits_fall_back_or_span_range(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "Request": {
+                "name": "Request",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": ["request_id"],
+                "methods": [],
+                "method_signatures": {},
+            },
+            "Envelope": {
+                "name": "Envelope",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": ["left", "right"],
+                "constructor_min_args": 1,
+                "constructor_max_args": 2,
+                "methods": [],
+                "method_signatures": {},
+            },
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["Envelope", "Request"],
+    }
+    test_content = (
+        "from module_under_test import Envelope, Request\n\n"
+        "def test_request_shapes():\n"
+        "    Request()\n"
+        "    Envelope(1, 2, 3)\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["constructor_arity_mismatches"] == [
+        "Envelope expects 1-2 args but test uses 3 at line 5",
+        "Request expects 1 args but test uses 0 at line 4",
+    ]
+
+
+def test_extract_parametrize_argument_names_skips_irrelevant_keywords(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    keyword_decorator = ast.parse(
+        "@pytest.mark.parametrize(values=[1], argnames=['left'])\n"
+        "def test_case():\n"
+        "    pass\n"
+    ).body[0].decorator_list[0]
+    missing_decorator = ast.parse(
+        "@pytest.mark.parametrize(values=[1])\n"
+        "def test_case():\n"
+        "    pass\n"
+    ).body[0].decorator_list[0]
+
+    assert orchestrator._extract_parametrize_argument_names(keyword_decorator) == {"left"}
+    assert orchestrator._extract_parametrize_argument_names(missing_decorator) == set()
 
 
 def test_build_code_behavior_contract_ignores_non_function_class_members(tmp_path):

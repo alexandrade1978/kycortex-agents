@@ -246,6 +246,95 @@ def test_public_type_module_defines_docstrings():
     assert types_module.ProjectSnapshot.__doc__ == "Immutable workflow snapshot consumed by agents, callers, and tests."
 
 
+def test_private_empty_telemetry_helpers_return_zeroed_payloads():
+    assert types_module._empty_metric_distribution() == {
+        "count": 0,
+        "total": 0,
+        "min": None,
+        "max": None,
+        "avg": None,
+    }
+    assert types_module.empty_task_resource_telemetry() == {
+        "has_provider_call": False,
+        "provider": None,
+        "model": None,
+        "task_duration_ms": None,
+        "last_attempt_duration_ms": None,
+        "provider_duration_ms": None,
+        "usage": {},
+    }
+    assert types_module.empty_workflow_telemetry() == {
+        "task_count": 0,
+        "task_status_counts": {},
+        "progress_summary": {
+            "pending_task_count": 0,
+            "running_task_count": 0,
+            "runnable_task_count": 0,
+            "blocked_task_count": 0,
+            "terminal_task_count": 0,
+            "completion_percent": 0,
+        },
+        "tasks_with_provider_calls": 0,
+        "tasks_without_provider_calls": 0,
+        "acceptance_summary": {
+            "policy": None,
+            "accepted": False,
+            "reason": None,
+            "terminal_outcome": None,
+            "failure_category": None,
+            "evaluated_task_count": 0,
+            "required_task_count": 0,
+            "completed_task_count": 0,
+            "failed_task_count": 0,
+            "skipped_task_count": 0,
+            "pending_task_count": 0,
+        },
+        "resume_summary": {
+            "count": 0,
+            "reasons": {},
+            "task_count": 0,
+            "unique_task_count": 0,
+            "unique_task_ids": [],
+            "last_resumed_at": None,
+        },
+        "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 0,
+            "budget_remaining": 0,
+            "history_count": 0,
+            "reasons": {},
+            "last_reason": None,
+            "failure_categories": {},
+            "failed_task_count": 0,
+            "failed_task_ids": [],
+        },
+        "final_providers": [],
+        "observed_providers": [],
+        "provider_summary": {},
+        "provider_health_summary": {},
+        "attempt_count": 0,
+        "retry_attempt_count": 0,
+        "duration_ms": {
+            "count": 0,
+            "total": 0,
+            "min": None,
+            "max": None,
+            "avg": None,
+        },
+        "usage": {},
+        "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "by_provider": {},
+            "by_status": {},
+        },
+        "error_summary": {
+            "final_error_types": {},
+            "fallback_error_types": {},
+        },
+    }
+
+
 def test_public_extension_types_define_class_docstrings():
     assert ProviderBaseLLMProvider.__doc__ == "Abstract provider contract for model-backed agent text generation."
     assert ProviderOpenAIProvider.__doc__ == "OpenAI-backed provider implementation for chat completion models."

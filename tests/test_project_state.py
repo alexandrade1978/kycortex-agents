@@ -1,3 +1,4 @@
+import builtins
 import json
 import sqlite3
 
@@ -803,6 +804,27 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
     }
 
 
+def test_record_workflow_progress_includes_task_status_and_preserves_explicit_provider_budget():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    project._record_execution_event(
+        event="custom",
+        details={"provider_budget": {"remaining_calls": 1}},
+    )
+    telemetry = project.record_workflow_progress(task_id="code", task_status=TaskStatus.RUNNING.value)
+
+    assert project.execution_events[0]["details"]["provider_budget"] == {"remaining_calls": 1}
+    assert project.execution_events[-1]["event"] == "workflow_progress"
+    assert project.execution_events[-1]["task_id"] == "code"
+    assert project.execution_events[-1]["details"]["task_status"] == TaskStatus.RUNNING.value
+    assert project.execution_events[-1]["details"]["workflow_telemetry"] == telemetry
+    assert "provider_budget" in project.execution_events[-1]["details"]
+
+    project.record_workflow_progress(task_id="review")
+
+    assert "task_status" not in project.execution_events[-1]["details"]
+
+
 def test_create_repair_task_records_lineage_and_requeue_audit():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
@@ -1135,6 +1157,41 @@ def test_repair_summary_aggregates_repair_reasons_across_cycles():
     }
 
 
+def test_repair_summary_ignores_malformed_entries_and_non_list_failed_task_ids():
+    project = ProjectState(project_name="Demo", goal="Build demo", repair_max_cycles=5)
+    project.repair_cycle_count = 2
+    project.repair_history = [
+        None,
+        {"reason": 7, "failure_category": ["bad"], "failed_task_ids": "tests"},
+        {
+            "reason": "manual_retry",
+            "failure_category": "test_validation",
+            "failed_task_ids": ["tests", "", None, "code"],
+        },
+    ]
+
+    assert project._repair_summary() == {
+        "cycle_count": 2,
+        "max_cycles": 5,
+        "budget_remaining": 3,
+        "history_count": 2,
+        "reasons": {"manual_retry": 1},
+        "last_reason": "manual_retry",
+        "failure_categories": {"test_validation": 1},
+        "failed_task_count": 2,
+        "failed_task_ids": ["code", "tests"],
+    }
+
+
+def test_provider_attempt_and_retry_helpers_handle_scalar_fallbacks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    assert project._provider_attempt_count({"attempt_history": "bad", "attempts_used": 2.9}) == 2
+    assert project._provider_attempt_count({"attempt_history": "bad", "attempts_used": True}) == 0
+    assert project._provider_retry_attempt_count({"attempt_history": "bad"}, 1) == 0
+    assert project._provider_retry_attempt_count({"attempt_history": "bad"}, 4) == 3
+
+
 def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry():
     project = ProjectState(project_name="Demo", goal="Build demo")
 
@@ -1286,6 +1343,180 @@ def test_snapshot_preserves_failure_category_and_terminal_outcome_fields():
     assert snapshot.acceptance_criteria_met is False
     assert snapshot.task_results["tests"].failure is not None
     assert snapshot.task_results["tests"].failure.category == "test_validation"
+
+
+def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_metadata():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            last_provider_call={
+                "provider": "openai",
+                "success": None,
+                "attempts_used": 1,
+                "duration_ms": 12.5,
+                "usage": {"prompt_tokens": 5},
+                "provider_health": {
+                    "openai": {
+                        "model": None,
+                        "status": None,
+                        "last_outcome": None,
+                        "circuit_breaker_open": True,
+                        "last_failure_retryable": True,
+                        "last_error_type": "TimeoutError",
+                        "last_health_check": {"active_check": True, "cooldown_cached": False},
+                    },
+                    "": {},
+                    "anthropic": "invalid",
+                },
+                "fallback_history": [
+                    None,
+                    {"provider": "", "status": "", "error_type": ""},
+                    {
+                        "provider": "anthropic",
+                        "status": "failed_health_check",
+                        "error_type": "ProviderTransientError",
+                    },
+                ],
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the changes",
+            assigned_to="code_reviewer",
+            status=TaskStatus.FAILED.value,
+            last_provider_call={
+                "provider": None,
+                "success": False,
+                "error_type": "AgentExecutionError",
+                "latency_ms": 20,
+                "usage": {"completion_tokens": 2},
+            },
+        )
+    )
+    project.execution_events.append(
+        {
+            "event": "workflow_resumed",
+            "details": {"reason": "", "task_ids": "not-a-list"},
+        }
+    )
+
+    telemetry = project.snapshot().workflow_telemetry
+
+    assert telemetry["resume_summary"]["count"] == 1
+    assert telemetry["resume_summary"]["reasons"] == {}
+    assert telemetry["resume_summary"]["unique_task_ids"] == []
+    assert telemetry["provider_summary"]["openai"]["task_count"] == 1
+    assert telemetry["provider_summary"]["openai"]["success_count"] == 0
+    assert telemetry["provider_summary"]["openai"]["failure_count"] == 0
+    assert telemetry["provider_summary"]["openai"]["duration_ms"]["count"] == 1
+    assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 5}
+    assert telemetry["provider_health_summary"]["openai"] == {
+        "models": [],
+        "status_counts": {},
+        "last_outcome_counts": {},
+        "circuit_open_count": 1,
+        "retryable_failure_count": 1,
+        "active_health_check_count": 1,
+        "last_error_types": {"TimeoutError": 1},
+    }
+    assert telemetry["final_providers"] == ["openai"]
+    assert telemetry["observed_providers"] == ["anthropic", "openai"]
+    assert telemetry["duration_ms"]["count"] == 2
+    assert telemetry["usage"] == {"completion_tokens": 2, "prompt_tokens": 5}
+    assert telemetry["fallback_summary"] == {
+        "task_count": 1,
+        "entry_count": 3,
+        "by_provider": {"anthropic": 1},
+        "by_status": {"failed_health_check": 1},
+    }
+    assert telemetry["error_summary"] == {
+        "final_error_types": {"AgentExecutionError": 1},
+        "fallback_error_types": {"ProviderTransientError": 1},
+    }
+
+
+def test_workflow_telemetry_summary_filters_invalid_provider_usage_metrics(monkeypatch):
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            last_provider_call={
+                "provider": "openai",
+                "success": True,
+                "usage": {"prompt_tokens": 1},
+            },
+        )
+    )
+    accumulate_calls = {"count": 0}
+
+    def fake_accumulate(target, metrics):
+        accumulate_calls["count"] += 1
+        if accumulate_calls["count"] == 1:
+            target["total_tokens"] = 9.0
+            return
+        target[7] = 2.0
+        target["bool_metric"] = True
+        target["prompt_tokens"] = 3.0
+
+    monkeypatch.setattr(project, "_accumulate_numeric_metrics", fake_accumulate)
+
+    telemetry = project._workflow_telemetry_summary()
+
+    assert telemetry["usage"] == {"total_tokens": 9}
+    assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 3}
+
+
+def test_workflow_telemetry_summary_handles_non_dict_provider_usage_bucket(monkeypatch):
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            last_provider_call={
+                "provider": "openai",
+                "success": True,
+                "usage": {"prompt_tokens": 1},
+            },
+        )
+    )
+    accumulate_calls = {"count": 0}
+
+    def fake_accumulate(target, metrics):
+        accumulate_calls["count"] += 1
+        if accumulate_calls["count"] == 1:
+            target["total_tokens"] = 1.0
+            return
+        target["__sentinel__"] = 1.0
+
+    original_isinstance = builtins.isinstance
+
+    def fake_isinstance(obj, typ):
+        if typ is dict and original_isinstance(obj, dict) and obj.get("__sentinel__") == 1.0:
+            return False
+        return original_isinstance(obj, typ)
+
+    monkeypatch.setattr(project, "_accumulate_numeric_metrics", fake_accumulate)
+    monkeypatch.setattr(builtins, "isinstance", fake_isinstance)
+
+    telemetry = project._workflow_telemetry_summary()
+
+    assert telemetry["usage"] == {"total_tokens": 1}
+    assert telemetry["provider_summary"]["openai"]["usage"] == {}
 
 
 def test_snapshot_ignores_malformed_output_payload_entries():

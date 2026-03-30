@@ -1619,8 +1619,6 @@ class Orchestrator:
             return False
         if last_non_empty_line.endswith(_LIKELY_TRUNCATED_TAIL_SUFFIXES):
             return True
-        if normalized_error.startswith("expected an indented block") and last_non_empty_line.endswith(":"):
-            return True
         if last_non_empty_line.count('"') % 2 == 1 or last_non_empty_line.count("'") % 2 == 1:
             return True
         return False

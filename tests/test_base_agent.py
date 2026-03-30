@@ -651,6 +651,27 @@ def test_chat_does_not_sleep_past_elapsed_budget(monkeypatch):
     assert sleep_calls == []
 
 
+def test_chat_fails_before_first_attempt_when_elapsed_budget_is_already_exhausted(monkeypatch):
+    provider = DummyProvider(response="ok")
+    agent = DummyAgent(provider)
+    agent.config.provider_max_elapsed_seconds_per_call = 0.1
+    timestamps = iter([100.0, 100.0, 100.2])
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps))
+    monkeypatch.setattr(agent, "_probe_provider_health", lambda *args, **kwargs: None)
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider elapsed budget exhausted after 0.2 seconds"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["attempts_used"] == 0
+    assert metadata["attempt_history"] == []
+    assert metadata["provider_call_count"] == 0
+    assert provider.calls == []
+
+
 def test_chat_fails_fast_when_provider_cancellation_is_requested_before_first_attempt():
     provider = DummyProvider(response="ok")
     agent = DummyAgent(provider)
@@ -666,6 +687,71 @@ def test_chat_fails_fast_when_provider_cancellation_is_requested_before_first_at
     assert metadata["provider_cancellation_requested"] is True
     assert metadata["provider_cancellation_reason"] == "operator requested stop"
     assert provider.calls == []
+
+
+def test_probe_provider_health_raises_for_cached_non_retryable_snapshot(monkeypatch):
+    agent = DummyAgent(DummyProvider(response="ok"))
+    cached_snapshot = {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "status": "failing",
+        "active_check": True,
+        "retryable": False,
+        "error_type": "AgentExecutionError",
+        "error_message": "configured model unavailable",
+    }
+
+    monkeypatch.setattr(
+        "kycortex_agents.agents.base_agent._maybe_get_cached_health_snapshot",
+        lambda runtime_config, current_time: dict(cached_snapshot),
+    )
+
+    with pytest.raises(AgentExecutionError, match="configured model unavailable"):
+        agent._probe_provider_health("openai", "gpt-4o", agent._provider)
+
+    assert agent._provider_last_health_checks["openai"]["status"] == "failing"
+
+
+def test_probe_provider_health_fills_missing_snapshot_defaults():
+    provider = DummyProvider(
+        response="ok",
+        health_response={
+            "provider": None,
+            "model": None,
+            "status": None,
+            "active_check": None,
+            "retryable": None,
+        },
+    )
+    agent = DummyAgent(provider)
+
+    snapshot = agent._probe_provider_health("openai", "gpt-4o", provider)
+
+    assert snapshot["provider"] == "openai"
+    assert snapshot["model"] == "gpt-4o"
+    assert snapshot["status"] == "ready"
+    assert snapshot["active_check"] is False
+    assert snapshot["retryable"] is False
+
+
+def test_probe_provider_health_raises_transient_for_retryable_degraded_snapshot():
+    provider = DummyProvider(
+        response="ok",
+        health_response={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "degraded",
+            "active_check": True,
+            "retryable": True,
+            "error_message": "temporary outage",
+        },
+    )
+    agent = DummyAgent(provider)
+
+    with pytest.raises(ProviderTransientError, match="temporary outage"):
+        agent._probe_provider_health("openai", "gpt-4o", provider)
+
+    assert agent._provider_last_health_checks["openai"]["status"] == "degraded"
 
 
 def test_clear_provider_cancellation_resets_requested_state():

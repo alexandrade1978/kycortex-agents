@@ -146,8 +146,10 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     }
 
 
-def test_build_full_workflow_config_uses_larger_completion_budget_for_full_generation(tmp_path):
+def test_build_full_workflow_config_uses_larger_completion_budget_for_full_generation(monkeypatch, tmp_path):
     from kycortex_agents.provider_matrix import build_full_workflow_config
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
 
     config = build_full_workflow_config("openai", "gpt-4o-mini", str(tmp_path / "output"))
 

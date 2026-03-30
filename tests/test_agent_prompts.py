@@ -283,7 +283,9 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
     assert "omit only the field under test and keep the rest of that payload valid" in agent.last_user_message
     assert "Keep the batch-processing scenario structurally valid" in agent.last_user_message
+    assert "If the provided test targets list batch-capable functions" in agent.last_user_message
     assert "If the public API exposes no dedicated batch helper" in agent.last_user_message
+    assert "Prefer the highest-level public service or top-level workflow functions" in agent.last_user_message
     assert "Do not add standalone caplog or raw logging-output assertions" in agent.last_user_message
     assert "assert only actions exercised in that same scenario" in agent.last_user_message
     assert "Never define a custom fixture named `request`" in agent.last_user_message
@@ -302,9 +304,11 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "keep the validation-failure coverage on the direct intake or validation surface" in agent.last_system_prompt
     assert "omit only the field under test and keep the rest of that payload valid" in agent.last_system_prompt
     assert "Keep batch-processing scenarios structurally valid" in agent.last_system_prompt
+    assert "If the provided test targets list batch-capable functions" in agent.last_system_prompt
     assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_system_prompt
     assert "count top-level tests and total lines yourself" in agent.last_system_prompt
     assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt
+    assert "Prefer the highest-level public service or top-level workflow functions" in agent.last_system_prompt
     assert "Do not add caplog assertions or raw logging-text expectations" in agent.last_system_prompt
     assert "assert only the actions exercised in that same scenario" in agent.last_system_prompt
     assert "Never define a custom fixture named `request`" in agent.last_system_prompt

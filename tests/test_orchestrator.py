@@ -413,7 +413,9 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules = orchestrator._parse_behavior_contract(contract)
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions = orchestrator._parse_behavior_contract(
+        contract
+    )
 
     assert validation_rules == {"intake_request": ["request_id", "compliance_data"]}
     assert field_value_rules == {"intake_request": {"status": ["approved", "denied"]}}
@@ -434,6 +436,7 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
             "fields": ["compliance_data", "status"],
         },
     }
+    assert sequence_input_functions == set()
 
 
 def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path):
@@ -449,11 +452,14 @@ def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules = orchestrator._parse_behavior_contract(contract)
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions = orchestrator._parse_behavior_contract(
+        contract
+    )
 
     assert validation_rules == {}
     assert field_value_rules == {}
     assert batch_rules == {"process_batch": {"request_key": None, "wrapper_key": None, "fields": []}}
+    assert sequence_input_functions == set()
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases(tmp_path):
@@ -1370,8 +1376,10 @@ def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(
         {
             "name": "public_async",
             "params": ["value"],
+            "param_annotations": [None],
             "min_args": 1,
             "max_args": 1,
+            "accepts_sequence_input": False,
             "return_annotation": None,
             "signature": "public_async(value)",
             "async": True,
@@ -1390,8 +1398,10 @@ def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(
         "method_signatures": {
             "run": {
                 "params": ["payload"],
+                "param_annotations": [None],
                 "min_args": 1,
                 "max_args": 1,
+                "accepts_sequence_input": False,
                 "return_annotation": None,
             }
         },
@@ -1485,8 +1495,9 @@ def test_build_code_test_targets_excludes_cli_wrapper_classes(tmp_path):
         {
             "syntax_ok": True,
             "functions": [
-                {"name": "main", "signature": "main()"},
-                {"name": "run_service", "signature": "run_service()"},
+                {"name": "main", "signature": "main()", "accepts_sequence_input": False},
+                {"name": "run_service", "signature": "run_service()", "accepts_sequence_input": False},
+                {"name": "batch_run", "signature": "batch_run(items)", "accepts_sequence_input": True},
             ],
             "classes": {
                 "ComplianceCLI": {},
@@ -1495,7 +1506,9 @@ def test_build_code_test_targets_excludes_cli_wrapper_classes(tmp_path):
         }
     )
 
-    assert "Functions to test: run_service()" in summary
+    assert "Functions to test: run_service(), batch_run(items)" in summary
+    assert "Batch-capable functions: batch_run(items)" in summary
+    assert "Scalar-only functions: run_service()" in summary
     assert "Classes to test: ComplianceService" in summary
     assert "Entry points to avoid in tests: ComplianceCLI, main" in summary
 
@@ -1979,6 +1992,7 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
         {"validate_request": ["name", "email"]},
         {"score_request": {"status": ["approved"]}},
         {},
+        set(),
         {"helper"},
         {},
     )
@@ -2007,6 +2021,7 @@ def test_analyze_test_behavior_contracts_ignores_negative_validation_expectation
         {"intake_request": ["name", "email"], "validate_request": ["name", "email"]},
         {},
         {},
+        set(),
         set(),
         {},
     )
@@ -2039,6 +2054,7 @@ def test_analyze_test_behavior_contracts_allows_partial_invalid_batch_when_resul
                 "wrapper_key": None,
             }
         },
+        set(),
         {"process_batch"},
         {},
     )
@@ -2096,6 +2112,7 @@ def test_analyze_test_behavior_contracts_ignores_unresolved_payloads_and_support
         {"validate_request": ["name"]},
         {"score_request": {"status": ["approved"]}},
         {},
+        set(),
         set(),
         {},
     )
@@ -2965,6 +2982,20 @@ def test_build_code_behavior_contract_ignores_non_function_class_members(tmp_pat
     assert "validate requires fields: request_id" in contract
 
 
+def test_build_code_behavior_contract_reports_sequence_accepting_functions(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    contract = orchestrator._build_code_behavior_contract(
+        "from typing import List\n\n"
+        "def process_requests(requests: List[str]) -> None:\n"
+        "    for request in requests:\n"
+        "        print(request)\n"
+    )
+
+    assert "process_requests accepts sequence inputs via parameter `requests`" in contract
+
+
 def test_build_test_validation_summary_omits_execution_lines_when_pytest_did_not_run(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -2984,7 +3015,7 @@ def test_ast_name_formats_nested_attributes(tmp_path):
     node = ast.Attribute(value=ast.Attribute(value=ast.Name("pkg"), attr="module"), attr="Class")
 
     assert orchestrator._ast_name(node) == "pkg.module.Class"
-    assert orchestrator._ast_name(ast.Constant("x")) == ""
+    assert orchestrator._ast_name(ast.Constant("x")) == "x"
 
 
 def test_summarize_output_returns_blank_for_whitespace_and_truncates_first_line(tmp_path):
@@ -6462,6 +6493,66 @@ def test_run_task_fails_qa_tester_when_generated_tests_treat_non_batch_api_as_ba
     assert validation["non_batch_sequence_calls"] == [
         "process_case does not accept batch/list inputs at line 5"
     ]
+
+
+def test_run_task_allows_generated_tests_to_use_list_for_sequence_function(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "from typing import List\n\n"
+        "class ComplianceCase:\n"
+        "    def __init__(self, value):\n"
+        "        self.value = value\n\n"
+        "def process_cases(cases: List[ComplianceCase]) -> int:\n"
+        "    return len(cases)\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceCase:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceCase, process_cases\n\n"
+        "def test_process_cases_list():\n"
+        "    cases = [ComplianceCase(1), ComplianceCase(2)]\n"
+        "    assert process_cases(cases) == 2\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    result = orchestrator.run_task(project.tasks[1], project)
+
+    assert "def test_process_cases_list" in result
+    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    assert validation["non_batch_sequence_calls"] == []
 
 
 def test_run_task_fails_qa_tester_when_generated_tests_miss_nested_constructor_payload_fields(tmp_path):

@@ -2285,10 +2285,12 @@ class Orchestrator:
                 functions.append({
                     "name": node.name,
                     "params": signature["params"],
+                    "param_annotations": signature["param_annotations"],
                     "min_args": signature["min_args"],
                     "max_args": signature["max_args"],
                     "return_annotation": signature["return_annotation"],
                     "signature": f"{node.name}({', '.join(signature['params'])})",
+                    "accepts_sequence_input": signature["accepts_sequence_input"],
                     "async": isinstance(node, ast.AsyncFunctionDef),
                 })
                 continue
@@ -2440,6 +2442,16 @@ class Orchestrator:
             return "Test targets unavailable because module syntax is invalid."
 
         entrypoint_names = self._entrypoint_symbol_names(code_analysis)
+        batch_capable_functions = [
+            item["signature"]
+            for item in code_analysis.get("functions") or []
+            if item["name"] not in entrypoint_names and item.get("accepts_sequence_input")
+        ]
+        scalar_functions = [
+            item["signature"]
+            for item in code_analysis.get("functions") or []
+            if item["name"] not in entrypoint_names and not item.get("accepts_sequence_input")
+        ]
         testable_functions = [
             item["signature"]
             for item in code_analysis.get("functions") or []
@@ -2452,6 +2464,8 @@ class Orchestrator:
         )
         lines = ["Test targets:"]
         lines.append(f"- Functions to test: {', '.join(testable_functions or ['none'])}")
+        lines.append(f"- Batch-capable functions: {', '.join(batch_capable_functions or ['none'])}")
+        lines.append(f"- Scalar-only functions: {', '.join(scalar_functions or ['none'])}")
         lines.append(f"- Classes to test: {', '.join(classes or ['none'])}")
         lines.append(f"- Entry points to avoid in tests: {', '.join(sorted(entrypoint_names) or ['none'])}")
         return "\n".join(lines)
@@ -2467,6 +2481,7 @@ class Orchestrator:
         validation_rules: dict[str, list[str]] = {}
         field_value_rules: dict[str, Dict[str, list[str]]] = {}
         batch_rules: list[str] = []
+        sequence_input_rules: list[str] = []
         function_map: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
 
         for node in tree.body:
@@ -2500,7 +2515,12 @@ class Orchestrator:
             if batch_rule:
                 batch_rules.append(batch_rule)
 
-        if not validation_rules and not field_value_rules and not batch_rules:
+        for function_node in function_map.values():
+            sequence_rule = self._extract_sequence_input_rule(function_node)
+            if sequence_rule:
+                sequence_input_rules.append(sequence_rule)
+
+        if not validation_rules and not field_value_rules and not batch_rules and not sequence_input_rules:
             return ""
 
         lines = ["Behavior contract:"]
@@ -2513,9 +2533,57 @@ class Orchestrator:
                 lines.append(
                     f"- {function_name} expects field `{field_name}` to be one of: {', '.join(field_value_rules[function_name][field_name])}"
                 )
+        for rule in sorted(sequence_input_rules):
+            lines.append(f"- {rule}")
         for rule in batch_rules:
             lines.append(f"- {rule}")
         return "\n".join(lines)
+
+    def _extract_sequence_input_rule(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+        first_parameter = self._first_user_parameter(node)
+        if first_parameter is None:
+            return ""
+        annotation = self._ast_name(first_parameter.annotation) if first_parameter.annotation is not None else ""
+        if self._annotation_accepts_sequence_input(annotation):
+            return f"{node.name} accepts sequence inputs via parameter `{first_parameter.arg}`"
+        if self._parameter_is_iterated(node, first_parameter.arg):
+            return f"{node.name} accepts sequence inputs via parameter `{first_parameter.arg}`"
+        return ""
+
+    def _first_user_parameter(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Optional[ast.arg]:
+        positional = [*node.args.posonlyargs, *node.args.args]
+        if positional and positional[0].arg in {"self", "cls"}:
+            positional = positional[1:]
+        return positional[0] if positional else None
+
+    def _annotation_accepts_sequence_input(self, annotation: str) -> bool:
+        normalized = annotation.replace(" ", "").lower()
+        if not normalized:
+            return False
+        return any(
+            marker in normalized
+            for marker in (
+                "list[",
+                "typing.list",
+                "sequence[",
+                "typing.sequence",
+                "iterable[",
+                "typing.iterable",
+                "tuple[",
+                "set[",
+                "collections.abc.sequence",
+                "collections.abc.iterable",
+            )
+        )
+
+    def _parameter_is_iterated(self, node: ast.FunctionDef | ast.AsyncFunctionDef, parameter_name: str) -> bool:
+        for child in ast.walk(node):
+            if not isinstance(child, ast.For):
+                continue
+            iterator = child.iter
+            if isinstance(iterator, ast.Name) and iterator.id == parameter_name:
+                return True
+        return False
 
     def _extract_required_fields(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
         literal_fields: list[str] = []
@@ -2703,7 +2771,9 @@ class Orchestrator:
         class_map = code_analysis.get("classes") or {}
         module_defined_names = self._collect_module_defined_names(tree)
         entrypoint_names = self._entrypoint_symbol_names(code_analysis)
-        validation_rules, field_value_rules, batch_rules = self._parse_behavior_contract(code_behavior_contract)
+        validation_rules, field_value_rules, batch_rules, sequence_input_functions = self._parse_behavior_contract(
+            code_behavior_contract
+        )
         analysis["top_level_test_count"] = sum(
             1
             for stmt in tree.body
@@ -2828,6 +2898,7 @@ class Orchestrator:
             validation_rules,
             field_value_rules,
             batch_rules,
+            sequence_input_functions,
             function_names,
             class_map,
         )
@@ -2851,12 +2922,13 @@ class Orchestrator:
     def _parse_behavior_contract(
         self,
         contract: str,
-    ) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]]]:
+    ) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]], set[str]]:
         validation_rules: Dict[str, list[str]] = {}
         field_value_rules: Dict[str, Dict[str, list[str]]] = {}
         batch_rules: Dict[str, Dict[str, Any]] = {}
+        sequence_input_functions: set[str] = set()
         if not contract.strip():
-            return validation_rules, field_value_rules, batch_rules
+            return validation_rules, field_value_rules, batch_rules, sequence_input_functions
 
         for raw_line in contract.splitlines():
             line = raw_line.strip()
@@ -2877,6 +2949,11 @@ class Orchestrator:
                 values = [value.strip() for value in field_value_match.group(3).split(",") if value.strip()]
                 if values:
                     field_value_rules.setdefault(function_name, {})[field_name] = values
+                continue
+
+            sequence_input_match = re.match(r"-\s+(\w+) accepts sequence inputs via parameter `([^`]+)`$", line)
+            if sequence_input_match:
+                sequence_input_functions.add(sequence_input_match.group(1))
                 continue
 
             nested_match = re.match(
@@ -2908,7 +2985,7 @@ class Orchestrator:
                     "fields": [field.strip() for field in wrapper_match.group(3).split(",") if field.strip()],
                 }
 
-        return validation_rules, field_value_rules, batch_rules
+        return validation_rules, field_value_rules, batch_rules, sequence_input_functions
 
     def _analyze_test_behavior_contracts(
         self,
@@ -2916,6 +2993,7 @@ class Orchestrator:
         validation_rules: Dict[str, list[str]],
         field_value_rules: Dict[str, Dict[str, list[str]]],
         batch_rules: Dict[str, Dict[str, Any]],
+        sequence_input_functions: set[str],
         function_names: set[str],
         class_map: Dict[str, Any],
     ) -> tuple[list[str], list[str]]:
@@ -2977,6 +3055,9 @@ class Orchestrator:
                         batch_rules[callable_name],
                     )
                     payload_violations.update(batch_violations)
+                    continue
+
+                if callable_name in sequence_input_functions:
                     continue
 
                 if callable_name in function_names and "batch" not in callable_name:
@@ -3335,19 +3416,30 @@ class Orchestrator:
         *,
         skip_first_param: bool = False,
     ) -> Dict[str, Any]:
-        positional_params = [arg.arg for arg in (*node.args.posonlyargs, *node.args.args)]
-        if skip_first_param and positional_params:
-            positional_params = positional_params[1:]
-        keyword_only_params = [arg.arg for arg in node.args.kwonlyargs]
+        positional_args = [*node.args.posonlyargs, *node.args.args]
+        if skip_first_param and positional_args:
+            positional_args = positional_args[1:]
+        keyword_only_args = list(node.args.kwonlyargs)
+        positional_params = [arg.arg for arg in positional_args]
+        keyword_only_params = [arg.arg for arg in keyword_only_args]
         params = [*positional_params, *keyword_only_params]
+        param_annotations = [
+            self._ast_name(arg.annotation) if arg.annotation is not None else None
+            for arg in [*positional_args, *keyword_only_args]
+        ]
         optional_positional = len(node.args.defaults)
         optional_kwonly = sum(default is not None for default in node.args.kw_defaults)
         max_args = len(params)
         min_args = max(0, max_args - optional_positional - optional_kwonly)
+        accepts_sequence_input = bool(param_annotations) and self._annotation_accepts_sequence_input(
+            param_annotations[0] or ""
+        )
         return {
             "params": params,
+            "param_annotations": param_annotations,
             "min_args": min_args,
             "max_args": max_args,
+            "accepts_sequence_input": accepts_sequence_input,
             "return_annotation": self._ast_name(node.returns) if node.returns is not None else None,
         }
 
@@ -4021,6 +4113,16 @@ class Orchestrator:
             return node.id
         if isinstance(node, ast.Attribute):
             return f"{self._ast_name(node.value)}.{node.attr}"
+        if isinstance(node, ast.Subscript):
+            value_name = self._ast_name(node.value)
+            slice_name = self._ast_name(node.slice)
+            if value_name and slice_name:
+                return f"{value_name}[{slice_name}]"
+            return value_name
+        if isinstance(node, ast.Tuple):
+            return ", ".join(filter(None, (self._ast_name(element) for element in node.elts)))
+        if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float, bool)):
+            return str(node.value)
         return ""
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:

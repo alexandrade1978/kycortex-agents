@@ -23,6 +23,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [examples/example_resume_workflow.py](../examples/example_resume_workflow.py): persisted-state resume example using the public top-level API.
 - [examples/example_custom_agent.py](../examples/example_custom_agent.py): custom-agent example using `BaseAgent` and `AgentRegistry` through the public API.
 - [examples/example_multi_provider.py](../examples/example_multi_provider.py): provider-configuration example showing the same workflow across OpenAI, Anthropic, and Ollama.
+- [examples/example_release_user_smoke.py](../examples/example_release_user_smoke.py): user-style live smoke example that generates a small project through the public API and validates the produced Python artifact.
 - [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py): empirical provider-matrix runner that skips unavailable providers, verifies provider readiness, and writes a structured full-workflow validation summary including aggregate workflow telemetry.
 - [examples/example_test_mode.py](../examples/example_test_mode.py): deterministic local execution example using fake agents instead of live provider calls.
 - [examples/example_complex_workflow.py](../examples/example_complex_workflow.py): converging multi-parent workflow example showing merged artifacts and decisions flowing into a downstream task.
@@ -56,6 +57,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [examples/example_resume_workflow.py](../examples/example_resume_workflow.py) when learning persisted reload and resume behavior.
 - Use [examples/example_custom_agent.py](../examples/example_custom_agent.py) when learning how custom agents plug into the public runtime.
 - Use [examples/example_multi_provider.py](../examples/example_multi_provider.py) when comparing supported provider configurations against the same workflow definition.
+- Use [examples/example_release_user_smoke.py](../examples/example_release_user_smoke.py) when you want a realistic local end-to-end creation smoke that also validates the generated Python artifact.
 - Use [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py) when collecting comparable full-workflow evidence with repair cycles enabled across the currently available providers.
 - Use [examples/example_test_mode.py](../examples/example_test_mode.py) when validating workflow behavior locally without calling a live provider.
 - Use [examples/example_complex_workflow.py](../examples/example_complex_workflow.py) when learning how converging DAGs expose merged upstream artifacts and decisions to a downstream agent.

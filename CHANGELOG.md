@@ -8,22 +8,26 @@ The format is intentionally lightweight for the stabilized 1.0 line. Entries gro
 
 ### Added
 
-- No unreleased changes yet.
+- Added `examples/example_release_user_smoke.py`, a user-style live smoke example that generates a small project through the public API and validates the generated Python artifact with a real sample call.
 
 ### Changed
 
 - Provider-matrix code-generation guidance now requires visible line-budget headroom during compact module generation and repair instead of merely aiming near the hard ceiling.
 - Provider-matrix QA guidance, repair priorities, and task descriptions now require leaving explicit test-budget headroom, counting top-level tests and total lines before finalizing, and cutting helper-only coverage before required workflow scenarios.
 - Compact high-level workflow suites now explicitly avoid spending scarce top-level tests on validator, scorer, dataclass-serialization, and audit-logger helper coverage unless those helpers are requested directly.
+- README and docs navigation now point directly to the new live smoke example for repository visitors who want a realistic local validation path.
 
 ### Fixed
 
 - The post-`1.0.12` Anthropic provider-matrix checkpoint no longer fails the workflow on over-budget code and test outputs after compactness repair guidance was tightened for both generation and repair paths.
+- Verified that the released `v1.0.12` package can still be installed into a clean virtual environment and execute a real Ollama-backed project-creation workflow successfully.
 
 ### Release Readiness Notes
 
 - Current package version remains `1.0.12` until the next maintenance update is released.
 - Focused prompt/provider-matrix/orchestrator regressions passed with `366` tests, `mypy` passed, and the dedicated empirical rerun `output/provider_matrix_validation_step3u_anthropic` completed with `repair_cycle_count=1` after the earlier `step3t` Anthropic workflow failure.
+- The live local smoke run `output/release_user_smoke_ollama_live` completed on `qwen2.5-coder:7b` via `http://127.0.0.1:11435` with `repair_cycle_count=0`, and the generated artifact validated successfully with a sample balance of `2650.00`.
+- A clean-install smoke of the released `v1.0.12` package also completed against the same Ollama runtime from a temporary virtual environment and produced a valid generated artifact exposing `calculate_budget_balance()` plus `main()`.
 
 ## 1.0.12 - 2026-03-30
 

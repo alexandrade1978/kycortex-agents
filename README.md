@@ -64,6 +64,8 @@ orch.execute_workflow(project)
 
 See `examples/` for complete examples, including `example_provider_matrix_validation.py` for resume-enabled empirical provider validation across the supported runtimes.
 
+For a real user-style local creation smoke against a live provider, run `examples/example_release_user_smoke.py`. It exercises the public package API, generates a small project, and validates the generated Python artifact with a sample call before reporting success.
+
 Provider preflight validation now distinguishes backend reachability from model readiness. In practice, this means cloud providers must expose the configured model through their model-listing API before generation starts, and Ollama must expose both a reachable `/api/tags` endpoint and the configured local model.
 
 ## Configuration

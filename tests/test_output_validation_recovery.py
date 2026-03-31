@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 import pytest
 
 from kycortex_agents.agents.base_agent import BaseAgent
@@ -52,8 +54,8 @@ class InvalidTypeAgent(BaseAgent):
     def __init__(self, config: KYCortexConfig):
         super().__init__("InvalidType", "Testing", config)
 
-    def run(self, task_description: str, context: dict):
-        return 42
+    def run(self, task_description: str, context: dict) -> str | AgentOutput:
+        return cast(str | AgentOutput, 42)
 
 
 class MissingSummaryAgent(BaseAgent):
@@ -75,10 +77,17 @@ class MissingSummaryAgent(BaseAgent):
         )
 
 
-def build_config(tmp_path, **overrides):
-    payload = {"output_dir": str(tmp_path / "output"), "api_key": "token"}
-    payload.update(overrides)
-    return KYCortexConfig(**payload)
+def build_config(tmp_path) -> KYCortexConfig:
+    config = KYCortexConfig()
+    config.output_dir = str(tmp_path / "output")
+    config.api_key = "token"
+    return config
+
+
+def require_artifact(project: ProjectState, index: int = 0) -> dict[str, Any]:
+    artifact = project.artifacts[index]
+    assert isinstance(artifact, dict)
+    return artifact
 
 
 def test_run_task_fails_on_empty_output_and_preserves_provider_metadata(tmp_path):
@@ -98,6 +107,7 @@ def test_run_task_fails_on_empty_output_and_preserves_provider_metadata(tmp_path
     assert task.output == "EmptyOutput: agent output must not be empty"
     assert task.output_payload is None
     assert task.last_error_type == "AgentExecutionError"
+    assert task.last_provider_call is not None
     assert task.last_provider_call["provider"] == "openai"
     assert task.last_provider_call["success"] is True
     assert task.last_provider_call["usage"]["total_tokens"] == 12
@@ -131,6 +141,7 @@ def test_execute_workflow_retries_after_output_validation_failure_and_completes(
     assert task.output == "Recovered output\nwith detail"
     assert task.output_payload is not None
     assert task.output_payload["summary"] == "Recovered output"
+    assert task.last_provider_call is not None
     assert task.last_provider_call["success"] is True
     assert task.last_provider_call["usage"]["total_tokens"] == 9
     assert [event["event"] for event in task.history] == ["started", "retry_scheduled", "started", "completed"]
@@ -173,9 +184,11 @@ def test_run_task_normalizes_missing_summary_and_persists_output_provider_metada
     assert task.output_payload is not None
     assert task.output_payload["summary"] == "Normalized summary"
     assert task.output_payload["metadata"]["provider_call"]["usage"]["total_tokens"] == 21
+    assert task.last_provider_call is not None
     assert task.last_provider_call["provider"] == "openai"
     assert task.last_provider_call["usage"]["total_tokens"] == 21
-    assert project.artifacts[0]["name"] == "docs_output"
-    assert project.artifacts[0]["path"] == "artifacts/docs_output.txt"
-    assert project.artifacts[0]["content"] == "Normalized summary\nMore detail"
+    artifact = require_artifact(project)
+    assert artifact["name"] == "docs_output"
+    assert artifact["path"] == "artifacts/docs_output.txt"
+    assert artifact["content"] == "Normalized summary\nMore detail"
     assert (tmp_path / "output" / "artifacts" / "docs_output.txt").read_text(encoding="utf-8") == "Normalized summary\nMore detail"

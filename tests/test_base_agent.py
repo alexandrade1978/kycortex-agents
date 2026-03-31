@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 import pytest
 
 from kycortex_agents.agents.base_agent import BaseAgent
@@ -14,7 +16,7 @@ class DummyAgent(BaseAgent):
         self._provider = provider
         self.events = []
 
-    def run(self, task_description: str, context: dict) -> str:
+    def run(self, task_description: str, context: dict) -> str | AgentOutput:
         return self.chat("system", task_description)
 
     def before_execute(self, agent_input: AgentInput) -> None:
@@ -40,12 +42,13 @@ class DummyProvider(BaseLLMProvider):
         self.calls.append((system_prompt, user_message))
         if self.error is not None:
             raise self.error
+        assert self.response is not None
         return self.response
 
-    def get_last_call_metadata(self):
+    def get_last_call_metadata(self) -> dict[str, Any] | None:
         return self.metadata
 
-    def health_check(self):
+    def health_check(self) -> dict[str, Any]:
         self.health_calls += 1
         if self.health_error is not None:
             raise self.health_error
@@ -139,6 +142,7 @@ def test_chat_raises_when_provider_attempts_are_zero_after_runtime_override():
     with pytest.raises(AgentExecutionError, match="Dummy failed to call the model provider"):
         agent.chat("system", "message")
 
+    assert isinstance(agent._provider, DummyProvider)
     assert agent._provider.calls == []
 
 
@@ -706,6 +710,7 @@ def test_probe_provider_health_raises_for_cached_non_retryable_snapshot(monkeypa
         lambda runtime_config, current_time: dict(cached_snapshot),
     )
 
+    assert agent._provider is not None
     with pytest.raises(AgentExecutionError, match="configured model unavailable"):
         agent._probe_provider_health("openai", "gpt-4o", agent._provider)
 
@@ -1339,7 +1344,7 @@ def test_validate_input_rejects_non_dict_context_and_missing_required_keys():
                 task_description="message",
                 project_name="Demo",
                 project_goal="Build demo",
-                context="not-a-dict",
+                context=cast(dict[str, Any], "not-a-dict"),
             )
         )
 
@@ -1490,6 +1495,7 @@ def test_require_context_value_returns_non_empty_value_and_provider_metadata_acc
     agent._last_provider_call_metadata = {"provider": "openai"}
 
     metadata_copy = agent.get_last_provider_call_metadata()
+    assert metadata_copy is not None
     metadata_copy["provider"] = "mutated"
 
     assert agent.require_context_value(agent_input, "architecture") == "Layered runtime"

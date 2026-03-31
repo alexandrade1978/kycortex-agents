@@ -1,6 +1,8 @@
 import json
 import os
 import sqlite3
+from collections.abc import Callable
+from typing import Any, cast
 
 import pytest
 
@@ -9,11 +11,19 @@ from kycortex_agents.memory.state_store import BaseStateStore, JsonStateStore, S
 
 
 class DelegatingStateStore(BaseStateStore):
-    def save(self, path, data):
-        return super().save(path, data)
+    def save(self, path: str, data: dict[str, Any]) -> None:
+        base_save = cast(
+            Callable[[BaseStateStore, str, dict[str, Any]], None],
+            BaseStateStore.__dict__["save"],
+        )
+        base_save(self, path, data)
 
-    def load(self, path):
-        return super().load(path)
+    def load(self, path: str) -> dict[str, Any]:
+        base_load = cast(
+            Callable[[BaseStateStore, str], dict[str, Any]],
+            BaseStateStore.__dict__["load"],
+        )
+        return base_load(self, path)
 
 
 def test_base_state_store_methods_raise_not_implemented():

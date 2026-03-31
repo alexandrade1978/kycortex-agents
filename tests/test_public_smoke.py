@@ -67,9 +67,14 @@ def test_root_public_api_executes_dependency_workflow(tmp_path):
     orchestrator = workflows.Orchestrator(config, registry=registry)
 
     orchestrator.execute_workflow(project)
+    arch_task = project.get_task("arch")
+    review_task = project.get_task("review")
 
-    assert project.get_task("arch").status == TaskStatus.DONE.value
-    assert project.get_task("review").status == TaskStatus.DONE.value
+    assert arch_task is not None
+    assert review_task is not None
+
+    assert arch_task.status == TaskStatus.DONE.value
+    assert review_task.status == TaskStatus.DONE.value
     assert reviewer.seen_architecture == "ARCHITECTURE for Demo"
     assert project.snapshot().workflow_status == WorkflowStatus.COMPLETED
     assert project.execution_events[-1]["event"] == "workflow_finished"
@@ -114,9 +119,14 @@ def test_workflows_module_smoke_supports_public_resume_flow(tmp_path):
     orchestrator = workflows.Orchestrator(config, registry=registry)
 
     orchestrator.execute_workflow(reloaded)
+    arch_task = reloaded.get_task("arch")
+    review_task = reloaded.get_task("review")
 
-    assert reloaded.get_task("arch").attempts == 2
-    assert reloaded.get_task("arch").status == TaskStatus.DONE.value
-    assert reloaded.get_task("review").status == TaskStatus.DONE.value
+    assert arch_task is not None
+    assert review_task is not None
+
+    assert arch_task.attempts == 2
+    assert arch_task.status == TaskStatus.DONE.value
+    assert review_task.status == TaskStatus.DONE.value
     assert reloaded.workflow_last_resumed_at is not None
     assert any(event["event"] == "workflow_resumed" for event in reloaded.execution_events)

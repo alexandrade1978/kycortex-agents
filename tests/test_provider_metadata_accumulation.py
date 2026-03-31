@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -11,6 +12,17 @@ from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
 from kycortex_agents.types import TaskStatus
+
+
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
+def require_provider_call(task: Task) -> dict[str, Any]:
+    assert task.last_provider_call is not None
+    return task.last_provider_call
 
 
 def build_openai_client(response=None, error=None, health_response=None, health_error=None):
@@ -76,9 +88,12 @@ def build_ollama_opener(
                 raise health_error
             if error is not None and health_payload is None:
                 raise error
-            return FakeHTTPResponse(health_payload if health_payload is not None else payload)
+            response_payload = health_payload if health_payload is not None else payload
+            assert isinstance(response_payload, str)
+            return FakeHTTPResponse(response_payload)
         if error is not None:
             raise error
+        assert isinstance(payload, str)
         return FakeHTTPResponse(payload)
 
     return open_request
@@ -157,29 +172,32 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
 
     Orchestrator(config, registry=build_success_registry(tmp_path)).execute_workflow(project)
 
-    arch = project.get_task("arch")
-    code = project.get_task("code")
-    review = project.get_task("review")
+    arch = require_task(project, "arch")
+    code = require_task(project, "code")
+    review = require_task(project, "review")
     snapshot = project.snapshot()
+    arch_provider_call = require_provider_call(arch)
+    code_provider_call = require_provider_call(code)
+    review_provider_call = require_provider_call(review)
 
-    assert arch.last_provider_call["provider"] == "openai"
-    assert arch.last_provider_call["usage"]["total_tokens"] == 15
-    assert code.last_provider_call["provider"] == "anthropic"
-    assert code.last_provider_call["usage"]["cache_creation_input_tokens"] == 3
-    assert review.last_provider_call["provider"] == "ollama"
-    assert review.last_provider_call["timing"]["total_duration_ms"] == 125.0
+    assert arch_provider_call["provider"] == "openai"
+    assert arch_provider_call["usage"]["total_tokens"] == 15
+    assert code_provider_call["provider"] == "anthropic"
+    assert code_provider_call["usage"]["cache_creation_input_tokens"] == 3
+    assert review_provider_call["provider"] == "ollama"
+    assert review_provider_call["timing"]["total_duration_ms"] == 125.0
     assert snapshot.task_results["arch"].details["last_provider_call"]["model"] == "gpt-4o"
     assert snapshot.task_results["code"].details["last_provider_call"]["model"] == "claude-3-5-sonnet"
     assert snapshot.task_results["review"].details["last_provider_call"]["model"] == "llama3"
     assert snapshot.task_results["arch"].resource_telemetry["provider"] == "openai"
     assert snapshot.task_results["arch"].resource_telemetry["model"] == "gpt-4o"
-    assert snapshot.task_results["arch"].resource_telemetry["provider_duration_ms"] == arch.last_provider_call["duration_ms"]
+    assert snapshot.task_results["arch"].resource_telemetry["provider_duration_ms"] == arch_provider_call["duration_ms"]
     assert snapshot.task_results["arch"].resource_telemetry["usage"] == {
         "input_tokens": 10,
         "output_tokens": 5,
         "total_tokens": 15,
     }
-    assert snapshot.task_results["review"].resource_telemetry["provider_duration_ms"] == review.last_provider_call["duration_ms"]
+    assert snapshot.task_results["review"].resource_telemetry["provider_duration_ms"] == review_provider_call["duration_ms"]
     assert snapshot.task_results["arch"].details["provider_budget"] == {
         "total_calls": 1,
         "calls_by_provider": {"openai": 1},
@@ -236,10 +254,10 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     }
     assert snapshot.workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
         "count": 1,
-        "total": review.last_provider_call["duration_ms"],
-        "min": review.last_provider_call["duration_ms"],
-        "max": review.last_provider_call["duration_ms"],
-        "avg": review.last_provider_call["duration_ms"],
+        "total": review_provider_call["duration_ms"],
+        "min": review_provider_call["duration_ms"],
+        "max": review_provider_call["duration_ms"],
+        "avg": review_provider_call["duration_ms"],
     }
     assert snapshot.workflow_telemetry["usage"] == {
         "cache_creation_input_tokens": 3,
@@ -289,21 +307,25 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
 
     Orchestrator(config, registry=registry).execute_workflow(project)
 
-    failed = project.get_task("arch")
-    completed = project.get_task("code")
+    failed = require_task(project, "arch")
+    completed = require_task(project, "code")
     snapshot = project.snapshot()
+    failed_provider_call = require_provider_call(failed)
+    completed_provider_call = require_provider_call(completed)
+    arch_failure = snapshot.task_results["arch"].failure
+    assert arch_failure is not None
 
     assert failed.status == TaskStatus.FAILED.value
-    assert failed.last_provider_call["provider"] == "openai"
-    assert failed.last_provider_call["success"] is False
-    assert failed.last_provider_call["error_type"] == "ProviderTransientError"
-    assert failed.last_provider_call["retryable"] is True
-    assert failed.last_provider_call["error_message"] == "OpenAI provider failed to call the model API"
-    assert snapshot.task_results["arch"].failure.details["provider_call"]["model"] == "gpt-4o"
+    assert failed_provider_call["provider"] == "openai"
+    assert failed_provider_call["success"] is False
+    assert failed_provider_call["error_type"] == "ProviderTransientError"
+    assert failed_provider_call["retryable"] is True
+    assert failed_provider_call["error_message"] == "OpenAI provider failed to call the model API"
+    assert arch_failure.details["provider_call"]["model"] == "gpt-4o"
     assert snapshot.task_results["arch"].resource_telemetry["has_provider_call"] is True
     assert snapshot.task_results["arch"].resource_telemetry["provider"] == "openai"
     assert snapshot.task_results["arch"].resource_telemetry["model"] == "gpt-4o"
-    assert snapshot.task_results["arch"].failure.details["provider_budget"] == {
+    assert arch_failure.details["provider_budget"] == {
         "total_calls": 1,
         "calls_by_provider": {"openai": 1},
         "max_calls_per_agent": 0,
@@ -311,7 +333,7 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
         "remaining_calls": None,
         "remaining_calls_by_provider": {},
     }
-    assert completed.last_provider_call["usage"]["total_tokens"] == 13
+    assert completed_provider_call["usage"]["total_tokens"] == 13
 
 
 def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_path):
@@ -412,12 +434,13 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
 
     Orchestrator(config, registry=registry).execute_workflow(project)
 
-    task = project.get_task("arch")
+    task = require_task(project, "arch")
     snapshot = project.snapshot()
+    provider_call = require_provider_call(task)
 
     assert task.status == TaskStatus.DONE.value
-    assert task.last_provider_call["provider"] == "anthropic"
-    assert task.last_provider_call["fallback_history"] == [
+    assert provider_call["provider"] == "anthropic"
+    assert provider_call["fallback_history"] == [
         {
             "provider": "openai",
             "model": "gpt-4o",
@@ -427,7 +450,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "retryable": True,
         }
     ]
-    assert task.last_provider_call["provider_health"]["openai"]["status"] == "degraded"
+    assert provider_call["provider_health"]["openai"]["status"] == "degraded"
     assert snapshot.task_results["arch"].details["last_provider_call"]["provider"] == "anthropic"
     assert snapshot.workflow_telemetry["observed_providers"] == ["anthropic", "openai"]
     assert snapshot.workflow_telemetry["final_providers"] == ["anthropic"]
@@ -477,14 +500,16 @@ def test_provider_metadata_survives_save_load_round_trip(tmp_path, state_filenam
     registry = build_success_registry(tmp_path)
     orchestrator = Orchestrator(config, registry=registry)
 
-    orchestrator.run_task(project.get_task("arch"), project)
-    orchestrator.run_task(project.get_task("code"), project)
+    orchestrator.run_task(require_task(project, "arch"), project)
+    orchestrator.run_task(require_task(project, "code"), project)
     project.save()
 
     reloaded = ProjectState.load(str(state_path))
     snapshot = reloaded.snapshot()
 
-    assert reloaded.get_task("arch").last_provider_call["provider"] == "openai"
-    assert reloaded.get_task("code").last_provider_call["provider"] == "anthropic"
+    reloaded_arch = require_task(reloaded, "arch")
+    reloaded_code = require_task(reloaded, "code")
+    assert require_provider_call(reloaded_arch)["provider"] == "openai"
+    assert require_provider_call(reloaded_code)["provider"] == "anthropic"
     assert snapshot.task_results["arch"].details["last_provider_call"]["usage"]["total_tokens"] == 15
     assert snapshot.task_results["code"].details["last_provider_call"]["usage"]["total_tokens"] == 20

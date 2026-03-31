@@ -1,0 +1,21 @@
+{
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.include": [
+    "kycortex_agents",
+    "tests",
+    "examples",
+    "scripts"
+  ],
+  "python.analysis.exclude": [
+    ".local-docs",
+    ".venv",
+    "build",
+    "dist",
+    "docs/_build",
+    "kycortex_agents.egg-info",
+    "multi_agent_ollama_output",
+    "output",
+    "**/__pycache__"
+  ]
+}

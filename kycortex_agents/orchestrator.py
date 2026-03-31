@@ -1342,17 +1342,18 @@ class Orchestrator:
         return sanitized
 
     def _sandbox_preexec_fn(self, sandbox_policy: ExecutionSandboxPolicy):
-        if not sandbox_policy.enabled or os.name != "posix" or resource is None:
+        resource_module = resource
+        if not sandbox_policy.enabled or os.name != "posix" or resource_module is None:
             return None
 
         def _apply_limits() -> None:
             cpu_seconds = max(int(sandbox_policy.max_cpu_seconds), 1)
             memory_bytes = max(sandbox_policy.max_memory_mb, 1) * 1024 * 1024
             os.umask(0o077)
-            resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
-            resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
-            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-            resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))
+            resource_module.setrlimit(resource_module.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
+            resource_module.setrlimit(resource_module.RLIMIT_AS, (memory_bytes, memory_bytes))
+            resource_module.setrlimit(resource_module.RLIMIT_CORE, (0, 0))
+            resource_module.setrlimit(resource_module.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))
 
         return _apply_limits
 
@@ -2317,6 +2318,7 @@ class Orchestrator:
             "classes": {},
             "imports": [],
             "third_party_imports": [],
+            "module_variables": [],
             "symbols": [],
             "has_main_guard": '__name__ == "__main__"' in raw_content or "__name__ == '__main__'" in raw_content,
         }
@@ -2332,6 +2334,7 @@ class Orchestrator:
         functions: list[Dict[str, Any]] = []
         classes: Dict[str, Dict[str, Any]] = {}
         import_roots: set[str] = set()
+        module_variables: set[str] = set()
 
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -2349,6 +2352,18 @@ class Orchestrator:
                     "accepts_sequence_input": signature["accepts_sequence_input"],
                     "async": isinstance(node, ast.AsyncFunctionDef),
                 })
+                continue
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    for name in self._bound_target_names(target):
+                        if not name.startswith("_"):
+                            module_variables.add(name)
+                continue
+            if isinstance(node, ast.AnnAssign):
+                if node.value is not None:
+                    for name in self._bound_target_names(node.target):
+                        if not name.startswith("_"):
+                            module_variables.add(name)
                 continue
             if isinstance(node, ast.Import):
                 for alias in node.names:  # pragma: no branch
@@ -2415,6 +2430,7 @@ class Orchestrator:
         analysis["third_party_imports"] = [
             module_name for module_name in sorted(import_roots) if self._is_probable_third_party_import(module_name)
         ]
+        analysis["module_variables"] = sorted(module_variables)
         analysis["symbols"] = sorted([item["name"] for item in functions] + list(classes.keys()))
         return analysis
 
@@ -2552,6 +2568,24 @@ class Orchestrator:
                 preferred.append(class_name)
         return preferred
 
+    def _constructor_param_matches_class(self, param_name: str, class_name: str) -> bool:
+        normalized_param = param_name.strip().lower()
+        if not normalized_param:
+            return False
+
+        snake_name = re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
+        candidate_names = {snake_name}
+        parts = snake_name.split("_")
+        if len(parts) > 2:
+            for start in range(1, len(parts) - 1):
+                candidate_names.add("_".join(parts[start:]))
+
+        if normalized_param in candidate_names:
+            return True
+
+        suffix = snake_name.split("_")[-1]
+        return suffix in {"logger", "repository", "service"} and normalized_param == suffix
+
     def _helper_classes_to_avoid(
         self,
         code_analysis: Dict[str, Any],
@@ -2560,11 +2594,30 @@ class Orchestrator:
         preferred = set(preferred_classes or self._preferred_test_class_names(code_analysis))
         if not preferred:
             return []
+        class_map = code_analysis.get("classes") or {}
         entrypoint_names = self._entrypoint_symbol_names(code_analysis)
         helper_suffixes = ("service", "repository", "logger")
+        required_constructor_helpers: set[str] = set()
+        for preferred_name in preferred:
+            class_info = class_map.get(preferred_name) or {}
+            constructor_params = [
+                param_name
+                for param_name in (class_info.get("constructor_params") or [])
+                if isinstance(param_name, str)
+            ]
+            for helper_name in class_map.keys():
+                if helper_name in preferred or helper_name in entrypoint_names:
+                    continue
+                if not helper_name.lower().endswith(helper_suffixes):
+                    continue
+                if any(
+                    self._constructor_param_matches_class(param_name, helper_name)
+                    for param_name in constructor_params
+                ):
+                    required_constructor_helpers.add(helper_name)
         helper_names: list[str] = []
-        for class_name in sorted((code_analysis.get("classes") or {}).keys()):
-            if class_name in entrypoint_names or class_name in preferred:
+        for class_name in sorted(class_map.keys()):
+            if class_name in entrypoint_names or class_name in preferred or class_name in required_constructor_helpers:
                 continue
             if class_name.lower().endswith(helper_suffixes):
                 helper_names.append(class_name)
@@ -2866,7 +2919,7 @@ class Orchestrator:
             analysis["syntax_error"] = f"{exc.msg} at line {exc.lineno}"
             return analysis
 
-        module_symbols = set(code_analysis.get("symbols") or [])
+        module_symbols = set(code_analysis.get("symbols") or []) | set(code_analysis.get("module_variables") or [])
         function_names = {item["name"] for item in code_analysis.get("functions") or []}
         function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
@@ -4286,6 +4339,10 @@ class Orchestrator:
                 lines.append(
                     "Preserve the documented public API and repair the module behavior itself instead of renaming helpers, reshaping return values, or shifting the failure onto the tests."
                 )
+            if "typeerror" in summary_lower:
+                lines.append(
+                    "Keep data-model semantics consistent: if the module defines dataclasses or typed request objects, validate and read them via attributes instead of mapping membership or subscripting unless the public contract explicitly uses dict inputs."
+                )
             if "line count:" in summary_lower:
                 lines.append(
                     "Rewrite the full module smaller and leave clear headroom below the reported line ceiling. Remove optional helper layers, repeated convenience wrappers, and non-essential docstrings before touching required behavior."
@@ -4317,12 +4374,18 @@ class Orchestrator:
                 "Replace that coverage with the documented higher-level workflow or service surface from the test targets, and do not reintroduce "
                 f"{', '.join(helper_surface_symbols)} anywhere in the rewritten file unless the public API contract explicitly makes one of them the primary surface under test."
             )
+            lines.append(
+                "When the module exposes a higher-level service or workflow facade, keep imports limited to that facade and directly exchanged domain models instead of auxiliary validators, scorers, loggers, repositories, processors, or engines."
+            )
         elif "helper surface usages:" in summary_lower:
             lines.append(
                 "Delete every import, fixture, helper variable, and top-level test that references the flagged helper surfaces from the validation summary. Do not repair those helper-surface tests in place."
             )
             lines.append(
                 "Replace removed helper-surface coverage with the documented higher-level workflow or service surface from the test targets, and do not reintroduce the flagged helper names anywhere in the rewritten file."
+            )
+            lines.append(
+                "When the module exposes a higher-level service or workflow facade, keep imports limited to that facade and directly exchanged domain models instead of auxiliary validators, scorers, loggers, repositories, processors, or engines."
             )
         if any(marker in summary_lower for marker in ("line count:", "top-level test functions:", "fixture count:")):
             lines.append(
@@ -4331,13 +4394,27 @@ class Orchestrator:
             lines.append(
                 "Keep only the minimum required scenarios: one happy path, one validation failure, and one batch or audit/integration path unless the contract explicitly requires more. Drop validator, scorer, serialization, logger, and other helper-level tests before cutting any required scenario."
             )
+        if "top-level test functions:" in summary_lower:
+            lines.append(
+                "If the validation summary reports too many top-level tests, delete or merge the lowest-value extra scenarios until the rewritten file is back under the stated maximum before addressing optional cleanup. A suite over the hard cap is invalid even when pytest passes."
+            )
         if any(marker in summary_lower for marker in ("unknown module symbols:", "missing function imports:", "undefined local names:")):
             lines.append(
                 "Use only documented module symbols and explicitly import every production class or function you reference in tests or fixtures."
             )
+            lines.append(
+                "If you use isinstance or another exact type assertion against a production class, import that class explicitly; otherwise rewrite the assertion to check returned fields or behavior without naming an unimported type."
+            )
         if "constructor arity mismatches:" in summary_lower and "constructor arity mismatches: none" not in summary_lower:
             lines.append(
                 "When constructor arity mismatches are reported, remove guessed helper wiring and rebuild the suite around the smallest documented public service or function surface using only listed constructor signatures."
+            )
+            lines.append(
+                "Instantiate typed request or result models with the exact field names and full constructor arity listed in the API contract instead of inventing generic placeholders such as id, data, timestamp, or status."
+            )
+        if "payload contract violations:" in summary_lower and "payload contract violations: none" not in summary_lower:
+            lines.append(
+                "When a called API expects a payload or filter dict with documented required fields, either provide every required field or omit that optional payload entirely. Do not keep partial dicts that the contract does not permit."
             )
         if "non-batch sequence calls:" in summary_lower:
             lines.append(
@@ -4354,7 +4431,17 @@ class Orchestrator:
                 "If the previous suite already passed static validation, preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton unless the validation summary explicitly says one of those pieces is wrong."
             )
             lines.append(
+                "If a pytest-only runtime failure comes from an overreaching assertion rather than a documented contract guarantee, rewrite that assertion to a contract-backed invariant instead of forcing a guessed business rule into the implementation."
+            )
+            lines.append(
                 "When behavior is uncertain, prefer stable invariants and type or shape assertions over guessed exact numeric values."
+            )
+            lines.append(
+                "If the implementation summary or behavior contract does not explicitly define a score formula or threshold flag trigger, remove exact score totals and threshold-triggered boolean assertions and replace them with stable invariants or relative comparisons."
+            )
+        if "assertionerror" in summary_lower or " - assert " in summary_lower:
+            lines.append(
+                "Do not infer derived statuses, labels, or report counters from suggestive field names or keywords alone. Keep exact categorical or counter assertions only when the contract or current implementation explicitly defines that trigger."
             )
         return lines
 

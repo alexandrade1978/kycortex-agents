@@ -127,6 +127,7 @@ def build_ollama_opener(
             generate_calls += 1
         if current_error is not None:
             raise current_error
+        assert isinstance(current_payload, str)
         return FakeHTTPResponse(current_payload)
 
     return open_request

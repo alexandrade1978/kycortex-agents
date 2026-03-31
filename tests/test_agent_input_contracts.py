@@ -6,7 +6,7 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
-from kycortex_agents.types import AgentInput, TaskStatus
+from kycortex_agents.types import AgentInput, AgentOutput, TaskStatus
 
 
 class InspectableAgent(BaseAgent):
@@ -14,18 +14,27 @@ class InspectableAgent(BaseAgent):
 
     def __init__(self, config: KYCortexConfig):
         super().__init__("Inspectable", "Testing", config)
-        self.last_input = None
+        self.last_input: AgentInput | None = None
 
     def run(self, task_description: str, context: dict) -> str:
         return "ok"
 
-    def run_with_input(self, agent_input: AgentInput) -> str:
+    def run_with_input(self, agent_input: AgentInput) -> str | AgentOutput:
         self.last_input = agent_input
         return super().run_with_input(agent_input)
 
 
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
 def build_config(tmp_path):
-    return KYCortexConfig(output_dir=str(tmp_path / "output"), api_key="token")
+    config = KYCortexConfig()
+    config.output_dir = str(tmp_path / "output")
+    config.api_key = "token"
+    return config
 
 
 def build_input(**overrides):
@@ -126,7 +135,8 @@ def test_orchestrator_context_exposes_only_completed_outputs_and_transitive_sema
     agent = InspectableAgent(config)
     orchestrator = Orchestrator(config, registry=AgentRegistry({"review_agent": agent}))
 
-    result = orchestrator.run_task(project.get_task("review"), project)
+    result = orchestrator.run_task(require_task(project, "review"), project)
+    assert agent.last_input is not None
     context = agent.last_input.context
 
     assert result == "ok"
@@ -140,4 +150,5 @@ def test_orchestrator_context_exposes_only_completed_outputs_and_transitive_sema
     assert "blocked" not in context
     assert "review" not in context
     assert "review" not in context["completed_tasks"]
-    assert project.get_task("review").status == TaskStatus.DONE.value
+    review_task = require_task(project, "review")
+    assert review_task.status == TaskStatus.DONE.value

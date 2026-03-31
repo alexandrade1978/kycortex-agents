@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
 import random
 import re
 from time import perf_counter, sleep
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
@@ -644,6 +645,7 @@ class BaseAgent(ABC):
     ) -> dict[str, Any]:
         started_at = perf_counter()
         runtime_config = self.config.provider_runtime_config(provider_name)
+        snapshot: dict[str, Any]
         cached_snapshot = _maybe_get_cached_health_snapshot(runtime_config, started_at)
         if cached_snapshot is not None:
             snapshot = dict(cached_snapshot)
@@ -667,7 +669,8 @@ class BaseAgent(ABC):
         health_check = getattr(provider, "health_check", None)
         try:
             if callable(health_check):
-                snapshot = dict(health_check())
+                typed_health_check = cast(Callable[[], Mapping[str, Any]], health_check)
+                snapshot = dict(typed_health_check())
             else:
                 snapshot = {
                     "provider": provider_name,

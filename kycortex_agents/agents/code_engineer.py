@@ -16,6 +16,7 @@ Do not include markdown fences, file trees, headings, or explanatory prose.
 You are writing exactly one importable Python module.
 The module must run as-is, keep its types internally consistent, and expose a coherent public API.
 Do not invent extra files, package layouts, or persistence layers unless the task explicitly requires them.
+Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence, SQL, or filesystem-backed storage.
 Prefer the Python standard library only.
 Do not add third-party dependencies or imports unless the task explicitly requires them and they are necessary to solve the task.
 Before finalizing, mentally execute the module entrypoint and fix any obvious attribute, name, or type errors.
@@ -24,6 +25,7 @@ If the architecture contains markdown, pseudo-code, or illustrative snippets, co
 Treat the architecture as guidance for required behavior, not as a requirement to mirror every optional layer, extension point, or future enhancement.
 Keep constructor signatures, helper function parameters, and internal call sites mutually consistent.
 If you define a helper to accept a domain object, every caller must pass that domain object; if you need a scalar helper, define it that way explicitly.
+If you model requests or records as dataclasses or other typed objects, access them consistently through attributes. Do not mix object-style APIs with dict membership tests or subscripting unless you explicitly convert them to mappings first.
 Avoid placeholder demo logic that contradicts your own type hints or public API.
 If the task includes validation, implement concrete reject conditions for clearly invalid input rather than returning a constant success placeholder.
 If the task includes scoring or other numeric derivation, use a transparent deterministic formula and avoid hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them.
@@ -75,6 +77,7 @@ Write the complete Python code for this task as a single raw Python file.
 The file will be saved as `{module_filename}` and imported as `{module_name}`.
 Do not rely on any files other than this module unless the task explicitly requires that dependency.
 Do not add third-party imports such as numpy or pandas unless the task explicitly requires them.
+Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence, SQL, or filesystem-backed storage.
 Respect the task's requested size budget exactly. If the task does not specify one, keep the module under 260 lines. When the task gives a hard line cap, stay comfortably under that ceiling instead of aiming for the exact limit. Prefer one small cohesive API over optional manager classes, wrappers, per-method docstrings, or verbose CLI plumbing when the task is compact.
 If the draft is still within roughly 10 to 15 lines of the ceiling, compress it further by removing optional helper layers, repeated convenience wrappers, and non-essential docstrings before finalizing.
 If the previous validation summary includes pytest failures, treat each listed failing assertion as an exact behavior contract for this module and update the implementation until those cited assertions would pass.
@@ -87,9 +90,11 @@ Before you finalize, verify this checklist against your own output:
 - if the previous file was syntax-invalid or truncated, you rewrote the full module from the top instead of appending a partial continuation
 - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential docstrings, comments, blank lines, and optional helpers so the whole module fits cleanly in one response
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require
+- if the task did not explicitly require durable persistence, you kept service state in memory instead of adding sqlite or filesystem-backed storage
 - if the task includes validation, your validator rejects at least one clearly invalid input shape instead of returning a constant success placeholder
 - if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
 - if boolean or toggle-like fields influence behavior, you used the field's truth value rather than mere key presence unless the contract explicitly defines presence-only semantics
+- if you modeled requests or records as dataclasses or typed objects, you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - every constructor call matches the constructor you defined
@@ -125,6 +130,7 @@ Task: {task_description}
 Write the complete Python code for this task as a single raw Python file.
 The file will be saved as `{module_filename}` and imported as `{module_name}`.
 Do not add third-party imports such as numpy or pandas unless the task explicitly requires them.
+Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence, SQL, or filesystem-backed storage.
 Respect the task's requested size budget exactly. If the task does not specify one, keep the module under 260 lines. When the task gives a hard line cap, stay comfortably under that ceiling instead of aiming for the exact limit. Prefer one small cohesive API over optional manager classes, wrappers, per-method docstrings, or verbose CLI plumbing when the task is compact.
 If the draft is still within roughly 10 to 15 lines of the ceiling, compress it further by removing optional helper layers, repeated convenience wrappers, and non-essential docstrings before finalizing.
 If the previous validation summary includes pytest failures, treat each listed failing assertion as an exact behavior contract for this module and update the implementation until those cited assertions would pass.
@@ -137,9 +143,11 @@ Before you finalize, verify this checklist against your own output:
 - if the previous file was syntax-invalid or truncated, you rewrote the full module from the top instead of appending a partial continuation
 - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential docstrings, comments, blank lines, and optional helpers so the whole module fits cleanly in one response
 - you implemented only the required behavior from the architecture and skipped optional layers, future extension points, and extra persistence scaffolding that the task did not require
+- if the task did not explicitly require durable persistence, you kept service state in memory instead of adding sqlite or filesystem-backed storage
 - if the task includes validation, your validator rejects at least one clearly invalid input shape instead of returning a constant success placeholder
 - if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
 - if boolean or toggle-like fields influence behavior, you used the field's truth value rather than mere key presence unless the contract explicitly defines presence-only semantics
+- if you modeled requests or records as dataclasses or typed objects, you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - every constructor call matches the constructor you defined

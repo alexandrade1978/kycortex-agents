@@ -574,7 +574,7 @@ def test_snapshot_inspection_example_documents_snapshot_outputs_and_provider_met
     example = example_path.read_text(encoding="utf-8")
 
     assert 'class FakeMetadataProvider(BaseLLMProvider):' in example
-    assert 'def health_check(self) -> dict:' in example
+    assert 'def health_check(self) -> dict[str, Any]:' in example
     assert 'snapshot = project.snapshot()' in example
     assert 'snapshot.workflow_status' in example
     assert 'snapshot.task_results.items()' in example

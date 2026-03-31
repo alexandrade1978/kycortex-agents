@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from kycortex_agents.agents.registry import AgentRegistry
@@ -10,11 +12,19 @@ from kycortex_agents.types import ArtifactRecord, ArtifactType, DecisionRecord, 
 class RecordingAgent:
     def __init__(self, response: str = "ok"):
         self.response = response
-        self.last_input = None
+        self.last_input: Any = None
 
-    def run_with_input(self, agent_input):
+    def run_with_input(self, agent_input: Any) -> str:
         self.last_input = agent_input
         return self.response
+
+
+def run_inspector_task(config: KYCortexConfig, project: ProjectState, inspector: RecordingAgent) -> dict[str, Any]:
+    inspect_task = project.get_task("inspect")
+    assert inspect_task is not None
+    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(inspect_task, project)
+    assert inspector.last_input is not None
+    return inspector.last_input.context
 
 
 def build_config(tmp_path):
@@ -81,9 +91,7 @@ def test_orchestrator_context_maps_all_public_agent_roles_to_semantic_keys(tmp_p
     )
 
     inspector = RecordingAgent()
-    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(project.get_task("inspect"), project)
-
-    context = inspector.last_input.context
+    context = run_inspector_task(config, project, inspector)
 
     assert context["upstream"] == output
     assert context["completed_tasks"]["upstream"] == output
@@ -103,9 +111,7 @@ def test_orchestrator_context_for_first_task_exposes_snapshot_without_completed_
     )
 
     inspector = RecordingAgent()
-    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(project.get_task("inspect"), project)
-
-    context = inspector.last_input.context
+    context = run_inspector_task(config, project, inspector)
 
     assert context["project_name"] == "Demo"
     assert context["goal"] == "Build demo"
@@ -138,9 +144,7 @@ def test_orchestrator_context_includes_snapshot_decisions_and_artifacts_for_down
     )
 
     inspector = RecordingAgent()
-    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(project.get_task("inspect"), project)
-
-    context = inspector.last_input.context
+    context = run_inspector_task(config, project, inspector)
 
     assert context["architecture"] == "ARCHITECTURE DOC"
     assert context["decisions"][0].topic == "stack"
@@ -186,9 +190,7 @@ def test_orchestrator_context_uses_task_title_fallback_for_semantic_keys(tmp_pat
     )
 
     inspector = RecordingAgent()
-    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(project.get_task("inspect"), project)
-
-    context = inspector.last_input.context
+    context = run_inspector_task(config, project, inspector)
 
     assert context["upstream"] == output
     assert context["completed_tasks"]["upstream"] == output
@@ -219,9 +221,7 @@ def test_orchestrator_context_omits_semantic_alias_when_role_and_title_are_unkno
     )
 
     inspector = RecordingAgent()
-    Orchestrator(config, registry=AgentRegistry({"inspector": inspector})).run_task(project.get_task("inspect"), project)
-
-    context = inspector.last_input.context
+    context = run_inspector_task(config, project, inspector)
 
     assert context["upstream"] == "RAW OUTPUT"
     assert context["completed_tasks"]["upstream"] == "RAW OUTPUT"

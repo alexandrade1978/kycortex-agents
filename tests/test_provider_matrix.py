@@ -14,8 +14,8 @@ def _load_example_module(module_name: str, relative_path: str):
     sys.path.insert(0, str(examples_dir))
     try:
         spec = importlib.util.spec_from_file_location(module_name, module_path)
-        module = importlib.util.module_from_spec(spec)
         assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
     finally:
@@ -186,17 +186,22 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "Leave at least 15 lines of headroom under the hard cap" in code_task.description
     assert "Implement only the minimal core flow" in code_task.description
     assert "Avoid extra helper layers" in code_task.description
+    assert "Prefer in-memory service state and audit records unless the architecture explicitly requires durable persistence" in code_task.description
     assert "Implement real validation and scoring behavior instead of constant-success validators" in code_task.description
     assert "prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds" in code_task.description
     assert "use its truth value rather than mere field presence" in code_task.description
+    assert "keep object access consistent and do not mix in dict-style membership checks or subscripting" in code_task.description
     assert "under 150 lines" in tests_task.description
     assert "at most 7 top-level test functions" in tests_task.description
     assert "Prefer 3 to 5 top-level tests" in tests_task.description
     assert "Leave at least one full test of headroom below the stated maximum" in tests_task.description
+    assert "If you draft more than 6 for this task" in tests_task.description
     assert "Stay comfortably under the fixture limit" in tests_task.description
     assert "Use the direct intake or validation surface for the validation-failure scenario" in tests_task.description
     assert "omit only the field under test and keep the rest of that payload valid" in tests_task.description
     assert "If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid" in tests_task.description
+    assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in tests_task.description
+    assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in tests_task.description
     assert "If the implementation exposes no dedicated batch helper" in tests_task.description
     assert "If the implementation exposes only a single-request surface such as process_request(request) and no process_batch(...)" in tests_task.description
     assert "If a batch helper returns None or constructs its own domain objects from raw items" in tests_task.description
@@ -211,6 +216,11 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "If repair feedback reports helper surface usages" in tests_task.description
     assert "use trivially countable inputs rather than prose strings" in tests_task.description
     assert "avoid threshold boundary values unless the contract explicitly defines those cutoffs" in tests_task.description
+    assert "Do not infer `FLAGGED` status, non-zero flagged/report counters" in tests_task.description
+    assert "Prefer assertions on directly observable totals, persisted submissions, audit growth, or non-negative scores" in tests_task.description
+    assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in tests_task.description
+    assert "either omit the optional filter dict or provide every documented required filter key" in tests_task.description
+    assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in tests_task.description
     assert "use repeated-character or similarly obvious inputs rather than natural-language sample text" in tests_task.description
 
 
@@ -471,11 +481,18 @@ def test_build_full_workflow_project_contains_expected_dependency_graph(tmp_path
     from kycortex_agents.provider_matrix import build_full_workflow_project
 
     project = build_full_workflow_project(str(tmp_path / "output"), "ollama")
+    code_task = project.get_task("code")
+    tests_task = project.get_task("tests")
+    legal_task = project.get_task("legal")
+
+    assert code_task is not None
+    assert tests_task is not None
+    assert legal_task is not None
 
     assert [task.id for task in project.tasks] == ["arch", "code", "deps", "tests", "review", "docs", "legal"]
-    assert project.get_task("code").dependencies == ["arch"]
-    assert project.get_task("tests").dependencies == ["code", "deps"]
-    assert project.get_task("legal").dependencies == ["docs"]
+    assert code_task.dependencies == ["arch"]
+    assert tests_task.dependencies == ["code", "deps"]
+    assert legal_task.dependencies == ["docs"]
 
 
 def test_write_summary_json_persists_sorted_payload(tmp_path):
@@ -599,7 +616,9 @@ def test_execute_empirical_validation_workflow_consumes_bounded_repair_cycle(mon
     original_can_start_repair_cycle = project.can_start_repair_cycle
 
     def fake_can_start_repair_cycle():
-        if project.repair_cycle_count == 0 and project.get_task("arch").status == "failed":
+        current_arch_task = project.get_task("arch")
+        assert current_arch_task is not None
+        if project.repair_cycle_count == 0 and current_arch_task.status == "failed":
             return True
         return original_can_start_repair_cycle()
 
@@ -608,10 +627,14 @@ def test_execute_empirical_validation_workflow_consumes_bounded_repair_cycle(mon
     original_execute_workflow = FakeOrchestrator.execute_workflow
 
     def wrapped_execute_workflow(self, state):
-        if state.repair_cycle_count == 0 and state.get_task("arch").status == "failed":
+        current_arch_task = state.get_task("arch")
+        assert current_arch_task is not None
+        if state.repair_cycle_count == 0 and current_arch_task.status == "failed":
             state.start_repair_cycle(reason="retry failed arch", failed_task_ids=["arch"])
         original_execute_workflow(self, state)
-        if state.repair_cycle_count == 1 and state.get_task("arch").status == "done":
+        current_arch_task = state.get_task("arch")
+        assert current_arch_task is not None
+        if state.repair_cycle_count == 1 and current_arch_task.status == "done":
             repair_task = state.get_task("arch__repair_1")
             if repair_task is None:
                 state.add_task(
@@ -632,9 +655,14 @@ def test_execute_empirical_validation_workflow_consumes_bounded_repair_cycle(mon
 
     provider_matrix.execute_empirical_validation_workflow(config, project)
 
-    assert project.get_task("arch").status == "done"
+    arch_task = project.get_task("arch")
+    repair_task = project.get_task("arch__repair_1")
+
+    assert arch_task is not None
+    assert repair_task is not None
+    assert arch_task.status == "done"
     assert project.repair_cycle_count == 1
-    assert project.get_task("arch__repair_1").repair_origin_task_id == "arch"
+    assert repair_task.repair_origin_task_id == "arch"
 
 
 def test_execute_empirical_validation_workflow_raises_last_error_when_resume_is_disabled(monkeypatch, tmp_path):

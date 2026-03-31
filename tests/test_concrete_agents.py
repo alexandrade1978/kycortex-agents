@@ -15,8 +15,8 @@ from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, Artif
 class ChatCaptureMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.last_system_prompt = None
-        self.last_user_message = None
+        self.last_system_prompt: str = ""
+        self.last_user_message: str = ""
 
     def chat(self, system_prompt: str, user_message: str) -> str:
         self.last_system_prompt = system_prompt
@@ -310,9 +310,16 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "If the public API exposes no dedicated batch helper" in agent.last_user_message
     assert "Never define a custom fixture named `request`" in agent.last_user_message
     assert "If you assert an exact numeric value, use trivially countable inputs" in agent.last_user_message
+    assert "Do not infer derived status transitions, escalation flags, or report counters" in agent.last_user_message
+    assert "When an API accepts a request, filter, or payload dict with documented required fields" in agent.last_user_message
+    assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in agent.last_user_message
+    assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in agent.last_user_message
+    assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in agent.last_user_message
+    assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in agent.last_user_message
     assert "never use prose sample text for that assertion" in agent.last_user_message
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
     assert "Treat the current implementation artifact and API contract as fixed ground truth during repair" in agent.last_user_message
+    assert "If a pytest-only runtime failure shows that an earlier assertion overreached the current implementation or contract" in agent.last_user_message
     assert "Import every called production function explicitly" in agent.last_user_message
     assert "Return only raw Python test code." in agent.last_system_prompt
     assert "Do not import `main`, CLI/demo entrypoints" in agent.last_system_prompt
@@ -320,6 +327,12 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_system_prompt
     assert "count top-level tests and total lines yourself" in agent.last_system_prompt
     assert "Do not hand-count prose strings to justify exact numeric assertions" in agent.last_system_prompt
+    assert "Do not infer derived status transitions, escalation flags, or report counters" in agent.last_system_prompt
+    assert "When an API accepts a request, filter, or payload dict with documented required fields" in agent.last_system_prompt
+    assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in agent.last_system_prompt
+    assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in agent.last_system_prompt
+    assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in agent.last_system_prompt
+    assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in agent.last_system_prompt
     assert "never use natural-language prose samples for that assertion" in agent.last_system_prompt
     assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt
     assert "Never define a custom fixture named `request`" in agent.last_system_prompt
@@ -349,10 +362,15 @@ def test_code_engineer_agent_prompt_demands_raw_python_output(tmp_path):
     assert "Task-specific scope and size limits override generic polish." in agent.last_system_prompt
     assert "stay comfortably under that ceiling so imports, the main guard, and any required repairs still fit" in agent.last_system_prompt
     assert "Treat the architecture as guidance for required behavior" in agent.last_system_prompt
+    assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_system_prompt
+    assert "Do not mix object-style APIs with dict membership tests or subscripting" in agent.last_system_prompt
     assert "Do not include markdown fences" in agent.last_system_prompt
     assert "Target module: code_implementation.py" in agent.last_user_message
     assert "stay comfortably under that ceiling instead of aiming for the exact limit" in agent.last_user_message
     assert "within roughly 10 to 15 lines of the ceiling" in agent.last_user_message
+    assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_user_message
+    assert "you kept service state in memory instead of adding sqlite or filesystem-backed storage" in agent.last_user_message
+    assert "you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting" in agent.last_user_message
 
 
 def test_code_reviewer_agent_prompt_includes_tests_and_module_name(tmp_path):

@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from kycortex_agents.agents.architect import ArchitectAgent
@@ -8,10 +10,11 @@ from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
+from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.types import ArtifactType, TaskStatus, WorkflowStatus
 
 
-class DummyProvider:
+class DummyProvider(BaseLLMProvider):
     def __init__(self, response: str):
         self.response = response
 
@@ -20,6 +23,22 @@ class DummyProvider:
 
     def get_last_call_metadata(self):
         return None
+
+
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
+def artifact_map(project: ProjectState) -> dict[str, dict[str, Any]]:
+    artifacts_by_name: dict[str, dict[str, Any]] = {}
+    for artifact in project.artifacts:
+        assert isinstance(artifact, dict)
+        name = artifact.get("name")
+        assert isinstance(name, str)
+        artifacts_by_name[name] = artifact
+    return artifacts_by_name
 
 
 class RecordingCodeEngineerAgent(CodeEngineerAgent):
@@ -127,7 +146,7 @@ def test_dependency_chain_propagates_semantic_context_and_artifacts(tmp_path):
     ]
     assert project.snapshot().workflow_status == WorkflowStatus.COMPLETED
 
-    artifacts_by_name = {artifact["name"]: artifact for artifact in project.artifacts}
+    artifacts_by_name = artifact_map(project)
 
     assert artifacts_by_name["arch_architecture"]["artifact_type"] == ArtifactType.DOCUMENT.value
     assert artifacts_by_name["code_implementation"]["artifact_type"] == ArtifactType.CODE.value
@@ -170,9 +189,9 @@ def test_reloaded_outputs_preserve_downstream_code_context_and_artifacts(tmp_pat
 
     orchestrator = Orchestrator(config, registry=registry)
 
-    orchestrator.run_task(project.get_task("arch"), project)
+    orchestrator.run_task(require_task(project, "arch"), project)
     project.save()
-    orchestrator.run_task(project.get_task("code"), project)
+    orchestrator.run_task(require_task(project, "code"), project)
     project.save()
 
     reloaded = ProjectState.load(str(state_path))
@@ -187,9 +206,12 @@ def test_reloaded_outputs_preserve_downstream_code_context_and_artifacts(tmp_pat
 
     Orchestrator(config, registry=reloaded_registry).execute_workflow(reloaded)
 
-    assert reloaded.get_task("arch").status == TaskStatus.DONE.value
-    assert reloaded.get_task("code").status == TaskStatus.DONE.value
-    assert reloaded.get_task("review").status == TaskStatus.DONE.value
+    reloaded_arch = require_task(reloaded, "arch")
+    reloaded_code = require_task(reloaded, "code")
+    reloaded_review = require_task(reloaded, "review")
+    assert reloaded_arch.status == TaskStatus.DONE.value
+    assert reloaded_code.status == TaskStatus.DONE.value
+    assert reloaded_review.status == TaskStatus.DONE.value
     assert reloaded_reviewer.seen_code == "print('hello world')"
 
     snapshot_artifacts = {artifact.name: artifact for artifact in reloaded.snapshot().artifacts}

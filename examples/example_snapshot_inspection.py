@@ -1,20 +1,22 @@
+from typing import Any
+
 from kycortex_agents import AgentRegistry, ArtifactType, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task
 from kycortex_agents.providers import BaseLLMProvider
 from kycortex_agents.types import AgentInput, AgentOutput, DecisionRecord
 
 
 class FakeMetadataProvider(BaseLLMProvider):
-    def __init__(self, response: str, metadata: dict):
+    def __init__(self, response: str, metadata: dict[str, Any]):
         self.response = response
         self.metadata = metadata
 
     def generate(self, system_prompt: str, user_message: str) -> str:
         return self.response
 
-    def get_last_call_metadata(self) -> dict:
+    def get_last_call_metadata(self) -> dict[str, Any]:
         return dict(self.metadata)
 
-    def health_check(self) -> dict:
+    def health_check(self) -> dict[str, Any]:
         return {
             "provider": self.metadata.get("provider"),
             "model": self.metadata.get("model"),

@@ -15,8 +15,8 @@ from kycortex_agents.types import AgentInput, ArtifactType
 class ChatCaptureMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.last_system_prompt = None
-        self.last_user_message = None
+        self.last_system_prompt: str = ""
+        self.last_user_message: str = ""
 
     def chat(self, system_prompt: str, user_message: str) -> str:
         self.last_system_prompt = system_prompt
@@ -191,9 +191,14 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "implement concrete reject conditions for clearly invalid input" in agent.last_system_prompt
     assert "use a transparent deterministic formula and avoid hidden caps" in agent.last_system_prompt
     assert "read the field's actual truth value instead of treating mere key presence as a positive signal" in agent.last_system_prompt
+    assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_system_prompt
+    assert "Do not mix object-style APIs with dict membership tests or subscripting" in agent.last_system_prompt
     assert "your validator rejects at least one clearly invalid input shape" in agent.last_user_message
     assert "the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds" in agent.last_user_message
     assert "you used the field's truth value rather than mere key presence" in agent.last_user_message
+    assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_user_message
+    assert "you kept service state in memory instead of adding sqlite or filesystem-backed storage" in agent.last_user_message
+    assert "you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting" in agent.last_user_message
 
 
 def test_code_reviewer_run_uses_context_module_validation_fields(tmp_path):
@@ -264,6 +269,10 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Import every called production function explicitly" in agent.last_user_message
     assert "Import every production class you instantiate or reference in a fixture or test body" in agent.last_user_message
     assert "Do not hand-wire validator, scorer, logger, batch-processor, dataclass, or similar helper objects into a service fixture" in agent.last_user_message
+    assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in agent.last_user_message
+    assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in agent.last_user_message
+    assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in agent.last_user_message
+    assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in agent.last_user_message
     assert "Respect the task's line budget and requested scenario count exactly." in agent.last_user_message
     assert "If the task sets a fixture maximum, count fixtures before you finalize" in agent.last_user_message
     assert "Do not assert exact categorical score bands or labels at boundary values" in agent.last_user_message
@@ -277,11 +286,17 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "every imported production symbol exists in the API contract" in agent.last_user_message
     assert "every imported production symbol also appears in the listed test targets" in agent.last_user_message
     assert "every class instantiation uses only documented constructor arguments" in agent.last_user_message
+    assert "when a public service or workflow facade exists, you limited imports to that facade and directly exchanged domain models" in agent.last_user_message
+    assert "if you used isinstance or another exact type assertion against a production class, you explicitly imported that class" in agent.last_user_message
+    assert "if the API contract exposed typed request or result models, you instantiated them with the exact field names and full constructor arity" in agent.last_user_message
+    assert "if the implementation summary or behavior contract did not explicitly define a formula or trigger, you avoided exact score totals and threshold-triggered boolean flags" in agent.last_user_message
     assert "if the previous validation summary lists constructor arity mismatches" in agent.last_user_message
     assert "every happy-path payload satisfies the listed behavior contract and validation rules" in agent.last_user_message
     assert "you stayed at or under it and inlined one-off setup instead of adding a borderline extra fixture" in agent.last_user_message
     assert "you did not add standalone helper or logging tests" in agent.last_user_message
     assert "every exact numeric assertion is supported by an explicit contract or formula" in agent.last_user_message
+    assert "you did not infer derived status transitions, escalation flags, or report counters" in agent.last_user_message
+    assert "every request, filter, or payload dict in the suite either supplies all documented required fields" in agent.last_user_message
     assert "if you asserted derived categorical levels or score bands" in agent.last_user_message
     assert "you used repeated-character or similarly obvious inputs rather than prose sample text" in agent.last_user_message
     assert "use the direct intake or validation surface for the failure case" in agent.last_user_message
@@ -299,6 +314,7 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
     assert "Do not import or instantiate CLI wrapper classes such as names ending in `CLI` or `Cli`" in agent.last_user_message
     assert "If the previous suite already passed static validation and only failed at pytest runtime" in agent.last_user_message
+    assert "If a pytest-only runtime failure shows that an earlier assertion overreached the current implementation or contract" in agent.last_user_message
     assert "If the previous validation summary reports undefined local names or undefined fixtures" in agent.last_user_message
     assert "If the previous validation summary reports helper surface usages" in agent.last_user_message
     assert "If flagged helper surfaces are listed below" in agent.last_user_message
@@ -311,6 +327,12 @@ def test_qa_tester_uses_module_name_when_provided(tmp_path):
     assert "Do not hand-count prose strings to justify exact numeric assertions" in agent.last_system_prompt
     assert "never use natural-language prose samples for that assertion" in agent.last_system_prompt
     assert "Do not assert exact categorical score bands or labels at boundary values" in agent.last_system_prompt
+    assert "Do not infer derived status transitions, escalation flags, or report counters" in agent.last_system_prompt
+    assert "When an API accepts a request, filter, or payload dict with documented required fields" in agent.last_system_prompt
+    assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in agent.last_system_prompt
+    assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in agent.last_system_prompt
+    assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in agent.last_system_prompt
+    assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in agent.last_system_prompt
     assert "keep the validation-failure coverage on the direct intake or validation surface" in agent.last_system_prompt
     assert "omit only the field under test and keep the rest of that payload valid" in agent.last_system_prompt
     assert "If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid" in agent.last_system_prompt

@@ -4,6 +4,7 @@ import pathlib
 import subprocess
 import sys
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import kycortex_agents.orchestrator as orchestrator_module
@@ -23,15 +24,15 @@ from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, Dec
 class RecordingAgent:
     def __init__(self, response: str):
         self.response = response
-        self.last_description = None
-        self.last_context = None
-        self.last_input = None
+        self.last_description: str = ""
+        self.last_context: dict[str, Any] = {}
+        self.last_input: Any = None
 
-    def run_with_input(self, agent_input) -> str:
+    def run_with_input(self, agent_input: Any) -> str:
         self.last_input = agent_input
         return self.run(agent_input.task_description, agent_input.context)
 
-    def run(self, task_description: str, context: dict) -> str:
+    def run(self, task_description: str, context: dict[str, Any]) -> str:
         self.last_description = task_description
         self.last_context = context
         return self.response
@@ -82,11 +83,7 @@ class StructuredAgent:
                 )
             ],
             decisions=[
-                DecisionRecord(
-                    topic="stack",
-                    decision="Use typed runtime",
-                    rationale="Enables contract validation",
-                )
+                DecisionRecord("stack", "Use typed runtime", "Enables contract validation")
             ],
         )
 
@@ -197,9 +194,65 @@ def build_ollama_opener(
             generate_calls += 1
         if current_error is not None:
             raise current_error
+        assert isinstance(current_payload, str)
         return FakeHTTPResponse(current_payload)
 
     return open_request
+
+
+def parse_function_node(source: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    node = ast.parse(source).body[0]
+    assert isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    return node
+
+
+def parse_call_node(source: str) -> ast.Call:
+    node = ast.parse(source, mode="eval").body
+    assert isinstance(node, ast.Call)
+    return node
+
+
+def parse_expr_node(source: str) -> ast.expr:
+    return ast.parse(source, mode="eval").body
+
+
+def parse_assert_node(source: str) -> ast.Assert:
+    node = ast.parse(source).body[0]
+    assert isinstance(node, ast.Assert)
+    return node
+
+
+def parse_with_node(source: str) -> ast.With | ast.AsyncWith:
+    node = ast.parse(source).body[0]
+    assert isinstance(node, (ast.With, ast.AsyncWith))
+    return node
+
+
+def parse_ann_assign_node(source: str) -> ast.AnnAssign:
+    node = ast.parse(source).body[0]
+    assert isinstance(node, ast.AnnAssign)
+    return node
+
+
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
+def require_output_payload(task: Task) -> dict[str, Any]:
+    assert task.output_payload is not None
+    return task.output_payload
+
+
+def require_test_validation(task: Task) -> dict[str, Any]:
+    return cast(dict[str, Any], require_output_payload(task)["metadata"]["validation"]["test_analysis"])
+
+
+def require_artifact(project: ProjectState, index: int = 0) -> dict[str, Any]:
+    artifact = project.artifacts[index]
+    assert isinstance(artifact, dict)
+    return artifact
 
 
 def test_run_task_exposes_semantic_context(tmp_path):
@@ -334,9 +387,12 @@ def test_run_task_uses_repair_owner_and_failure_context_for_code_validation(tmp_
     )
 
     result = orchestrator.run_task(project.tasks[1], project)
+    repair_task = project.get_task("repair")
+
+    assert repair_task is not None
 
     assert result == "def repaired() -> int:\n    return 1"
-    assert project.get_task("repair").status == TaskStatus.DONE.value
+    assert repair_task.status == TaskStatus.DONE.value
     assert engineer.last_context["repair_context"]["repair_owner"] == "code_engineer"
     assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
     assert engineer.last_context["repair_validation_summary"].startswith("Generated code validation:")
@@ -1092,7 +1148,7 @@ def test_active_repair_cycle_returns_none_for_non_mapping_history_entries(tmp_pa
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
-    project.repair_history.append("invalid")
+    project.repair_history.append(cast(Any, "invalid"))
 
     assert orchestrator._active_repair_cycle(project) is None
 
@@ -1436,6 +1492,23 @@ def test_analyze_python_module_covers_enum_fields_and_public_async_methods(tmp_p
     assert analysis["classes"]["Status"]["methods"] == ["label(self)"]
 
 
+def test_analyze_python_module_includes_public_module_variables_in_symbols(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    raw_content = (
+        "PUBLIC_COUNT = 1\n"
+        "_internal_state = []\n"
+        "audit_logs: list[str] = []\n\n"
+        "def run():\n"
+        "    return PUBLIC_COUNT\n"
+    )
+
+    analysis = orchestrator._analyze_python_module(raw_content)
+
+    assert analysis["module_variables"] == ["PUBLIC_COUNT", "audit_logs"]
+    assert analysis["symbols"] == ["run"]
+
+
 def test_analyze_python_module_returns_default_shape_for_blank_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1449,6 +1522,7 @@ def test_analyze_python_module_returns_default_shape_for_blank_content(tmp_path)
         "classes": {},
         "imports": [],
         "third_party_imports": [],
+        "module_variables": [],
         "symbols": [],
         "has_main_guard": False,
     }
@@ -1539,6 +1613,64 @@ def test_build_code_test_targets_marks_preferred_and_helper_classes(tmp_path):
     assert "Helper classes to avoid in compact workflow tests: ComplianceRepository, RiskScoringService" in summary
 
 
+def test_build_code_test_targets_keeps_required_constructor_logger_off_helper_avoid_list(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_test_targets(
+        {
+            "syntax_ok": True,
+            "functions": [],
+            "classes": {
+                "ComplianceIntakeService": {
+                    "constructor_params": ["audit_logger"],
+                    "method_signatures": {"batch_process": {}},
+                },
+                "AuditLogger": {
+                    "constructor_params": [],
+                    "method_signatures": {"log_action": {}},
+                },
+            },
+        }
+    )
+
+    assert "Preferred workflow classes: ComplianceIntakeService" in summary
+    assert "Helper classes to avoid in compact workflow tests: none" in summary
+
+
+def test_build_code_test_targets_keeps_multi_token_constructor_helpers_off_helper_avoid_list(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_test_targets(
+        {
+            "syntax_ok": True,
+            "functions": [],
+            "classes": {
+                "ComplianceService": {
+                    "constructor_params": ["repository", "scoring_service", "logging_service"],
+                    "method_signatures": {"intake_request": {}, "validate_request": {}},
+                },
+                "ComplianceRepository": {
+                    "constructor_params": [],
+                    "method_signatures": {"store_request": {}},
+                },
+                "RiskScoringService": {
+                    "constructor_params": [],
+                    "method_signatures": {"calculate_score": {}},
+                },
+                "AuditLoggingService": {
+                    "constructor_params": [],
+                    "method_signatures": {"log_entry": {}},
+                },
+            },
+        }
+    )
+
+    assert "Preferred workflow classes: ComplianceService" in summary
+    assert "Helper classes to avoid in compact workflow tests: none" in summary
+
+
 def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid_modules(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1550,11 +1682,11 @@ def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid
 def test_extract_required_fields_returns_declared_required_fields_list(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def validate(payload):\n"
         "    required_fields = ['name', 1, 'email']\n"
         "    return payload\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_required_fields(function_node) == ["name", "email"]
 
@@ -1562,14 +1694,14 @@ def test_extract_required_fields_returns_declared_required_fields_list(tmp_path)
 def test_extract_required_fields_collects_unique_comparison_literals(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def validate(payload):\n"
         "    if 'status' in payload:\n"
         "        return True\n"
         "    if 'status' not in payload:\n"
         "        return False\n"
         "    return 'request_id' in payload\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_required_fields(function_node) == ["status", "request_id"]
 
@@ -1577,11 +1709,11 @@ def test_extract_required_fields_collects_unique_comparison_literals(tmp_path):
 def test_extract_required_fields_returns_empty_for_blank_required_fields_list(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def validate(payload):\n"
         "    required_fields = []\n"
         "    return payload\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_required_fields(function_node) == []
 
@@ -1601,10 +1733,10 @@ def test_comparison_required_field_rejects_invalid_shapes(tmp_path):
 def test_extract_indirect_required_fields_supports_attribute_calls(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def process(payload):\n"
         "    return helper.validate_request(payload)\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_indirect_required_fields(function_node, {"validate_request": ["request_id"]}) == ["request_id"]
     assert orchestrator._extract_indirect_required_fields(function_node, {"other": ["request_id"]}) == []
@@ -1613,11 +1745,11 @@ def test_extract_indirect_required_fields_supports_attribute_calls(tmp_path):
 def test_extract_indirect_required_fields_ignores_unmatched_attribute_calls(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def validate(payload):\n"
         "    service.other(payload)\n"
         "    return payload\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_indirect_required_fields(function_node, {"validate_request": ["request_id"]}) == []
 
@@ -1625,13 +1757,13 @@ def test_extract_indirect_required_fields_ignores_unmatched_attribute_calls(tmp_
 def test_extract_lookup_field_rules_collects_literal_key_sets_and_skips_unknown_selectors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def score_request(request, payload, selector):\n"
         "    if True:\n"
         "        pass\n"
         "    risk_scores = {'approved': 1, 'denied': 0}\n"
         "    return risk_scores[request.status] + risk_scores[payload['state']] + risk_scores[selector]\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_lookup_field_rules(function_node) == {
         "status": ["approved", "denied"],
@@ -1645,11 +1777,11 @@ def test_extract_lookup_field_rules_collects_literal_key_sets_and_skips_unknown_
 def test_extract_lookup_field_rules_ignores_empty_literal_key_sets(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def validate(payload):\n"
         "    allowed = {}\n"
         "    return allowed[payload['status']]\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_lookup_field_rules(function_node) == {}
 
@@ -1657,31 +1789,31 @@ def test_extract_lookup_field_rules_ignores_empty_literal_key_sets(tmp_path):
 def test_extract_batch_rule_covers_direct_and_nested_shapes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    direct_batch = ast.parse(
+    direct_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
         "        intake_request(item['request_id'], item)\n"
-    ).body[0]
-    nested_batch = ast.parse(
+    )
+    nested_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
         "        self.intake_request(item['request_id'], item['payload'])\n"
-    ).body[0]
-    wrapper_only_batch = ast.parse(
+    )
+    wrapper_only_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
         "        intake_request(item.id, item['payload'])\n"
-    ).body[0]
-    missing_args_batch = ast.parse(
+    )
+    missing_args_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
         "        intake_request(item)\n"
-    ).body[0]
-    not_batch = ast.parse(
+    )
+    not_batch = parse_function_node(
         "def process_items(items):\n"
         "    for item in items:\n"
         "        intake_request(item['request_id'], item)\n"
-    ).body[0]
+    )
     validation_rules = {"intake_request": ["name", "email"]}
 
     assert (
@@ -1704,21 +1836,21 @@ def test_extract_batch_rule_ignores_non_matching_calls_and_empty_required_fields
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
     validation_rules = {"intake_request": []}
-    helper_batch = ast.parse(
+    helper_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
         "        service.validate(item)\n"
-    ).body[0]
-    empty_direct_batch = ast.parse(
+    )
+    empty_direct_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
         "        intake_request(request_id, item)\n"
-    ).body[0]
-    empty_nested_batch = ast.parse(
+    )
+    empty_nested_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
         "        intake_request(request_id, item['payload'])\n"
-    ).body[0]
+    )
 
     assert orchestrator._extract_batch_rule(helper_batch, validation_rules) == ""
     assert orchestrator._extract_batch_rule(empty_direct_batch, validation_rules) == ""
@@ -1833,6 +1965,27 @@ def test_analyze_test_module_allows_existing_class_methods(tmp_path):
     assert analysis["invalid_member_references"] == []
 
 
+def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = orchestrator._analyze_python_module(
+        "audit_logs: list[str] = []\n\n"
+        "def log_audit():\n"
+        "    audit_logs.append('ok')\n"
+    )
+    test_content = (
+        "from module_under_test import audit_logs, log_audit\n\n"
+        "def test_log_audit_records_event():\n"
+        "    log_audit()\n"
+        "    assert audit_logs == ['ok']\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["imported_module_symbols"] == ["audit_logs", "log_audit"]
+    assert analysis["unknown_module_symbols"] == []
+
+
 def test_analyze_test_module_flags_helper_surface_usages_when_workflow_class_exists(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1898,6 +2051,144 @@ def test_analyze_test_module_flags_helper_surface_usages_when_workflow_class_exi
     analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
 
     assert analysis["helper_surface_usages"] == ["ComplianceRepository", "RiskScoringService"]
+
+
+def test_analyze_test_module_allows_required_constructor_helper_for_preferred_workflow_class(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "ComplianceIntakeService": {
+                "name": "ComplianceIntakeService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": ["audit_logger"],
+                "constructor_min_args": 1,
+                "constructor_max_args": 1,
+                "methods": ["intake(self, payload)"],
+                "method_signatures": {
+                    "intake": {"params": ["payload"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+            "AuditLogger": {
+                "name": "AuditLogger",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["log_action(self, action)"],
+                "method_signatures": {
+                    "log_action": {"params": ["action"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["ComplianceIntakeService", "AuditLogger"],
+    }
+    test_content = (
+        "from module_under_test import ComplianceIntakeService, AuditLogger\n\n"
+        "def test_service_flow():\n"
+        "    service = ComplianceIntakeService(AuditLogger())\n"
+        "    assert service is not None\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["helper_surface_usages"] == []
+
+
+def test_analyze_test_module_allows_multi_token_constructor_helpers_for_preferred_workflow_class(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "ComplianceService": {
+                "name": "ComplianceService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": ["repository", "scoring_service", "logging_service"],
+                "constructor_min_args": 3,
+                "constructor_max_args": 3,
+                "methods": ["intake_request(self, request)", "validate_request(self, request)"],
+                "method_signatures": {
+                    "intake_request": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                    "validate_request": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+            "ComplianceRepository": {
+                "name": "ComplianceRepository",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["store_request(self, request)"],
+                "method_signatures": {
+                    "store_request": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+            "RiskScoringService": {
+                "name": "RiskScoringService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["calculate_score(self, request)"],
+                "method_signatures": {
+                    "calculate_score": {"params": ["request"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+            "AuditLoggingService": {
+                "name": "AuditLoggingService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": ["log_entry(self, entry)"],
+                "method_signatures": {
+                    "log_entry": {"params": ["entry"], "min_args": 1, "max_args": 1, "return_annotation": None},
+                },
+            },
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": [
+            "ComplianceService",
+            "ComplianceRepository",
+            "RiskScoringService",
+            "AuditLoggingService",
+        ],
+    }
+    test_content = (
+        "from module_under_test import ComplianceService, ComplianceRepository, RiskScoringService, AuditLoggingService\n\n"
+        "def test_service_flow():\n"
+        "    service = ComplianceService(ComplianceRepository(), RiskScoringService(), AuditLoggingService())\n"
+        "    assert service is not None\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["helper_surface_usages"] == []
 
 
 def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs(tmp_path):
@@ -2044,12 +2335,12 @@ def test_analyze_test_module_flags_reserved_request_fixture_and_missing_fixture_
 def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "def test_case():\n"
         "    payload: dict = {'status': 'approved'}\n"
         "    service.validate_request(payload)\n"
         "    process_request('id-1', payload=payload)\n"
-    ).body[0]
+    )
     call_nodes = [node for node in ast.walk(function_node) if isinstance(node, ast.Call)]
 
     bindings = orchestrator._collect_local_bindings(function_node)
@@ -2458,7 +2749,7 @@ def test_call_argument_value_handles_keywords_constructors_and_non_name_callable
 def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_violations(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    bindings = {
+    bindings: dict[str, ast.AST] = {
         "batch": ast.List(
             elts=[
                 ast.Constant("bad-item"),
@@ -2490,7 +2781,7 @@ def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_viol
 def test_validate_batch_call_reports_missing_nested_fields_when_nested_payload_keys_are_available(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    bindings = {
+    bindings: dict[str, ast.AST] = {
         "batch": ast.List(
             elts=[
                 ast.Dict(
@@ -2519,7 +2810,7 @@ def test_validate_batch_call_reports_missing_nested_fields_when_nested_payload_k
 def test_validate_batch_call_reports_missing_required_fields_for_direct_items(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    bindings = {
+    bindings: dict[str, ast.AST] = {
         "batch": ast.List(
             elts=[
                 ast.Dict(keys=[ast.Constant("name")], values=[ast.Constant("Ada")]),
@@ -2545,7 +2836,7 @@ def test_validate_batch_call_accepts_complete_direct_and_nested_items(tmp_path, 
         return real_extract(node, current_bindings, class_map)
 
     monkeypatch.setattr(orchestrator, "_extract_literal_dict_keys", fake_extract)
-    bindings = {
+    bindings: dict[str, ast.AST] = {
         "direct_batch": ast.List(
             elts=[
                 ast.Dict(
@@ -2602,12 +2893,12 @@ def test_is_pytest_fixture_detects_name_attribute_and_call_decorators(tmp_path):
 def test_is_pytest_fixture_handles_multiple_decorators_before_fixture(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "@custom\n"
         "@pytest.fixture(scope='module')\n"
         "def sample():\n"
         "    return 1\n"
-    ).body[0]
+    )
 
     assert orchestrator._is_pytest_fixture(function_node) is True
 
@@ -2769,7 +3060,7 @@ def test_run_task_fails_qa_tester_when_compact_suite_imports_helper_surfaces(tmp
     with pytest.raises(AgentExecutionError, match=r"helper surface usages"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["helper_surface_usages"] == [
         "ComplianceRepository",
         "ComplianceRepository (line 7)",
@@ -2824,69 +3115,82 @@ def test_truncation_and_completion_helpers_cover_edge_cases(tmp_path):
 def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    call_node = ast.parse("process_batch(requests)", mode="eval").body
+    call_node = parse_call_node("process_batch(requests)")
 
-    assert orchestrator._call_has_negative_expectation(None, {}) is False
+    assert orchestrator._call_has_negative_expectation(call_node, {}) is False
     assert orchestrator._call_has_negative_expectation(
         call_node,
         orchestrator._parent_map(ast.parse("process_batch(requests)")),
     ) is False
     assert orchestrator._batch_call_allows_partial_invalid_items(
-        ast.parse("def test_case():\n    result = process_batch(requests)\n").body[0],
-        ast.parse("process_batch(requests)", mode="eval").body,
+        parse_function_node("def test_case():\n    result = process_batch(requests)\n"),
+        parse_call_node("process_batch(requests)"),
         {},
         {},
     ) is False
     ann_assign_module = ast.parse("results: list[str] = process_batch(requests)")
     ann_assign = ann_assign_module.body[0]
+    assert isinstance(ann_assign, ast.AnnAssign)
+    assert isinstance(ann_assign.value, ast.Call)
     parent_map = orchestrator._parent_map(ann_assign_module)
     assert orchestrator._assigned_name_for_call(ann_assign.value, parent_map) == "results"
     assert orchestrator._assigned_name_for_call(call_node, {}) is None
     assert orchestrator._assert_limits_batch_result(
-        ast.parse("1 > len(results)", mode="eval").body,
+        parse_expr_node("1 > len(results)"),
         "results",
         call_node,
         3,
     ) is True
-    assert orchestrator._assert_limits_batch_result(ast.parse("len(results)", mode="eval").body, "results", call_node, 3) is False
-    assert orchestrator._assert_limits_batch_result(ast.parse("count == 1", mode="eval").body, "results", call_node, 3) is False
+    assert orchestrator._assert_limits_batch_result(parse_expr_node("len(results)"), "results", call_node, 3) is False
+    assert orchestrator._assert_limits_batch_result(parse_expr_node("count == 1"), "results", call_node, 3) is False
     assert orchestrator._len_call_matches_batch_result(ast.Name("results"), "results", call_node) is False
-    assert orchestrator._len_call_matches_batch_result(ast.parse("count(results)", mode="eval").body, "results", call_node) is False
-    direct_len = ast.parse("len(process_batch(requests))", mode="eval").body
+    assert orchestrator._len_call_matches_batch_result(parse_expr_node("count(results)"), "results", call_node) is False
+    direct_len = parse_call_node("len(process_batch(requests))")
+    assert isinstance(direct_len.args[0], ast.Call)
     assert orchestrator._len_call_matches_batch_result(direct_len, None, direct_len.args[0]) is True
     assert orchestrator._int_constant_value(ast.Constant("x")) is None
     assert orchestrator._comparison_implies_partial_batch_result(ast.Gt(), 1, 3) is False
     assert orchestrator._comparison_implies_partial_batch_result(ast.Lt(), 3, 3) is True
     assert orchestrator._comparison_implies_partial_batch_result(ast.LtE(), 2, 3) is True
     assert orchestrator._comparison_implies_partial_batch_result(ast.Eq(), None, 3) is False
-    false_compare = ast.parse("assert False == validate_request(data)").body[0]
+    false_compare = parse_assert_node("assert False == validate_request(data)")
+    assert isinstance(false_compare.test, ast.Compare)
+    assert isinstance(false_compare.test.comparators[0], ast.Call)
     assert orchestrator._assert_expects_false(false_compare, false_compare.test.comparators[0]) is True
-    plain_assert = ast.parse("assert validate_request(data)").body[0]
+    plain_assert = parse_assert_node("assert validate_request(data)")
+    assert isinstance(plain_assert.test, ast.Call)
     assert orchestrator._assert_expects_false(plain_assert, plain_assert.test) is False
-    unrelated_compare = ast.parse("assert other_result == False").body[0]
+    unrelated_compare = parse_assert_node("assert other_result == False")
     assert orchestrator._assert_expects_false(unrelated_compare, call_node) is False
-    invalid_status_assert = ast.parse("assert request.status == 'Invalid'").body[0]
+    invalid_status_assert = parse_assert_node("assert request.status == 'Invalid'")
     assert orchestrator._assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
-    pending_status_assert = ast.parse("assert request.status == 'Pending'").body[0]
+    pending_status_assert = parse_assert_node("assert request.status == 'Pending'")
     assert orchestrator._assert_expects_invalid_outcome(pending_status_assert.test, None, "request") is True
-    false_result_assert = ast.parse("assert result is False").body[0]
+    false_result_assert = parse_assert_node("assert result is False")
     assert orchestrator._assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
-    with_node = ast.parse("with context_manager:\n    validate_request(data)\n").body[0]
+    with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")
     assert orchestrator._with_uses_pytest_raises(with_node) is False
-    warns_with_node = ast.parse("with pytest.warns(ValueError):\n    validate_request(data)\n").body[0]
+    warns_with_node = parse_with_node("with pytest.warns(ValueError):\n    validate_request(data)\n")
     assert orchestrator._with_uses_pytest_raises(warns_with_node) is False
 
 
 def test_batch_partial_invalid_detection_returns_false_when_asserts_do_not_limit_batch(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
+    function_node = parse_function_node(
+        "def test_batch():\n"
+        "    result = process_batch([1, 2, 3])\n"
+        "    assert len(other) == 3\n"
+    )
     tree = ast.parse(
         "def test_batch():\n"
         "    result = process_batch([1, 2, 3])\n"
         "    assert len(other) == 3\n"
     )
-    function_node = tree.body[0]
-    call_node = function_node.body[0].value
+    first_statement = function_node.body[0]
+    assert isinstance(first_statement, ast.Assign)
+    assert isinstance(first_statement.value, ast.Call)
+    call_node = first_statement.value
     parent_map = orchestrator._parent_map(tree)
 
     assert orchestrator._batch_call_allows_partial_invalid_items(function_node, call_node, {}, parent_map) is False
@@ -2908,7 +3212,7 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
     )
     assert orchestrator._collect_module_defined_names(module_tree) == {"operating_system", "value", "annotated"}
 
-    function_node = ast.parse(
+    function_node = parse_function_node(
         "@plain\n"
         "@pytest.mark.skip(reason='ignored')\n"
         "@custom.parametrize('ignored', [1])\n"
@@ -2935,16 +3239,16 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
         "        return missing\n"
         "    class Nested:\n"
         "        attr = missing\n"
-    ).body[0]
-    class_init = ast.parse(
+    )
+    class_init = parse_function_node(
         "def __init__(self):\n"
         "    self.value: int = 1\n"
-    ).body[0]
-    class_init_with_local = ast.parse(
+    )
+    class_init_with_local = parse_function_node(
         "def __init__(self):\n"
         "    self.value: int = 1\n"
         "    local = 2\n"
-    ).body[0]
+    )
 
     assert orchestrator._function_argument_names(function_node) == {"base", "args", "kwargs"}
     assert orchestrator._collect_parametrized_argument_names(function_node) == {"left", "right"}
@@ -2963,7 +3267,9 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
     assert "missing" not in orchestrator._collect_undefined_local_names(function_node, {"items", "manager", "source"})
     assert orchestrator._self_assigned_attributes(class_init) == ["value"]
     assert orchestrator._self_assigned_attributes(class_init_with_local) == ["value"]
-    starred_target = ast.parse("first, *rest = values").body[0].targets[0]
+    starred_assign = ast.parse("first, *rest = values").body[0]
+    assert isinstance(starred_assign, ast.Assign)
+    starred_target = starred_assign.targets[0]
     assert orchestrator._bound_target_names(starred_target) == {"first", "rest"}
     assert orchestrator._bound_target_names(ast.Attribute(value=ast.Name("obj"), attr="field")) == set()
 
@@ -2993,7 +3299,7 @@ def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path)
         "build_request": {"return_annotation": "Request"},
         "build_text": {"return_annotation": "str"},
     }
-    test_node = ast.parse(
+    test_node = parse_function_node(
         "def test_case():\n"
         "    request: Request = build_request()\n"
         "    text: str = build_text()\n"
@@ -3003,7 +3309,7 @@ def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path)
         "    service.range_fetch(1, 2, 3)\n"
         "    service.missing()\n"
         "    assert returned.invalid == 1\n"
-    ).body[0]
+    )
 
     local_types = orchestrator._collect_test_local_types(test_node, class_map, function_map)
 
@@ -3051,11 +3357,11 @@ def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path)
 def test_analyze_typed_test_member_usage_treats_enum_fields_as_invalid_members(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    test_node = ast.parse(
+    test_node = parse_function_node(
         "def test_enum_usage():\n"
         "    status = Status()\n"
         "    assert status.value == 'ok'\n"
-    ).body[0]
+    )
     local_types = {"status": "Status"}
     class_map = {
         "Status": {
@@ -3124,16 +3430,19 @@ def test_analyze_test_module_reports_constructor_arity_when_limits_fall_back_or_
 def test_extract_parametrize_argument_names_skips_irrelevant_keywords(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    keyword_decorator = ast.parse(
+    keyword_decorator = parse_function_node(
         "@pytest.mark.parametrize(values=[1], argnames=['left'])\n"
         "def test_case():\n"
         "    pass\n"
-    ).body[0].decorator_list[0]
-    missing_decorator = ast.parse(
+    ).decorator_list[0]
+    missing_decorator = parse_function_node(
         "@pytest.mark.parametrize(values=[1])\n"
         "def test_case():\n"
         "    pass\n"
-    ).body[0].decorator_list[0]
+    ).decorator_list[0]
+
+    assert isinstance(keyword_decorator, ast.Call)
+    assert isinstance(missing_decorator, ast.Call)
 
     assert orchestrator._extract_parametrize_argument_names(keyword_decorator) == {"left"}
     assert orchestrator._extract_parametrize_argument_names(missing_decorator) == set()
@@ -5788,7 +6097,7 @@ def test_build_generated_test_env_strips_loader_and_native_runtime_markers(tmp_p
 def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     def fake_run(command, **kwargs):
         runner_path = pathlib.Path(command[-1])
@@ -6110,6 +6419,7 @@ def test_run_task_fails_code_engineer_when_generated_code_has_syntax_error(tmp_p
         orchestrator.run_task(project.tasks[0], project)
 
     assert project.tasks[0].status == TaskStatus.FAILED.value
+    assert project.tasks[0].output is not None
     assert "Generated code validation failed: syntax error" in project.tasks[0].output
     assert project.tasks[0].output_payload is not None
     assert project.tasks[0].output_payload["raw_content"] == "def broken(:\n    return 1\n"
@@ -6164,6 +6474,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_fail_pytest_execution(tmp
         orchestrator.run_task(project.tasks[1], project)
 
     assert project.tasks[1].status == TaskStatus.FAILED.value
+    assert project.tasks[1].output is not None
     assert "Generated test validation failed: pytest failed" in project.tasks[1].output
     assert project.tasks[1].output_payload is not None
     assert project.tasks[1].output_payload["raw_content"].startswith("from code_implementation import run")
@@ -6255,7 +6566,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_fixtures(tm
     with pytest.raises(AgentExecutionError, match=r"undefined test fixtures: sample_case \(line 3\)"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["undefined_fixtures"] == ["sample_case (line 3)"]
 
 
@@ -6323,7 +6634,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_local_names
     with pytest.raises(AgentExecutionError, match=r"undefined local names: expected_result \(line 4\)"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["undefined_local_names"] == ["expected_result (line 4)"]
 
 
@@ -6389,7 +6700,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_call_entrypoints_directly
     with pytest.raises(AgentExecutionError, match=r"unsafe entrypoint calls: main\(\) \(line 4\)"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["unsafe_entrypoint_calls"] == ["main() (line 4)"]
 
 
@@ -6455,7 +6766,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_import_entrypoints(tmp_pa
     with pytest.raises(AgentExecutionError, match=r"imported entrypoint symbols: main"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["imported_entrypoint_symbols"] == ["main"]
 
 
@@ -6528,7 +6839,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_import_cli_wrapper_classe
     with pytest.raises(AgentExecutionError, match=r"imported entrypoint symbols: ComplianceCLI"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["imported_entrypoint_symbols"] == ["ComplianceCLI"]
 
 
@@ -6601,7 +6912,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_violate_payload_contract(
     with pytest.raises(AgentExecutionError, match=r"payload contract violations"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["payload_contract_violations"] == [
         "process_batch batch item missing required fields: name, email, compliance_type at line 14",
     ]
@@ -6662,7 +6973,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_treat_non_batch_api_as_ba
     with pytest.raises(AgentExecutionError, match=r"non-batch sequence calls"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["non_batch_sequence_calls"] == [
         "process_case does not accept batch/list inputs at line 5"
     ]
@@ -6724,7 +7035,7 @@ def test_run_task_allows_generated_tests_to_use_list_for_sequence_function(tmp_p
     result = orchestrator.run_task(project.tasks[1], project)
 
     assert "def test_process_cases_list" in result
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["non_batch_sequence_calls"] == []
 
 
@@ -6785,7 +7096,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_miss_nested_constructor_p
     with pytest.raises(AgentExecutionError, match=r"payload contract violations"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["payload_contract_violations"] == [
         "validate_request payload missing required fields: compliance_data at line 5"
     ]
@@ -6847,7 +7158,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_use_unsupported_field_lit
     with pytest.raises(AgentExecutionError, match=r"payload contract violations"):
         orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["payload_contract_violations"] == [
         "score_request field `document_type` uses unsupported values: type at line 5"
     ]
@@ -6916,7 +7227,7 @@ def test_run_task_allows_missing_required_fields_for_intentional_invalid_status_
 
     orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["payload_contract_violations"] == []
     assert project.tasks[1].status == TaskStatus.DONE.value
 
@@ -6983,7 +7294,7 @@ def test_run_task_allows_missing_required_fields_for_intentional_pending_status_
 
     orchestrator.run_task(project.tasks[1], project)
 
-    validation = project.tasks[1].output_payload["metadata"]["validation"]["test_analysis"]
+    validation = require_test_validation(project.tasks[1])
     assert validation["payload_contract_violations"] == []
     assert project.tasks[1].status == TaskStatus.DONE.value
 
@@ -7309,9 +7620,10 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert project.execution_events[0]["event"] == "task_started"
     assert project.execution_events[-1]["event"] == "task_completed"
     assert project.decisions[0]["topic"] == "stack"
-    assert project.artifacts[0]["name"] == "architecture_doc"
-    assert project.artifacts[0]["path"] == "artifacts/architecture.md"
-    assert project.artifacts[0]["artifact_type"] == ArtifactType.DOCUMENT.value
+    artifact = require_artifact(project)
+    assert artifact["name"] == "architecture_doc"
+    assert artifact["path"] == "artifacts/architecture.md"
+    assert artifact["artifact_type"] == ArtifactType.DOCUMENT.value
 
 
 def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):
@@ -7339,7 +7651,8 @@ def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):
 
     orchestrator.run_task(project.tasks[0], project)
 
-    assert project.artifacts[0]["path"] == "artifacts/arch_output.txt"
+    artifact = require_artifact(project)
+    assert artifact["path"] == "artifacts/arch_output.txt"
     assert (tmp_path / "output" / "artifacts" / "arch_output.txt").read_text(encoding="utf-8") == "ARCHITECTURE DOC"
 
 
@@ -7786,8 +8099,10 @@ def test_execute_workflow_fails_when_custom_registry_is_incomplete(tmp_path):
     with pytest.raises(AgentExecutionError, match="Task 'code' is assigned to unknown agent 'code_engineer'"):
         orchestrator.execute_workflow(project)
 
-    assert project.get_task("arch").status == TaskStatus.PENDING.value
-    assert project.get_task("code").status == TaskStatus.PENDING.value
+    arch_task = require_task(project, "arch")
+    code_task = require_task(project, "code")
+    assert arch_task.status == TaskStatus.PENDING.value
+    assert code_task.status == TaskStatus.PENDING.value
 
 
 def test_execute_workflow_validates_all_tasks_before_any_execution(tmp_path):
@@ -7969,9 +8284,12 @@ def test_execute_workflow_can_continue_after_terminal_failure(tmp_path):
 
     orchestrator.execute_workflow(project)
 
-    assert project.get_task("arch").status == TaskStatus.FAILED.value
-    assert project.get_task("code").status == TaskStatus.DONE.value
-    assert project.get_task("review").status == TaskStatus.SKIPPED.value
+    arch_task = require_task(project, "arch")
+    code_task = require_task(project, "code")
+    review_task = require_task(project, "review")
+    assert arch_task.status == TaskStatus.FAILED.value
+    assert code_task.status == TaskStatus.DONE.value
+    assert review_task.status == TaskStatus.SKIPPED.value
     assert project.phase == "completed"
     assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value
     assert project.acceptance_criteria_met is False
@@ -8014,8 +8332,10 @@ def test_execute_workflow_can_complete_under_required_task_acceptance_policy(tmp
 
     orchestrator.execute_workflow(project)
 
-    assert project.get_task("code").status == TaskStatus.DONE.value
-    assert project.get_task("docs").status == TaskStatus.FAILED.value
+    code_task = require_task(project, "code")
+    docs_task = require_task(project, "docs")
+    assert code_task.status == TaskStatus.DONE.value
+    assert docs_task.status == TaskStatus.FAILED.value
     assert project.phase == "completed"
     assert project.acceptance_policy == "required_tasks"
     assert project.terminal_outcome == WorkflowOutcome.COMPLETED.value
@@ -8044,7 +8364,8 @@ def test_execute_workflow_degrades_when_required_task_policy_has_no_required_tas
 
     orchestrator.execute_workflow(project)
 
-    assert project.get_task("docs").status == TaskStatus.DONE.value
+    docs_task = require_task(project, "docs")
+    assert docs_task.status == TaskStatus.DONE.value
     assert project.phase == "completed"
     assert project.acceptance_policy == "required_tasks"
     assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value
@@ -8092,20 +8413,24 @@ def test_execute_workflow_can_resume_failed_workflow(tmp_path):
     with pytest.raises(RuntimeError, match="boom-1"):
         orchestrator.execute_workflow(project)
 
-    assert project.get_task("arch").status == TaskStatus.FAILED.value
+    arch_task = require_task(project, "arch")
+    assert arch_task.status == TaskStatus.FAILED.value
 
     orchestrator.execute_workflow(project)
 
-    assert project.get_task("arch").status == TaskStatus.DONE.value
-    assert project.get_task("review").status == TaskStatus.DONE.value
-    assert project.get_task("arch__repair_1").status == TaskStatus.DONE.value
-    assert project.get_task("arch__repair_1").repair_origin_task_id == "arch"
+    arch_task = require_task(project, "arch")
+    review_task = require_task(project, "review")
+    repair_task = require_task(project, "arch__repair_1")
+    assert arch_task.status == TaskStatus.DONE.value
+    assert review_task.status == TaskStatus.DONE.value
+    assert repair_task.status == TaskStatus.DONE.value
+    assert repair_task.repair_origin_task_id == "arch"
     assert project.repair_cycle_count == 1
     assert project.repair_history[0]["reason"] == "resume_failed_tasks"
     assert project.repair_history[0]["failed_task_ids"] == ["arch"]
     assert project.execution_events[-1]["event"] == "workflow_finished"
-    assert "requeued" in [entry["event"] for entry in project.get_task("arch").history]
-    assert project.get_task("arch").history[-1]["event"] == "repaired"
+    assert "requeued" in [entry["event"] for entry in arch_task.history]
+    assert arch_task.history[-1]["event"] == "repaired"
 
 
 def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
@@ -8171,8 +8496,8 @@ def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
 
     orchestrator.execute_workflow(project)
 
-    review_task = project.get_task("review")
-    repair_task = project.get_task("review__repair_1")
+    review_task = require_task(project, "review")
+    repair_task = require_task(project, "review__repair_1")
     assert review_task.status == TaskStatus.DONE.value
     assert review_task.output == "def repaired() -> int:\n    return 1"
     assert repair_task.status == TaskStatus.DONE.value
@@ -8298,10 +8623,14 @@ def test_execute_workflow_can_chain_new_failed_task_within_active_repair_cycle(t
     orchestrator.execute_workflow(project)
 
     assert project.repair_cycle_count == 1
-    assert project.get_task("arch").status == TaskStatus.DONE.value
-    assert project.get_task("arch__repair_1").status == TaskStatus.DONE.value
-    assert project.get_task("tests").status == TaskStatus.DONE.value
-    assert project.get_task("tests__repair_1").status == TaskStatus.DONE.value
+    arch_task = require_task(project, "arch")
+    arch_repair_task = require_task(project, "arch__repair_1")
+    tests_task = require_task(project, "tests")
+    tests_repair_task = require_task(project, "tests__repair_1")
+    assert arch_task.status == TaskStatus.DONE.value
+    assert arch_repair_task.status == TaskStatus.DONE.value
+    assert tests_task.status == TaskStatus.DONE.value
+    assert tests_repair_task.status == TaskStatus.DONE.value
     assert any(event["event"] == "task_repair_created" and event["task_id"] == "tests__repair_1" for event in project.execution_events)
     assert any(event["event"] == "task_repair_chained" and event["task_id"] == "tests" for event in project.execution_events)
 
@@ -8344,7 +8673,8 @@ def test_execute_workflow_does_not_spawn_duplicate_repair_task_when_pending_chil
     orchestrator.execute_workflow(project)
 
     assert len([task for task in project.tasks if task.repair_origin_task_id == "arch"]) == 1
-    assert project.get_task("arch").status == TaskStatus.DONE.value
+    arch_task = require_task(project, "arch")
+    assert arch_task.status == TaskStatus.DONE.value
 
 
 def test_build_agent_input_includes_test_repair_context(tmp_path):
@@ -8395,7 +8725,7 @@ def test_build_agent_input_includes_test_repair_context(tmp_path):
         )
     )
 
-    agent_input = orchestrator._build_agent_input(project.get_task("tests"), project)
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
 
     assert "Repair objective:" in agent_input.task_description
     assert "Previous failure category: test_validation" in agent_input.task_description
@@ -8467,7 +8797,7 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
         )
     )
 
-    agent_input = orchestrator._build_agent_input(project.get_task("tests"), project)
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
@@ -8477,8 +8807,12 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
     assert "Reduce scope aggressively: target 3 to 4 top-level tests" in agent_input.task_description
     assert "Count top-level tests and total lines before finalizing" in agent_input.task_description
     assert "Drop validator, scorer, serialization, logger, and other helper-level tests" in agent_input.task_description
+    assert "A suite over the hard cap is invalid even when pytest passes" in agent_input.task_description
     assert "Use only documented module symbols" in agent_input.task_description
+    assert "keep imports limited to that facade and directly exchanged domain models" in agent_input.task_description
+    assert "If you use isinstance or another exact type assertion against a production class, import that class explicitly" in agent_input.task_description
     assert "remove guessed helper wiring and rebuild the suite around the smallest documented public service or function surface" in agent_input.task_description
+    assert "Instantiate typed request or result models with the exact field names and full constructor arity listed in the API contract" in agent_input.task_description
     assert "Keep scalar functions scalar" in agent_input.task_description
     assert "Never define a custom fixture named request." in agent_input.task_description
     assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
@@ -8531,6 +8865,7 @@ def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
                     "- Unknown module symbols: none\n"
                     "- Constructor arity mismatches: none\n"
                     "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_add - AssertionError: assert add(1, 2) == 4\n"
                     "- Pytest summary: 1 failed, 1 passed in 0.01s\n"
                     "- Verdict: FAIL"
                 ),
@@ -8540,12 +8875,72 @@ def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
         )
     )
 
-    agent_input = orchestrator._build_agent_input(project.get_task("tests"), project)
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
     assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
     assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
+    assert "rewrite that assertion to a contract-backed invariant instead of forcing a guessed business rule" in agent_input.task_description
+    assert "remove exact score totals and threshold-triggered boolean assertions" in agent_input.task_description
+    assert "Do not infer derived statuses, labels, or report counters from suggestive field names or keywords alone" in agent_input.task_description
+
+
+def test_build_agent_input_adds_payload_contract_test_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def get_logs(filters=None):\n    return []",
+            output_payload={
+                "summary": "def get_logs(filters=None):",
+                "raw_content": "def get_logs(filters=None):\n    return []",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def get_logs(filters=None):\n    return []",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Payload contract violations: get_logs payload missing required fields: action, record_id at line 14\n"
+                    "- Pytest execution: PASS\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "from code_implementation import get_logs",
+                "failed_artifact_content": "from code_implementation import get_logs",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "provide every required field or omit that optional payload entirely" in agent_input.task_description
 
 
 def test_build_repair_context_extracts_helper_surface_names_from_test_validation(tmp_path):
@@ -8616,12 +9011,49 @@ def test_build_agent_input_adds_targeted_code_repair_priorities_for_pytest_asser
         )
     )
 
-    agent_input = orchestrator._build_agent_input(project.get_task("code"), project)
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
     assert "change the implementation until that exact expectation holds" in agent_input.task_description
     assert "Preserve the documented public API and repair the module behavior itself" in agent_input.task_description
+
+
+def test_build_agent_input_adds_object_semantics_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it satisfies the existing valid pytest suite and the documented contract without shifting the failure onto the tests.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_request - TypeError: argument of type 'ComplianceRequest' is not iterable\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def validate_request(request):\n    return 'data' in request",
+                "failed_artifact_content": "def validate_request(request):\n    return 'data' in request",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "Repair priorities:" in agent_input.task_description
+    assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
+    assert "Preserve the documented public API and repair the module behavior itself" in agent_input.task_description
+    assert "Keep data-model semantics consistent" in agent_input.task_description
+    assert "validate and read them via attributes instead of mapping membership or subscripting" in agent_input.task_description
 
 
 def test_build_agent_input_adds_code_line_budget_repair_priority(tmp_path):
@@ -8651,7 +9083,7 @@ def test_build_agent_input_adds_code_line_budget_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator._build_agent_input(project.get_task("code"), project)
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "Rewrite the full module smaller and leave clear headroom below the reported line ceiling" in agent_input.task_description
@@ -8912,11 +9344,15 @@ def test_execute_workflow_resume_failed_repairs_code_before_rerunning_valid_test
 
     orchestrator.execute_workflow(project)
 
-    assert project.get_task("code").status == TaskStatus.DONE.value
-    assert project.get_task("tests").status == TaskStatus.DONE.value
-    assert project.get_task("code__repair_1").status == TaskStatus.DONE.value
-    assert project.get_task("tests__repair_1").status == TaskStatus.DONE.value
-    assert "code__repair_1" in project.get_task("tests__repair_1").dependencies
+    code_task = require_task(project, "code")
+    tests_task = require_task(project, "tests")
+    code_repair_task = require_task(project, "code__repair_1")
+    tests_repair_task = require_task(project, "tests__repair_1")
+    assert code_task.status == TaskStatus.DONE.value
+    assert tests_task.status == TaskStatus.DONE.value
+    assert code_repair_task.status == TaskStatus.DONE.value
+    assert tests_repair_task.status == TaskStatus.DONE.value
+    assert "code__repair_1" in tests_repair_task.dependencies
     assert engineer.last_context["existing_code"] == "def risky() -> int:\n    raise AttributeError('boom')"
     assert engineer.last_context["existing_tests"] == "from code_implementation import risky\n\ndef test_risky():\n    assert risky() == 1"
     assert "Pytest failure details" in engineer.last_context["repair_validation_summary"]
@@ -8945,7 +9381,7 @@ def test_build_context_includes_dependency_repair_manifest_and_summary(tmp_path)
         )
     )
 
-    context = orchestrator._build_context(project.get_task("deps"), project)
+    context = orchestrator._build_context(require_task(project, "deps"), project)
 
     assert context["repair_context"]["repair_owner"] == "dependency_manager"
     assert context["existing_dependency_manifest"] == "# No external runtime dependencies"
@@ -8962,7 +9398,7 @@ def test_repair_helper_fallbacks_cover_missing_validation_payload(tmp_path):
         assigned_to="architect",
         output="provider timeout",
         last_error="provider timeout",
-        output_payload="not-a-dict",
+        output_payload=cast(dict[str, Any], "not-a-dict"),
     )
 
     assert orchestrator._validation_payload(task) == {}

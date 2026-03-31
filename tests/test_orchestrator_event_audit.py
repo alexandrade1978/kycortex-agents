@@ -21,8 +21,21 @@ class FailingAgent:
         raise RuntimeError("boom")
 
 
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
+def build_config(tmp_path, workflow_failure_policy: str = "fail_fast") -> KYCortexConfig:
+    config = KYCortexConfig()
+    config.output_dir = str(tmp_path / "output")
+    config.workflow_failure_policy = workflow_failure_policy
+    return config
+
+
 def test_execute_workflow_logs_workflow_blocked_for_persisted_unsatisfied_dependencies(tmp_path, caplog):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    config = build_config(tmp_path)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -73,7 +86,7 @@ def test_execute_workflow_logs_workflow_blocked_for_persisted_unsatisfied_depend
 
 
 def test_execute_workflow_logs_cascading_dependent_tasks_skipped(tmp_path, caplog):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_failure_policy="continue")
+    config = build_config(tmp_path, workflow_failure_policy="continue")
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -131,16 +144,20 @@ def test_execute_workflow_logs_cascading_dependent_tasks_skipped(tmp_path, caplo
     assert skipped_record.project_name == "Demo"
     assert skipped_record.task_id == "arch"
     assert skipped_record.skipped_task_ids == ["code", "review", "tests"]
-    assert project.get_task("arch").status == TaskStatus.FAILED.value
-    assert project.get_task("code").status == TaskStatus.SKIPPED.value
-    assert project.get_task("review").status == TaskStatus.SKIPPED.value
-    assert project.get_task("tests").status == TaskStatus.SKIPPED.value
+    arch_task = require_task(project, "arch")
+    code_task = require_task(project, "code")
+    review_task = require_task(project, "review")
+    tests_task = require_task(project, "tests")
+    assert arch_task.status == TaskStatus.FAILED.value
+    assert code_task.status == TaskStatus.SKIPPED.value
+    assert review_task.status == TaskStatus.SKIPPED.value
+    assert tests_task.status == TaskStatus.SKIPPED.value
     assert project.phase == "completed"
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
 def test_cascading_task_skip_audit_trail_persists_across_reload(tmp_path, state_filename):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"), workflow_failure_policy="continue")
+    config = build_config(tmp_path, workflow_failure_policy="continue")
     state_path = tmp_path / state_filename
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
     project.add_task(
@@ -190,5 +207,7 @@ def test_cascading_task_skip_audit_trail_persists_across_reload(tmp_path, state_
     assert [event["task_id"] for event in skipped_events] == ["code", "tests"]
     assert skipped_events[0]["details"]["reason"] == "Skipped because dependency 'arch' failed"
     assert skipped_events[1]["details"]["reason"] == "Skipped because dependency 'arch' failed"
-    assert reloaded.get_task("code").history[-1]["event"] == "skipped"
-    assert reloaded.get_task("tests").history[-1]["event"] == "skipped"
+    code_task = require_task(reloaded, "code")
+    tests_task = require_task(reloaded, "tests")
+    assert code_task.history[-1]["event"] == "skipped"
+    assert tests_task.history[-1]["event"] == "skipped"

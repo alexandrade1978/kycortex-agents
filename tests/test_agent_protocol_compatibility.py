@@ -50,6 +50,12 @@ class LegacyRunAgent:
         return "LEGACY RESULT"
 
 
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
 def build_project():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
@@ -69,12 +75,14 @@ def test_orchestrator_prefers_execute_over_other_agent_entrypoints(tmp_path):
     orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": agent}))
     project = build_project()
 
-    result = orchestrator.run_task(project.get_task("arch"), project)
+    result = orchestrator.run_task(require_task(project, "arch"), project)
 
     assert result == "EXECUTE RESULT"
     assert agent.called == ["execute"]
-    assert project.get_task("arch").status == TaskStatus.DONE.value
-    assert project.get_task("arch").output_payload["summary"] == "Structured"
+    arch_task = require_task(project, "arch")
+    assert arch_task.status == TaskStatus.DONE.value
+    assert arch_task.output_payload is not None
+    assert arch_task.output_payload["summary"] == "Structured"
 
 
 def test_orchestrator_uses_run_with_input_before_legacy_run(tmp_path):
@@ -83,13 +91,15 @@ def test_orchestrator_uses_run_with_input_before_legacy_run(tmp_path):
     orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": agent}))
     project = build_project()
 
-    result = orchestrator.run_task(project.get_task("arch"), project)
+    result = orchestrator.run_task(require_task(project, "arch"), project)
 
     assert result == "RUN WITH INPUT RESULT"
     assert agent.called == ["run_with_input"]
+    assert agent.last_input is not None
     assert agent.last_input.task_id == "arch"
     assert agent.last_input.project_name == "Demo"
-    assert project.get_task("arch").status == TaskStatus.DONE.value
+    arch_task = require_task(project, "arch")
+    assert arch_task.status == TaskStatus.DONE.value
 
 
 def test_orchestrator_falls_back_to_legacy_run_signature(tmp_path):
@@ -98,11 +108,13 @@ def test_orchestrator_falls_back_to_legacy_run_signature(tmp_path):
     orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": agent}))
     project = build_project()
 
-    result = orchestrator.run_task(project.get_task("arch"), project)
+    result = orchestrator.run_task(require_task(project, "arch"), project)
 
     assert result == "LEGACY RESULT"
     assert agent.called == ["run"]
     assert agent.last_description == "Design the architecture"
+    assert agent.last_context is not None
     assert agent.last_context["project_name"] == "Demo"
     assert agent.last_context["task"]["id"] == "arch"
-    assert project.get_task("arch").status == TaskStatus.DONE.value
+    arch_task = require_task(project, "arch")
+    assert arch_task.status == TaskStatus.DONE.value

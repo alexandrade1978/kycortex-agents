@@ -1,10 +1,14 @@
 import pytest
+from typing import Any, cast
 
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.types import TaskStatus
+
+
+KYCortexConfig = cast(Any, KYCortexConfig)
 
 
 class RecordingAgent:
@@ -26,6 +30,12 @@ class FlakyAgent:
         if self.calls <= self.failures_before_success:
             raise RuntimeError(f"boom-{self.calls}")
         return self.success_response
+
+
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
@@ -68,8 +78,8 @@ def test_persisted_interrupted_workflow_resumes_after_reload(tmp_path, state_fil
 
     orchestrator.execute_workflow(reloaded)
 
-    resumed_arch = reloaded.get_task("arch")
-    resumed_review = reloaded.get_task("review")
+    resumed_arch = require_task(reloaded, "arch")
+    resumed_review = require_task(reloaded, "review")
 
     assert resumed_arch.status == TaskStatus.DONE.value
     assert resumed_arch.attempts == 2
@@ -125,7 +135,8 @@ def test_persisted_failed_workflow_resumes_after_reload(tmp_path, state_filename
 
     failed = ProjectState.load(str(state_path))
 
-    assert failed.get_task("arch").status == TaskStatus.FAILED.value
+    failed_arch = require_task(failed, "arch")
+    assert failed_arch.status == TaskStatus.FAILED.value
     assert failed.phase == "failed"
 
     resume_orchestrator = Orchestrator(
@@ -140,9 +151,9 @@ def test_persisted_failed_workflow_resumes_after_reload(tmp_path, state_filename
 
     resume_orchestrator.execute_workflow(failed)
 
-    resumed_arch = failed.get_task("arch")
-    resumed_review = failed.get_task("review")
-    repair_task = failed.get_task("arch__repair_1")
+    resumed_arch = require_task(failed, "arch")
+    resumed_review = require_task(failed, "review")
+    repair_task = require_task(failed, "arch__repair_1")
 
     assert resumed_arch.status == TaskStatus.DONE.value
     assert resumed_arch.output == "ARCHITECTURE DOC"
@@ -202,14 +213,17 @@ def test_resume_failed_requeues_skipped_descendants_transitively(tmp_path, state
     reloaded = ProjectState.load(str(state_path))
 
     resumed = reloaded.resume_failed_tasks()
+    arch_task = require_task(reloaded, "arch")
+    review_task = require_task(reloaded, "review")
+    docs_task = require_task(reloaded, "docs")
 
     assert resumed == ["arch", "review", "docs"]
-    assert reloaded.get_task("arch").status == TaskStatus.PENDING.value
-    assert reloaded.get_task("review").status == TaskStatus.PENDING.value
-    assert reloaded.get_task("docs").status == TaskStatus.PENDING.value
-    assert reloaded.get_task("docs").output is None
-    assert reloaded.get_task("docs").last_error == "Task resumed after failed workflow execution"
-    assert reloaded.get_task("docs").history[-1]["event"] == "requeued"
+    assert arch_task.status == TaskStatus.PENDING.value
+    assert review_task.status == TaskStatus.PENDING.value
+    assert docs_task.status == TaskStatus.PENDING.value
+    assert docs_task.output is None
+    assert docs_task.last_error == "Task resumed after failed workflow execution"
+    assert docs_task.history[-1]["event"] == "requeued"
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
@@ -271,14 +285,18 @@ def test_resume_failed_does_not_revive_manually_skipped_tasks(tmp_path, state_fi
     reloaded = ProjectState.load(str(state_path))
 
     resumed = reloaded.resume_failed_tasks()
+    arch_task = require_task(reloaded, "arch")
+    review_task = require_task(reloaded, "review")
+    docs_task = require_task(reloaded, "docs")
+    legal_task = require_task(reloaded, "legal")
 
     assert resumed == ["arch", "review", "docs"]
-    assert reloaded.get_task("arch").status == TaskStatus.PENDING.value
-    assert reloaded.get_task("review").status == TaskStatus.PENDING.value
-    assert reloaded.get_task("docs").status == TaskStatus.PENDING.value
-    assert reloaded.get_task("legal").status == TaskStatus.SKIPPED.value
-    assert reloaded.get_task("legal").output == "Skipped pending legal approval"
-    assert reloaded.get_task("legal").skip_reason_type == "manual"
+    assert arch_task.status == TaskStatus.PENDING.value
+    assert review_task.status == TaskStatus.PENDING.value
+    assert docs_task.status == TaskStatus.PENDING.value
+    assert legal_task.status == TaskStatus.SKIPPED.value
+    assert legal_task.output == "Skipped pending legal approval"
+    assert legal_task.skip_reason_type == "manual"
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
@@ -347,13 +365,17 @@ def test_resume_failed_does_not_revive_legacy_manual_skip_with_dependency_shaped
     project.save()
     reloaded = ProjectState.load(str(state_path))
 
-    assert reloaded.get_task("review").skip_reason_type == "dependency_failed"
-    assert reloaded.get_task("docs").skip_reason_type == "dependency_failed"
-    assert reloaded.get_task("legal").skip_reason_type == "manual"
+    review_task = require_task(reloaded, "review")
+    docs_task = require_task(reloaded, "docs")
+    legal_task = require_task(reloaded, "legal")
+
+    assert review_task.skip_reason_type == "dependency_failed"
+    assert docs_task.skip_reason_type == "dependency_failed"
+    assert legal_task.skip_reason_type == "manual"
 
     resumed = reloaded.resume_failed_tasks()
 
     assert resumed == ["arch", "review", "docs"]
-    assert reloaded.get_task("legal").status == TaskStatus.SKIPPED.value
-    assert reloaded.get_task("legal").output == "Skipped because dependency 'arch' failed"
-    assert reloaded.get_task("legal").skip_reason_type == "manual"
+    assert legal_task.status == TaskStatus.SKIPPED.value
+    assert legal_task.output == "Skipped because dependency 'arch' failed"
+    assert legal_task.skip_reason_type == "manual"

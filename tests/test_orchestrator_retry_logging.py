@@ -29,6 +29,12 @@ class ProviderFailingAgent:
         }
 
 
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
 def test_run_task_logs_retry_scheduled_for_retriable_failure(tmp_path, caplog):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -57,7 +63,7 @@ def test_run_task_logs_retry_scheduled_for_retriable_failure(tmp_path, caplog):
     assert retry_record.error_type == "RuntimeError"
     assert all(getattr(record, "event", None) != "task_failed" for record in caplog.records)
 
-    task = project.get_task("arch")
+    task = require_task(project, "arch")
     assert task.status == TaskStatus.PENDING.value
     assert task.attempts == 1
     assert task.output is None
@@ -97,7 +103,7 @@ def test_run_task_logs_terminal_failure_with_provider_metadata(tmp_path, caplog)
     assert failed_record.model == "claude-3-5-sonnet"
     assert all(getattr(record, "event", None) != "task_retry_scheduled" for record in caplog.records)
 
-    task = project.get_task("arch")
+    task = require_task(project, "arch")
     assert task.status == TaskStatus.FAILED.value
     assert task.output == "terminal boom"
     assert task.last_error == "terminal boom"

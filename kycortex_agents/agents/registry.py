@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, Optional
+from collections.abc import Iterable, Mapping
+from typing import Any, Protocol, TypeAlias
 
 from kycortex_agents.agents.architect import ArchitectAgent
-from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.code_engineer import CodeEngineerAgent
 from kycortex_agents.agents.code_reviewer import CodeReviewerAgent
 from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
@@ -12,24 +12,40 @@ from kycortex_agents.agents.legal_advisor import LegalAdvisorAgent
 from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.types import AgentInput, AgentOutput
 
 __all__ = ["AgentRegistry", "build_default_registry"]
+
+
+class SupportsExecute(Protocol):
+    def execute(self, agent_input: AgentInput) -> AgentOutput: ...
+
+
+class SupportsRunWithInput(Protocol):
+    def run_with_input(self, agent_input: AgentInput) -> str | AgentOutput: ...
+
+
+class SupportsLegacyRun(Protocol):
+    def run(self, task_description: str, context: dict[str, Any]) -> str | AgentOutput: ...
+
+
+AgentLike: TypeAlias = SupportsExecute | SupportsRunWithInput | SupportsLegacyRun
 
 
 class AgentRegistry:
     """Registry that normalizes agent keys and resolves workflow agent instances."""
 
-    def __init__(self, agents: Optional[Dict[str, BaseAgent]] = None):
-        self._agents: Dict[str, BaseAgent] = {}
+    def __init__(self, agents: Mapping[str, AgentLike] | None = None):
+        self._agents: dict[str, AgentLike] = {}
         for key, agent in (agents or {}).items():
             self.register(key, agent)
 
-    def register(self, key: str, agent: BaseAgent) -> None:
+    def register(self, key: str, agent: AgentLike) -> None:
         """Register or replace an agent under the normalized registry key."""
 
         self._agents[self.normalize_key(key)] = agent
 
-    def get(self, key: str) -> BaseAgent:
+    def get(self, key: str) -> AgentLike:
         """Return the agent bound to the normalized key or raise when it is unknown."""
 
         normalized_key = self.normalize_key(key)

@@ -1,0 +1,26 @@
+{
+  "include": [
+    "kycortex_agents",
+    "tests",
+    "examples",
+    "scripts"
+  ],
+  "exclude": [
+    ".git",
+    ".local-docs",
+    ".venv",
+    "build",
+    "dist",
+    "docs/_build",
+    "kycortex_agents.egg-info",
+    "multi_agent_ollama_output",
+    "output",
+    "output_*",
+    "**/__pycache__"
+  ],
+  "ignore": [
+    "**/.pytest_cache",
+    "**/.ruff_cache",
+    "**/.mypy_cache"
+  ]
+}

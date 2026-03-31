@@ -25,9 +25,9 @@ class RecordingMergeAgent(BaseAgent):
 
     def __init__(self, config: KYCortexConfig):
         super().__init__("MergeDocs", "Documentation Merge", config)
-        self.seen_context = None
-        self.seen_artifact_names = None
-        self.seen_decision_topics = None
+        self.seen_context: dict[str, object] | None = None
+        self.seen_artifact_names: list[str] | None = None
+        self.seen_decision_topics: list[str] | None = None
 
     def run_with_input(self, agent_input: AgentInput) -> str:
         self.seen_context = dict(agent_input.context)
@@ -75,6 +75,12 @@ def build_project(state_file: str | None = None):
     return project
 
 
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
 def test_multi_parent_convergence_receives_merged_context_and_artifacts(tmp_path):
     config = build_config(tmp_path)
     registry, merge_agent = build_registry(config)
@@ -82,6 +88,7 @@ def test_multi_parent_convergence_receives_merged_context_and_artifacts(tmp_path
 
     Orchestrator(config, registry=registry).execute_workflow(project)
 
+    assert merge_agent.seen_context is not None
     assert merge_agent.seen_context["architecture"] == "ARCHITECTURE DOC"
     assert merge_agent.seen_context["code"] == "print('hello world')"
     assert merge_agent.seen_context["review"] == "PASS: reviewed"
@@ -117,13 +124,13 @@ def test_multi_parent_convergence_preserves_upstream_artifacts_after_reload(tmp_
     project = build_project(str(state_path))
     orchestrator = Orchestrator(config, registry=registry)
 
-    orchestrator.run_task(project.get_task("arch"), project)
+    orchestrator.run_task(require_task(project, "arch"), project)
     project.save()
-    orchestrator.run_task(project.get_task("code"), project)
+    orchestrator.run_task(require_task(project, "code"), project)
     project.save()
-    orchestrator.run_task(project.get_task("review"), project)
+    orchestrator.run_task(require_task(project, "review"), project)
     project.save()
-    orchestrator.run_task(project.get_task("tests"), project)
+    orchestrator.run_task(require_task(project, "tests"), project)
     project.save()
 
     reloaded = ProjectState.load(str(state_path))
@@ -131,6 +138,7 @@ def test_multi_parent_convergence_preserves_upstream_artifacts_after_reload(tmp_
 
     Orchestrator(config, registry=reloaded_registry).execute_workflow(reloaded)
 
+    assert reloaded_merge_agent.seen_context is not None
     assert reloaded_merge_agent.seen_context["architecture"] == "ARCHITECTURE DOC"
     assert reloaded_merge_agent.seen_context["code"] == "print('hello world')"
     assert reloaded_merge_agent.seen_context["review"] == "PASS: reviewed"
@@ -148,4 +156,5 @@ def test_multi_parent_convergence_preserves_upstream_artifacts_after_reload(tmp_
     assert snapshot_artifacts["code_implementation"].artifact_type == ArtifactType.CODE
     assert snapshot_artifacts["review_review"].artifact_type == ArtifactType.DOCUMENT
     assert snapshot_artifacts["tests_tests"].artifact_type == ArtifactType.TEST
-    assert reloaded.get_task("docs").status == TaskStatus.DONE.value
+    docs_task = require_task(reloaded, "docs")
+    assert docs_task.status == TaskStatus.DONE.value

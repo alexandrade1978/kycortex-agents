@@ -31,14 +31,21 @@ For compact scenario-driven tasks, merge overlapping checks into the smallest se
 Do not hand-count prose strings to justify exact numeric assertions. If an exact numeric result is contractually required, use trivially countable inputs such as repeated characters or small literals; otherwise prefer stable invariants, ranges, or state transitions over guessed exact scores.
 If an exact numeric assertion depends on string length, modulo, counts, or collection size, never use natural-language prose samples for that assertion. Use repeated-character literals, small digit strings, or similarly obvious inputs whose size can be verified at a glance.
 Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. For derived levels such as low, medium, or high, use values comfortably inside a band or assert relative ordering when the exact boundary is not part of the contract.
+Do not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone. Assert those outcomes only when the behavior contract or the current implementation explicitly defines the trigger; otherwise assert direct observable state, totals, or non-exact invariants.
+When an API accepts a request, filter, or payload dict with documented required fields, either supply every required field or omit that optional dict entirely. Do not assume partial filter payloads are accepted unless the contract explicitly marks those keys optional.
 When a constructor or callable signature is listed in the API contract, use exactly that signature in every test.
 Do not instantiate helper validators, scorers, loggers, dataclasses, or batch processors merely to wire a higher-level service fixture unless the public API contract explicitly requires that direct setup.
+When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models rather than auxiliary validators, scorers, loggers, repositories, processors, or engines.
+If you use isinstance or another exact type assertion against a returned production class, import that class explicitly; otherwise assert on returned fields or behavior without naming the unimported type.
+When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity from that contract. Do not invent generic placeholders such as id, data, timestamp, or status when the contract lists different fields.
+Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger. Otherwise assert stable invariants such as success, request identity, audit growth, and non-negative or relative scores.
 When repairing a previously generated suite that already passed static validation, preserve the existing imported symbols, constructor shapes, fixture payload structure, and scenario skeleton unless the validation summary explicitly identifies one of those pieces as invalid.
 When the previous validation summary reports constructor arity mismatches, treat those constructor calls as invalid and remove or rewrite them instead of preserving them from the earlier suite.
 If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in the rewritten file. In a compact suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
 If the previous validation summary reports helper surface usages, delete every import, fixture, helper variable, and top-level test that references those helper surfaces. Do not repair those helper-surface tests in place.
 If flagged helper surfaces are provided separately in the repair context, treat those names as banned in the rewritten file unless the public API contract explicitly makes them the primary surface under test.
 Treat the current implementation artifact and API contract as fixed ground truth during repair. Do not invent replacement response classes, alternate validators, renamed helpers, or new return-wrapper types.
+If a pytest-only runtime failure shows that an earlier assertion overreached the current implementation or contract, rewrite that assertion to a contract-backed invariant instead of forcing a guessed business rule into the code.
 Do not invent alternate field names, sample payload shapes, return structures, or exception messages.
 Do not reference pytest fixtures unless you define them in the same file or they are standard built-in pytest fixtures.
 Every test function argument must be a built-in pytest fixture, a fixture defined in the same file, or a name introduced by a matching `pytest.mark.parametrize` decorator.
@@ -156,6 +163,10 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not import or instantiate CLI wrapper classes such as names ending in `CLI` or `Cli` unless the task explicitly requires CLI testing and you fully control argv or input.
     Import every production class you instantiate or reference in a fixture or test body.
     Do not hand-wire validator, scorer, logger, batch-processor, dataclass, or similar helper objects into a service fixture unless the public API contract explicitly requires those constructor arguments.
+    When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models instead of auxiliary validators, scorers, loggers, repositories, processors, or engines.
+    If you use isinstance or another exact type assertion against a returned production class, import that class explicitly; otherwise assert on returned fields or behavior without naming the unimported type.
+    When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity from that contract. Do not invent generic placeholders such as id, data, timestamp, or status when the contract lists different fields.
+    Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger. Otherwise assert stable invariants such as success, request identity, audit growth, and non-negative or relative scores.
     Do not duplicate the implementation code in the tests.
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
@@ -183,8 +194,11 @@ Import from `{module_name}` and test the actual public functions and classes fro
     If you assert an exact numeric value, use trivially countable inputs and do so only when the behavior contract or implementation clearly defines the exact formula; otherwise prefer stable non-exact assertions.
     If an exact numeric assertion depends on string length, modulo, counts, or collection size, never use prose sample text for that assertion. Use repeated-character literals or similarly obvious inputs.
     Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. Use comfortably in-band inputs or non-boundary assertions for derived levels.
+    Do not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone. Assert those outcomes only when the behavior contract or current implementation explicitly defines the trigger.
+    When an API accepts a request, filter, or payload dict with documented required fields, either supply every required field or omit that optional dict entirely. Do not assume partial filter payloads are accepted unless the contract explicitly marks those keys optional.
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
+    If a pytest-only runtime failure shows that an earlier assertion overreached the current implementation or contract, rewrite that assertion to a contract-backed invariant instead of forcing a guessed business rule into the code.
     If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in this rewritten file. In a compact workflow suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
     If the previous validation summary reports helper surface usages, delete every import, fixture, helper variable, and top-level test that references those helper surfaces. Do not repair those helper-surface tests in place.
     If flagged helper surfaces are listed below, treat those names as banned in the rewritten file unless the public API contract explicitly makes them the primary surface under test.
@@ -193,7 +207,11 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - every imported production symbol exists in the API contract
     - every imported production symbol also appears in the listed test targets unless it is only used as a type container
     - every production class referenced in a fixture or test body is explicitly imported from the target module
+    - when a public service or workflow facade exists, you limited imports to that facade and directly exchanged domain models instead of auxiliary validators, scorers, loggers, repositories, processors, or engines
     - every class instantiation uses only documented constructor arguments
+    - if you used isinstance or another exact type assertion against a production class, you explicitly imported that class; otherwise you asserted on returned fields or behavior without naming an unimported type
+    - if the API contract exposed typed request or result models, you instantiated them with the exact field names and full constructor arity from that contract instead of inventing generic placeholders
+    - if the implementation summary or behavior contract did not explicitly define a formula or trigger, you avoided exact score totals and threshold-triggered boolean flags and used stable invariants instead
     - if the previous validation summary lists constructor arity mismatches, you removed guessed helper wiring and rebuilt the scenario around the smallest documented public API surface
     - every assertion matches behavior reachable from the provided implementation summary
     - every happy-path payload satisfies the listed behavior contract and validation rules
@@ -224,9 +242,12 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - if you asserted audit records, every asserted action is exercised in that same scenario rather than guessed from unrelated workflow steps
     - you did not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first
     - every exact numeric assertion is supported by an explicit contract or formula and uses trivially countable input; otherwise you used stable non-exact assertions
+    - you did not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone
+    - every request, filter, or payload dict in the suite either supplies all documented required fields or omits that optional dict entirely
     - if you asserted derived categorical levels or score bands, you used comfortably in-band inputs or non-boundary assertions unless the contract explicitly defined the thresholds
     - if an exact numeric assertion depends on string length, modulo, counts, or collection size, you used repeated-character or similarly obvious inputs rather than prose sample text
     - you did not invent replacement API names, response-wrapper classes, alternate validators, or alternate constructor signatures during repair
+    - if a pytest-only runtime failure exposed a guessed business-rule assertion, you rewrote it to a contract-backed invariant instead of forcing a new unstated rule into the implementation
     - if the previous test file was syntax-invalid or truncated, you rewrote the full pytest file from the top instead of appending a partial continuation
     - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential comments, blank lines, optional fixtures, and helper scaffolding so the whole pytest file fits cleanly in one response
     - no test imports entrypoints listed under "Entry points to avoid in tests"
@@ -281,6 +302,10 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not import or instantiate CLI wrapper classes such as names ending in `CLI` or `Cli` unless the task explicitly requires CLI testing and you fully control argv or input.
     Import every production class you instantiate or reference in a fixture or test body.
     Do not hand-wire validator, scorer, logger, batch-processor, dataclass, or similar helper objects into a service fixture unless the public API contract explicitly requires those constructor arguments.
+    When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models instead of auxiliary validators, scorers, loggers, repositories, processors, or engines.
+    If you use isinstance or another exact type assertion against a returned production class, import that class explicitly; otherwise assert on returned fields or behavior without naming the unimported type.
+    When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity from that contract. Do not invent generic placeholders such as id, data, timestamp, or status when the contract lists different fields.
+    Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger. Otherwise assert stable invariants such as success, request identity, audit growth, and non-negative or relative scores.
     Do not duplicate the implementation code in the tests.
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
@@ -308,8 +333,11 @@ Import from `{module_name}` and test the actual public functions and classes fro
     If you assert an exact numeric value, use trivially countable inputs and do so only when the behavior contract or implementation clearly defines the exact formula; otherwise prefer stable non-exact assertions.
     If an exact numeric assertion depends on string length, modulo, counts, or collection size, never use prose sample text for that assertion. Use repeated-character literals or similarly obvious inputs.
     Do not assert exact categorical score bands or labels at boundary values unless the contract explicitly defines those cutoffs. Use comfortably in-band inputs or non-boundary assertions for derived levels.
+    Do not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone. Assert those outcomes only when the behavior contract or current implementation explicitly defines the trigger.
+    When an API accepts a request, filter, or payload dict with documented required fields, either supply every required field or omit that optional dict entirely. Do not assume partial filter payloads are accepted unless the contract explicitly marks those keys optional.
     If the API contract does not list a symbol or enum member, do not use it.
     If the previous suite already passed static validation and only failed at pytest runtime, keep the same public module surface and make the smallest behavioral correction needed. Do not replace valid imports with guessed APIs or change documented constructor signatures.
+    If a pytest-only runtime failure shows that an earlier assertion overreached the current implementation or contract, rewrite that assertion to a contract-backed invariant instead of forcing a guessed business rule into the code.
     If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in this rewritten file. In a compact workflow suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
     If the previous validation summary reports helper surface usages, delete every import, fixture, helper variable, and top-level test that references those helper surfaces. Do not repair those helper-surface tests in place.
     If flagged helper surfaces are listed below, treat those names as banned in the rewritten file unless the public API contract explicitly makes them the primary surface under test.
@@ -318,7 +346,11 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - every imported production symbol exists in the API contract
     - every imported production symbol also appears in the listed test targets unless it is only used as a type container
     - every production class referenced in a fixture or test body is explicitly imported from the target module
+    - when a public service or workflow facade exists, you limited imports to that facade and directly exchanged domain models instead of auxiliary validators, scorers, loggers, repositories, processors, or engines
     - every class instantiation uses only documented constructor arguments
+    - if you used isinstance or another exact type assertion against a production class, you explicitly imported that class; otherwise you asserted on returned fields or behavior without naming an unimported type
+    - if the API contract exposed typed request or result models, you instantiated them with the exact field names and full constructor arity from that contract instead of inventing generic placeholders
+    - if the implementation summary or behavior contract did not explicitly define a formula or trigger, you avoided exact score totals and threshold-triggered boolean flags and used stable invariants instead
     - if the previous validation summary lists constructor arity mismatches, you removed guessed helper wiring and rebuilt the scenario around the smallest documented public API surface
     - every assertion matches behavior reachable from the provided implementation summary
     - every happy-path payload satisfies the listed behavior contract and validation rules
@@ -348,8 +380,11 @@ Import from `{module_name}` and test the actual public functions and classes fro
     - if you asserted audit records, every asserted action is exercised in that same scenario rather than guessed from unrelated workflow steps
     - you did not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions on logging objects or production callables unless the same test creates the exact mock or patch target first
     - every exact numeric assertion is supported by an explicit contract or formula and uses trivially countable input; otherwise you used stable non-exact assertions
+    - you did not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone
+    - every request, filter, or payload dict in the suite either supplies all documented required fields or omits that optional dict entirely
     - if an exact numeric assertion depends on string length, modulo, counts, or collection size, you used repeated-character or similarly obvious inputs rather than prose sample text
     - you did not invent replacement API names, response-wrapper classes, alternate validators, or alternate constructor signatures during repair
+    - if a pytest-only runtime failure exposed a guessed business-rule assertion, you rewrote it to a contract-backed invariant instead of forcing a new unstated rule into the implementation
     - if the previous test file was syntax-invalid or truncated, you rewrote the full pytest file from the top instead of appending a partial continuation
     - if the previous validation mentions truncation or completion diagnostics, you reduced non-essential comments, blank lines, optional fixtures, and helper scaffolding so the whole pytest file fits cleanly in one response
     - no test imports entrypoints listed under "Entry points to avoid in tests"

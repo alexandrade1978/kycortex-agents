@@ -1,6 +1,7 @@
 import builtins
 import json
 import sqlite3
+from typing import Any, cast
 
 import pytest
 
@@ -8,6 +9,18 @@ from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinition
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.memory.state_store import resolve_state_store
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome, WorkflowStatus
+
+
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
+def require_artifact(artifacts: list[dict[str, Any] | str], index: int = 0) -> dict[str, Any]:
+    artifact = artifacts[index]
+    assert isinstance(artifact, dict)
+    return artifact
 
 
 def test_save_and_load_project_state(tmp_path):
@@ -211,7 +224,8 @@ def test_load_normalizes_legacy_artifact_timestamps_deterministically(tmp_path, 
     first_snapshot = loaded.snapshot()
     second_snapshot = loaded.snapshot()
 
-    assert loaded.artifacts[0]["created_at"] == "2026-03-22T10:09:00+00:00"
+    artifact = require_artifact(loaded.artifacts)
+    assert artifact["created_at"] == "2026-03-22T10:09:00+00:00"
     assert first_snapshot.artifacts[0].created_at == "2026-03-22T10:09:00+00:00"
     assert second_snapshot.artifacts[0].created_at == "2026-03-22T10:09:00+00:00"
 
@@ -272,7 +286,8 @@ def test_load_infers_dependency_failed_skip_reason_for_legacy_tasks(tmp_path, st
 
     loaded = ProjectState.load(str(state_path))
 
-    assert loaded.get_task("docs").skip_reason_type == "dependency_failed"
+    docs_task = require_task(loaded, "docs")
+    assert docs_task.skip_reason_type == "dependency_failed"
 
 
 @pytest.mark.parametrize("state_filename", ["legacy-manual-skips.json", "legacy-manual-skips.sqlite"])
@@ -308,7 +323,8 @@ def test_load_infers_manual_skip_reason_when_dependency_reason_does_not_match_gr
 
     loaded = ProjectState.load(str(state_path))
 
-    assert loaded.get_task("docs").skip_reason_type == "manual"
+    docs_task = require_task(loaded, "docs")
+    assert docs_task.skip_reason_type == "manual"
 
 
 @pytest.mark.parametrize("state_filename", ["legacy-nondict.json", "legacy-nondict.sqlite"])
@@ -330,7 +346,8 @@ def test_load_discards_non_dict_legacy_decisions_and_preserves_string_artifacts(
     assert len(loaded.decisions) == 1
     assert loaded.decisions[0]["at"] == "2026-03-22T10:09:00+00:00"
     assert loaded.artifacts[0] == "README.md"
-    assert loaded.artifacts[1]["created_at"] == "2026-03-22T10:09:00+00:00"
+    artifact = require_artifact(loaded.artifacts, 1)
+    assert artifact["created_at"] == "2026-03-22T10:09:00+00:00"
 
 
 def test_project_state_handles_missing_tasks_unresolved_dependencies_and_lightweight_decisions():
@@ -395,14 +412,17 @@ def test_snapshot_skips_malformed_project_decisions_in_legacy_state():
         project_name="Demo",
         goal="Build demo",
         updated_at="2026-03-22T10:09:00+00:00",
-        decisions=[
-            "bad-decision-entry",
-            {
-                "topic": "architecture",
-                "decision": "Use layered runtime",
-                "rationale": "Keeps providers isolated",
-            },
-        ],
+        decisions=cast(
+            list[dict[str, Any]],
+            [
+                "bad-decision-entry",
+                {
+                    "topic": "architecture",
+                    "decision": "Use layered runtime",
+                    "rationale": "Keeps providers isolated",
+                },
+            ],
+        ),
     )
 
     snapshot = project.snapshot()
@@ -492,17 +512,13 @@ def test_complete_task_persists_structured_agent_output_payload():
                 )
             ],
             decisions=[
-                DecisionRecord(
-                    topic="stack",
-                    decision="Use FastAPI",
-                    rationale="Fits the API use case",
-                )
+                DecisionRecord("stack", "Use FastAPI", "Fits the API use case")
             ],
             metadata={"agent_name": "Architect"},
         ),
     )
 
-    task = project.get_task("arch")
+    task = require_task(project, "arch")
     snapshot = project.snapshot()
     result = snapshot.task_results["arch"]
 
@@ -534,8 +550,9 @@ def test_save_and_load_preserves_rich_artifact_records_json(tmp_path):
     loaded = ProjectState.load(str(state_path))
     snapshot = loaded.snapshot()
 
-    assert loaded.artifacts[0]["name"] == "architecture_doc"
-    assert loaded.artifacts[0]["artifact_type"] == ArtifactType.DOCUMENT.value
+    artifact = require_artifact(loaded.artifacts)
+    assert artifact["name"] == "architecture_doc"
+    assert artifact["artifact_type"] == ArtifactType.DOCUMENT.value
     assert snapshot.artifacts[0].path == "artifacts/architecture.md"
     assert snapshot.artifacts[0].content == "# Architecture"
     assert snapshot.artifacts[0].metadata["source"] == "architect"
@@ -566,8 +583,10 @@ def test_save_and_load_preserves_structured_task_output_payload_json(tmp_path):
     loaded = ProjectState.load(str(state_path))
     snapshot = loaded.snapshot()
 
-    assert loaded.get_task("arch").output_payload is not None
-    assert loaded.get_task("arch").output_payload["summary"] == "Architecture summary"
+    arch_task = require_task(loaded, "arch")
+    assert arch_task.output_payload is not None
+    assert arch_task.output_payload["summary"] == "Architecture summary"
+    assert snapshot.task_results["arch"].output is not None
     assert snapshot.task_results["arch"].output.summary == "Architecture summary"
     assert snapshot.task_results["arch"].output.metadata["agent_name"] == "Architect"
 
@@ -588,7 +607,8 @@ def test_save_and_load_preserves_rich_artifact_records_sqlite(tmp_path):
     loaded = ProjectState.load(str(state_path))
     snapshot = loaded.snapshot()
 
-    assert loaded.artifacts[0]["artifact_type"] == ArtifactType.TEST.value
+    artifact = require_artifact(loaded.artifacts)
+    assert artifact["artifact_type"] == ArtifactType.TEST.value
     assert snapshot.artifacts[0].name == "generated_tests"
     assert snapshot.artifacts[0].content == "def test_example(): pass"
     assert snapshot.artifacts[0].metadata["source"] == "qa_tester"
@@ -752,12 +772,14 @@ def test_resume_failed_tasks_resets_failed_and_dependency_skipped_tasks():
     resumed = project.resume_failed_tasks()
 
     assert resumed == ["arch", "review"]
-    assert project.get_task("arch").status == TaskStatus.PENDING.value
-    assert project.get_task("arch").output is None
-    assert project.get_task("arch").history[-1]["event"] == "requeued"
-    assert project.get_task("review").status == TaskStatus.PENDING.value
-    assert project.get_task("review").output is None
-    assert project.get_task("review").history[-1]["event"] == "requeued"
+    arch_task = require_task(project, "arch")
+    review_task = require_task(project, "review")
+    assert arch_task.status == TaskStatus.PENDING.value
+    assert arch_task.output is None
+    assert arch_task.history[-1]["event"] == "requeued"
+    assert review_task.status == TaskStatus.PENDING.value
+    assert review_task.output is None
+    assert review_task.history[-1]["event"] == "requeued"
 
 
 def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested():
@@ -790,8 +812,10 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
     snapshot = project.snapshot()
 
     assert resumed == ["review"]
-    assert project.get_task("arch").status == TaskStatus.FAILED.value
-    assert project.get_task("review").status == TaskStatus.PENDING.value
+    arch_task = require_task(project, "arch")
+    review_task = require_task(project, "review")
+    assert arch_task.status == TaskStatus.FAILED.value
+    assert review_task.status == TaskStatus.PENDING.value
     assert project.execution_events[-1]["event"] == "workflow_resumed"
     assert project.execution_events[-1]["details"]["task_ids"] == ["review", "arch__repair_1"]
     assert snapshot.workflow_telemetry["resume_summary"] == {
@@ -849,7 +873,8 @@ def test_create_repair_task_records_lineage_and_requeue_audit():
     assert repair_task.repair_origin_task_id == "code"
     assert repair_task.repair_attempt == 1
     assert repair_task.assigned_to == "code_engineer"
-    assert project.get_task("code").history[-1]["event"] == "requeued"
+    code_task = require_task(project, "code")
+    assert code_task.history[-1]["event"] == "requeued"
     assert any(event["event"] == "task_repair_created" for event in project.execution_events)
 
 
@@ -871,11 +896,12 @@ def test_complete_task_syncs_repair_result_back_to_origin():
         "code_engineer",
         {"cycle": 1, "instruction": "Repair the code."},
     )
+    assert repair_task is not None
 
     project.start_task(repair_task.id)
     project.complete_task(repair_task.id, "def repaired() -> int:\n    return 1")
 
-    origin = project.get_task("code")
+    origin = require_task(project, "code")
     assert origin.status == TaskStatus.DONE.value
     assert origin.output == "def repaired() -> int:\n    return 1"
     assert origin.attempts == 2
@@ -901,11 +927,12 @@ def test_fail_task_syncs_repair_failure_back_to_origin():
         "qa_tester",
         {"cycle": 1, "instruction": "Repair the tests."},
     )
+    assert repair_task is not None
 
     project.start_task(repair_task.id)
     project.fail_task(repair_task.id, RuntimeError("pytest failed"), error_category="test_validation")
 
-    origin = project.get_task("tests")
+    origin = require_task(project, "tests")
     assert origin.status == TaskStatus.FAILED.value
     assert origin.last_error == "pytest failed"
     assert origin.last_error_category == "test_validation"
@@ -931,6 +958,7 @@ def test_fail_task_syncs_structured_repair_failure_payload_back_to_origin():
         "docs_writer",
         {"cycle": 1, "instruction": "Repair the docs."},
     )
+    assert repair_task is not None
 
     project.start_task(repair_task.id)
     project.fail_task(
@@ -940,7 +968,7 @@ def test_fail_task_syncs_structured_repair_failure_payload_back_to_origin():
         error_category="task_execution",
     )
 
-    origin = project.get_task("docs")
+    origin = require_task(project, "docs")
     assert origin.output == "markdown broken"
     assert origin.output_payload is not None
     assert origin.output_payload["raw_content"] == "# repaired docs"
@@ -985,6 +1013,7 @@ def test_fail_task_syncs_repair_retry_without_finalizing_origin_output():
         "docs_writer",
         {"cycle": 1, "instruction": "Repair the docs."},
     )
+    assert repair_task is not None
     repair_task.retry_limit = 1
 
     project.start_task(repair_task.id)
@@ -995,12 +1024,10 @@ def test_fail_task_syncs_repair_retry_without_finalizing_origin_output():
         error_category="task_execution",
     )
 
-    origin = project.get_task("docs")
-    repair = project.get_task(repair_task.id)
+    origin = require_task(project, "docs")
+    repair = require_task(project, repair_task.id)
 
-    assert repair is not None
     assert repair.status == TaskStatus.PENDING.value
-    assert origin is not None
     assert origin.status == TaskStatus.FAILED.value
     assert origin.output == "broken docs"
     assert origin.output_payload is None
@@ -1071,8 +1098,9 @@ def test_save_and_load_preserve_task_repair_context(tmp_path):
     project.save()
     loaded = ProjectState.load(str(state_path))
 
-    assert loaded.get_task("code").repair_context["cycle"] == 1
-    assert loaded.get_task("code").repair_context["repair_owner"] == "code_engineer"
+    code_task = require_task(loaded, "code")
+    assert code_task.repair_context["cycle"] == 1
+    assert code_task.repair_context["repair_owner"] == "code_engineer"
 
 
 def test_snapshot_exposes_task_repair_context_details():
@@ -1160,15 +1188,18 @@ def test_repair_summary_aggregates_repair_reasons_across_cycles():
 def test_repair_summary_ignores_malformed_entries_and_non_list_failed_task_ids():
     project = ProjectState(project_name="Demo", goal="Build demo", repair_max_cycles=5)
     project.repair_cycle_count = 2
-    project.repair_history = [
-        None,
-        {"reason": 7, "failure_category": ["bad"], "failed_task_ids": "tests"},
-        {
-            "reason": "manual_retry",
-            "failure_category": "test_validation",
-            "failed_task_ids": ["tests", "", None, "code"],
-        },
-    ]
+    project.repair_history = cast(
+        list[dict[str, Any]],
+        [
+            None,
+            {"reason": 7, "failure_category": ["bad"], "failed_task_ids": "tests"},
+            {
+                "reason": "manual_retry",
+                "failure_category": "test_validation",
+                "failed_task_ids": ["tests", "", None, "code"],
+            },
+        ],
+    )
 
     assert project._repair_summary() == {
         "cycle_count": 2,
@@ -1571,7 +1602,8 @@ def test_save_and_load_preserves_task_history_json(tmp_path):
     project.save()
     loaded = ProjectState.load(str(state_path))
 
-    assert loaded.get_task("arch").history[0]["event"] == "started"
+    arch_task = require_task(loaded, "arch")
+    assert arch_task.history[0]["event"] == "started"
 
 
 def test_save_and_load_preserves_task_history_sqlite(tmp_path):
@@ -1590,7 +1622,8 @@ def test_save_and_load_preserves_task_history_sqlite(tmp_path):
     project.save()
     loaded = ProjectState.load(str(state_path))
 
-    assert loaded.get_task("arch").history[0]["event"] == "started"
+    arch_task = require_task(loaded, "arch")
+    assert arch_task.history[0]["event"] == "started"
 
 
 def test_snapshot_includes_workflow_execution_metadata():
@@ -1778,8 +1811,9 @@ def test_depends_on_task_handles_cycles_and_missing_dependencies_without_looping
         )
     )
 
-    assert project._depends_on_task(project.get_task("arch"), "code") is True
-    assert project._depends_on_task(project.get_task("arch"), "tests") is False
+    arch_task = require_task(project, "arch")
+    assert project._depends_on_task(arch_task, "code") is True
+    assert project._depends_on_task(arch_task, "tests") is False
 
 
 def test_skip_task_ignores_missing_task_ids_without_side_effects():
@@ -1815,7 +1849,8 @@ def test_skip_dependent_tasks_ignores_non_pending_dependents():
     skipped = project.skip_dependent_tasks("arch", "Skipped because dependency 'arch' failed")
 
     assert skipped == []
-    assert project.get_task("docs").status == TaskStatus.DONE.value
+    docs_task = require_task(project, "docs")
+    assert docs_task.status == TaskStatus.DONE.value
 
 
 def test_duration_ms_returns_none_for_invalid_timestamps():
@@ -1945,9 +1980,10 @@ def test_save_and_load_preserves_execution_metadata_json(tmp_path):
     project.save()
     loaded = ProjectState.load(str(state_path))
 
-    assert loaded.get_task("arch").started_at == "2026-03-22T10:00:00+00:00"
-    assert loaded.get_task("arch").last_attempt_started_at == "2026-03-22T10:01:00+00:00"
-    assert loaded.get_task("arch").last_resumed_at == "2026-03-22T10:02:00+00:00"
+    arch_task = require_task(loaded, "arch")
+    assert arch_task.started_at == "2026-03-22T10:00:00+00:00"
+    assert arch_task.last_attempt_started_at == "2026-03-22T10:01:00+00:00"
+    assert arch_task.last_resumed_at == "2026-03-22T10:02:00+00:00"
 
 
 def test_save_and_load_preserves_workflow_metadata_json(tmp_path):
@@ -1988,9 +2024,10 @@ def test_save_and_load_preserves_execution_metadata_sqlite(tmp_path):
     project.save()
     loaded = ProjectState.load(str(state_path))
 
-    assert loaded.get_task("arch").started_at == "2026-03-22T10:00:00+00:00"
-    assert loaded.get_task("arch").last_attempt_started_at == "2026-03-22T10:01:00+00:00"
-    assert loaded.get_task("arch").last_resumed_at == "2026-03-22T10:02:00+00:00"
+    arch_task = require_task(loaded, "arch")
+    assert arch_task.started_at == "2026-03-22T10:00:00+00:00"
+    assert arch_task.last_attempt_started_at == "2026-03-22T10:01:00+00:00"
+    assert arch_task.last_resumed_at == "2026-03-22T10:02:00+00:00"
 
 
 def test_save_and_load_preserves_workflow_metadata_sqlite(tmp_path):
@@ -2063,8 +2100,10 @@ def test_skip_dependent_tasks_marks_pending_descendants_as_skipped():
     skipped = project.skip_dependent_tasks("arch", "Skipped because arch failed")
 
     assert skipped == ["code", "test"]
-    assert project.get_task("code").status == TaskStatus.SKIPPED.value
-    assert project.get_task("test").status == TaskStatus.SKIPPED.value
+    code_task = require_task(project, "code")
+    test_task = require_task(project, "test")
+    assert code_task.status == TaskStatus.SKIPPED.value
+    assert test_task.status == TaskStatus.SKIPPED.value
 
 
 def test_skip_task_clears_stale_structured_output_from_snapshot():

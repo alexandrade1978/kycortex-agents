@@ -31,6 +31,12 @@ class FlakyAgent:
         return self.success_response
 
 
+def require_task(project: ProjectState, task_id: str) -> Task:
+    task = project.get_task(task_id)
+    assert task is not None
+    return task
+
+
 @pytest.mark.parametrize(
     (
         "failure_policy",
@@ -191,13 +197,16 @@ def test_retry_budget_is_consumed_before_resume_failed_policy_requeues_task(tmp_
     project.save()
     reloaded = ProjectState.load(str(state_path))
 
-    assert reloaded.get_task("arch").attempts == 2
-    assert reloaded.get_task("arch").status == TaskStatus.FAILED.value
+    arch_task = require_task(reloaded, "arch")
+    assert arch_task.attempts == 2
+    assert arch_task.status == TaskStatus.FAILED.value
 
     orchestrator.execute_workflow(reloaded)
 
-    assert reloaded.get_task("arch").status == TaskStatus.DONE.value
-    assert reloaded.get_task("arch").attempts == 3
-    assert reloaded.get_task("review").status == TaskStatus.DONE.value
-    assert [entry["event"] for entry in reloaded.get_task("arch").history].count("retry_scheduled") == 1
+    arch_task = require_task(reloaded, "arch")
+    review_task = require_task(reloaded, "review")
+    assert arch_task.status == TaskStatus.DONE.value
+    assert arch_task.attempts == 3
+    assert review_task.status == TaskStatus.DONE.value
+    assert [entry["event"] for entry in arch_task.history].count("retry_scheduled") == 1
     assert any(event["event"] == "task_requeued" for event in reloaded.execution_events)

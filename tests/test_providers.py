@@ -1,6 +1,9 @@
 import json
 import sys
+from email.message import Message
 from types import SimpleNamespace
+from collections.abc import Callable
+from typing import Any, cast
 from urllib.error import HTTPError
 
 import pytest
@@ -18,6 +21,9 @@ from kycortex_agents.providers._error_classifier import (
     is_transient_provider_exception,
 )
 from kycortex_agents.providers import factory as provider_factory
+
+
+KYCortexConfig = cast(Any, KYCortexConfig)
 
 
 class FakeAPIError(Exception):
@@ -123,13 +129,30 @@ def build_ollama_opener(payload=None, error=None):
         calls += 1
         if current_error is not None:
             raise current_error
+        assert isinstance(current_payload, str)
         return FakeHTTPResponse(current_payload)
 
     return open_request
 
 
 def build_http_error(url: str, code: int, reason: str) -> HTTPError:
-    return HTTPError(url=url, code=code, msg=reason, hdrs=None, fp=None)
+    return HTTPError(url=url, code=code, msg=reason, hdrs=Message(), fp=None)
+
+
+def require_metadata(provider: BaseLLMProvider) -> dict[str, Any]:
+    metadata = provider.get_last_call_metadata()
+    assert metadata is not None
+    return metadata
+
+
+def require_number(value: object) -> float:
+    assert isinstance(value, (int, float))
+    return float(value)
+
+
+def require_text(value: object) -> str:
+    assert isinstance(value, str)
+    return value
 
 
 @pytest.mark.parametrize(
@@ -219,7 +242,7 @@ def test_openai_provider_metadata_includes_finish_reason_and_requested_max_token
     provider = OpenAIProvider(config, client=build_client(response=build_response_with_usage("ok"), captured_kwargs=captured_kwargs))
 
     assert provider.generate("system", "message") == "ok"
-    metadata = provider.get_last_call_metadata()
+    metadata = require_metadata(provider)
 
     assert captured_kwargs[0]["max_tokens"] == 321
     assert metadata["requested_max_tokens"] == 321
@@ -243,7 +266,7 @@ def test_anthropic_provider_metadata_includes_stop_reason_and_requested_max_toke
     provider = AnthropicProvider(config, client=build_anthropic_client(response=response, captured_kwargs=captured_kwargs))
 
     assert provider.generate("system", "message") == "ok"
-    metadata = provider.get_last_call_metadata()
+    metadata = require_metadata(provider)
 
     assert captured_kwargs[0]["max_tokens"] == 654
     assert metadata["requested_max_tokens"] == 654
@@ -306,13 +329,13 @@ def test_probe_provider_health_returns_default_snapshot_for_providers_without_ac
     assert snapshot["status"] == "ready"
     assert snapshot["active_check"] is False
     assert snapshot["retryable"] is False
-    assert snapshot["latency_ms"] >= 0
+    assert require_number(snapshot["latency_ms"]) >= 0
 
 
 def test_probe_provider_health_wraps_transient_provider_failures(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
 
-    def create_failing_provider(runtime_config: KYCortexConfig):
+    def create_failing_provider(runtime_config: Any):
         return OllamaProvider(runtime_config, request_opener=build_ollama_opener(error=OSError("down")))
 
     monkeypatch.setattr("kycortex_agents.providers.factory.create_provider", create_failing_provider)
@@ -325,14 +348,14 @@ def test_probe_provider_health_wraps_transient_provider_failures(tmp_path, monke
     assert snapshot["active_check"] is True
     assert snapshot["retryable"] is True
     assert snapshot["error_type"] == "ProviderTransientError"
-    assert "not responding" in snapshot["error_message"]
-    assert snapshot["latency_ms"] >= 0
+    assert "not responding" in require_text(snapshot["error_message"])
+    assert require_number(snapshot["latency_ms"]) >= 0
 
 
 def test_probe_provider_health_wraps_deterministic_provider_failures(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="ollama", llm_model="llama3")
 
-    def create_failing_provider(runtime_config: KYCortexConfig):
+    def create_failing_provider(runtime_config: Any):
         return OllamaProvider(
             runtime_config,
             request_opener=build_ollama_opener(
@@ -350,8 +373,8 @@ def test_probe_provider_health_wraps_deterministic_provider_failures(tmp_path, m
     assert snapshot["active_check"] is True
     assert snapshot["retryable"] is False
     assert snapshot["error_type"] == "AgentExecutionError"
-    assert "HTTP 404" in snapshot["error_message"]
-    assert snapshot["latency_ms"] >= 0
+    assert "HTTP 404" in require_text(snapshot["error_message"])
+    assert require_number(snapshot["latency_ms"]) >= 0
 
 
 def test_probe_provider_health_caches_unhealthy_snapshot_during_cooldown(tmp_path, monkeypatch):
@@ -386,7 +409,7 @@ def test_probe_provider_health_caches_unhealthy_snapshot_during_cooldown(tmp_pat
     assert first_snapshot["cooldown_remaining_seconds"] == 0.0
     assert second_snapshot["status"] == "degraded"
     assert second_snapshot["cooldown_cached"] is True
-    assert second_snapshot["cooldown_remaining_seconds"] > 0
+    assert require_number(second_snapshot["cooldown_remaining_seconds"]) > 0
 
 
 def test_probe_provider_health_does_not_share_unhealthy_cache_across_credentials(tmp_path, monkeypatch):
@@ -554,7 +577,7 @@ def test_openai_provider_captures_usage_metadata(tmp_path):
 
     provider.generate("system", "message")
 
-    assert provider.get_last_call_metadata() == {
+    assert require_metadata(provider) == {
         "requested_max_tokens": 4096,
         "finish_reason": "stop",
         "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
@@ -598,7 +621,7 @@ def test_openai_provider_health_check_returns_structured_success_snapshot(tmp_pa
     assert snapshot["backend_reachable"] is True
     assert snapshot["model_ready"] is True
     assert snapshot["timeout_seconds"] == 5.0
-    assert snapshot["latency_ms"] >= 0
+    assert require_number(snapshot["latency_ms"]) >= 0
 
 
 def test_openai_provider_lists_model_ids_from_multiple_payload_shapes(tmp_path):
@@ -769,7 +792,7 @@ def test_anthropic_provider_captures_usage_metadata(tmp_path):
 
     provider.generate("system", "message")
 
-    assert provider.get_last_call_metadata() == {
+    assert require_metadata(provider) == {
         "requested_max_tokens": 4096,
         "stop_reason": None,
         "stop_type": None,
@@ -847,7 +870,7 @@ def test_anthropic_provider_health_check_returns_structured_success_snapshot(tmp
     assert snapshot["backend_reachable"] is True
     assert snapshot["model_ready"] is True
     assert snapshot["timeout_seconds"] == 5.0
-    assert snapshot["latency_ms"] >= 0
+    assert require_number(snapshot["latency_ms"]) >= 0
 
 
 def test_anthropic_provider_lists_model_ids_from_multiple_payload_shapes(tmp_path):
@@ -946,7 +969,8 @@ def test_ollama_provider_uses_configured_timeouts_for_health_check_and_generatio
     captured_timeouts: list[float] = []
 
     def open_request(request, timeout=None):
-        captured_timeouts.append(timeout)
+        assert isinstance(timeout, (int, float))
+        captured_timeouts.append(float(timeout))
         if request.full_url.endswith("/api/tags"):
             return FakeHTTPResponse('{"models": []}')
         return FakeHTTPResponse('{"response": "ok"}')
@@ -986,7 +1010,7 @@ def test_ollama_provider_health_check_returns_structured_success_snapshot(tmp_pa
     assert snapshot["model_ready"] is True
     assert snapshot["base_url"] == "http://localhost:11434"
     assert snapshot["timeout_seconds"] == 5.0
-    assert snapshot["latency_ms"] >= 0
+    assert require_number(snapshot["latency_ms"]) >= 0
 
 
 def test_ollama_provider_health_check_reports_configured_model_not_ready(tmp_path):
@@ -1328,7 +1352,11 @@ def test_base_provider_default_health_check_returns_ready_snapshot():
 def test_base_provider_generate_super_raises_not_implemented():
     class SuperCallingProvider(BaseLLMProvider):
         def generate(self, system_prompt: str, user_message: str) -> str:
-            return super().generate(system_prompt, user_message)
+            base_generate = cast(
+                Callable[[BaseLLMProvider, str, str], str],
+                BaseLLMProvider.__dict__["generate"],
+            )
+            return base_generate(self, system_prompt, user_message)
 
     with pytest.raises(NotImplementedError):
         SuperCallingProvider().generate("system", "message")

@@ -5758,6 +5758,22 @@ class Orchestrator:
                         project.save()
                         continue
                     if not self._is_repairable_failure(failure_category):
+                        if self.config.workflow_failure_policy == "continue":
+                            skipped = project.skip_dependent_tasks(
+                                task.id,
+                                f"Skipped because dependency '{task.id}' failed",
+                            )
+                            self._emit_workflow_progress(project, task=task)
+                            project.save()
+                            if skipped:
+                                self._log_event(
+                                    "warning",
+                                    "dependent_tasks_skipped",
+                                    project_name=project.project_name,
+                                    task_id=task.id,
+                                    skipped_task_ids=list(skipped),
+                                )
+                            continue
                         project.mark_workflow_finished(
                             "failed",
                             acceptance_policy=self.config.workflow_acceptance_policy,

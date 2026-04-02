@@ -8,7 +8,7 @@ import pytest
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import PROJECT_STATE_SCHEMA_VERSION, ProjectState, Task
 from kycortex_agents.memory.state_store import resolve_state_store
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome, WorkflowStatus
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, FailureCategory, TaskStatus, WorkflowOutcome, WorkflowStatus
 
 
 def require_task(project: ProjectState, task_id: str) -> Task:
@@ -1080,6 +1080,61 @@ def test_pause_workflow_marks_snapshot_paused_and_suppresses_runnable_tasks():
     assert project.runnable_tasks() == []
     assert project.execution_events[-1]["event"] == "workflow_paused"
     assert project.execution_events[-1]["details"]["reason"] == "manual_operator_pause"
+
+
+def test_cancel_workflow_marks_terminal_state_and_skips_pending_tasks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+        )
+    )
+
+    cancelled_task_ids = project.cancel_workflow(reason="manual_operator_cancel")
+    snapshot = project.snapshot()
+
+    assert cancelled_task_ids == ["docs"]
+    assert require_task(project, "arch").status == TaskStatus.DONE.value
+    assert require_task(project, "docs").status == TaskStatus.SKIPPED.value
+    assert require_task(project, "docs").skip_reason_type == "workflow_cancelled"
+    assert require_task(project, "docs").output == "manual_operator_cancel"
+    assert project.phase == WorkflowStatus.CANCELLED.value
+    assert project.terminal_outcome == WorkflowOutcome.CANCELLED.value
+    assert project.failure_category == FailureCategory.WORKFLOW_CANCELLED.value
+    assert project.acceptance_criteria_met is False
+    assert snapshot.workflow_status == WorkflowStatus.CANCELLED
+    assert project.execution_events[-1]["event"] == "workflow_cancelled"
+    assert project.execution_events[-1]["details"]["reason"] == "manual_operator_cancel"
+    assert project.execution_events[-1]["details"]["cancelled_task_ids"] == ["docs"]
+
+
+def test_pause_workflow_rejects_cancelled_workflow():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+        )
+    )
+    project.cancel_workflow(reason="manual_operator_cancel")
+
+    with pytest.raises(ValueError, match="finished workflow"):
+        project.pause_workflow(reason="manual_operator_pause")
 
 
 def test_override_task_marks_task_done_and_records_manual_override_event():

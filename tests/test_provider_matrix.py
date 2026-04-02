@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.error import URLError
 
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.types import WorkflowOutcome, WorkflowStatus
 
 
 def _load_example_module(module_name: str, relative_path: str):
@@ -976,3 +977,41 @@ def test_execute_empirical_validation_workflow_does_not_resume_non_repairable_fa
     assert len(workflow_finished_events) == 1
     assert project.failure_category == "provider_transient"
     assert project.repair_cycle_count == 0
+
+
+def test_execute_empirical_validation_workflow_does_not_resume_cancelled_workflow(monkeypatch, tmp_path):
+    import kycortex_agents.provider_matrix as provider_matrix
+
+    config = provider_matrix.build_full_workflow_config(
+        "ollama",
+        "llama3",
+        str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(
+        project_name="Demo",
+        goal="Exercise cancelled workflow path",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
+    execute_calls = {"count": 0}
+
+    class CancelledOrchestrator:
+        def __init__(self, _config):
+            self.config = _config
+
+        def execute_workflow(self, state):
+            execute_calls["count"] += 1
+            if execute_calls["count"] > 1:
+                raise AssertionError("execute_workflow resumed a cancelled workflow")
+            state.cancel_workflow(reason="manual_operator_cancel")
+
+    monkeypatch.setattr(provider_matrix, "Orchestrator", CancelledOrchestrator)
+
+    provider_matrix.execute_empirical_validation_workflow(config, project)
+
+    assert execute_calls["count"] == 1
+    assert project.terminal_outcome == WorkflowOutcome.CANCELLED.value
+    assert project.phase == WorkflowStatus.CANCELLED.value

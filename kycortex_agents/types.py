@@ -63,6 +63,7 @@ class WorkflowStatus(str, Enum):
     INIT = "init"
     RUNNING = "running"
     PAUSED = "paused"
+    CANCELLED = "cancelled"
     FAILED = "failed"
     COMPLETED = "completed"
 
@@ -73,6 +74,7 @@ class WorkflowOutcome(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     DEGRADED = "degraded"
+    CANCELLED = "cancelled"
     MANUAL_REVIEW_REQUIRED = "manual_review_required"
 
 
@@ -87,6 +89,7 @@ class FailureCategory(str, Enum):
     TEST_VALIDATION = "test_validation"
     DEPENDENCY_VALIDATION = "dependency_validation"
     WORKFLOW_BLOCKED = "workflow_blocked"
+    WORKFLOW_CANCELLED = "workflow_cancelled"
     WORKFLOW_DEFINITION = "workflow_definition"
     REPAIR_BUDGET_EXHAUSTED = "repair_budget_exhausted"
 

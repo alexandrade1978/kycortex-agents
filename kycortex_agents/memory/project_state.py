@@ -275,10 +275,15 @@ class ProjectState:
 
         return self.phase == WorkflowStatus.PAUSED.value
 
+    def is_workflow_cancelled(self) -> bool:
+        """Return whether the workflow has been cancelled by an operator."""
+
+        return self.phase == WorkflowStatus.CANCELLED.value or self.terminal_outcome == WorkflowOutcome.CANCELLED.value
+
     def pause_workflow(self, *, reason: str) -> bool:
         """Mark the workflow paused so new runnable tasks are not dispatched."""
 
-        if self._workflow_status() in {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}:
+        if self._workflow_status() in {WorkflowStatus.COMPLETED, WorkflowStatus.CANCELLED, WorkflowStatus.FAILED}:
             raise ValueError("Cannot pause a finished workflow")
 
         paused_at = datetime.now(timezone.utc).isoformat()
@@ -371,6 +376,62 @@ class ProjectState:
         )
         self._touch(replayed_at)
         return replayed_task_ids
+
+    def cancel_workflow(self, *, reason: str = "manual_cancel") -> List[str]:
+        """Cancel a workflow and prevent any further runnable work from being dispatched."""
+
+        current_status = self._workflow_status()
+        if current_status == WorkflowStatus.CANCELLED:
+            return []
+        if current_status in {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}:
+            raise ValueError("Cannot cancel a finished workflow")
+
+        cancelled_at = datetime.now(timezone.utc).isoformat()
+        cancel_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "manual_cancel"
+        cancelled_task_ids: List[str] = []
+        for task in self.tasks:
+            if task.status != TaskStatus.PENDING.value:
+                continue
+            task.status = TaskStatus.SKIPPED.value
+            task.last_error = cancel_reason
+            task.last_error_type = None
+            task.last_error_category = None
+            task.output = cancel_reason
+            task.output_payload = None
+            task.skip_reason_type = "workflow_cancelled"
+            task.last_provider_call = None
+            task.last_resumed_at = None
+            task.completed_at = cancelled_at
+            self._record_task_event(task, "cancelled", cancelled_at, error_message=cancel_reason)
+            self._record_execution_event(
+                event="task_cancelled",
+                timestamp=cancelled_at,
+                task_id=task.id,
+                status=task.status,
+                details={"reason": cancel_reason},
+            )
+            cancelled_task_ids.append(task.id)
+
+        self.mark_workflow_finished(
+            WorkflowStatus.CANCELLED.value,
+            acceptance_policy=self.acceptance_policy,
+            terminal_outcome=WorkflowOutcome.CANCELLED.value,
+            failure_category=FailureCategory.WORKFLOW_CANCELLED.value,
+            acceptance_criteria_met=False,
+            acceptance_evaluation=self._cancelled_acceptance_evaluation(),
+        )
+        self._record_execution_event(
+            event="workflow_cancelled",
+            timestamp=cancelled_at,
+            status=self.phase,
+            details={
+                "reason": cancel_reason,
+                "cancelled_task_ids": cancelled_task_ids,
+                "terminal_outcome": self.terminal_outcome,
+            },
+        )
+        self._touch(cancelled_at)
+        return cancelled_task_ids
 
     def resume_interrupted_tasks(self) -> List[str]:
         """Re-queue tasks left running by an interrupted workflow execution."""
@@ -1050,7 +1111,7 @@ class ProjectState:
     def runnable_tasks(self) -> List[Task]:
         """Return pending tasks whose dependencies are already satisfied."""
 
-        if self.is_workflow_paused():
+        if self.is_workflow_paused() or self.is_workflow_cancelled():
             return []
         return [task for task in self.execution_plan() if self.is_task_ready(task)]
 
@@ -1747,11 +1808,15 @@ class ProjectState:
     def _workflow_status(self) -> WorkflowStatus:
         if self.is_workflow_paused():
             return WorkflowStatus.PAUSED
+        if self.is_workflow_cancelled():
+            return WorkflowStatus.CANCELLED
         statuses = {task.status for task in self.tasks}
         if not self.tasks:
             return WorkflowStatus.INIT
         if self.workflow_finished_at and self.terminal_outcome == WorkflowOutcome.COMPLETED.value:
             return WorkflowStatus.COMPLETED
+        if self.workflow_finished_at and self.terminal_outcome == WorkflowOutcome.CANCELLED.value:
+            return WorkflowStatus.CANCELLED
         if self.workflow_finished_at and self.terminal_outcome == WorkflowOutcome.FAILED.value:
             return WorkflowStatus.FAILED
         if TaskStatus.FAILED.value in statuses:
@@ -1767,6 +1832,27 @@ class ProjectState:
             return TaskStatus(status)
         except ValueError:
             return TaskStatus.PENDING
+
+    def _cancelled_acceptance_evaluation(self) -> Dict[str, Any]:
+        completed_task_ids = [task.id for task in self.tasks if task.status == TaskStatus.DONE.value]
+        failed_task_ids = [task.id for task in self.tasks if task.status == TaskStatus.FAILED.value]
+        skipped_task_ids = [task.id for task in self.tasks if task.status == TaskStatus.SKIPPED.value]
+        pending_task_ids = [
+            task.id
+            for task in self.tasks
+            if task.status not in {TaskStatus.DONE.value, TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
+        ]
+        return {
+            "policy": self.acceptance_policy,
+            "accepted": False,
+            "reason": "workflow_cancelled",
+            "evaluated_task_ids": [task.id for task in self.tasks],
+            "required_task_ids": [task.id for task in self.tasks if task.required_for_acceptance],
+            "completed_task_ids": completed_task_ids,
+            "failed_task_ids": failed_task_ids,
+            "skipped_task_ids": skipped_task_ids,
+            "pending_task_ids": pending_task_ids,
+        }
 
     def _build_agent_output(self, task: Task) -> AgentOutput:
         if task.output_payload:

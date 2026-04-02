@@ -104,6 +104,21 @@ class PausingAgent:
         return response
 
 
+class CancellingAgent:
+    def __init__(self, responses: list[str], project: ProjectState, cancel_reason: str):
+        self.responses = list(responses)
+        self.project = project
+        self.cancel_reason = cancel_reason
+        self.calls = 0
+
+    def run(self, task_description: str, context: dict[str, Any]) -> str:
+        response = self.responses[min(self.calls, len(self.responses) - 1)]
+        self.calls += 1
+        if self.calls == 1:
+            self.project.cancel_workflow(reason=self.cancel_reason)
+        return response
+
+
 class FakeHTTPResponse:
     def __init__(self, payload: str):
         self._payload = payload
@@ -8886,6 +8901,66 @@ def test_execute_workflow_can_pause_between_tasks_and_resume_later(tmp_path):
     assert [task.status for task in project.tasks] == [TaskStatus.DONE.value, TaskStatus.DONE.value]
     assert project.phase == "completed"
     assert project.terminal_outcome == WorkflowOutcome.COMPLETED.value
+
+
+def test_execute_workflow_returns_without_dispatch_when_project_is_precancelled(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.cancel_workflow(reason="manual_operator_cancel")
+
+    agent = RecordingAgent("ARCHITECTURE DOC")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": agent}))
+
+    orchestrator.execute_workflow(project)
+
+    assert agent.last_input is None
+    assert project.phase == WorkflowStatus.CANCELLED.value
+    assert project.terminal_outcome == WorkflowOutcome.CANCELLED.value
+    assert project.tasks[0].status == TaskStatus.SKIPPED.value
+    assert project.snapshot().workflow_status == WorkflowStatus.CANCELLED
+
+
+def test_execute_workflow_can_cancel_between_tasks(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write the documentation",
+            assigned_to="architect",
+        )
+    )
+
+    cancelling_agent = CancellingAgent(["ARCHITECTURE DOC", "DOCUMENTATION"], project, "manual_operator_cancel")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": cancelling_agent}))
+
+    orchestrator.execute_workflow(project)
+
+    assert cancelling_agent.calls == 1
+    assert require_task(project, "arch").status == TaskStatus.DONE.value
+    assert require_task(project, "docs").status == TaskStatus.SKIPPED.value
+    assert require_task(project, "docs").skip_reason_type == "workflow_cancelled"
+    assert project.phase == WorkflowStatus.CANCELLED.value
+    assert project.terminal_outcome == WorkflowOutcome.CANCELLED.value
+    assert project.snapshot().workflow_status == WorkflowStatus.CANCELLED
+    assert any(event["event"] == "workflow_cancelled" for event in project.execution_events)
 
 
 def test_execute_workflow_can_continue_after_manual_task_override(tmp_path):

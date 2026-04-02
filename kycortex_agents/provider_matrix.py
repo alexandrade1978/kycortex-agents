@@ -435,6 +435,8 @@ def _can_resume_failed_workflow(project: ProjectState) -> bool:
         for task in project.tasks
     ):
         return False
+    if project.terminal_outcome == WorkflowOutcome.CANCELLED.value:
+        return False
     if project.terminal_outcome != WorkflowOutcome.FAILED.value:
         return True
     failure_category = project.failure_category or FailureCategory.UNKNOWN.value

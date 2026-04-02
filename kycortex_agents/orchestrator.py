@@ -830,6 +830,23 @@ class Orchestrator:
             )
         return changed
 
+    def cancel_workflow(self, project: ProjectState, *, reason: str = "manual_cancel") -> list[str]:
+        """Cancel a workflow through the orchestrator control surface."""
+
+        was_cancelled = project.is_workflow_cancelled()
+        cancelled_task_ids = project.cancel_workflow(reason=reason)
+        if not was_cancelled and project.is_workflow_cancelled():
+            project.save()
+            self._log_event(
+                "warning",
+                "workflow_cancelled",
+                project_name=project.project_name,
+                phase=project.phase,
+                reason=reason,
+                cancelled_task_ids=list(cancelled_task_ids),
+            )
+        return cancelled_task_ids
+
     def skip_task(self, project: ProjectState, task_id: str, *, reason: str) -> bool:
         """Skip a task manually through the orchestrator control surface."""
 
@@ -890,6 +907,19 @@ class Orchestrator:
             project_name=project.project_name,
             phase=project.phase,
             reason=project.workflow_pause_reason,
+        )
+        return True
+
+    def _exit_if_workflow_cancelled(self, project: ProjectState) -> bool:
+        if not project.is_workflow_cancelled():
+            return False
+        project.save()
+        self._log_event(
+            "warning",
+            "workflow_cancelled",
+            project_name=project.project_name,
+            phase=project.phase,
+            terminal_outcome=project.terminal_outcome,
         )
         return True
 
@@ -5706,6 +5736,8 @@ class Orchestrator:
 
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""
+        if self._exit_if_workflow_cancelled(project):
+            return
         project.execution_plan()
         self._validate_agent_resolution(project)
         project.repair_max_cycles = self.config.workflow_max_repair_cycles
@@ -5782,6 +5814,8 @@ class Orchestrator:
         if resumed_task_ids:
             self._log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))
             project.save()
+        if self._exit_if_workflow_cancelled(project):
+            return
         if self._exit_if_workflow_paused(project):
             return
         if project.workflow_started_at is None or project.phase != "execution":
@@ -5791,6 +5825,8 @@ class Orchestrator:
             )
             self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         while True:
+            if self._exit_if_workflow_cancelled(project):
+                return
             pending = project.pending_tasks()
             if not pending:
                 acceptance_evaluation = self._evaluate_workflow_acceptance(project)
@@ -5809,6 +5845,8 @@ class Orchestrator:
                 project.save()
                 self._log_event("info", "workflow_completed", project_name=project.project_name, phase=project.phase)
                 break
+            if self._exit_if_workflow_cancelled(project):
+                return
             if self._exit_if_workflow_paused(project):
                 return
             try:
@@ -5847,11 +5885,15 @@ class Orchestrator:
                     f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
                 )
             for task in runnable:
+                if self._exit_if_workflow_cancelled(project):
+                    return
                 if self._exit_if_workflow_paused(project):
                     return
                 try:
                     self.run_task(task, project)
                 except Exception as exc:
+                    if self._exit_if_workflow_cancelled(project):
+                        return
                     failure_category = self._classify_task_failure(task, exc)
                     if project.should_retry_task(task.id):
                         self._emit_workflow_progress(project, task=task)

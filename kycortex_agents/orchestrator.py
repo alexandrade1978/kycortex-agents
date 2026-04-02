@@ -817,7 +817,8 @@ class Orchestrator:
 
     def _log_event(self, level: str, event: str, **fields: Any) -> None:
         log_method = getattr(self.logger, level)
-        log_method(event, extra={"event": event, **fields})
+        safe_fields = cast(Dict[str, Any], redact_sensitive_data(fields))
+        log_method(event, extra={"event": event, **safe_fields})
 
     def _emit_workflow_progress(self, project: ProjectState, *, task: Optional[Task] = None) -> None:
         workflow_telemetry = project.record_workflow_progress(

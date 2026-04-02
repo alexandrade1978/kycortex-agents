@@ -8908,6 +8908,58 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
     assert finished_record.workflow_telemetry["acceptance_summary"]["accepted"] is True
 
 
+def test_orchestrator_control_logs_redact_sensitive_reasons(tmp_path, caplog):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config, registry=AgentRegistry({}))
+
+    pause_project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(tmp_path / "pause.json"))
+    pause_project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    pause_project.mark_workflow_running()
+
+    skip_project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(tmp_path / "skip.json"))
+    skip_project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+        )
+    )
+
+    cancel_project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(tmp_path / "cancel.json"))
+    cancel_project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+        )
+    )
+
+    with caplog.at_level("INFO", logger="Orchestrator"):
+        assert orchestrator.pause_workflow(pause_project, reason="api_key=sk-secret-123456") is True
+        assert orchestrator.skip_task(skip_project, "docs", reason="Authorization: Bearer sk-ant-secret-987654") is True
+        assert orchestrator.cancel_workflow(cancel_project, reason="password=hunter2") == ["docs"]
+
+    pause_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_paused")
+    skip_record = next(record for record in caplog.records if getattr(record, "event", None) == "task_skipped")
+    cancel_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_cancelled")
+
+    assert "sk-secret-123456" not in pause_record.reason
+    assert "sk-ant-secret-987654" not in skip_record.reason
+    assert "hunter2" not in cancel_record.reason
+    assert "[REDACTED]" in pause_record.reason
+    assert "[REDACTED]" in skip_record.reason
+    assert "[REDACTED]" in cancel_record.reason
+
+
 def test_execute_workflow_respects_task_dependencies(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

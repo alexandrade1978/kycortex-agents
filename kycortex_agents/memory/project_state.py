@@ -60,6 +60,12 @@ def _redact_provider_call(provider_call: Optional[Dict[str, Any]]) -> Optional[D
         return None
     return cast(Dict[str, Any], _redact_payload(provider_call))
 
+
+def _normalized_redacted_reason(reason: Any, default: str) -> str:
+    if isinstance(reason, str) and reason.strip():
+        return _redact_text(reason.strip()) or default
+    return default
+
 @dataclass
 class Task:
     """Serializable workflow task record tracked inside a project state."""
@@ -330,7 +336,7 @@ class ProjectState:
             raise ValueError("Cannot pause a finished workflow")
 
         paused_at = datetime.now(timezone.utc).isoformat()
-        pause_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "manual_pause"
+        pause_reason = _normalized_redacted_reason(reason, "manual_pause")
         self.phase = WorkflowStatus.PAUSED.value
         self.workflow_finished_at = None
         self.workflow_paused_at = paused_at
@@ -430,7 +436,7 @@ class ProjectState:
             raise ValueError("Cannot cancel a finished workflow")
 
         cancelled_at = datetime.now(timezone.utc).isoformat()
-        cancel_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "manual_cancel"
+        cancel_reason = _normalized_redacted_reason(reason, "manual_cancel")
         cancelled_task_ids: List[str] = []
         for task in self.tasks:
             if task.status != TaskStatus.PENDING.value:
@@ -1223,12 +1229,13 @@ class ProjectState:
         task = self.get_task(task_id)
         if task is None:
             return
+        skip_reason = _redact_text(reason) if isinstance(reason, str) else ""
         task.status = TaskStatus.SKIPPED.value
-        task.last_error = reason
+        task.last_error = skip_reason
         task.last_error_type = None
         task.last_error_category = None
         task.repair_context = {}
-        task.output = reason
+        task.output = skip_reason
         task.output_payload = None
         task.skip_reason_type = reason_type
         task.last_provider_call = None
@@ -1236,13 +1243,13 @@ class ProjectState:
         task.last_attempt_started_at = None
         task.last_resumed_at = None
         task.completed_at = datetime.now(timezone.utc).isoformat()
-        self._record_task_event(task, "skipped", task.completed_at, error_message=reason)
+        self._record_task_event(task, "skipped", task.completed_at, error_message=skip_reason)
         self._record_execution_event(
             event="task_skipped",
             timestamp=task.completed_at,
             task_id=task.id,
             status=task.status,
-            details={"reason": reason},
+            details={"reason": skip_reason},
         )
         self._touch(task.completed_at)
 

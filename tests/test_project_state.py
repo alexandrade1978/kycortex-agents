@@ -1374,6 +1374,27 @@ def test_pause_workflow_marks_snapshot_paused_and_suppresses_runnable_tasks():
     assert project.execution_events[-1]["details"]["reason"] == "manual_operator_pause"
 
 
+def test_pause_workflow_redacts_sensitive_operator_reason():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+        )
+    )
+    project.mark_workflow_running()
+
+    changed = project.pause_workflow(reason="api_key=sk-secret-123456")
+
+    assert changed is True
+    assert "sk-secret-123456" not in project.workflow_pause_reason
+    assert "[REDACTED]" in project.workflow_pause_reason
+    assert "sk-secret-123456" not in project.execution_events[-1]["details"]["reason"]
+    assert "[REDACTED]" in project.execution_events[-1]["details"]["reason"]
+
+
 def test_cancel_workflow_marks_terminal_state_and_skips_pending_tasks():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
@@ -1411,6 +1432,33 @@ def test_cancel_workflow_marks_terminal_state_and_skips_pending_tasks():
     assert project.execution_events[-1]["event"] == "workflow_cancelled"
     assert project.execution_events[-1]["details"]["reason"] == "manual_operator_cancel"
     assert project.execution_events[-1]["details"]["cancelled_task_ids"] == ["docs"]
+
+
+def test_cancel_workflow_redacts_sensitive_operator_reason():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+        )
+    )
+
+    cancelled_task_ids = project.cancel_workflow(reason="password=hunter2")
+    task = require_task(project, "docs")
+    task_cancelled_event = next(event for event in project.execution_events if event["event"] == "task_cancelled")
+    workflow_cancelled_event = next(event for event in project.execution_events if event["event"] == "workflow_cancelled")
+
+    assert cancelled_task_ids == ["docs"]
+    assert "hunter2" not in task.last_error
+    assert "hunter2" not in task.output
+    assert "hunter2" not in task_cancelled_event["details"]["reason"]
+    assert "hunter2" not in workflow_cancelled_event["details"]["reason"]
+    assert "[REDACTED]" in task.last_error
+    assert task.output == task.last_error
+    assert "[REDACTED]" in task_cancelled_event["details"]["reason"]
+    assert "[REDACTED]" in workflow_cancelled_event["details"]["reason"]
 
 
 def test_pause_workflow_rejects_cancelled_workflow():
@@ -2803,6 +2851,31 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.details["last_resumed_at"] is None
     assert result.details["task_duration_ms"] is None
     assert result.details["last_attempt_duration_ms"] is None
+
+
+def test_skip_task_redacts_sensitive_operator_reason():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Docs",
+            description="Document",
+            assigned_to="docs_writer",
+        )
+    )
+
+    project.skip_task("docs", "Authorization: Bearer sk-ant-secret-987654")
+
+    task = require_task(project, "docs")
+
+    assert "sk-ant-secret-987654" not in task.last_error
+    assert "sk-ant-secret-987654" not in task.output
+    assert "sk-ant-secret-987654" not in task.history[-1]["error_message"]
+    assert "sk-ant-secret-987654" not in project.execution_events[-1]["details"]["reason"]
+    assert "[REDACTED]" in task.last_error
+    assert task.output == task.last_error
+    assert "[REDACTED]" in task.history[-1]["error_message"]
+    assert "[REDACTED]" in project.execution_events[-1]["details"]["reason"]
 
 
 def test_snapshot_does_not_expose_created_at_as_started_at_for_never_started_tasks():

@@ -8888,6 +8888,66 @@ def test_execute_workflow_can_pause_between_tasks_and_resume_later(tmp_path):
     assert project.terminal_outcome == WorkflowOutcome.COMPLETED.value
 
 
+def test_execute_workflow_can_continue_after_manual_task_override(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    architect = RecordingAgent("ARCHITECTURE DOC")
+    code_engineer = RecordingAgent("IMPLEMENTED CODE")
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"architect": architect, "code_engineer": code_engineer}),
+    )
+
+    assert orchestrator.override_task(project, "arch", "MANUAL ARCHITECTURE", reason="manual_operator_override") is True
+
+    orchestrator.execute_workflow(project)
+
+    assert architect.last_input is None
+    assert require_task(project, "arch").status == TaskStatus.DONE.value
+    assert require_task(project, "arch").output == "MANUAL ARCHITECTURE"
+    assert require_task(project, "code").status == TaskStatus.DONE.value
+    assert require_task(project, "code").output == "IMPLEMENTED CODE"
+    assert any(event["event"] == "task_overridden" for event in project.execution_events)
+
+
+def test_orchestrator_skip_task_marks_task_skipped_without_manual_state_edit(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+        )
+    )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({}))
+
+    assert orchestrator.skip_task(project, "docs", reason="manual_skip") is True
+    assert require_task(project, "docs").status == TaskStatus.SKIPPED.value
+    assert require_task(project, "docs").skip_reason_type == "manual"
+    assert require_task(project, "docs").output == "manual_skip"
+
+
 def test_execute_workflow_rejects_dependency_cycles(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

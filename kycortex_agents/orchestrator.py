@@ -830,6 +830,40 @@ class Orchestrator:
             )
         return changed
 
+    def skip_task(self, project: ProjectState, task_id: str, *, reason: str) -> bool:
+        """Skip a task manually through the orchestrator control surface."""
+
+        task = project.get_task(task_id)
+        if task is None:
+            return False
+        project.skip_task(task_id, reason, reason_type="manual")
+        project.save()
+        self._log_event(
+            "info",
+            "task_skipped",
+            project_name=project.project_name,
+            task_id=task_id,
+            phase=project.phase,
+            reason=reason,
+        )
+        return True
+
+    def override_task(self, project: ProjectState, task_id: str, output: str | AgentOutput, *, reason: str) -> bool:
+        """Complete a task manually through the orchestrator control surface."""
+
+        changed = project.override_task(task_id, output, reason=reason)
+        if changed:
+            project.save()
+            self._log_event(
+                "info",
+                "task_overridden",
+                project_name=project.project_name,
+                task_id=task_id,
+                phase=project.phase,
+                reason=reason,
+            )
+        return changed
+
     def _exit_if_workflow_paused(self, project: ProjectState) -> bool:
         if not project.is_workflow_paused():
             return False

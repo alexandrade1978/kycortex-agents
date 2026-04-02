@@ -1082,6 +1082,32 @@ def test_pause_workflow_marks_snapshot_paused_and_suppresses_runnable_tasks():
     assert project.execution_events[-1]["details"]["reason"] == "manual_operator_pause"
 
 
+def test_override_task_marks_task_done_and_records_manual_override_event():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            status=TaskStatus.FAILED.value,
+            output="boom",
+        )
+    )
+
+    changed = project.override_task("arch", "MANUAL ARCHITECTURE", reason="manual_operator_override")
+    task = require_task(project, "arch")
+
+    assert changed is True
+    assert task.status == TaskStatus.DONE.value
+    assert task.output == "MANUAL ARCHITECTURE"
+    assert task.last_error is None
+    assert task.history[-1]["event"] == "overridden"
+    assert task.history[-1]["error_message"] == "manual_operator_override"
+    assert project.execution_events[-1]["event"] == "task_overridden"
+    assert project.execution_events[-1]["details"]["reason"] == "manual_operator_override"
+
+
 def test_resume_workflow_clears_pause_state_and_records_resume_summary():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

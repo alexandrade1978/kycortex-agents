@@ -1025,6 +1025,41 @@ class ProjectState:
         )
         self._touch(task.completed_at)
 
+    def override_task(self, task_id: str, output: str | AgentOutput, *, reason: str) -> bool:
+        """Mark a task done manually and record the operator override in audit history."""
+
+        task = self.get_task(task_id)
+        if task is None:
+            return False
+
+        overridden_at = datetime.now(timezone.utc).isoformat()
+        override_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "manual_override"
+        task.status = TaskStatus.DONE.value
+        if isinstance(output, AgentOutput):
+            task.output = output.raw_content
+            task.output_payload = asdict(output)
+        else:
+            task.output = output
+            task.output_payload = None
+        task.last_error = None
+        task.last_error_type = None
+        task.last_error_category = None
+        task.repair_context = {}
+        task.skip_reason_type = None
+        task.last_provider_call = None
+        task.last_resumed_at = overridden_at
+        task.completed_at = overridden_at
+        self._record_task_event(task, "overridden", overridden_at, error_message=override_reason)
+        self._record_execution_event(
+            event="task_overridden",
+            timestamp=overridden_at,
+            task_id=task.id,
+            status=task.status,
+            details={"reason": override_reason},
+        )
+        self._touch(overridden_at)
+        return True
+
     def skip_dependent_tasks(self, dependency_id: str, reason: str) -> List[str]:
         """Skip all pending descendants of a failed dependency and return their ids."""
 

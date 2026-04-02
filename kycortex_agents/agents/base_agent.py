@@ -199,7 +199,7 @@ class BaseAgent(ABC):
                     **self._provider_circuit_metadata(provider_name, current_time),
                     **self._provider_health_metadata(current_time, provider_plan),
                 }
-                raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                raise self._prefix_agent_execution_error(exc) from exc
             for attempt in range(1, max_attempts + 1):
                 current_time = perf_counter()
                 self._raise_if_provider_cancellation_requested(
@@ -404,7 +404,7 @@ class BaseAgent(ABC):
                                 }
                             )
                             break
-                        raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                        raise self._prefix_agent_execution_error(exc) from exc
                     remaining_elapsed_budget = self._provider_elapsed_budget_remaining_seconds(
                         started_at,
                         current_time,
@@ -484,7 +484,7 @@ class BaseAgent(ABC):
                         **self._provider_health_metadata(current_time, provider_plan),
                     }
                     if isinstance(exc, AgentExecutionError):
-                        raise AgentExecutionError(f"{self.name}: {exc}") from exc
+                        raise self._prefix_agent_execution_error(exc) from exc
                     raise AgentExecutionError(f"{self.name} failed to call the model provider") from exc
         raise AgentExecutionError(f"{self.name} failed to call the model provider")
 
@@ -1025,6 +1025,12 @@ class BaseAgent(ABC):
         if isinstance(exc, AgentExecutionError):
             raise exc
         raise AgentExecutionError(f"{self.name} failed during agent execution") from exc
+
+    def _prefix_agent_execution_error(self, exc: AgentExecutionError) -> AgentExecutionError:
+        message = f"{self.name}: {exc}"
+        if isinstance(exc, ProviderTransientError):
+            return ProviderTransientError(message)
+        return AgentExecutionError(message)
 
     def _normalize_output(self, result: Any, agent_input: AgentInput) -> AgentOutput:
         if isinstance(result, AgentOutput):

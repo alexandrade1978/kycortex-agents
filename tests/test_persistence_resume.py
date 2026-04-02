@@ -1,11 +1,13 @@
 import pytest
 from typing import Any, cast
 
+from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
-from kycortex_agents.types import TaskStatus
+from kycortex_agents.types import FailureCategory, TaskStatus, WorkflowOutcome
 
 
 KYCortexConfig = cast(Any, KYCortexConfig)
@@ -36,6 +38,12 @@ def require_task(project: ProjectState, task_id: str) -> Task:
     task = project.get_task(task_id)
     assert task is not None
     return task
+
+
+def require_provider_call(task: Task) -> dict[str, Any]:
+    provider_call = task.last_provider_call
+    assert isinstance(provider_call, dict)
+    return provider_call
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
@@ -165,6 +173,214 @@ def test_persisted_failed_workflow_resumes_after_reload(tmp_path, state_filename
     assert failed.workflow_last_resumed_at is not None
     assert any(event["event"] == "task_requeued" for event in failed.execution_events)
     assert failed.execution_events[-1]["event"] == "workflow_finished"
+
+
+@pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
+def test_persisted_provider_transient_failure_does_not_auto_resume_after_reload(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+
+    class TimeoutProvider:
+        def __init__(self):
+            self.calls: list[tuple[str, str]] = []
+            self.health_calls = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+        def get_last_call_metadata(self) -> None:
+            return None
+
+        def health_check(self) -> dict[str, object]:
+            self.health_calls += 1
+            return {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "status": "healthy",
+                "active_check": False,
+                "retryable": False,
+            }
+
+    class ProviderBackedArchitect(BaseAgent):
+        def __init__(self, provider: Any, runtime_config: Any):
+            super().__init__("Architect", "Architecture & Design", runtime_config)
+            self._provider = cast(Any, provider)
+
+        def run(self, task_description: str, context: dict[str, Any]) -> str:
+            return self.chat("system", task_description)
+
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    provider = TimeoutProvider()
+    failing_orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"architect": ProviderBackedArchitect(provider, config)}),
+    )
+
+    with pytest.raises(ProviderTransientError, match="Architect: provider temporarily unavailable"):
+        failing_orchestrator.execute_workflow(project)
+
+    failed = ProjectState.load(str(state_path))
+    failed_arch = require_task(failed, "arch")
+    failed_provider_call = require_provider_call(failed_arch)
+
+    assert failed.phase == "failed"
+    assert failed.failure_category == FailureCategory.PROVIDER_TRANSIENT.value
+    assert failed.terminal_outcome == WorkflowOutcome.FAILED.value
+    assert failed_arch.status == TaskStatus.FAILED.value
+    assert failed_arch.last_error_category == FailureCategory.PROVIDER_TRANSIENT.value
+    assert failed_provider_call["provider"] == "openai"
+    assert failed_provider_call["retryable"] is True
+    assert failed_provider_call["attempts_used"] == 1
+
+    resume_orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"architect": ProviderBackedArchitect(TimeoutProvider(), config)}),
+    )
+
+    with pytest.raises(AgentExecutionError, match="cannot resume automatically"):
+        resume_orchestrator.execute_workflow(failed)
+
+    reloaded_arch = require_task(failed, "arch")
+    reloaded_provider_call = require_provider_call(reloaded_arch)
+
+    assert failed.phase == "failed"
+    assert failed.failure_category == FailureCategory.PROVIDER_TRANSIENT.value
+    assert failed.terminal_outcome == WorkflowOutcome.FAILED.value
+    assert failed.repair_cycle_count == 0
+    assert failed.get_task("arch__repair_1") is None
+    assert reloaded_arch.status == TaskStatus.FAILED.value
+    assert reloaded_arch.last_error_category == FailureCategory.PROVIDER_TRANSIENT.value
+    assert reloaded_provider_call["provider"] == "openai"
+    assert reloaded_provider_call["retryable"] is True
+    assert reloaded_provider_call["attempts_used"] == 1
+
+
+@pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
+def test_completed_workflow_persists_fallback_provider_metadata_after_reload(tmp_path, state_filename, monkeypatch):
+    state_path = tmp_path / state_filename
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        provider_max_attempts=1,
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+
+    class TransientPrimaryProvider:
+        def __init__(self):
+            self.calls: list[tuple[str, str]] = []
+            self.health_calls = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("primary temporarily unavailable")
+
+        def get_last_call_metadata(self) -> None:
+            return None
+
+        def health_check(self) -> dict[str, object]:
+            self.health_calls += 1
+            return {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "status": "healthy",
+                "active_check": False,
+                "retryable": False,
+            }
+
+    class FallbackProvider:
+        def __init__(self):
+            self.calls: list[tuple[str, str]] = []
+            self.health_calls = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            return "FALLBACK ARCHITECTURE"
+
+        def get_last_call_metadata(self) -> None:
+            return None
+
+        def health_check(self) -> dict[str, object]:
+            self.health_calls += 1
+            return {
+                "provider": "anthropic",
+                "model": "claude-3-5-sonnet",
+                "status": "healthy",
+                "active_check": False,
+                "retryable": False,
+            }
+
+    class ProviderBackedArchitect(BaseAgent):
+        def __init__(self, provider: Any, runtime_config: Any):
+            super().__init__("Architect", "Architecture & Design", runtime_config)
+            self._provider = cast(Any, provider)
+
+        def run(self, task_description: str, context: dict[str, Any]) -> str:
+            return self.chat("system", task_description)
+
+    primary_provider = TransientPrimaryProvider()
+    fallback_provider = FallbackProvider()
+
+    def create_fallback_provider(runtime_config: Any):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_fallback_provider)
+
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"architect": ProviderBackedArchitect(primary_provider, config)}),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    reloaded = ProjectState.load(str(state_path))
+    reloaded_arch = require_task(reloaded, "arch")
+    provider_call = require_provider_call(reloaded_arch)
+
+    assert reloaded.phase == "completed"
+    assert reloaded.terminal_outcome == WorkflowOutcome.COMPLETED.value
+    assert reloaded_arch.status == TaskStatus.DONE.value
+    assert reloaded_arch.output == "FALLBACK ARCHITECTURE"
+    assert provider_call["provider"] == "anthropic"
+    assert provider_call["success"] is True
+    assert provider_call["fallback_used"] is True
+    assert provider_call["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_transient",
+            "error_type": "ProviderTransientError",
+            "error_message": "primary temporarily unavailable",
+            "attempts_used": 1,
+        }
+    ]
+    assert primary_provider.calls == [("system", "Design the architecture")]
+    assert fallback_provider.calls == [("system", "Design the architecture")]
 
 
 @pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])

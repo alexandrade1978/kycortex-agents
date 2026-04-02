@@ -87,6 +87,9 @@ def test_architect_agent_execute_uses_default_constraints_and_document_artifact(
     assert result.raw_content == "ok"
     assert "Python 3.10+, production-ready dependencies, licensing suitable for open-source or commercial distribution" in agent.last_user_message
     assert "Respect the task scope exactly" in agent.last_user_message
+    assert "Prefer one cohesive public service surface plus domain models over separate helper interfaces for scoring, logging, or batch processing." in agent.last_user_message
+    assert "Do not introduce standalone RiskScorer, AuditLogger, BatchProcessor, Manager, or Processor collaborators unless the task explicitly requires those public types." in agent.last_user_message
+    assert "For compact single-module service tasks, prefer one cohesive public service surface plus domain models" in agent.last_system_prompt
     assert result.artifacts[0].artifact_type == ArtifactType.DOCUMENT
     assert result.artifacts[0].name == "arch_architecture"
 
@@ -301,7 +304,9 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "stay comfortably under that ceiling" in agent.last_user_message
     assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_user_message
     assert "count top-level tests and total lines explicitly" in agent.last_user_message
+    assert "target clear headroom below it instead of landing on the boundary" in agent.last_user_message
     assert "Import every production class you instantiate or reference in a fixture or test body" in agent.last_user_message
+    assert "Do not derive new helper names by adding or removing prefixes or suffixes from documented symbols" in agent.last_user_message
     assert "stay on the main service or batch API" in agent.last_user_message
     assert "validator units, scorer units, dataclass serialization, audit logger wrappers" in agent.last_user_message
     assert "merge overlapping checks instead of creating helper-specific extra tests" in agent.last_user_message
@@ -315,9 +320,28 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in agent.last_user_message
     assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in agent.last_user_message
     assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in agent.last_user_message
+    assert "do not shorten them to submit(...) or submit_batch(...)" in agent.last_user_message
     assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in agent.last_user_message
+    assert "If an exact numeric assertion depends on top-level dict size or collection size" in agent.last_user_message
+    assert "do not pair exact score equality with word-like sample strings such as data, valid_data, or data1" in agent.last_user_message
+    assert "risk_factor=2 and compliance_history=0.1 yield 1.45, not 1.25" in agent.last_user_message
+    assert "risk_factor=\"invalid\" does not raise TypeError" in agent.last_user_message
+    assert "use xxxxxxxxxx rather than \"\"" in agent.last_user_message
+    assert "request_id=\"\" or another same-type placeholder can still pass" in agent.last_user_message
+    assert "empty dict is still a same-type placeholder and may pass when validation only checks dict type" in agent.last_user_message
+    assert "do not shorten them to submit(...) or submit_batch(...)" in agent.last_user_message
+    assert "ComplianceData(id=\"1\", data={\"key\": \"wrong_value\"}) is still valid input and should be asserted as a non-compliant result" in agent.last_user_message
+    assert "Do not write a validation-failure test as `assert not validate_request(...)`" in agent.last_user_message
+    assert "choose an input that validate_request rejects before scoring runs" in agent.last_user_message
+    assert "a two-item valid batch can emit 5 audit logs, not 3" in agent.last_user_message
+    assert "prefer assertions on returned results, terminal batch markers, or monotonic audit growth" in agent.last_user_message
+    assert "Unless the current implementation or behavior contract explicitly enumerates every emitted batch log, do not write len(service.audit_logs) == N or a similar exact batch-audit assertion." in agent.last_user_message
+    assert "If a previous pytest failure showed a batch audit mismatch such as assert 5 == 3 on len(service.audit_logs), delete that exact count and replace it with stable checks" in agent.last_user_message
+    assert "do not create a separate invalid-scoring test that first calls intake_request on an invalid object" in agent.last_user_message
     assert "never use prose sample text for that assertion" in agent.last_user_message
+    assert "One invalid batch item can emit two failure-related audit entries" in agent.last_user_message
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
+    assert "Do not replace one guessed helper with another guessed helper during repair" in agent.last_user_message
     assert "Treat the current implementation artifact and API contract as fixed ground truth during repair" in agent.last_user_message
     assert "If a pytest-only runtime failure shows that an earlier assertion overreached the current implementation or contract" in agent.last_user_message
     assert "Import every called production function explicitly" in agent.last_user_message
@@ -326,19 +350,42 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "stay comfortably under that cap" in agent.last_system_prompt
     assert "Leave at least one top-level test of headroom below a stated maximum" in agent.last_system_prompt
     assert "count top-level tests and total lines yourself" in agent.last_system_prompt
+    assert "target clear headroom below it instead of landing on the boundary" in agent.last_system_prompt
     assert "Do not hand-count prose strings to justify exact numeric assertions" in agent.last_system_prompt
+    assert "Do not derive new helper names by adding or removing prefixes or suffixes from documented symbols" in agent.last_system_prompt
     assert "Do not infer derived status transitions, escalation flags, or report counters" in agent.last_system_prompt
     assert "When an API accepts a request, filter, or payload dict with documented required fields" in agent.last_system_prompt
     assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in agent.last_system_prompt
     assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in agent.last_system_prompt
     assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in agent.last_system_prompt
+    assert "do not shorten them to submit(...) or submit_batch(...)" in agent.last_system_prompt
+    assert "every constructor call in the suite must pass all five named arguments" in agent.last_system_prompt
     assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in agent.last_system_prompt
+    assert "If an exact numeric assertion depends on top-level dict size or collection size" in agent.last_system_prompt
+    assert "do not pair exact score equality with word-like sample strings such as data, valid_data, or data1" in agent.last_system_prompt
+    assert "risk_factor=2 and compliance_history=0.1 yield 1.45, not 1.25" in agent.last_system_prompt
+    assert "risk_factor=\"invalid\" does not raise TypeError" in agent.last_system_prompt
+    assert "use xxxxxxxxxx rather than \"\"" in agent.last_system_prompt
+    assert "request_id=\"\" or another same-type placeholder can still pass" in agent.last_system_prompt
+    assert "empty dict is still a same-type placeholder and may pass when validation only checks dict type" in agent.last_system_prompt
+    assert "do not shorten them to submit(...) or submit_batch(...)" in agent.last_system_prompt
+    assert "ComplianceData(id=\"1\", data={\"key\": \"wrong_value\"}) is still valid input and should be asserted as a non-compliant result" in agent.last_system_prompt
+    assert "Do not write a validation-failure test as `assert not validate_request(...)`" in agent.last_system_prompt
+    assert "choose an input that validate_request rejects before scoring runs" in agent.last_system_prompt
+    assert "a two-item valid batch can emit 5 audit logs, not 3" in agent.last_system_prompt
+    assert "prefer assertions on returned results, terminal batch markers, or monotonic audit growth" in agent.last_system_prompt
+    assert "Unless the current implementation or behavior contract explicitly enumerates every emitted batch log, do not write len(service.audit_logs) == N or a similar exact batch-audit assertion." in agent.last_system_prompt
+    assert "If a previous pytest failure showed a batch audit mismatch such as assert 5 == 3 on len(service.audit_logs), delete that exact count and replace it with stable checks" in agent.last_system_prompt
+    assert "do not create a separate invalid-scoring test that first calls intake_request on an invalid object" in agent.last_system_prompt
     assert "never use natural-language prose samples for that assertion" in agent.last_system_prompt
+    assert "One invalid batch item can emit two failure-related audit entries" in agent.last_system_prompt
     assert "If the public API exposes no dedicated batch helper" in agent.last_system_prompt
     assert "Never define a custom fixture named `request`" in agent.last_system_prompt
+    assert "If you use the `pytest.` namespace anywhere in the file, add `import pytest` explicitly at the top of the module." in agent.last_system_prompt
     assert "do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities" in agent.last_system_prompt
     assert "Do not add caplog assertions or raw logging-text expectations" in agent.last_system_prompt
     assert "Do not use mock-style bookkeeping assertions such as `.call_count` or `.assert_called_once()`" in agent.last_system_prompt
+    assert "Do not replace one guessed helper with another guessed helper during repair" in agent.last_system_prompt
     assert "Treat the current implementation artifact and API contract as fixed ground truth during repair" in agent.last_system_prompt
     assert "Task-specific scope, test-count, and size limits override these defaults." in agent.last_system_prompt
     assert result.artifacts[0].artifact_type == ArtifactType.TEST
@@ -362,15 +409,25 @@ def test_code_engineer_agent_prompt_demands_raw_python_output(tmp_path):
     assert "Task-specific scope and size limits override generic polish." in agent.last_system_prompt
     assert "stay comfortably under that ceiling so imports, the main guard, and any required repairs still fit" in agent.last_system_prompt
     assert "Treat the architecture as guidance for required behavior" in agent.last_system_prompt
+    assert "For compact single-module service tasks, prefer one cohesive public service surface plus domain models over separate helper-only collaborator classes." in agent.last_system_prompt
+    assert "Do not split validation, scoring, audit logging, or batch handling into separate Logger, Scorer, Processor, Manager, or interface classes" in agent.last_system_prompt
     assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_system_prompt
     assert "Do not mix object-style APIs with dict membership tests or subscripting" in agent.last_system_prompt
+    assert "If you define dataclasses or typed record models with defaults, keep every required non-default field before every defaulted field so the module imports cleanly" in agent.last_system_prompt
+    assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_system_prompt
+    assert "Keep imports consistent with the names you reference. If you call datetime.datetime.now() or datetime.date.today(), import datetime." in agent.last_system_prompt
     assert "Do not include markdown fences" in agent.last_system_prompt
     assert "Target module: code_implementation.py" in agent.last_user_message
     assert "stay comfortably under that ceiling instead of aiming for the exact limit" in agent.last_user_message
     assert "within roughly 10 to 15 lines of the ceiling" in agent.last_user_message
+    assert "For compact service tasks, keep validation, scoring, audit logging, and batch behavior on one main service surface or a very small set of top-level functions." in agent.last_user_message
+    assert "Do not split those behaviors into separate Logger, Scorer, Processor, Manager, or interface classes unless the task or validated public API explicitly requires those public collaborators." in agent.last_user_message
     assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_user_message
     assert "you kept service state in memory instead of adding sqlite or filesystem-backed storage" in agent.last_user_message
     assert "you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting" in agent.last_user_message
+    assert "If you define dataclasses or typed record models with defaults, keep every required field before any defaulted field so the module imports cleanly and does not fail at import time." in agent.last_user_message
+    assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_user_message
+    assert "Keep imports consistent with how you reference names. If you call datetime.datetime.now() or datetime.date.today(), import datetime." in agent.last_user_message
 
 
 def test_code_reviewer_agent_prompt_includes_tests_and_module_name(tmp_path):

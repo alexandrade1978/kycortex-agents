@@ -1,6 +1,6 @@
 import pytest
 
-from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.config import KYCortexConfig, resolve_provider_base_url
 from kycortex_agents.exceptions import ConfigValidationError
 
 
@@ -44,6 +44,40 @@ def test_config_sets_default_ollama_base_url(tmp_path):
     )
 
     assert config.base_url == "http://localhost:11434"
+
+
+def test_config_reads_ollama_base_url_from_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:15000")
+
+    config = KYCortexConfig(
+        llm_provider="ollama",
+        output_dir=str(tmp_path / "output"),
+    )
+
+    assert config.base_url == "http://127.0.0.1:15000"
+
+
+def test_config_prefers_explicit_ollama_base_url_over_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:15000")
+
+    config = KYCortexConfig(
+        llm_provider="ollama",
+        output_dir=str(tmp_path / "output"),
+        base_url="http://127.0.0.1:11435",
+    )
+
+    assert config.base_url == "http://127.0.0.1:11435"
+
+
+def test_resolve_provider_base_url_prefers_explicit_then_env_then_default(monkeypatch):
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:15000")
+
+    assert resolve_provider_base_url("ollama", "http://127.0.0.1:11435") == "http://127.0.0.1:11435"
+    assert resolve_provider_base_url("ollama") == "http://127.0.0.1:15000"
+
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+
+    assert resolve_provider_base_url("ollama") == "http://localhost:11434"
 
 
 def test_config_rejects_non_positive_ollama_num_ctx(tmp_path):

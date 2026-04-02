@@ -383,6 +383,46 @@ class ProjectState:
         )
         self._touch(planned_at)
 
+    def _create_budget_decomposition_task(self, task_id: str, repair_context: Dict[str, Any]) -> Optional[Task]:
+        source_task = self.get_task(task_id)
+        if source_task is None:
+            return None
+        repair_attempt = int(repair_context.get("cycle") or 0)
+        if repair_attempt <= 0:
+            return None
+        decomposition_task_id = f"{task_id}__repair_{repair_attempt}__budget_plan"
+        existing = self.get_task(decomposition_task_id)
+        if existing is not None:
+            if isinstance(existing.repair_context, dict):
+                existing.repair_context.update(dict(repair_context))
+            return existing
+        created_at = datetime.now(timezone.utc).isoformat()
+        decomposition_task = Task(
+            id=decomposition_task_id,
+            title=f"Budget plan for {source_task.title}",
+            description=source_task.description,
+            assigned_to="architect",
+            dependencies=list(source_task.dependencies),
+            required_for_acceptance=False,
+            retry_limit=source_task.retry_limit,
+            repair_context=dict(repair_context),
+            created_at=created_at,
+        )
+        self.tasks.append(decomposition_task)
+        self._record_execution_event(
+            event="task_budget_decomposition_created",
+            timestamp=created_at,
+            task_id=decomposition_task.id,
+            status=decomposition_task.status,
+            details={
+                "decomposition_target_task_id": source_task.id,
+                "repair_attempt": repair_attempt,
+                "assigned_to": decomposition_task.assigned_to,
+            },
+        )
+        self._touch(created_at)
+        return decomposition_task
+
     def _create_repair_task(self, task_id: str, repair_owner: str, repair_context: Dict[str, Any]) -> Optional[Task]:
         source_task = self.get_task(task_id)
         if source_task is None:

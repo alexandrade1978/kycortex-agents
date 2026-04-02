@@ -1084,11 +1084,13 @@ def test_anthropic_provider_treats_server_5xx_errors_as_transient(tmp_path):
 
 
 def test_anthropic_provider_builds_client_from_installed_sdk(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token")
 
     class FakeAnthropic:
-        def __init__(self, api_key):
+        def __init__(self, api_key, base_url=None):
             self.api_key = api_key
+            self.base_url = base_url
 
     monkeypatch.setitem(sys.modules, "anthropic", SimpleNamespace(Anthropic=FakeAnthropic))
 
@@ -1097,6 +1099,26 @@ def test_anthropic_provider_builds_client_from_installed_sdk(tmp_path, monkeypat
 
     assert isinstance(client, FakeAnthropic)
     assert client.api_key == "token"
+    assert client.base_url is None
+
+
+def test_anthropic_provider_normalizes_v1_base_url_from_environment(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token")
+
+    class FakeAnthropic:
+        def __init__(self, api_key, base_url=None):
+            self.api_key = api_key
+            self.base_url = base_url
+
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://api.llmapi.ai/v1")
+    monkeypatch.setitem(sys.modules, "anthropic", SimpleNamespace(Anthropic=FakeAnthropic))
+
+    provider = AnthropicProvider(config)
+    client = provider._get_client()
+
+    assert isinstance(client, FakeAnthropic)
+    assert client.api_key == "token"
+    assert client.base_url == "https://api.llmapi.ai"
 
 
 def test_anthropic_provider_rejects_invalid_and_empty_payloads(tmp_path):

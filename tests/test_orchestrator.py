@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 import kycortex_agents.orchestrator as orchestrator_module
 
+from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
@@ -712,6 +713,62 @@ def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_pat
         orchestrator._validate_code_output(output, task=task)
 
 
+def test_validate_code_output_rejects_import_time_errors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="code",
+        raw_content=(
+            "from dataclasses import dataclass\n\n"
+            "@dataclass\n"
+            "class Broken:\n"
+            "    label: str = ''\n"
+            "    value: int\n"
+        ),
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write one Python module.",
+        assigned_to="code_engineer",
+    )
+
+    with pytest.raises(
+        AgentExecutionError,
+        match="module import failed: TypeError: non-default argument 'value' follows default argument",
+    ):
+        orchestrator._validate_code_output(output, task=task)
+
+
+def test_validate_code_output_skips_import_validation_for_third_party_imports(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="code", raw_content="import requests\n")
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write one Python module.",
+        assigned_to="code_engineer",
+    )
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_analyze_python_module",
+        lambda *args, **kwargs: {
+            "syntax_ok": True,
+            "has_main_guard": True,
+            "third_party_imports": ["requests"],
+        },
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_module_import",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not run import validation")),
+    )
+
+    assert orchestrator._validate_code_output(output, task=task) is None
+
+
 def test_classify_task_failure_returns_workflow_definition_for_definition_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -815,6 +872,24 @@ def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
         "returncode": None,
         "summary": "generated code or tests were empty",
     }
+
+
+def test_execute_generated_module_import_reports_import_time_errors(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_module_import(
+        "generated_module.py",
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class Broken:\n"
+        "    label: str = ''\n"
+        "    value: int\n",
+    )
+
+    assert result["ran"] is True
+    assert result["returncode"] != 0
+    assert "TypeError: non-default argument 'value' follows default argument" in result["summary"]
 
 
 def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monkeypatch):
@@ -1112,6 +1187,178 @@ def test_build_code_validation_summary_includes_line_count_without_budget(tmp_pa
     )
 
     assert "Line count: 12" in summary
+
+
+def test_build_code_validation_summary_includes_import_validation(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_validation_summary(
+        {"syntax_ok": True, "third_party_imports": []},
+        "",
+        import_validation={
+            "ran": True,
+            "returncode": 1,
+            "summary": "TypeError: non-default argument 'value' follows default argument",
+        },
+    )
+
+    assert "Module import: FAIL" in summary
+    assert "Import summary: TypeError: non-default argument 'value' follows default argument" in summary
+
+
+def test_build_code_public_api_marks_constructor_fields_explicit_for_tests(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    code_analysis = orchestrator._analyze_python_module(
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    id: str\n"
+        "    user_id: str\n"
+        "    data: dict[str, str]\n"
+        "    timestamp: str\n"
+        "    status: str = 'pending'\n"
+    )
+
+    summary = orchestrator._build_code_public_api(code_analysis)
+
+    assert "ComplianceRequest(id, user_id, data, timestamp, status)" in summary
+    assert "tests must instantiate with all listed constructor fields explicitly: id, user_id, data, timestamp, status" in summary
+
+
+def test_build_code_behavior_contract_includes_payload_storage_and_score_formula(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    contract = orchestrator._build_code_behavior_contract(
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    id: str\n"
+        "    data: dict[str, str]\n"
+        "    timestamp: datetime\n"
+        "    status: str = 'pending'\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    score: int\n"
+        "    level: str\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def intake_request(self, request_data: dict[str, str]) -> ComplianceRequest:\n"
+        "        request = ComplianceRequest(id=request_data['id'], data=request_data, timestamp=datetime.now())\n"
+        "        return request\n\n"
+        "    def score_risk(self, request: ComplianceRequest) -> RiskScore:\n"
+        "        score = len(request.data) * 10\n"
+        "        return RiskScore(score=score, level='low')\n"
+    )
+
+    assert "intake_request stores full request_data in returned ComplianceRequest.data" in contract
+    assert "score_risk derives score from len(request.data) * 10" in contract
+
+
+def test_build_code_behavior_contract_inlines_helper_score_formula_for_service_methods(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    contract = orchestrator._build_code_behavior_contract(
+        "from dataclasses import dataclass\n"
+        "from typing import Any, Dict\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    id: str\n"
+        "    data: dict[str, str]\n"
+        "    timestamp: str\n"
+        "    status: str = 'pending'\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    score: float\n"
+        "    level: str\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def assess_risk(self, request: ComplianceRequest) -> RiskScore:\n"
+        "        score = self.calculate_risk_score(request.data)\n"
+        "        level = 'low'\n"
+        "        return RiskScore(score, level)\n\n"
+        "    def calculate_risk_score(self, data: Dict[str, Any]) -> float:\n"
+        "        return float(len(data.get('compliance_data', ''))) * 0.1\n"
+    )
+
+    assert "calculate_risk_score derives score from float(len(data.get('compliance_data', ''))) * 0.1" in contract
+    assert "assess_risk derives score from float(len(request.data.get('compliance_data', ''))) * 0.1" in contract
+
+
+def test_build_code_behavior_contract_expands_local_score_aliases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    contract = orchestrator._build_code_behavior_contract(
+        "from dataclasses import dataclass\n"
+        "from typing import Any, Dict\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    id: str\n"
+        "    data: dict[str, str]\n"
+        "    timestamp: str\n"
+        "    status: str = 'pending'\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    score: float\n"
+        "    level: str\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def assess_risk(self, request: ComplianceRequest) -> RiskScore:\n"
+        "        score = self.calculate_risk_score(request.data)\n"
+        "        level = 'low'\n"
+        "        return RiskScore(score, level)\n\n"
+        "    def calculate_risk_score(self, data: Dict[str, Any]) -> float:\n"
+        "        compliance_data_length = len(data.get('compliance_data', ''))\n"
+        "        return compliance_data_length * 0.2\n"
+    )
+
+    assert "calculate_risk_score derives score from len(data.get('compliance_data', '')) * 0.2" in contract
+    assert "assess_risk derives score from len(request.data.get('compliance_data', '')) * 0.2" in contract
+
+
+def test_pytest_failure_details_include_assertion_context(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    details = orchestrator._pytest_failure_details(
+        {
+            "stdout": "FAILED tests_tests.py::test_example - AssertionError: assert 1 == 2\nE   AssertionError: assert 1 == 2\n",
+            "stderr": "",
+        }
+    )
+
+    assert details == [
+        "FAILED tests_tests.py::test_example - AssertionError: assert 1 == 2 | AssertionError: assert 1 == 2"
+    ]
+
+
+def test_pytest_failure_details_prefer_full_assertion_lines_from_failure_sections(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    details = orchestrator._pytest_failure_details(
+        {
+            "stdout": (
+                "..F                                                                    \n"
+                "=================================== FAILURES ===================================\n"
+                "_________________________ test_assess_risk_happy_path __________________________\n\n"
+                ">   ???\n"
+                "E   AssertionError: assert 0.4 == 0.1\n"
+                "E    +  where 0.4 = RiskScore(score=0.4, level='low').score\n\n"
+                "tests_tests.py:24: AssertionError\n"
+                "=========================== short test summary info ============================\n"
+                "FAILED tests_tests.py::test_assess_risk_happy_path - AssertionError: assert 0...\n"
+            ),
+            "stderr": "",
+        }
+    )
+
+    assert details == [
+        "FAILED tests_tests.py::test_assess_risk_happy_path - AssertionError: assert 0... | AssertionError: assert 0.4 == 0.1"
+    ]
 
 
 def test_build_repair_validation_summary_falls_back_when_validation_payload_shape_is_unusable(tmp_path):
@@ -1609,8 +1856,56 @@ def test_build_code_test_targets_marks_preferred_and_helper_classes(tmp_path):
         }
     )
 
+    assert "Classes to test: ComplianceService" in summary
     assert "Preferred workflow classes: ComplianceService" in summary
     assert "Helper classes to avoid in compact workflow tests: ComplianceRepository, RiskScoringService" in summary
+
+
+def test_build_code_exact_test_contract_excludes_helper_classes_when_facade_exists(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_exact_test_contract(
+        {
+            "syntax_ok": True,
+            "functions": [],
+            "classes": {
+                "ComplianceIntakeService": {
+                    "constructor_params": [],
+                    "methods": ["intake_request", "validate_request"],
+                    "method_signatures": {
+                        "intake_request": {},
+                        "validate_request": {},
+                    },
+                },
+                "ComplianceRequest": {
+                    "constructor_params": ["request_id", "request_type", "details", "timestamp"],
+                    "methods": [],
+                    "method_signatures": {},
+                },
+                "RiskScoringService": {
+                    "constructor_params": [],
+                    "methods": ["score_request"],
+                    "method_signatures": {"score_request": {}},
+                },
+                "AuditLogger": {
+                    "constructor_params": [],
+                    "methods": ["log_action"],
+                    "method_signatures": {"log_action": {}},
+                },
+            },
+        }
+    )
+
+    assert "Allowed production imports: ComplianceIntakeService, ComplianceRequest" in summary
+    assert "Preferred service or workflow facades: ComplianceIntakeService" in summary
+    assert "ComplianceIntakeService.intake_request" in summary
+    assert "ComplianceIntakeService.validate_request" in summary
+    assert "ComplianceRequest(request_id, request_type, details, timestamp)" in summary
+    assert "RiskScoringService" not in summary
+    assert "AuditLogger" not in summary
+    assert "score_request" not in summary
+    assert "log_action" not in summary
 
 
 def test_build_code_test_targets_keeps_required_constructor_logger_off_helper_avoid_list(tmp_path):
@@ -2250,6 +2545,90 @@ def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs
     assert analysis["invalid_member_references"] == ["ComplianceRequest.id (line 6)"]
 
 
+def test_analyze_test_module_tracks_inline_constructor_member_refs_and_returned_types(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = {
+        "syntax_ok": True,
+        "functions": [],
+        "classes": {
+            "ComplianceData": {
+                "name": "ComplianceData",
+                "bases": [],
+                "is_enum": False,
+                "fields": ["id", "data", "timestamp"],
+                "attributes": [],
+                "constructor_params": ["id", "data", "timestamp"],
+                "constructor_min_args": 2,
+                "constructor_max_args": 3,
+                "methods": [],
+                "method_signatures": {},
+            },
+            "ComplianceResult": {
+                "name": "ComplianceResult",
+                "bases": [],
+                "is_enum": False,
+                "fields": ["id", "is_compliant", "risk_score"],
+                "attributes": [],
+                "constructor_params": ["id", "is_compliant", "risk_score"],
+                "constructor_min_args": 3,
+                "constructor_max_args": 3,
+                "methods": [],
+                "method_signatures": {},
+            },
+            "ComplianceIntakeService": {
+                "name": "ComplianceIntakeService",
+                "bases": [],
+                "is_enum": False,
+                "fields": [],
+                "attributes": [],
+                "constructor_params": [],
+                "constructor_min_args": 0,
+                "constructor_max_args": 0,
+                "methods": [
+                    "submit_intake(self, data)",
+                    "batch_submit_intakes(self, data_list)",
+                ],
+                "method_signatures": {
+                    "submit_intake": {
+                        "params": ["data"],
+                        "min_args": 1,
+                        "max_args": 1,
+                        "return_annotation": "ComplianceResult",
+                    },
+                    "batch_submit_intakes": {
+                        "params": ["data_list"],
+                        "min_args": 1,
+                        "max_args": 1,
+                        "return_annotation": None,
+                    },
+                },
+            },
+        },
+        "imports": [],
+        "third_party_imports": [],
+        "symbols": ["ComplianceData", "ComplianceIntakeService", "ComplianceResult"],
+    }
+    test_content = (
+        "from module_under_test import ComplianceData, ComplianceIntakeService\n\n"
+        "def test_inline_service_usage():\n"
+        "    result = ComplianceIntakeService().submit_intake(ComplianceData('1', {'key': 'value'}))\n"
+        "    ComplianceIntakeService().submit('x')\n"
+        "    ComplianceIntakeService().batch_submit_intakes([], [])\n"
+        "    assert result.invalid is True\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["call_arity_mismatches"] == [
+        "ComplianceIntakeService.batch_submit_intakes expects 1 args but test uses 2 at line 6"
+    ]
+    assert analysis["invalid_member_references"] == [
+        "ComplianceIntakeService.submit (line 5)",
+        "ComplianceResult.invalid (line 7)",
+    ]
+
+
 def test_analyze_test_module_flags_mock_style_assertions_without_mock_setup(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -2415,6 +2794,30 @@ def test_analyze_test_behavior_contracts_ignores_negative_validation_expectation
     assert non_batch_calls == []
 
 
+def test_analyze_test_behavior_contracts_ignores_validation_result_invalid_state_assertions(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    result = validate_submission({'name': 'Ada'})\n"
+        "    assert result.is_valid is False\n"
+        "    assert result.errors\n"
+    )
+
+    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+        tree,
+        {"validate_submission": ["name", "email"]},
+        {},
+        {},
+        set(),
+        set(),
+        {},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
 def test_analyze_test_behavior_contracts_allows_partial_invalid_batch_when_result_count_is_explicit(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -2476,6 +2879,58 @@ def test_analyze_test_module_allows_optional_constructor_arguments(tmp_path):
         "def test_request_defaults():\n"
         "    request = ComplianceRequest('req-1', {'name': 'Ada'}, '2024-01-01T00:00:00Z')\n"
         "    assert request is not None\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["constructor_arity_mismatches"] == []
+
+
+def test_analyze_python_module_tracks_optional_dataclass_constructor_fields(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    analysis = orchestrator._analyze_python_module(
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    requester_name: str\n"
+        "    request_details: str\n"
+        "    submission_date: datetime = field(default_factory=datetime.now)\n"
+    )
+
+    class_info = analysis["classes"]["ComplianceRequest"]
+
+    assert class_info["constructor_params"] == [
+        "request_id",
+        "requester_name",
+        "request_details",
+        "submission_date",
+    ]
+    assert class_info["constructor_min_args"] == 3
+    assert class_info["constructor_max_args"] == 4
+
+
+def test_analyze_test_module_allows_omitted_defaulted_dataclass_field_from_module_analysis(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = orchestrator._analyze_python_module(
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    requester_name: str\n"
+        "    request_details: str\n"
+        "    submission_date: datetime = field(default_factory=datetime.now)\n"
+    )
+    test_content = (
+        "from module_under_test import ComplianceRequest\n\n"
+        "def test_request_defaults():\n"
+        "    request = ComplianceRequest('req-1', 'Ada', 'High priority')\n"
+        "    assert request.request_id == 'req-1'\n"
     )
 
     analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
@@ -3352,6 +3807,56 @@ def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path)
 
     assert invalid_refs == ["Request.invalid (line 9)", "Service.missing (line 8)"]
     assert arity_mismatches == ["Service.range_fetch expects 1-2 args but test uses 3 at line 7"]
+
+
+def test_type_inference_and_member_usage_helpers_support_inline_constructor_calls(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    class_map = {
+        "Request": {
+            "attributes": ["request_id"],
+            "fields": [],
+            "is_enum": False,
+            "method_signatures": {},
+        },
+        "Service": {
+            "attributes": [],
+            "fields": [],
+            "is_enum": False,
+            "method_signatures": {
+                "fetch": {"min_args": 1, "max_args": 1, "return_annotation": "Request"},
+                "range_fetch": {"min_args": 1, "max_args": 2, "return_annotation": "Request"},
+            },
+        },
+    }
+    function_map: dict[str, dict[str, Any]] = {}
+    test_node = parse_function_node(
+        "def test_inline_case():\n"
+        "    returned = Service().fetch({'request_id': 'req-1'})\n"
+        "    Service().missing()\n"
+        "    Service().range_fetch(1, 2, 3)\n"
+        "    assert returned.invalid == 1\n"
+    )
+
+    local_types = orchestrator._collect_test_local_types(test_node, class_map, function_map)
+
+    assert local_types["returned"] == "Request"
+    assert orchestrator._infer_call_result_type(
+        ast.parse("Service().fetch({'request_id': 'req-1'})", mode="eval").body,
+        {},
+        class_map,
+        function_map,
+    ) == "Request"
+
+    invalid_refs, arity_mismatches = orchestrator._analyze_typed_test_member_usage(
+        test_node,
+        local_types,
+        class_map,
+        function_map,
+    )
+
+    assert invalid_refs == ["Request.invalid (line 5)", "Service.missing (line 3)"]
+    assert arity_mismatches == ["Service.range_fetch expects 1-2 args but test uses 3 at line 4"]
 
 
 def test_analyze_typed_test_member_usage_treats_enum_fields_as_invalid_members(tmp_path):
@@ -7367,10 +7872,102 @@ def test_code_artifact_context_includes_behavior_contract(tmp_path):
     context = orchestrator._build_context(project.tasks[0], project)
 
     assert "Behavior contract:" in context["code_behavior_contract"]
+    assert "Exact test contract:" in context["code_exact_test_contract"]
+    assert "Allowed production imports: Service" in context["code_exact_test_contract"]
+    assert "Exact public class methods:" in context["code_exact_test_contract"]
+    assert "Service.intake_request" in context["code_exact_test_contract"]
+    assert "Service.validate_request" in context["code_exact_test_contract"]
+    assert "Service.process_batch" in context["code_exact_test_contract"]
     assert "Test targets:" in context["code_test_targets"]
     assert "Entry points to avoid in tests: none" in context["code_test_targets"]
     assert "validate_request requires fields: name, email, compliance_type" in context["code_behavior_contract"]
     assert "process_batch expects each batch item to include: request_id, name, email, compliance_type" in context["code_behavior_contract"]
+
+
+def test_build_context_extracts_task_public_contract_anchor(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description=(
+            "Design the system.\n\n"
+            "Public contract anchor:\n"
+            "- Public facade: ComplianceIntakeService\n"
+            "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+            "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+            "\n"
+            "Keep the design compact."
+        ),
+        assigned_to="architect",
+    )
+    project.add_task(task)
+
+    orchestrator = Orchestrator(config)
+    context = orchestrator._build_context(task, project)
+
+    assert context["task_public_contract_anchor"] == (
+        "- Public facade: ComplianceIntakeService\n"
+        "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+        "- Required request workflow: ComplianceIntakeService.handle_request(request)"
+    )
+
+
+def test_build_context_includes_provider_max_tokens(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), max_tokens=900)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description="Design the system.",
+        assigned_to="architect",
+    )
+    project.add_task(task)
+
+    orchestrator = Orchestrator(config)
+    context = orchestrator._build_context(task, project)
+
+    assert context["provider_max_tokens"] == 900
+
+
+def test_build_context_compacts_architecture_for_low_budget_code_tasks_with_anchor(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), max_tokens=900)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    architecture_output = "# Architecture\n\nVery long architecture document that should not be copied verbatim into the low-budget code prompt."
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output=architecture_output,
+        )
+    )
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description=(
+            "Write one Python module under 300 lines with a CLI demo entrypoint.\n\n"
+            "Public contract anchor:\n"
+            "- Public facade: ComplianceIntakeService\n"
+            "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+            "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+            "- Supporting validation surface: ComplianceIntakeService.validate_request(request)"
+        ),
+        assigned_to="code_engineer",
+    )
+    project.add_task(code_task)
+
+    orchestrator = Orchestrator(config)
+    context = orchestrator._build_context(code_task, project)
+
+    assert context["architecture"].startswith("Low-budget architecture summary:")
+    assert "- Public facade: ComplianceIntakeService" in context["architecture"]
+    assert "Stay comfortably under 300 lines" in context["architecture"]
+    assert 'main() plus a literal if __name__ == "__main__": block' in context["architecture"]
+    assert context["arch"] == architecture_output
+    assert context["completed_tasks"]["arch"] == architecture_output
 
 
 def test_code_artifact_context_includes_field_value_contracts(tmp_path):
@@ -8509,6 +9106,101 @@ def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
     assert any(event["event"] == "task_repair_created" for event in project.execution_events)
 
 
+def test_execute_workflow_resume_failed_inserts_budget_decomposition_plan_before_code_repair(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write one Python module under 80 lines.",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+            status=TaskStatus.FAILED.value,
+            output="Generated code validation failed: syntax error '[' was never closed at line 2; output likely truncated at the completion token limit",
+            last_error="Generated code validation failed: syntax error '[' was never closed at line 2; output likely truncated at the completion token limit",
+            last_error_type="AgentExecutionError",
+            last_error_category=FailureCategory.CODE_VALIDATION.value,
+            output_payload={
+                "summary": "broken code",
+                "raw_content": "def risky():\n    values = [1, 2,\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def risky():\n    values = [1, 2,\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {
+                    "validation": {
+                        "code_analysis": {
+                            "syntax_ok": False,
+                            "syntax_error": "'[' was never closed at line 2",
+                            "third_party_imports": [],
+                            "line_count": 82,
+                            "line_budget": 80,
+                        },
+                        "completion_diagnostics": {
+                            "requested_max_tokens": 900,
+                            "output_tokens": 900,
+                            "finish_reason": "length",
+                            "stop_reason": None,
+                            "done_reason": None,
+                            "hit_token_limit": True,
+                            "likely_truncated": True,
+                        },
+                    }
+                },
+            },
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    architect = RecordingAgent(
+        "- Keep only the public risky() surface.\n- Remove optional helpers and comments.\n- Write the importable module top-down so required behavior appears first."
+    )
+    engineer = RecordingAgent("def risky() -> int:\n    return 1")
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "architect": architect,
+                "code_engineer": engineer,
+            }
+        ),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    plan_task = require_task(project, "code__repair_1__budget_plan")
+    repair_task = require_task(project, "code__repair_1")
+    code_task = require_task(project, "code")
+    assert plan_task.status == TaskStatus.DONE.value
+    assert repair_task.status == TaskStatus.DONE.value
+    assert code_task.status == TaskStatus.DONE.value
+    assert "code__repair_1__budget_plan" in repair_task.dependencies
+    assert engineer.last_context["budget_decomposition_brief"].startswith("- Keep only the public risky() surface.")
+    assert "Budget decomposition brief:" in engineer.last_description
+    assert any(event["event"] == "task_budget_decomposition_created" for event in project.execution_events)
+
+
 def test_execute_workflow_resume_failed_hard_stops_for_non_repairable_failed_tasks(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -8572,6 +9264,67 @@ def test_execute_workflow_fails_fast_for_provider_transient_without_repair_task(
     assert project.phase == "failed"
     assert project.failure_category == FailureCategory.PROVIDER_TRANSIENT.value
     assert project.get_task("arch__repair_1") is None
+
+
+def test_execute_workflow_preserves_base_agent_provider_transients_without_repair_task(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+        )
+    )
+
+    class TimeoutProvider:
+        def __init__(self):
+            self.calls: list[tuple[str, str]] = []
+            self.health_calls = 0
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            raise ProviderTransientError("provider temporarily unavailable")
+
+        def get_last_call_metadata(self) -> None:
+            return None
+
+        def health_check(self) -> dict[str, object]:
+            self.health_calls += 1
+            return {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "status": "healthy",
+                "active_check": False,
+                "retryable": False,
+            }
+
+    class ProviderBackedQATester(BaseAgent):
+        output_artifact_type = ArtifactType.TEST
+
+        def __init__(self, provider: TimeoutProvider, runtime_config: KYCortexConfig):
+            super().__init__("QATester", "Quality Assurance & Testing", runtime_config)
+            self._provider = cast(Any, provider)
+
+        def run(self, task_description: str, context: dict[str, Any]) -> str:
+            return self.chat("system", task_description)
+
+    provider = TimeoutProvider()
+    agent = ProviderBackedQATester(provider, config)
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(ProviderTransientError, match="QATester: provider temporarily unavailable"):
+        orchestrator.execute_workflow(project)
+
+    assert project.phase == "failed"
+    assert project.failure_category == FailureCategory.PROVIDER_TRANSIENT.value
+    assert project.get_task("tests__repair_1") is None
 
 
 def test_execute_workflow_can_chain_new_failed_task_within_active_repair_cycle(tmp_path):
@@ -8804,15 +9557,20 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
     assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
     assert "Delete every import, fixture, helper variable, and top-level test that references these flagged helper surfaces: RiskScoringService." in agent_input.task_description
     assert "do not reintroduce RiskScoringService anywhere in the rewritten file" in agent_input.task_description
+    assert "Do not replace one guessed helper with another guessed helper during repair" in agent_input.task_description
     assert "Reduce scope aggressively: target 3 to 4 top-level tests" in agent_input.task_description
     assert "Count top-level tests and total lines before finalizing" in agent_input.task_description
+    assert "Target clear headroom below the line ceiling instead of landing on the boundary" in agent_input.task_description
     assert "Drop validator, scorer, serialization, logger, and other helper-level tests" in agent_input.task_description
     assert "A suite over the hard cap is invalid even when pytest passes" in agent_input.task_description
+    assert "delete standalone validator, scorer, and audit helper tests before keeping any extra coverage" in agent_input.task_description
     assert "Use only documented module symbols" in agent_input.task_description
+    assert "Do not derive new helper names by adding or removing prefixes or suffixes from documented symbols" in agent_input.task_description
     assert "keep imports limited to that facade and directly exchanged domain models" in agent_input.task_description
     assert "If you use isinstance or another exact type assertion against a production class, import that class explicitly" in agent_input.task_description
     assert "remove guessed helper wiring and rebuild the suite around the smallest documented public service or function surface" in agent_input.task_description
     assert "Instantiate typed request or result models with the exact field names and full constructor arity listed in the API contract" in agent_input.task_description
+    assert "Pass every documented constructor field explicitly, including trailing defaulted fields" in agent_input.task_description
     assert "Keep scalar functions scalar" in agent_input.task_description
     assert "Never define a custom fixture named request." in agent_input.task_description
     assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
@@ -8882,8 +9640,1187 @@ def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
     assert "Do not invent replacement classes, functions, validators, return-wrapper types" in agent_input.task_description
     assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
     assert "rewrite that assertion to a contract-backed invariant instead of forcing a guessed business rule" in agent_input.task_description
+    assert "Do not assume empty strings, placeholder IDs, or domain keywords are invalid" in agent_input.task_description
+    assert "If the implementation only checks types such as isinstance(id, str) or isinstance(data, dict)" in agent_input.task_description
     assert "remove exact score totals and threshold-triggered boolean assertions" in agent_input.task_description
     assert "Do not infer derived statuses, labels, or report counters from suggestive field names or keywords alone" in agent_input.task_description
+
+
+def test_build_agent_input_adds_audit_log_runtime_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from pathlib import Path\n\n"
+                "def validate_request(request):\n"
+                "    return bool(request)\n\n"
+                "def score_request(request):\n"
+                "    return {'request_id': 1, 'score': 0.5}\n\n"
+                "def log_audit(message):\n"
+                "    Path('audit.log').write_text(message + '\\n', encoding='utf-8')\n"
+            ),
+            output_payload={
+                "summary": "def validate_request(request):",
+                "raw_content": (
+                    "from pathlib import Path\n\n"
+                    "def validate_request(request):\n"
+                    "    return bool(request)\n\n"
+                    "def score_request(request):\n"
+                    "    return {'request_id': 1, 'score': 0.5}\n\n"
+                    "def log_audit(message):\n"
+                    "    Path('audit.log').write_text(message + '\\n', encoding='utf-8')\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "from pathlib import Path\n\n"
+                            "def validate_request(request):\n"
+                            "    return bool(request)\n\n"
+                            "def score_request(request):\n"
+                            "    return {'request_id': 1, 'score': 0.5}\n\n"
+                            "def log_audit(message):\n"
+                            "    Path('audit.log').write_text(message + '\\n', encoding='utf-8')\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: validate_request, score_request, log_audit\n"
+                    "- Unknown module symbols: none\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_log_audit - AssertionError: assert audit_path.read_text(encoding='utf-8') == 'entry'; FAILED tests_tests.py::test_happy_path - AssertionError: assert 1 == 3\n"
+                    "- Pytest summary: 1 failed, 3 passed in 0.01s\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import log_audit\n\n"
+                    "def test_log_audit(tmp_path):\n"
+                    "    log_audit('entry')\n"
+                    "    assert (tmp_path / 'audit.log').read_text(encoding='utf-8') == 'entry'\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import log_audit\n\n"
+                    "def test_log_audit(tmp_path):\n"
+                    "    log_audit('entry')\n"
+                    "    assert (tmp_path / 'audit.log').read_text(encoding='utf-8') == 'entry'\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "standalone audit or logging helper test" in agent_input.task_description
+    assert "Do not compare full audit or log file contents by exact string equality" in agent_input.task_description
+    assert "collapse the suite to exactly three tests" in agent_input.task_description
+    assert "derive the exact expected score from only the branches exercised by the chosen input" in agent_input.task_description
+    assert "should assert 1, not 3" in agent_input.task_description
+
+
+def test_build_agent_input_adds_batch_audit_runtime_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from dataclasses import dataclass\n"
+                "from typing import Any\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    id: str\n"
+                "    data: Any\n\n"
+                "@dataclass\n"
+                "class AuditLog:\n"
+                "    action: str\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.audit_logs = []\n\n"
+                "    def intake_request(self, request):\n"
+                "        return request\n\n"
+                "    def process_batch(self, requests):\n"
+                "        return requests\n"
+            ),
+            output_payload={
+                "summary": "class ComplianceIntakeService:",
+                "raw_content": (
+                    "from dataclasses import dataclass\n"
+                    "from typing import Any\n\n"
+                    "@dataclass\n"
+                    "class ComplianceRequest:\n"
+                    "    id: str\n"
+                    "    data: Any\n\n"
+                    "@dataclass\n"
+                    "class AuditLog:\n"
+                    "    action: str\n\n"
+                    "class ComplianceIntakeService:\n"
+                    "    def __init__(self):\n"
+                    "        self.audit_logs = []\n\n"
+                    "    def intake_request(self, request):\n"
+                    "        return request\n\n"
+                    "    def process_batch(self, requests):\n"
+                    "        return requests\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "from dataclasses import dataclass\n"
+                            "from typing import Any\n\n"
+                            "@dataclass\n"
+                            "class ComplianceRequest:\n"
+                            "    id: str\n"
+                            "    data: Any\n\n"
+                            "@dataclass\n"
+                            "class AuditLog:\n"
+                            "    action: str\n\n"
+                            "class ComplianceIntakeService:\n"
+                            "    def __init__(self):\n"
+                            "        self.audit_logs = []\n\n"
+                            "    def intake_request(self, request):\n"
+                            "        return request\n\n"
+                            "    def process_batch(self, requests):\n"
+                            "        return requests\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: AuditLog, ComplianceIntakeService, ComplianceRequest\n"
+                    "- Unknown module symbols: none\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_process_batch_with_failure - AssertionError: assert 2 == 3\n"
+                    "- Pytest summary: 1 failed, 3 passed in 0.01s\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_process_batch_with_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    requests = [\n"
+                    "        ComplianceRequest(id='1', data={'ok': True}),\n"
+                    "        ComplianceRequest(id='2', data=None),\n"
+                    "    ]\n"
+                    "    service.process_batch(requests)\n"
+                    "    assert len(service.audit_logs) == 2\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_process_batch_with_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    requests = [\n"
+                    "        ComplianceRequest(id='1', data={'ok': True}),\n"
+                    "        ComplianceRequest(id='2', data=None),\n"
+                    "    ]\n"
+                    "    service.process_batch(requests)\n"
+                    "    assert len(service.audit_logs) == 2\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Add logs from both inner failing operations and outer batch error handlers" in agent_input.task_description
+    assert "one invalid item can emit two failure-related audit records" in agent_input.task_description
+    assert "before asserting an exact audit total" in agent_input.task_description
+    assert "a two-item valid batch can emit 5 audit logs, not 3" in agent_input.task_description
+    assert "the suite guessed internal logging" in agent_input.task_description
+    assert "Delete that exact len(service.audit_logs) == N assertion unless the contract explicitly enumerates every emitted batch log" in agent_input.task_description
+    assert "Replace brittle batch audit counts with stable checks such as result length, required audit actions, a terminal batch marker, or monotonic audit growth" in agent_input.task_description
+    assert "stop asserting an exact batch audit length and switch to stable checks" in agent_input.task_description
+
+
+def test_build_agent_input_adds_weighted_score_and_guarded_nested_field_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from typing import Any\n\n"
+                "def calculate_risk_score(request_data: dict[str, Any]) -> float:\n"
+                "    score = 0.0\n"
+                "    if 'risk_factor' in request_data and isinstance(request_data['risk_factor'], (int, float)):\n"
+                "        score += request_data['risk_factor'] * 0.5\n"
+                "    if 'compliance_history' in request_data and isinstance(request_data['compliance_history'], (int, float)):\n"
+                "        score += (1 - request_data['compliance_history']) * 0.5\n"
+                "    return score\n"
+            ),
+            output_payload={
+                "summary": "def calculate_risk_score(request_data):",
+                "raw_content": (
+                    "from typing import Any\n\n"
+                    "def calculate_risk_score(request_data: dict[str, Any]) -> float:\n"
+                    "    score = 0.0\n"
+                    "    if 'risk_factor' in request_data and isinstance(request_data['risk_factor'], (int, float)):\n"
+                    "        score += request_data['risk_factor'] * 0.5\n"
+                    "    if 'compliance_history' in request_data and isinstance(request_data['compliance_history'], (int, float)):\n"
+                    "        score += (1 - request_data['compliance_history']) * 0.5\n"
+                    "    return score\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "from typing import Any\n\n"
+                            "def calculate_risk_score(request_data: dict[str, Any]) -> float:\n"
+                            "    score = 0.0\n"
+                            "    if 'risk_factor' in request_data and isinstance(request_data['risk_factor'], (int, float)):\n"
+                            "        score += request_data['risk_factor'] * 0.5\n"
+                            "    if 'compliance_history' in request_data and isinstance(request_data['compliance_history'], (int, float)):\n"
+                            "        score += (1 - request_data['compliance_history']) * 0.5\n"
+                            "    return score\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: calculate_risk_score\n"
+                    "- Unknown module symbols: none\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_score - AssertionError: assert 1.45 == 1.25; FAILED tests_tests.py::test_invalid_nested_value - Failed: DID NOT RAISE <class 'TypeError'>\n"
+                    "- Pytest summary: 2 failed, 1 passed in 0.01s\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import calculate_risk_score\n\n"
+                    "def test_score():\n"
+                    "    assert calculate_risk_score({'risk_factor': 2, 'compliance_history': 0.1}) == 1.25\n\n"
+                    "def test_invalid_nested_value():\n"
+                    "    with pytest.raises(TypeError):\n"
+                    "        calculate_risk_score({'risk_factor': 'invalid', 'compliance_history': 0.1})\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import calculate_risk_score\n\n"
+                    "def test_score():\n"
+                    "    assert calculate_risk_score({'risk_factor': 2, 'compliance_history': 0.1}) == 1.25\n\n"
+                    "def test_invalid_nested_value():\n"
+                    "    with pytest.raises(TypeError):\n"
+                    "        calculate_risk_score({'risk_factor': 'invalid', 'compliance_history': 0.1})\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "risk_factor=2 and compliance_history=0.1 yield 1.45, not 1.25" in agent_input.task_description
+    assert "a wrong nested field type is ignored rather than raising" in agent_input.task_description
+
+
+def test_build_agent_input_adds_required_string_modulo_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    requester_name: str\n"
+                "    request_details: str\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def validate_request(self, request: ComplianceRequest) -> None:\n"
+                "        if not request.request_id or not request.requester_name or not request.request_details:\n"
+                "            raise ValueError('All fields must be filled in.')\n\n"
+                "    def score_risk(self, request: ComplianceRequest) -> int:\n"
+                "        self.validate_request(request)\n"
+                "        return len(request.request_details) % 10\n"
+            ),
+            output_payload={
+                "summary": "class ComplianceIntakeService:",
+                "raw_content": (
+                    "from dataclasses import dataclass\n\n"
+                    "@dataclass\n"
+                    "class ComplianceRequest:\n"
+                    "    request_id: str\n"
+                    "    requester_name: str\n"
+                    "    request_details: str\n\n"
+                    "class ComplianceIntakeService:\n"
+                    "    def validate_request(self, request: ComplianceRequest) -> None:\n"
+                    "        if not request.request_id or not request.requester_name or not request.request_details:\n"
+                    "            raise ValueError('All fields must be filled in.')\n\n"
+                    "    def score_risk(self, request: ComplianceRequest) -> int:\n"
+                    "        self.validate_request(request)\n"
+                    "        return len(request.request_details) % 10\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "from dataclasses import dataclass\n\n"
+                            "@dataclass\n"
+                            "class ComplianceRequest:\n"
+                            "    request_id: str\n"
+                            "    requester_name: str\n"
+                            "    request_details: str\n\n"
+                            "class ComplianceIntakeService:\n"
+                            "    def validate_request(self, request: ComplianceRequest) -> None:\n"
+                            "        if not request.request_id or not request.requester_name or not request.request_details:\n"
+                            "            raise ValueError('All fields must be filled in.')\n\n"
+                            "    def score_risk(self, request: ComplianceRequest) -> int:\n"
+                            "        self.validate_request(request)\n"
+                            "        return len(request.request_details) % 10\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: ComplianceIntakeService, ComplianceRequest\n"
+                    "- Unknown module symbols: none\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_score_risk_with_empty_details - ValueError: All fields must be filled in.\n"
+                    "- Pytest summary: 1 failed, 2 passed in 0.01s\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_score_risk_with_empty_details():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    empty_request = ComplianceRequest(request_id='req3', requester_name='Charlie', request_details='')\n"
+                    "    assert service.score_risk(empty_request) == 0\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_score_risk_with_empty_details():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    empty_request = ComplianceRequest(request_id='req3', requester_name='Charlie', request_details='')\n"
+                    "    assert service.score_risk(empty_request) == 0\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "do not preserve that empty string just to force a zero score" in agent_input.task_description
+    assert 'use "xxxxxxxxxx" rather than ""' in agent_input.task_description
+
+
+def test_build_agent_input_preserves_valid_import_surface_on_pytest_only_repair(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: str\n\n"
+                "@dataclass\n"
+                "class AuditLog:\n"
+                "    action: str\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.batch = []\n\n"
+                "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+                "        self.batch.append(request)\n"
+            ),
+            output_payload={
+                "summary": "class ComplianceIntakeService:",
+                "raw_content": (
+                    "from dataclasses import dataclass\n\n"
+                    "@dataclass\n"
+                    "class ComplianceRequest:\n"
+                    "    request_id: str\n"
+                    "    request_type: str\n"
+                    "    details: str\n\n"
+                    "@dataclass\n"
+                    "class AuditLog:\n"
+                    "    action: str\n\n"
+                    "class ComplianceIntakeService:\n"
+                    "    def __init__(self):\n"
+                    "        self.batch = []\n\n"
+                    "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+                    "        self.batch.append(request)\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "from dataclasses import dataclass\n\n"
+                            "@dataclass\n"
+                            "class ComplianceRequest:\n"
+                            "    request_id: str\n"
+                            "    request_type: str\n"
+                            "    details: str\n\n"
+                            "@dataclass\n"
+                            "class AuditLog:\n"
+                            "    action: str\n\n"
+                            "class ComplianceIntakeService:\n"
+                            "    def __init__(self):\n"
+                            "        self.batch = []\n\n"
+                            "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+                            "        self.batch.append(request)\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: AuditLog, ComplianceIntakeService, ComplianceRequest\n"
+                    "- Unknown module symbols: none\n"
+                    "- Invalid member references: none\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_handle_request_invalid - Failed: DID NOT RAISE <class 'ValueError'>\n"
+                    "- Pytest summary: 1 failed, 2 passed in 0.01s\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "import pytest\n"
+                    "from code_implementation import ComplianceRequest, AuditLog, ComplianceIntakeService\n\n"
+                    "def test_handle_request_invalid():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='', request_type='TypeA', details='Details of the request')\n"
+                    "    with pytest.raises(ValueError):\n"
+                    "        service.handle_request(request)\n"
+                ),
+                "failed_artifact_content": (
+                    "import pytest\n"
+                    "from code_implementation import ComplianceRequest, AuditLog, ComplianceIntakeService\n\n"
+                    "def test_handle_request_invalid():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='', request_type='TypeA', details='Details of the request')\n"
+                    "    with pytest.raises(ValueError):\n"
+                    "        service.handle_request(request)\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "The previous suite already used a statically valid production import surface: AuditLog, ComplianceIntakeService, ComplianceRequest." in agent_input.task_description
+    assert "If the valid suite imported ComplianceIntakeService, do not replace it with ComplianceService" in agent_input.task_description
+    assert "The previous statically valid suite already exercised these production member calls: ComplianceIntakeService.handle_request." in agent_input.task_description
+    assert "Do not replace a previously valid member call with a guessed workflow alias such as process_request or process_batch" in agent_input.task_description
+    assert "When the previous suite had no constructor arity mismatches, keep the same request and result constructor field names and arity during repair" in agent_input.task_description
+    assert "The previous statically valid suite already instantiated production models with these keyword fields: ComplianceRequest(request_id, request_type, details)." in agent_input.task_description
+    assert "Do not rewrite a previously valid request model from fields such as request_id, request_type, details to guessed placeholders such as id, data, timestamp, or status" in agent_input.task_description
+
+
+def test_build_agent_input_moves_invalid_required_field_case_off_scoring_surface(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    details: str\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def intake_request(self, request: ComplianceRequest) -> None:\n"
+                "        self.validate_request(request)\n\n"
+                "    def validate_request(self, request: ComplianceRequest) -> None:\n"
+                "        if not request.request_id or not request.details:\n"
+                "            raise ValueError('All fields must be filled in.')\n\n"
+                "    def score_request(self, request: ComplianceRequest) -> int:\n"
+                "        return len(request.details) % 10\n"
+            ),
+            output_payload={
+                "summary": "class ComplianceIntakeService:",
+                "raw_content": (
+                    "from dataclasses import dataclass\n\n"
+                    "@dataclass\n"
+                    "class ComplianceRequest:\n"
+                    "    request_id: str\n"
+                    "    details: str\n\n"
+                    "class ComplianceIntakeService:\n"
+                    "    def intake_request(self, request: ComplianceRequest) -> None:\n"
+                    "        self.validate_request(request)\n\n"
+                    "    def validate_request(self, request: ComplianceRequest) -> None:\n"
+                    "        if not request.request_id or not request.details:\n"
+                    "            raise ValueError('All fields must be filled in.')\n\n"
+                    "    def score_request(self, request: ComplianceRequest) -> int:\n"
+                    "        return len(request.details) % 10\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": (
+                            "from dataclasses import dataclass\n\n"
+                            "@dataclass\n"
+                            "class ComplianceRequest:\n"
+                            "    request_id: str\n"
+                            "    details: str\n\n"
+                            "class ComplianceIntakeService:\n"
+                            "    def intake_request(self, request: ComplianceRequest) -> None:\n"
+                            "        self.validate_request(request)\n\n"
+                            "    def validate_request(self, request: ComplianceRequest) -> None:\n"
+                            "        if not request.request_id or not request.details:\n"
+                            "            raise ValueError('All fields must be filled in.')\n\n"
+                            "    def score_request(self, request: ComplianceRequest) -> int:\n"
+                            "        return len(request.details) % 10\n"
+                        ),
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: ComplianceIntakeService, ComplianceRequest\n"
+                    "- Unknown module symbols: none\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_score_request_with_invalid_details - ValueError: All fields must be filled in.\n"
+                    "- Pytest summary: 1 failed, 2 passed in 0.01s\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_score_request_with_invalid_details():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='1', details='')\n"
+                    "    service.intake_request(request)\n"
+                    "    with pytest.raises(ValueError):\n"
+                    "        service.score_request(request)\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_score_request_with_invalid_details():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='1', details='')\n"
+                    "    service.intake_request(request)\n"
+                    "    with pytest.raises(ValueError):\n"
+                    "        service.score_request(request)\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "do not keep a separate invalid-scoring test that first calls intake_request" in agent_input.task_description
+    assert "Move that failure case to intake_request or validate_request" in agent_input.task_description
+
+
+def test_build_agent_input_removes_copied_implementation_from_tests(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="from dataclasses import dataclass\n\n@dataclass\nclass Demo:\n    value: int\n",
+            output_payload={
+                "summary": "class Demo:",
+                "raw_content": "from dataclasses import dataclass\n\n@dataclass\nclass Demo:\n    value: int\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "from dataclasses import dataclass\n\n@dataclass\nclass Demo:\n    value: int\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Line count: 217/150\n"
+                    "- Top-level test functions: 12/7 max\n"
+                    "- Imported module symbols: Demo\n"
+                    "- Imported entrypoint symbols: cli_demo\n"
+                    "- Unsafe entrypoint calls: cli_demo() (line 6)\n"
+                    "- Undefined local names: argparse (line 46)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: NameError: name 'dataclass' is not defined\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: line count 217 exceeds maximum 150; imported entrypoint symbols: cli_demo; unsafe entrypoint calls: cli_demo() (line 6); undefined local names: argparse (line 46); pytest failed: NameError: name 'dataclass' is not defined",
+                "failed_artifact_content": (
+                    "import pytest\n"
+                    "from code_implementation import cli_demo\n\n"
+                    "@dataclass\n"
+                    "class Demo:\n"
+                    "    value: int\n\n"
+                    "def test_main():\n"
+                    "    parser = argparse.ArgumentParser()\n"
+                    "    cli_demo()\n\n"
+                    "def test_all_tests():\n"
+                    "    test_main()\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Delete any copied implementation blocks from the pytest module" in agent_input.task_description
+    assert "`test_main`, `test_all_tests`" in agent_input.task_description
+    assert "Do not import or execute entrypoints in tests" in agent_input.task_description
+
+
+def test_build_agent_input_adds_did_not_raise_and_numeric_type_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Constructor arity mismatches: ComplianceRequest expects 4 args but test uses 2 at line 6\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 3 failed, 2 passed in 0.21s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_intake_request_validation_failure - Failed: DID NOT RAISE <class 'ValueError'>; FAILED tests_tests.py::test_score_risk_happy_path - AssertionError: assert False\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: constructor arity mismatches: ComplianceRequest expects 4 args but test uses 2; pytest failed: DID NOT RAISE and assert False",
+                "failed_artifact_content": (
+                    "import pytest\n"
+                    "from code_implementation import ComplianceRequest\n\n"
+                    "def test_intake_request_validation_failure():\n"
+                    "    request = ComplianceRequest(id='', data={'field': 'value'})\n"
+                    "    with pytest.raises(ValueError):\n"
+                    "        raise AssertionError()\n\n"
+                    "def test_score_risk_happy_path():\n"
+                    "    assert False\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "do not use empty-string ids or still-valid dict payloads as the failure input" in agent_input.task_description
+    assert "ComplianceData(id=\"1\", data={\"key\": \"wrong_value\"}) is still valid input and should be asserted as a non-compliant result" in agent_input.task_description
+    assert "empty dict is still a same-type placeholder and may pass when validation only checks dict type" in agent_input.task_description
+    assert "do not assume a wrong nested value type makes the request invalid" in agent_input.task_description
+    assert "choose an input that validate_request rejects before scoring runs" in agent_input.task_description
+    assert "Do not require an exact runtime numeric type such as float" in agent_input.task_description
+    assert "Do not rely on dataclass defaults just because omission would run" in agent_input.task_description
+    assert "ComplianceRequest(id=\"1\", data={\"name\": \"John Doe\", \"amount\": 1000}, timestamp=1.0, status=\"pending\")" in agent_input.task_description
+    assert "rewrite every constructor call for that type in the file until the mismatch list is empty" in agent_input.task_description
+
+
+def test_build_agent_input_adds_assert_not_true_validation_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 3 passed in 0.10s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_validate_request_failure - AssertionError: assert not True\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed: AssertionError: assert not True",
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_validate_request_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='', data={'field': 'value'}, timestamp=1.0)\n"
+                    "    assert not service.validate_request(request)\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "If pytest reports `assert not True` or another failed falsy expectation" in agent_input.task_description
+    assert "Replace it with a clearly wrong top-level type or a truly missing required field" in agent_input.task_description
+    assert "do not use request_id='' or another same-type placeholder as the failing input" in agent_input.task_description
+    assert "do not use an empty dict or nested None values to fake a validation failure" in agent_input.task_description
+
+
+def test_build_agent_input_adds_exact_numeric_mismatch_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 4 passed in 0.08s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_assess_risk_happy_path - AssertionError: assert 0.4 == 0.1\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.08s",
+                "failed_artifact_content": (
+                    "def test_assess_risk_happy_path():\n"
+                    "    risk_score = service.assess_risk(request)\n"
+                    "    assert risk_score.score == 0.1\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "do not preserve the stale guessed literal from the earlier suite" in agent_input.task_description
+    assert "Either recompute the expected value from the current implementation formula" in agent_input.task_description
+    assert "or replace the equality with a stable contract-backed invariant" in agent_input.task_description
+
+
+def test_build_agent_input_adds_batch_same_shape_score_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 5 passed in 0.08s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_process_batch - AssertionError: assert 3.0 == 4.5 | AssertionError: assert 3.0 == 4.5\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed: 1 failed, 5 passed in 0.08s",
+                "failed_artifact_content": (
+                    "def test_process_batch():\n"
+                    "    risk_scores = service.process_batch(requests_data)\n"
+                    "    assert risk_scores[0].score == 3.0\n"
+                    "    assert risk_scores[1].score == 4.5\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Recompute each batch item's expected score independently" in agent_input.task_description
+    assert "if the formula counts top-level keys or container size, same-shape inputs produce the same score" in agent_input.task_description
+
+
+def test_build_agent_input_adds_string_length_sample_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 4 passed in 0.08s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_assess_risk_happy_path - AssertionError: assert 0.8 == 0.2\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.08s",
+                "failed_artifact_content": (
+                    "def test_assess_risk_happy_path():\n"
+                    "    request = ComplianceRequest(id='1', data={'compliance_data': 'data'}, timestamp=datetime.now(), status='pending')\n"
+                    "    risk_score = service.assess_risk(request)\n"
+                    "    assert risk_score.score == 0.2\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "do not keep word-like sample strings such as data, valid_data, or data1 together with exact score equality" in agent_input.task_description
+    assert "Replace them with repeated-character literals whose length is obvious" in agent_input.task_description
+
+
+def test_build_agent_input_adds_boundary_label_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 4 passed in 0.08s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_assess_risk - AssertionError: assert 'medium' == 'low'\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.08s",
+                "failed_artifact_content": (
+                    "def test_assess_risk(service):\n"
+                    "    request_data = {'name': 'John Doe', 'amount': 100}\n"
+                    "    risk_score = service.assess_risk(service.intake_request(request_data))\n"
+                    "    assert risk_score.level == 'low'\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Do not keep boundary-like inputs for exact categorical labels" in agent_input.task_description
+    assert "do not use amount=100 to assert an exact level" in agent_input.task_description
+    assert "do not use a borderline count such as 2 to assert an exact low label" in agent_input.task_description
+
+
+def test_build_agent_input_adds_payload_shape_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 4 passed in 0.08s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_intake_request_happy_path - AssertionError: assert {'data': {'field1': 'value1'}, 'id': 'req1'} == {'field1': 'value1'}\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.08s",
+                "failed_artifact_content": (
+                    "def test_intake_request_happy_path():\n"
+                    "    request_data = {'id': 'req1', 'data': {'field1': 'value1'}}\n"
+                    "    compliance_request = service.intake_request(request_data)\n"
+                    "    assert compliance_request.data == {'field1': 'value1'}\n"
+                    "    assert risk_score.score == 7.0\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "If a returned request object's `.data` field stores the full input payload" in agent_input.task_description
+    assert "Assert the full stored payload shape or direct nested keys instead" in agent_input.task_description
+    assert "the score is 0.0, not 7.0" in agent_input.task_description
+
+
+def test_build_agent_input_adds_self_referential_constructor_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Constructor arity mismatches: none\n"
+                    "- Undefined local names: request (line 6), request (line 14)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: FAILED tests_tests.py::test_happy_path - NameError: name 'request' is not defined\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: undefined local names: request (line 6), request (line 14)",
+                "failed_artifact_content": (
+                    "def test_happy_path():\n"
+                    "    request = ComplianceRequest(id=\"1\", user_id=\"u1\", data={\"field\": 1}, timestamp=request.timestamp, status=\"pending\")\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Do not satisfy explicit constructor fields by reading attributes from the object you are still constructing" in agent_input.task_description
+    assert "timestamp=fixed_time instead of timestamp=request.timestamp" in agent_input.task_description
+
+
+def test_build_agent_input_adds_pytest_import_test_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def add(a, b):\n    return a + b",
+            output_payload={
+                "summary": "def add(a, b):",
+                "raw_content": "def add(a, b):\n    return a + b",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def add(a, b):\n    return a + b",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Undefined local names: pytest (line 18)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def test_add():\n    with pytest.raises(ValueError):\n        raise ValueError",
+                "failed_artifact_content": "def test_add():\n    with pytest.raises(ValueError):\n        raise ValueError",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "add `import pytest` explicitly at the top of the file" in agent_input.task_description
+    assert "Do not leave `pytest.raises`, `pytest.mark`, or similar helpers unimported" in agent_input.task_description
 
 
 def test_build_agent_input_adds_payload_contract_test_repair_priority(tmp_path):
@@ -8941,6 +10878,111 @@ def test_build_agent_input_adds_payload_contract_test_repair_priority(tmp_path):
     agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
 
     assert "provide every required field or omit that optional payload entirely" in agent_input.task_description
+
+
+def test_build_agent_input_adds_datetime_import_test_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="from dataclasses import dataclass\nfrom datetime import datetime\n\n@dataclass\nclass ComplianceRequest:\n    request_id: str\n    timestamp: datetime",
+            output_payload={
+                "summary": "from dataclasses import dataclass",
+                "raw_content": "from dataclasses import dataclass\nfrom datetime import datetime\n\n@dataclass\nclass ComplianceRequest:\n    request_id: str\n    timestamp: datetime",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "from dataclasses import dataclass\nfrom datetime import datetime\n\n@dataclass\nclass ComplianceRequest:\n    request_id: str\n    timestamp: datetime",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Undefined local names: datetime (line 6), datetime (line 12)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_request - NameError: name 'datetime' is not defined\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from module_under_test import ComplianceRequest\n\n"
+                    "def test_request():\n"
+                    "    request = ComplianceRequest(request_id='req-1', timestamp=datetime.now())\n"
+                    "    assert request.request_id == 'req-1'"
+                ),
+                "failed_artifact_content": (
+                    "from module_under_test import ComplianceRequest\n\n"
+                    "def test_request():\n"
+                    "    request = ComplianceRequest(request_id='req-1', timestamp=datetime.now())\n"
+                    "    assert request.request_id == 'req-1'"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "If the rewritten suite keeps any `datetime.now()` call or other bare `datetime` reference" in agent_input.task_description
+    assert "add `from datetime import datetime` or `import datetime` explicitly at the top of the file before finalizing" in agent_input.task_description
+    assert "Otherwise remove every bare datetime reference and use a self-contained timestamp value" in agent_input.task_description
+
+
+def test_build_agent_input_adds_truncation_test_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: no\n"
+                    "- Completion diagnostics: likely truncated before the file ended cleanly, tokens=508/3200\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "from module_under_test import add\n\ndef test_add():\n    assert add(1, 2)",
+                "failed_artifact_content": "from module_under_test import add\n\ndef test_add():\n    assert add(1, 2)",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "If completion diagnostics say the previous pytest output was likely truncated" in agent_input.task_description
+    assert "discard the partial tail and rewrite the complete pytest module from the top" in agent_input.task_description
+    assert "Rebuild the minimum contract-backed suite first" in agent_input.task_description
+    assert "leave visible headroom below the line, test-count, and fixture budgets" in agent_input.task_description
 
 
 def test_build_repair_context_extracts_helper_surface_names_from_test_validation(tmp_path):
@@ -9017,6 +11059,8 @@ def test_build_agent_input_adds_targeted_code_repair_priorities_for_pytest_asser
     assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
     assert "change the implementation until that exact expectation holds" in agent_input.task_description
     assert "Preserve the documented public API and repair the module behavior itself" in agent_input.task_description
+    assert "Repair the implementation module itself. Return only importable module code" in agent_input.task_description
+    assert "If the task requires a CLI or demo entrypoint, preserve or restore a minimal main()" in agent_input.task_description
 
 
 def test_build_agent_input_adds_object_semantics_code_repair_priority(tmp_path):
@@ -9052,8 +11096,148 @@ def test_build_agent_input_adds_object_semantics_code_repair_priority(tmp_path):
     assert "Repair priorities:" in agent_input.task_description
     assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
     assert "Preserve the documented public API and repair the module behavior itself" in agent_input.task_description
+    assert "Repair the implementation module itself. Return only importable module code" in agent_input.task_description
     assert "Keep data-model semantics consistent" in agent_input.task_description
     assert "validate and read them via attributes instead of mapping membership or subscripting" in agent_input.task_description
+
+
+def test_build_agent_input_adds_dataclass_field_order_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it satisfies the existing valid pytest suite and the documented contract without shifting the failure onto the tests.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: ERROR tests_tests.py - TypeError: non-default argument 'user' follows default...\n"
+                    "- Pytest failure details: TypeError: non-default argument 'user' follows default argument\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "@dataclass\nclass ComplianceRequest:\n    status: str = 'pending'\n    user: str",
+                "failed_artifact_content": "@dataclass\nclass ComplianceRequest:\n    status: str = 'pending'\n    user: str",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "reorder the fields so every required non-default field appears before any field with a default" in agent_input.task_description
+    assert "while preserving the documented constructor contract" in agent_input.task_description
+    assert "AuditLog(action, details, timestamp=field(default_factory=...))" in agent_input.task_description
+
+
+def test_build_agent_input_adds_dataclass_field_import_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated code validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Module import: FAIL\n"
+                    "- Import summary: NameError: name 'field' is not defined\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "from dataclasses import dataclass\n\n@dataclass\nclass Demo:\n    values: list[int] = field(default_factory=list)",
+                "failed_artifact_content": "from dataclasses import dataclass\n\n@dataclass\nclass Demo:\n    values: list[int] = field(default_factory=list)",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "import field explicitly from dataclasses" in agent_input.task_description
+    assert "Do not leave field referenced without that import" in agent_input.task_description
+
+
+def test_build_agent_input_adds_datetime_import_consistency_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_audit - NameError: name 'datetime' is not defined\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "timestamp: str = field(default_factory=lambda: str(datetime.datetime.now()))",
+                "failed_artifact_content": "timestamp: str = field(default_factory=lambda: str(datetime.datetime.now()))",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "If the module calls datetime.datetime.now() or datetime.date.today(), import datetime" in agent_input.task_description
+    assert "call datetime.now() instead of datetime.datetime.now()" in agent_input.task_description
+
+
+def test_build_agent_input_adds_code_truncation_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated code validation:\n"
+                    "- Syntax OK: no\n"
+                    "- Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, finish_reason=length, tokens=900/900\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def run():\n    values = [1, 2,\n",
+                "failed_artifact_content": "def run():\n    values = [1, 2,\n",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "If completion diagnostics say the module output was likely truncated" in agent_input.task_description
+    assert "rewrite the full module from the top instead of patching a partial tail or appending a continuation" in agent_input.task_description
+    assert "Restore a complete importable module first" in agent_input.task_description
+    assert "stays comfortably under the size budget with visible headroom" in agent_input.task_description
 
 
 def test_build_agent_input_adds_code_line_budget_repair_priority(tmp_path):
@@ -9088,6 +11272,96 @@ def test_build_agent_input_adds_code_line_budget_repair_priority(tmp_path):
     assert "Repair priorities:" in agent_input.task_description
     assert "Rewrite the full module smaller and leave clear headroom below the reported line ceiling" in agent_input.task_description
     assert "Remove optional helper layers, repeated convenience wrappers, and non-essential docstrings" in agent_input.task_description
+
+
+def test_build_agent_input_includes_budget_decomposition_brief_without_overriding_architecture(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1__budget_plan",
+            title="Budget plan for Implementation",
+            description="Write code",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="- Keep the public facade and request model.\n- Remove optional helpers and verbose CLI prose.",
+            repair_context={"decomposition_mode": "budget_compaction_planner"},
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated code validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Line count: 82/80\n"
+                    "- Verdict: FAIL"
+                ),
+                "budget_decomposition_plan_task_id": "code__repair_1__budget_plan",
+            },
+        )
+    )
+
+    repair_task = require_task(project, "code__repair_1")
+    agent_input = orchestrator._build_agent_input(repair_task, project)
+
+    assert agent_input.context["architecture"] == "ARCHITECTURE DOC"
+    assert agent_input.context["budget_decomposition_brief"].startswith("- Keep the public facade")
+    assert "Budget decomposition brief:" in agent_input.task_description
+    assert "Remove optional helpers and verbose CLI prose." in agent_input.task_description
+
+
+def test_build_agent_input_preserves_public_method_names_for_pytest_only_repairs(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed",
+                "failed_artifact_content": "result = service.submit_intake(data)",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Do not rename submit_intake(...) to submit(...) or batch_submit_intakes(...) to submit_batch(...)" in agent_input.task_description
 
 
 def test_test_failure_requires_code_repair_for_code_tracebacks_and_assertion_mismatches(tmp_path):

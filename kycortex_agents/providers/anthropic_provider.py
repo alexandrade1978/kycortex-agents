@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from time import perf_counter
 from typing import Any, Optional
@@ -18,11 +19,24 @@ class AnthropicProvider(BaseLLMProvider):
         self._client = client
         self._last_call_metadata: Optional[dict[str, Any]] = None
 
+    def _base_url(self) -> Optional[str]:
+        base_url = self.config.base_url or os.environ.get("ANTHROPIC_BASE_URL")
+        if not isinstance(base_url, str) or not base_url.strip():
+            return None
+        normalized_base_url = base_url.strip().rstrip("/")
+        if normalized_base_url.endswith("/v1"):
+            normalized_base_url = normalized_base_url[:-3]
+        return normalized_base_url or None
+
     def _get_client(self) -> Any:
         if self._client is None:
             from anthropic import Anthropic  # type: ignore[import-not-found]
 
-            self._client = Anthropic(api_key=self.config.api_key)
+            client_kwargs: dict[str, Any] = {"api_key": self.config.api_key}
+            base_url = self._base_url()
+            if base_url is not None:
+                client_kwargs["base_url"] = base_url
+            self._client = Anthropic(**client_kwargs)
         return self._client
 
     def _health_check_timeout(self) -> float:

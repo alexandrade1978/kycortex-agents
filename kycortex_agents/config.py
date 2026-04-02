@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass, field, replace
-from typing import Optional
+from typing import Mapping, Optional
 
 from kycortex_agents.exceptions import ConfigValidationError
 from kycortex_agents.types import ExecutionSandboxPolicy
@@ -14,6 +14,10 @@ PROVIDER_ENV_VARS = {
     "ollama": None,
 }
 
+PROVIDER_BASE_URL_ENV_VARS = {
+    "ollama": "OLLAMA_HOST",
+}
+
 DEFAULT_PROVIDER_BASE_URLS = {
     "ollama": "http://localhost:11434",
 }
@@ -22,8 +26,32 @@ __all__ = [
     "DEFAULT_CONFIG",
     "DEFAULT_PROVIDER_BASE_URLS",
     "KYCortexConfig",
+    "PROVIDER_BASE_URL_ENV_VARS",
     "PROVIDER_ENV_VARS",
+    "resolve_provider_base_url",
 ]
+
+
+def resolve_provider_base_url(
+    provider_name: str,
+    explicit_base_url: Optional[str] = None,
+    *,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Optional[str]:
+    """Resolve a provider base URL from explicit config, env, then built-in defaults."""
+
+    provider_key = provider_name.strip().lower()
+    if explicit_base_url is not None:
+        return explicit_base_url
+
+    resolved_environ = environ if environ is not None else os.environ
+    env_var = PROVIDER_BASE_URL_ENV_VARS.get(provider_key)
+    if env_var:
+        env_value = resolved_environ.get(env_var)
+        if isinstance(env_value, str) and env_value.strip():
+            return env_value
+
+    return DEFAULT_PROVIDER_BASE_URLS.get(provider_key)
 
 @dataclass
 class KYCortexConfig:
@@ -92,7 +120,7 @@ class KYCortexConfig:
         if self.api_key is None:
             self.api_key = self._resolve_api_key()
         if self.base_url is None:
-            self.base_url = DEFAULT_PROVIDER_BASE_URLS.get(self.llm_provider)
+            self.base_url = resolve_provider_base_url(self.llm_provider)
         self._validate_static_config()
 
     def _resolve_api_key(self) -> str:

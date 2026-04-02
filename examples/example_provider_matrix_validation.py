@@ -67,6 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=16384,
         help="Explicit Ollama num_ctx to request during empirical Ollama runs.",
     )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=3200,
+        help="Completion-token budget to request for each provider call during the empirical run.",
+    )
     return parser
 
 
@@ -90,6 +96,7 @@ def run_provider(
     max_repair_cycles: int,
     ollama_base_url: str | None = None,
     ollama_num_ctx: int | None = 16384,
+    max_tokens: int = 3200,
 ) -> dict:
     if provider == "ollama":
         availability = get_provider_availability(provider, ollama_base_url=ollama_base_url)
@@ -116,6 +123,7 @@ def run_provider(
             output_dir,
             ollama_base_url=ollama_base_url,
             ollama_num_ctx=ollama_num_ctx,
+            max_tokens=max_tokens,
             workflow_failure_policy=failure_policy,
             workflow_resume_policy=resume_policy,
             workflow_max_repair_cycles=max_repair_cycles,
@@ -125,6 +133,7 @@ def run_provider(
             provider,
             model,
             output_dir,
+            max_tokens=max_tokens,
             workflow_failure_policy=failure_policy,
             workflow_resume_policy=resume_policy,
             workflow_max_repair_cycles=max_repair_cycles,
@@ -163,6 +172,7 @@ def main() -> None:
             max_repair_cycles=args.max_repair_cycles,
             ollama_base_url=args.ollama_base_url,
             ollama_num_ctx=args.ollama_num_ctx,
+            max_tokens=args.max_tokens,
         )
         for provider in providers
     ]
@@ -174,6 +184,7 @@ def main() -> None:
         "max_repair_cycles": args.max_repair_cycles,
         "ollama_base_url": args.ollama_base_url,
         "ollama_num_ctx": args.ollama_num_ctx,
+        "max_tokens": args.max_tokens,
         "output_root": output_root,
     }
     summary_path = args.summary_json or str(Path(output_root) / "provider_matrix_summary.json")

@@ -385,9 +385,10 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
     monkeypatch.setattr("kycortex_agents.agents.base_agent.sleep", lambda _: None)
     monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable") as exc_info:
         agent.chat("system", "message")
 
+    assert exc_info.type is ProviderTransientError
     metadata = agent.get_last_provider_call_metadata()
     assert metadata is not None
     assert metadata["success"] is False
@@ -864,18 +865,20 @@ def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatc
     agent.config.provider_circuit_breaker_cooldown_seconds = 10.0
     monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: 100.0)
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable") as first_exc_info:
         agent.chat("system", "message")
 
+    assert first_exc_info.type is ProviderTransientError
     first_metadata = agent.get_last_provider_call_metadata()
     assert first_metadata is not None
     assert first_metadata["circuit_breaker_open"] is False
     assert first_metadata["circuit_breaker_failure_streak"] == 1
     assert first_metadata["circuit_breaker_remaining_seconds"] == 0.0
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable") as second_exc_info:
         agent.chat("system", "message")
 
+    assert second_exc_info.type is ProviderTransientError
     second_metadata = agent.get_last_provider_call_metadata()
     assert second_metadata is not None
     assert second_metadata["circuit_breaker_open"] is True
@@ -920,9 +923,10 @@ def test_chat_resets_circuit_breaker_after_successful_call(monkeypatch):
     timestamps = iter([100.0, 100.0, 100.0, 100.0, 100.0, 111.0, 111.0, 111.0, 111.0, 111.0])
     monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: next(timestamps, 111.0))
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider temporarily unavailable"):
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable") as exc_info:
         agent.chat("system", "message")
 
+    assert exc_info.type is ProviderTransientError
     result = agent.chat("system", "message")
 
     metadata = agent.get_last_provider_call_metadata()
@@ -973,6 +977,204 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
     ]
     assert primary_provider.calls == []
     assert fallback_provider.calls == [("system", "message")]
+
+
+def test_chat_reopens_circuit_breaker_after_recovery_and_new_transient_streak(monkeypatch):
+    class FlappingProvider(DummyProvider):
+        def __init__(self):
+            super().__init__()
+            self.outcomes = iter(["fail", "fail", "ok", "fail", "fail"])
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            if next(self.outcomes) == "fail":
+                raise ProviderTransientError("provider temporarily unavailable")
+            return "ok"
+
+    provider = FlappingProvider()
+    agent = DummyAgent(provider)
+    agent.config.provider_max_attempts = 1
+    agent.config.provider_circuit_breaker_threshold = 2
+    agent.config.provider_circuit_breaker_cooldown_seconds = 10.0
+    current_time = {"value": 100.0}
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: current_time["value"])
+
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message-1")
+
+    first_failure_metadata = agent.get_last_provider_call_metadata()
+    assert first_failure_metadata is not None
+    assert first_failure_metadata["circuit_breaker_open"] is False
+    assert first_failure_metadata["circuit_breaker_failure_streak"] == 1
+
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message-2")
+
+    second_failure_metadata = agent.get_last_provider_call_metadata()
+    assert second_failure_metadata is not None
+    assert second_failure_metadata["circuit_breaker_open"] is True
+    assert second_failure_metadata["circuit_breaker_failure_streak"] == 2
+    assert second_failure_metadata["circuit_breaker_remaining_seconds"] == 10.0
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider circuit breaker is open for 10 more seconds"):
+        agent.chat("system", "message-3")
+
+    first_open_metadata = agent.get_last_provider_call_metadata()
+    assert first_open_metadata is not None
+    assert first_open_metadata["attempts_used"] == 0
+    assert first_open_metadata["attempt_history"] == []
+
+    current_time["value"] = 111.0
+    result = agent.chat("system", "message-4")
+
+    recovery_metadata = agent.get_last_provider_call_metadata()
+    assert result == "ok"
+    assert recovery_metadata is not None
+    assert recovery_metadata["success"] is True
+    assert recovery_metadata["circuit_breaker_open"] is False
+    assert recovery_metadata["circuit_breaker_failure_streak"] == 0
+
+    current_time["value"] = 112.0
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message-5")
+
+    third_failure_metadata = agent.get_last_provider_call_metadata()
+    assert third_failure_metadata is not None
+    assert third_failure_metadata["circuit_breaker_open"] is False
+    assert third_failure_metadata["circuit_breaker_failure_streak"] == 1
+
+    with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable"):
+        agent.chat("system", "message-6")
+
+    fourth_failure_metadata = agent.get_last_provider_call_metadata()
+    assert fourth_failure_metadata is not None
+    assert fourth_failure_metadata["circuit_breaker_open"] is True
+    assert fourth_failure_metadata["circuit_breaker_failure_streak"] == 2
+    assert fourth_failure_metadata["circuit_breaker_remaining_seconds"] == 10.0
+
+    with pytest.raises(AgentExecutionError, match="Dummy: provider circuit breaker is open for 10 more seconds"):
+        agent.chat("system", "message-7")
+
+    second_open_metadata = agent.get_last_provider_call_metadata()
+    assert second_open_metadata is not None
+    assert second_open_metadata["attempts_used"] == 0
+    assert second_open_metadata["attempt_history"] == []
+    assert second_open_metadata["circuit_breaker_open"] is True
+    assert second_open_metadata["circuit_breaker_failure_streak"] == 2
+    assert second_open_metadata["provider_health"]["openai"]["status"] == "open_circuit"
+    assert provider.calls == [
+        ("system", "message-1"),
+        ("system", "message-2"),
+        ("system", "message-4"),
+        ("system", "message-5"),
+        ("system", "message-6"),
+    ]
+
+
+def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypatch):
+    class FlappingPrimaryProvider(DummyProvider):
+        def __init__(self):
+            super().__init__()
+            self.outcomes = iter(["fail", "ok", "fail"])
+
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            self.calls.append((system_prompt, user_message))
+            if next(self.outcomes) == "fail":
+                raise ProviderTransientError("primary temporarily unavailable")
+            return "PRIMARY RESULT"
+
+    primary_provider = FlappingPrimaryProvider()
+    fallback_provider = DummyProvider(response="FALLBACK RESULT")
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        provider_max_attempts=1,
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+        provider_circuit_breaker_threshold=1,
+        provider_circuit_breaker_cooldown_seconds=10.0,
+    )
+    agent = DummyAgent(primary_provider, config)
+    current_time = {"value": 100.0}
+
+    def create_provider_for_fallback(runtime_config: KYCortexConfig):
+        assert runtime_config.llm_provider == "anthropic"
+        return fallback_provider
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_provider_for_fallback)
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.perf_counter", lambda: current_time["value"])
+
+    first_result = agent.chat("system", "message one")
+
+    first_metadata = agent.get_last_provider_call_metadata()
+    assert first_result == "FALLBACK RESULT"
+    assert first_metadata is not None
+    assert first_metadata["provider"] == "anthropic"
+    assert first_metadata["fallback_used"] is True
+    assert first_metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_transient",
+            "error_type": "ProviderTransientError",
+            "error_message": "primary temporarily unavailable",
+            "attempts_used": 1,
+        }
+    ]
+
+    second_result = agent.chat("system", "message two")
+
+    second_metadata = agent.get_last_provider_call_metadata()
+    assert second_result == "FALLBACK RESULT"
+    assert second_metadata is not None
+    assert second_metadata["provider"] == "anthropic"
+    assert second_metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "skipped_open_circuit",
+            "remaining_cooldown_seconds": 10.0,
+        }
+    ]
+
+    current_time["value"] = 111.0
+    third_result = agent.chat("system", "message three")
+
+    third_metadata = agent.get_last_provider_call_metadata()
+    assert third_result == "PRIMARY RESULT"
+    assert third_metadata is not None
+    assert third_metadata["provider"] == "openai"
+    assert third_metadata["fallback_used"] is False
+    assert third_metadata["circuit_breaker_open"] is False
+    assert third_metadata["circuit_breaker_failure_streak"] == 0
+
+    current_time["value"] = 112.0
+    fourth_result = agent.chat("system", "message four")
+
+    fourth_metadata = agent.get_last_provider_call_metadata()
+    assert fourth_result == "FALLBACK RESULT"
+    assert fourth_metadata is not None
+    assert fourth_metadata["provider"] == "anthropic"
+    assert fourth_metadata["fallback_used"] is True
+    assert fourth_metadata["fallback_history"] == [
+        {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "status": "failed_transient",
+            "error_type": "ProviderTransientError",
+            "error_message": "primary temporarily unavailable",
+            "attempts_used": 1,
+        }
+    ]
+    assert primary_provider.calls == [
+        ("system", "message one"),
+        ("system", "message three"),
+        ("system", "message four"),
+    ]
+    assert fallback_provider.calls == [
+        ("system", "message one"),
+        ("system", "message two"),
+        ("system", "message four"),
+    ]
 
 
 def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monkeypatch):
@@ -1249,6 +1451,28 @@ def test_chat_fails_fast_when_last_provider_health_check_is_deterministically_un
     assert metadata["error_message"] == "provider health check rejected backend"
     assert metadata["provider_health"]["openai"]["status"] == "failing"
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "failing"
+    assert provider.calls == []
+    assert provider.health_calls == 1
+
+
+def test_chat_fails_fast_when_last_provider_health_check_is_transient():
+    provider = DummyProvider(health_error=ProviderTransientError("provider health check timed out"))
+    agent = DummyAgent(provider)
+
+    with pytest.raises(ProviderTransientError, match="Dummy: provider health check timed out") as exc_info:
+        agent.chat("system", "message")
+
+    assert exc_info.type is ProviderTransientError
+    metadata = agent.get_last_provider_call_metadata()
+    assert metadata is not None
+    assert metadata["success"] is False
+    assert metadata["retryable"] is True
+    assert metadata["attempts_used"] == 0
+    assert metadata["attempt_history"] == []
+    assert metadata["error_type"] == "ProviderTransientError"
+    assert metadata["error_message"] == "provider health check timed out"
+    assert metadata["provider_health"]["openai"]["status"] == "degraded"
+    assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"
     assert provider.calls == []
     assert provider.health_calls == 1
 

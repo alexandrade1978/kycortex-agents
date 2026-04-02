@@ -156,6 +156,21 @@ def test_build_full_workflow_config_uses_larger_completion_budget_for_full_gener
     assert config.max_tokens == 3200
 
 
+def test_build_full_workflow_config_accepts_completion_budget_override(monkeypatch, tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_config
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+
+    config = build_full_workflow_config(
+        "openai",
+        "gpt-4o-mini",
+        str(tmp_path / "output"),
+        max_tokens=900,
+    )
+
+    assert config.max_tokens == 900
+
+
 def test_build_full_workflow_config_applies_ollama_runtime_overrides(tmp_path):
     from kycortex_agents.provider_matrix import build_full_workflow_config
 
@@ -178,10 +193,22 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
 
     code_task = project.get_task("code")
     tests_task = project.get_task("tests")
+    arch_task = project.get_task("arch")
 
+    assert arch_task is not None
     assert code_task is not None
     assert tests_task is not None
+    assert "Prefer one cohesive public service surface plus domain models over separate helper-only collaborators or interface sections" in arch_task.description
+    assert "Do not describe standalone RiskScorer, AuditLogger, BatchProcessor, Manager, or Processor types" in arch_task.description
+    assert "Public contract anchor:" in arch_task.description
+    assert "Public facade: ComplianceIntakeService" in arch_task.description
+    assert "ComplianceIntakeService.handle_request(request)" in arch_task.description
+    assert "ComplianceIntakeService.validate_request(request)" in arch_task.description
+    assert "repeated handle_request(request) calls" in arch_task.description
     assert "under 300 lines" in code_task.description
+    assert "Prefer one cohesive public service surface or a very small set of top-level functions for validation, scoring, audit logging, and batch handling" in code_task.description
+    assert "Do not split those behaviors into separate Logger, Scorer, Processor, Manager, or interface classes" in code_task.description
+    assert "If the architecture sketch mentions optional helper collaborators such as RiskScorer, AuditLogger, or BatchProcessor" in code_task.description
     assert "Target roughly 240 to 280 lines" in code_task.description
     assert "Leave at least 15 lines of headroom under the hard cap" in code_task.description
     assert "Implement only the minimal core flow" in code_task.description
@@ -191,34 +218,93 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds" in code_task.description
     assert "use its truth value rather than mere field presence" in code_task.description
     assert "keep object access consistent and do not mix in dict-style membership checks or subscripting" in code_task.description
+    assert "place every required non-default field before any defaulted field" in code_task.description
+    assert "AuditLog has required fields action and details plus a defaulted timestamp" in code_task.description
+    assert "If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses" in code_task.description
+    assert "If you call datetime.datetime.now() or datetime.date.today(), import datetime" in code_task.description
+    assert "Public contract anchor:" in code_task.description
+    assert "Public facade: ComplianceIntakeService" in code_task.description
+    assert "ComplianceIntakeService.handle_request(request)" in code_task.description
+    assert "ComplianceIntakeService.validate_request(request)" in code_task.description
+    assert "batch_intake_requests(...)" in code_task.description
     assert "under 150 lines" in tests_task.description
     assert "at most 7 top-level test functions" in tests_task.description
     assert "Prefer 3 to 5 top-level tests" in tests_task.description
+    assert "Public contract anchor:" in tests_task.description
+    assert "Public facade: ComplianceIntakeService" in tests_task.description
+    assert "ComplianceIntakeService.handle_request(request)" in tests_task.description
+    assert "ComplianceIntakeService.validate_request(request)" in tests_task.description
+    assert "Do not omit timestamp from ComplianceRequest(...) calls" in tests_task.description
+    assert "invent process_batch(...), batch_process(...), batch_intake_requests(...), validate_and_score(...), or similar aliases" in tests_task.description
+    assert "Unless the current implementation or behavior contract explicitly enumerates every emitted batch log, do not write len(service.audit_logs) == N" in tests_task.description
+    assert "If pytest or prior repair feedback showed a mismatch such as assert 5 == 3 on len(service.audit_logs)" in tests_task.description
     assert "Leave at least one full test of headroom below the stated maximum" in tests_task.description
     assert "If you draft more than 6 for this task" in tests_task.description
+    assert "Target clear headroom below the 150-line ceiling" in tests_task.description
     assert "Stay comfortably under the fixture limit" in tests_task.description
     assert "Use the direct intake or validation surface for the validation-failure scenario" in tests_task.description
     assert "omit only the field under test and keep the rest of that payload valid" in tests_task.description
     assert "If a validation-failure path leaves the same caller-owned object in a non-success state such as pending or invalid" in tests_task.description
+    assert "Concrete class, function, and field names used in the generic examples below are placeholders only." in tests_task.description
     assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in tests_task.description
+    assert "Do not derive new helper names by adding or removing prefixes or suffixes from documented symbols" in tests_task.description
+    assert "do not shorten them to submit(...) or submit_batch(...)" in tests_task.description
     assert "When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity" in tests_task.description
+    assert "pass every listed field explicitly in test instantiations, including documented defaulted fields" in tests_task.description
+    assert "Do not rely on dataclass defaults just because omission would run" in tests_task.description
+    assert "ComplianceRequest(id=\"1\", data={\"name\": \"John Doe\", \"amount\": 1000}, timestamp=1.0, status=\"pending\")" in tests_task.description
+    assert "If the public API contract lists ComplianceRequest(id, user_id, data, timestamp, status), every constructor call in the suite must pass all five named arguments" in tests_task.description
+    assert "define fixed_time first and pass timestamp=fixed_time instead of writing timestamp=request.timestamp" in tests_task.description
     assert "If the implementation exposes no dedicated batch helper" in tests_task.description
     assert "If the implementation exposes only a single-request surface such as process_request(request) and no process_batch(...)" in tests_task.description
+    assert "If the implementation exposes only scalar validation, scoring, or audit helpers" in tests_task.description
     assert "If a batch helper returns None or constructs its own domain objects from raw items" in tests_task.description
     assert "Do not import or test `main`, CLI/demo entrypoints" in tests_task.description
     assert "Do not spend standalone tests on simple logging or audit helpers" in tests_task.description
     assert "do not spend top-level tests on validator units, scorers, dataclass serialization, audit loggers" in tests_task.description
     assert "Do not add standalone caplog or raw logging-output assertions" in tests_task.description
     assert "assert only records for actions actually exercised in the scenario" in tests_task.description
+    assert "One invalid batch item can emit two failure-related audit entries" in tests_task.description
+    assert "a two-item valid batch can emit 5 audit logs, not 3" in tests_task.description
+    assert "prefer assertions on returned results, terminal batch markers, or monotonic audit growth" in tests_task.description
     assert "Never define a custom fixture named `request`" in tests_task.description
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in tests_task.description
     assert "If repair feedback reports undefined local names or undefined fixtures" in tests_task.description
     assert "If repair feedback reports helper surface usages" in tests_task.description
+    assert "If the suite uses the `pytest.` namespace anywhere, add `import pytest` explicitly at the top of the file" in tests_task.description
+    assert "Do not assume empty strings, placeholder IDs, or domain keywords are invalid" in tests_task.description
+    assert "request_id=\"\" or another same-type placeholder can still pass" in tests_task.description
+    assert "empty dict is still a same-type placeholder and may pass when validation only checks dict type" in tests_task.description
+    assert "ComplianceData(id=\"1\", data={\"key\": \"wrong_value\"}) is still valid input and should be asserted as a non-compliant result" in tests_task.description
+    assert "Do not write a validation-failure test as assert not validate_request(...)" in tests_task.description
+    assert "choose an input that validate_request rejects before scoring runs" in tests_task.description
+    assert "If the implementation only checks types such as isinstance(id, str) or isinstance(data, dict)" in tests_task.description
+    assert "do not create a separate invalid-scoring test that first calls intake_request on an invalid object" in tests_task.description
+    assert "ComplianceRequest(id=\"\", data={\"field\": \"value\"}) still passes" in tests_task.description
+    assert "do not assume a wrong nested value type makes the request invalid" in tests_task.description
+    assert "risk_factor=\"invalid\" does not raise TypeError" in tests_task.description
+    assert "If the implementation exposes only helper-level audit or logging functions" in tests_task.description
+    assert "If the implementation exposes validate_request(request), score_request(request), and log_audit(request_id, action, result), write exactly three tests" in tests_task.description
     assert "use trivially countable inputs rather than prose strings" in tests_task.description
+    assert "If an exact numeric assertion depends on nested payload shape" in tests_task.description
     assert "avoid threshold boundary values unless the contract explicitly defines those cutoffs" in tests_task.description
+    assert "do not use amount=100 to assert an exact label" in tests_task.description
+    assert "do not use borderline counts such as 2 to assert an exact low or medium label" in tests_task.description
     assert "Do not infer `FLAGGED` status, non-zero flagged/report counters" in tests_task.description
     assert "Prefer assertions on directly observable totals, persisted submissions, audit growth, or non-negative scores" in tests_task.description
+    assert "do not assume that field was normalized to only an inner sub-dict" in tests_task.description
+    assert "Never redeclare production dataclasses, business functions, CLI parsers, or other implementation code inside the pytest module" in tests_task.description
+    assert "Do not turn copied implementation into `test_main`, `test_all_tests`, or similar meta-tests" in tests_task.description
+    assert "Do not compare full audit or log file contents by exact string equality" in tests_task.description
+    assert "Do not assert an exact runtime numeric type such as float unless the contract or current implementation explicitly casts to that type" in tests_task.description
+    assert "compute it from only the branches exercised by the chosen input instead of summing unrelated categories" in tests_task.description
+    assert "should assert 1, not 3" in tests_task.description
+    assert "risk_factor=2 and compliance_history=0.1 yield 1.45, not 1.25" in tests_task.description
     assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in tests_task.description
+    assert "If an exact numeric assertion depends on top-level dict size or collection size" in tests_task.description
+    assert "do not invent a guessed exact total such as 6.0 or a derived level such as medium" in tests_task.description
+    assert "do not pair exact score equality with word-like sample strings such as data, valid_data, or data1" in tests_task.description
+    assert "use xxxxxxxxxx rather than \"\"" in tests_task.description
     assert "either omit the optional filter dict or provide every documented required filter key" in tests_task.description
     assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in tests_task.description
     assert "use repeated-character or similarly obvious inputs rather than natural-language sample text" in tests_task.description
@@ -334,6 +420,31 @@ def test_provider_matrix_resolve_model_handles_override_and_ollama_probe(monkeyp
     assert seen_urls == ["http://localhost:11435/api/tags"]
 
 
+def test_provider_matrix_resolve_model_uses_ollama_host_env_when_override_absent(monkeypatch):
+    from kycortex_agents.provider_matrix import resolve_model
+
+    seen_urls: list[str] = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps({"models": [{"name": "qwen2.5-coder:7b"}]}).encode("utf-8")
+
+    def fake_urlopen(request, *args, **kwargs):
+        seen_urls.append(request.full_url)
+        return Response()
+
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:15000")
+
+    assert resolve_model("ollama", None, urlopen_fn=fake_urlopen) == "qwen2.5-coder:7b"
+    assert seen_urls == ["http://127.0.0.1:15000/api/tags"]
+
+
 def test_provider_matrix_resolve_model_prefers_default_when_installed(monkeypatch):
     from kycortex_agents.provider_matrix import resolve_model
 
@@ -422,6 +533,39 @@ def test_provider_matrix_availability_uses_custom_ollama_base_url():
         "reason": None,
     }
     assert seen_urls == ["http://localhost:11435/api/tags"]
+
+
+def test_provider_matrix_availability_uses_ollama_host_env_when_override_absent(monkeypatch):
+    from kycortex_agents.provider_matrix import get_provider_availability
+
+    seen_urls: list[str] = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(request, timeout=5):
+        seen_urls.append(request.full_url)
+        return Response()
+
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:15000")
+
+    availability = get_provider_availability(
+        "ollama",
+        urlopen_fn=fake_urlopen,
+    )
+
+    assert availability == {
+        "provider": "ollama",
+        "available": True,
+        "reason": None,
+    }
+    assert seen_urls == ["http://127.0.0.1:15000/api/tags"]
 
 
 def test_provider_matrix_availability_uses_env_vars_and_ollama_probe(monkeypatch):
@@ -565,6 +709,22 @@ def test_provider_matrix_parser_accepts_ollama_runtime_overrides():
     assert args.ollama_num_ctx == 16384
 
 
+def test_provider_matrix_parser_accepts_max_tokens_override():
+    module = _load_example_module(
+        "example_provider_matrix_validation_parser_max_tokens_override_test",
+        "examples/example_provider_matrix_validation.py",
+    )
+
+    args = module.build_parser().parse_args([
+        "openai",
+        "--max-tokens",
+        "900",
+    ])
+
+    assert args.providers == ["openai"]
+    assert args.max_tokens == 900
+
+
 def test_provider_matrix_parser_rejects_unsupported_provider():
     module = _load_example_module(
         "example_provider_matrix_validation_parser_invalid_provider_test",
@@ -579,6 +739,61 @@ def test_provider_matrix_parser_rejects_unsupported_provider():
         )
     else:  # pragma: no cover - defensive guard
         raise AssertionError("Expected unsupported provider to raise SystemExit")
+
+
+def test_provider_matrix_example_passes_completion_budget_override(tmp_path, monkeypatch):
+    module = _load_example_module(
+        "example_provider_matrix_validation_run_provider_max_tokens_test",
+        "examples/example_provider_matrix_validation.py",
+    )
+
+    monkeypatch.setattr(
+        module,
+        "get_provider_availability",
+        lambda provider: {"provider": provider, "available": True, "reason": None},
+    )
+    monkeypatch.setattr(module, "resolve_model", lambda provider, model_override=None: "gpt-4o-mini")
+
+    captured: dict[str, object] = {}
+
+    def fake_build_full_workflow_config(provider, model, output_dir, **kwargs):
+        captured["provider"] = provider
+        captured["model"] = model
+        captured["output_dir"] = output_dir
+        captured.update(kwargs)
+        return object()
+
+    class FakeProject:
+        phase = "completed"
+        terminal_outcome = "completed"
+        repair_cycle_count = 0
+
+    monkeypatch.setattr(module, "build_full_workflow_config", fake_build_full_workflow_config)
+    monkeypatch.setattr(module, "build_full_workflow_project", lambda output_dir, provider: FakeProject())
+    monkeypatch.setattr(module, "execute_empirical_validation_workflow", lambda config, project: None)
+    monkeypatch.setattr(
+        module,
+        "summarize_workflow_run",
+        lambda project, provider, model, output_dir: {
+            "phase": "completed",
+            "terminal_outcome": "completed",
+            "repair_cycle_count": 0,
+        },
+    )
+
+    result = module.run_provider(
+        "openai",
+        output_root=str(tmp_path / "matrix"),
+        failure_policy="continue",
+        resume_policy="resume_failed",
+        max_repair_cycles=1,
+        max_tokens=900,
+    )
+
+    assert captured["provider"] == "openai"
+    assert captured["model"] == "gpt-4o-mini"
+    assert captured["max_tokens"] == 900
+    assert result["summary"]["repair_cycle_count"] == 0
 
 
 def test_execute_empirical_validation_workflow_consumes_bounded_repair_cycle(monkeypatch, tmp_path):
@@ -698,3 +913,66 @@ def test_execute_empirical_validation_workflow_raises_last_error_when_resume_is_
         assert str(exc) == "provider boom"
     else:  # pragma: no cover - safety assertion
         raise AssertionError("Expected runtime error to propagate when resume is disabled")
+
+
+def test_execute_empirical_validation_workflow_does_not_resume_non_repairable_failures(monkeypatch, tmp_path):
+    import kycortex_agents.provider_matrix as provider_matrix
+
+    config = provider_matrix.build_full_workflow_config(
+        "ollama",
+        "llama3",
+        str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    project = ProjectState(
+        project_name="Demo",
+        goal="Exercise non-repairable provider failure path",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.repair_max_cycles = 1
+    project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
+    execute_calls = {"count": 0}
+
+    class NonRepairableFailingOrchestrator:
+        def __init__(self, _config):
+            self.config = _config
+
+        def execute_workflow(self, state):
+            execute_calls["count"] += 1
+            if execute_calls["count"] > 1:
+                raise AssertionError("execute_workflow resumed a non-repairable failure")
+
+            arch = state.get_task("arch")
+            assert arch is not None
+            arch.status = "failed"
+            arch.last_error = "provider boom"
+            arch.last_error_type = "ProviderTransientError"
+            arch.last_error_category = "provider_transient"
+            state.mark_workflow_finished(
+                "failed",
+                acceptance_policy=self.config.workflow_acceptance_policy,
+                terminal_outcome="failed",
+                failure_category="provider_transient",
+                acceptance_criteria_met=False,
+                acceptance_evaluation={"policy": self.config.workflow_acceptance_policy, "accepted": False},
+            )
+            raise RuntimeError("provider boom")
+
+    monkeypatch.setattr(provider_matrix, "Orchestrator", NonRepairableFailingOrchestrator)
+
+    try:
+        provider_matrix.execute_empirical_validation_workflow(config, project)
+    except RuntimeError as exc:
+        assert str(exc) == "provider boom"
+    else:  # pragma: no cover - safety assertion
+        raise AssertionError("Expected non-repairable provider failure to propagate")
+
+    workflow_finished_events = [
+        event for event in project.execution_events if event.get("event") == "workflow_finished"
+    ]
+    assert execute_calls["count"] == 1
+    assert len(workflow_finished_events) == 1
+    assert project.failure_category == "provider_transient"
+    assert project.repair_cycle_count == 0

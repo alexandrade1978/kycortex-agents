@@ -916,29 +916,73 @@ class ProjectState:
             else resolved_outcome == WorkflowOutcome.COMPLETED.value
         )
         self.acceptance_evaluation = dict(acceptance_evaluation or {})
+        terminal_failure_context = self._terminal_failure_context(self.failure_category)
         workflow_telemetry = self._workflow_telemetry_summary()
         self._record_policy_enforcement_event(
             source_event="workflow_finished",
             timestamp=finished_at,
+            task_id=cast(Optional[str], terminal_failure_context.get("task_id")),
             status=self.phase,
             category=self.failure_category,
+            message=cast(Optional[str], terminal_failure_context.get("message")),
+            error_type=cast(Optional[str], terminal_failure_context.get("error_type")),
+            provider_call=cast(Optional[Dict[str, Any]], terminal_failure_context.get("provider_call")),
             terminal_outcome=self.terminal_outcome,
         )
+        workflow_finished_details: Dict[str, Any] = {
+            "workflow_duration_ms": self._duration_ms(self.workflow_started_at, finished_at),
+            "acceptance_policy": self.acceptance_policy,
+            "terminal_outcome": self.terminal_outcome,
+            "failure_category": self.failure_category,
+            "acceptance_criteria_met": self.acceptance_criteria_met,
+            "acceptance_evaluation": self.acceptance_evaluation,
+            "workflow_telemetry": workflow_telemetry,
+        }
+        if terminal_failure_context:
+            failure_task_id = terminal_failure_context.get("task_id")
+            failure_message = terminal_failure_context.get("message")
+            failure_error_type = terminal_failure_context.get("error_type")
+            failure_provider_call = terminal_failure_context.get("provider_call")
+            if isinstance(failure_task_id, str) and failure_task_id:
+                workflow_finished_details["failure_task_id"] = failure_task_id
+            if isinstance(failure_message, str) and failure_message:
+                workflow_finished_details["failure_message"] = failure_message
+            if isinstance(failure_error_type, str) and failure_error_type:
+                workflow_finished_details["failure_error_type"] = failure_error_type
+            if isinstance(failure_provider_call, dict):
+                workflow_finished_details["provider_call"] = failure_provider_call
         self._record_execution_event(
             event="workflow_finished",
             timestamp=finished_at,
             status=self.phase,
-            details={
-                "workflow_duration_ms": self._duration_ms(self.workflow_started_at, finished_at),
-                "acceptance_policy": self.acceptance_policy,
-                "terminal_outcome": self.terminal_outcome,
-                "failure_category": self.failure_category,
-                "acceptance_criteria_met": self.acceptance_criteria_met,
-                "acceptance_evaluation": self.acceptance_evaluation,
-                "workflow_telemetry": workflow_telemetry,
-            },
+            details=workflow_finished_details,
         )
         self._touch(finished_at)
+
+    def _terminal_failure_context(self, category: Optional[str]) -> Dict[str, Any]:
+        if category is None:
+            return {}
+        matching_tasks = [
+            task
+            for task in self.tasks
+            if task.last_error_category == category
+            and (
+                (isinstance(task.last_error, str) and task.last_error)
+                or (isinstance(task.last_error_type, str) and task.last_error_type)
+                or isinstance(task.last_provider_call, dict)
+            )
+        ]
+        if not matching_tasks:
+            return {}
+        task = max(matching_tasks, key=lambda current: ((current.completed_at or ""), current.id))
+        details: Dict[str, Any] = {"task_id": task.id}
+        if isinstance(task.last_error, str) and task.last_error:
+            details["message"] = task.last_error
+        if isinstance(task.last_error_type, str) and task.last_error_type:
+            details["error_type"] = task.last_error_type
+        if isinstance(task.last_provider_call, dict):
+            details["provider_call"] = task.last_provider_call
+        return details
 
     def record_workflow_progress(
         self,

@@ -1745,6 +1745,20 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
 
 def test_mark_workflow_finished_records_policy_enforcement_for_security_failures():
     project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            output="sandbox policy blocked filesystem write outside sandbox root",
+            last_error="sandbox policy blocked filesystem write outside sandbox root",
+            last_error_type="RuntimeError",
+            last_error_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
 
     project.mark_workflow_running(acceptance_policy="required_tasks", repair_max_cycles=1)
     project.mark_workflow_finished(
@@ -1757,11 +1771,18 @@ def test_mark_workflow_finished_records_policy_enforcement_for_security_failures
     )
 
     policy_event = next(event for event in project.execution_events if event["event"] == "policy_enforcement")
+    workflow_event = next(event for event in project.execution_events if event["event"] == "workflow_finished")
 
+    assert policy_event["task_id"] == "tests"
     assert policy_event["details"]["policy_area"] == "sandbox"
     assert policy_event["details"]["source_event"] == "workflow_finished"
     assert policy_event["details"]["failure_category"] == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+    assert policy_event["details"]["message"] == "sandbox policy blocked filesystem write outside sandbox root"
+    assert policy_event["details"]["error_type"] == "RuntimeError"
     assert policy_event["details"]["terminal_outcome"] == WorkflowOutcome.FAILED.value
+    assert workflow_event["details"]["failure_task_id"] == "tests"
+    assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
+    assert workflow_event["details"]["failure_error_type"] == "RuntimeError"
     assert project.execution_events[-1]["event"] == "workflow_finished"
 
 

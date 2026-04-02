@@ -7,7 +7,7 @@ from typing import Any, Optional, cast
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
-from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_data
+from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_data, sanitize_prompt_input
 from kycortex_agents.providers.factory import (
     _maybe_get_cached_health_snapshot,
     _store_health_snapshot,
@@ -74,6 +74,8 @@ class BaseAgent(ABC):
 
     def chat(self, system_prompt: str, user_message: str) -> str:
         started_at = perf_counter()
+        sanitized_system_prompt = sanitize_prompt_input(system_prompt)
+        sanitized_user_message = sanitize_prompt_input(user_message)
         provider_plan = self._provider_execution_plan()
         max_attempts = self.config.provider_max_attempts
         attempt_history: list[dict[str, Any]] = []
@@ -303,7 +305,7 @@ class BaseAgent(ABC):
                 try:
                     self._provider_call_count += 1
                     self._provider_call_counts[provider_name] = self._provider_call_counts.get(provider_name, 0) + 1
-                    response = provider.generate(system_prompt, user_message)
+                    response = provider.generate(sanitized_system_prompt, sanitized_user_message)
                     self._reset_provider_circuit_breaker(provider_name)
                     self._record_provider_success(provider_name, current_time)
                     attempt_history.append(

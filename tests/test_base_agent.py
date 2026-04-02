@@ -339,6 +339,22 @@ def test_chat_redacts_sensitive_values_from_failed_provider_call_metadata():
     assert "sk-ant-secret-987654" not in metadata["attempt_history"][0]["error_message"]
 
 
+def test_chat_sanitizes_prompt_input_before_provider_generate():
+    provider = DummyProvider(response="ok")
+    agent = DummyAgent(provider)
+
+    result = agent.chat(
+        "system api_key=sk-secret-123456\x00",
+        "message Authorization: Bearer sk-ant-secret-987654",
+    )
+
+    assert result == "ok"
+    assert provider.calls == [
+        ("system api_key=[REDACTED]", "message Authorization: Bearer [REDACTED]"),
+    ]
+    assert "\x00" not in provider.calls[0][0]
+
+
 def test_execute_redacts_sensitive_provider_metadata_before_exposing_provider_call():
     provider = DummyProvider(
         response="ok",
@@ -366,6 +382,25 @@ def test_execute_redacts_sensitive_provider_metadata_before_exposing_provider_ca
     assert provider_call["api_key"] == "[REDACTED]"
     assert provider_call["nested"]["authorization"] == "[REDACTED]"
     assert provider_call["usage"]["total_tokens"] == 5
+
+
+def test_execute_sanitizes_task_description_before_provider_generate():
+    provider = DummyProvider(response="ok")
+    agent = DummyAgent(provider)
+
+    result = agent.execute(
+        AgentInput(
+            task_id="task-1",
+            task_title="Task",
+            task_description="message api_key=sk-secret-123456",
+            project_name="Demo",
+            project_goal="Build demo",
+            context={},
+        )
+    )
+
+    assert result.raw_content == "ok"
+    assert provider.calls == [("system", "message api_key=[REDACTED]")]
 
 
 def test_chat_redacts_sensitive_values_from_provider_health_metadata():

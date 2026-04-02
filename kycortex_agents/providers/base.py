@@ -34,6 +34,7 @@ _STANDALONE_SECRET_PATTERNS = (
     re.compile(r"\bsk-ant-[A-Za-z0-9_-]{10,}\b"),
 )
 _URL_USERINFO_PATTERN = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@")
+_PROMPT_CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 
 def _redact_assignment_match(match: re.Match[str]) -> str:
     suffix = match.group(3) if match.re.groups >= 3 else ""
@@ -48,6 +49,13 @@ def redact_sensitive_text(value: str) -> str:
     for pattern in _STANDALONE_SECRET_PATTERNS:
         redacted = pattern.sub(_REDACTED, redacted)
     return redacted
+
+
+def sanitize_prompt_input(value: str) -> str:
+    """Return provider-bound prompt text with control chars stripped and secrets redacted."""
+
+    sanitized = redact_sensitive_text(value)
+    return _PROMPT_CONTROL_CHAR_PATTERN.sub(" ", sanitized)
 
 
 def redact_sensitive_data(value: Any) -> Any:

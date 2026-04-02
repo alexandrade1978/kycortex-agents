@@ -54,6 +54,12 @@ def _redact_text(value: Optional[str]) -> Optional[str]:
 def _redact_payload(value: Any) -> Any:
     return redact_sensitive_data(value)
 
+
+def _redact_provider_call(provider_call: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if provider_call is None:
+        return None
+    return cast(Dict[str, Any], _redact_payload(provider_call))
+
 @dataclass
 class Task:
     """Serializable workflow task record tracked inside a project state."""
@@ -178,11 +184,18 @@ class ProjectState:
         for task in self.tasks:
             if task.id == task_id:
                 error_message = str(error)
+                redacted_error_message = _redact_text(error_message) or ""
+                redacted_provider_call = _redact_provider_call(provider_call)
+                redacted_output_payload = (
+                    cast(Dict[str, Any], _redact_payload(asdict(output)))
+                    if isinstance(output, AgentOutput) and output.raw_content.strip()
+                    else None
+                )
                 error_type = type(error).__name__ if isinstance(error, Exception) else "runtime_error"
-                task.last_error = error_message
+                task.last_error = redacted_error_message
                 task.last_error_type = error_type
                 task.last_error_category = error_category or FailureCategory.TASK_EXECUTION.value
-                task.last_provider_call = provider_call
+                task.last_provider_call = redacted_provider_call
                 if task.attempts <= task.retry_limit:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
@@ -193,9 +206,9 @@ class ProjectState:
                         task_id=task.id,
                         status=task.status,
                         category=task.last_error_category,
-                        message=error_message,
+                        message=redacted_error_message,
                         error_type=task.last_error_type,
-                        provider_call=provider_call,
+                        provider_call=redacted_provider_call,
                         retryable=True,
                     )
                     self._record_execution_event(
@@ -207,38 +220,35 @@ class ProjectState:
                             "retry_limit": task.retry_limit,
                             "error_type": task.last_error_type,
                             "error_category": task.last_error_category,
-                            "provider_call": provider_call,
+                            "provider_call": redacted_provider_call,
                             "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, datetime.now(timezone.utc).isoformat()),
                         },
                     )
                     self._sync_repair_origin_failure(
                         task,
-                        error_message=error_message,
+                        error_message=redacted_error_message,
                         error_type=error_type,
-                        provider_call=provider_call,
-                        output=output,
+                        provider_call=redacted_provider_call,
+                        output_payload=redacted_output_payload,
                         completed_at=None,
                         final_failure=False,
                     )
                     self._touch()
                     return
                 task.status = TaskStatus.FAILED.value
-                task.output = error_message
-                if isinstance(output, AgentOutput) and output.raw_content.strip():
-                    task.output_payload = asdict(output)
-                else:
-                    task.output_payload = None
+                task.output = redacted_error_message
+                task.output_payload = redacted_output_payload
                 task.completed_at = datetime.now(timezone.utc).isoformat()
-                self._record_task_event(task, "failed", task.completed_at, error_message=error_message)
+                self._record_task_event(task, "failed", task.completed_at, error_message=redacted_error_message)
                 self._record_policy_enforcement_event(
                     source_event="task_failed",
                     timestamp=task.completed_at,
                     task_id=task.id,
                     status=task.status,
                     category=task.last_error_category,
-                    message=error_message,
+                    message=redacted_error_message,
                     error_type=error_type,
-                    provider_call=provider_call,
+                    provider_call=redacted_provider_call,
                     retryable=False,
                 )
                 self._record_execution_event(
@@ -248,19 +258,19 @@ class ProjectState:
                     status=task.status,
                     details={
                         "attempts": task.attempts,
-                        "error_message": error_message,
+                        "error_message": redacted_error_message,
                         "error_type": error_type,
                         "error_category": task.last_error_category,
-                        "provider_call": provider_call,
+                        "provider_call": redacted_provider_call,
                         "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     },
                 )
                 self._sync_repair_origin_failure(
                     task,
-                    error_message=error_message,
+                    error_message=redacted_error_message,
                     error_type=error_type,
-                    provider_call=provider_call,
-                    output=output,
+                    provider_call=redacted_provider_call,
+                    output_payload=redacted_output_payload,
                     completed_at=task.completed_at,
                     final_failure=True,
                 )
@@ -715,7 +725,7 @@ class ProjectState:
         error_message: str,
         error_type: str,
         provider_call: Optional[Dict[str, Any]],
-        output: Optional[str | AgentOutput],
+        output_payload: Optional[Dict[str, Any]],
         completed_at: Optional[str],
         final_failure: bool,
     ) -> None:
@@ -731,8 +741,7 @@ class ProjectState:
         origin.last_provider_call = provider_call
         if final_failure:
             origin.output = error_message
-            if isinstance(output, AgentOutput) and output.raw_content.strip():
-                origin.output_payload = asdict(output)
+            origin.output_payload = output_payload
             origin.completed_at = completed_at
         self._record_task_event(
             origin,
@@ -1428,7 +1437,7 @@ class ProjectState:
                 "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
                 "status": task.status,
                 "attempts": task.attempts,
-                "error_message": error_message,
+                "error_message": _redact_text(error_message),
             }
         )
 
@@ -1487,7 +1496,7 @@ class ProjectState:
         status: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
     ):
-        normalized_details = dict(details or {})
+        normalized_details = cast(Dict[str, Any], _redact_payload(dict(details or {})))
         if "provider_budget" not in normalized_details:
             normalized_details["provider_budget"] = self._provider_budget_summary(
                 normalized_details.get("provider_call")

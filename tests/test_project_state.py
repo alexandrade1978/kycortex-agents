@@ -946,6 +946,82 @@ def test_snapshot_hides_failed_output_after_task_is_requeued_for_retry():
     assert result.details["history"][-1]["event"] == "retry_scheduled"
 
 
+def test_fail_task_redacts_live_failure_state_events_and_terminal_context():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+        )
+    )
+
+    project.mark_workflow_running(acceptance_policy="required_tasks", repair_max_cycles=1)
+    project.start_task("tests")
+    project.fail_task(
+        "tests",
+        RuntimeError("Authorization: Bearer sk-ant-secret-987654"),
+        provider_call={
+            "provider": "anthropic",
+            "model": "claude-3-5-sonnet",
+            "success": False,
+            "base_url": "https://alice:secret-pass@example.com/messages",
+            "error_message": "api_key=sk-secret-123456",
+        },
+        output=AgentOutput(summary="failure", raw_content="password=hunter2"),
+        error_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+    )
+    project.mark_workflow_finished(
+        "failed",
+        acceptance_policy="required_tasks",
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+        acceptance_criteria_met=False,
+        acceptance_evaluation={"policy": "required_tasks", "accepted": False, "failed_task_ids": ["tests"]},
+    )
+
+    task = require_task(project, "tests")
+    task_failed_event = next(event for event in project.execution_events if event["event"] == "task_failed")
+    task_policy_event = next(
+        event
+        for event in project.execution_events
+        if event["event"] == "policy_enforcement" and event["details"]["source_event"] == "task_failed"
+    )
+    workflow_policy_event = next(
+        event
+        for event in project.execution_events
+        if event["event"] == "policy_enforcement" and event["details"]["source_event"] == "workflow_finished"
+    )
+    workflow_event = next(event for event in project.execution_events if event["event"] == "workflow_finished")
+
+    assert "sk-ant-secret-987654" not in task.last_error
+    assert "hunter2" not in task.output_payload["raw_content"]
+    assert "secret-pass" not in str(task.last_provider_call)
+    assert "sk-secret-123456" not in str(task.last_provider_call)
+    assert "sk-ant-secret-987654" not in task.history[-1]["error_message"]
+    assert "sk-ant-secret-987654" not in task_failed_event["details"]["error_message"]
+    assert "secret-pass" not in str(task_failed_event["details"]["provider_call"])
+    assert "sk-ant-secret-987654" not in task_policy_event["details"]["message"]
+    assert "secret-pass" not in str(task_policy_event["details"]["provider_call"])
+    assert "sk-ant-secret-987654" not in workflow_policy_event["details"]["message"]
+    assert "secret-pass" not in str(workflow_policy_event["details"]["provider_call"])
+    assert "sk-ant-secret-987654" not in workflow_event["details"]["failure_message"]
+    assert "secret-pass" not in str(workflow_event["details"]["provider_call"])
+    assert "[REDACTED]" in task.last_error
+    assert task.output == task.last_error
+    assert "[REDACTED]" in task.output_payload["raw_content"]
+    assert "[REDACTED]" in task.last_provider_call["base_url"]
+    assert "[REDACTED]" in task.last_provider_call["error_message"]
+    assert "[REDACTED]" in task.history[-1]["error_message"]
+    assert task_failed_event["details"]["error_message"] == task.last_error
+    assert task_policy_event["details"]["message"] == task.last_error
+    assert workflow_policy_event["details"]["message"] == task.last_error
+    assert workflow_event["details"]["failure_message"] == task.last_error
+    assert "[REDACTED]" in workflow_event["details"]["provider_call"]["base_url"]
+    assert "[REDACTED]" in workflow_event["details"]["provider_call"]["error_message"]
+
+
 def test_resume_interrupted_tasks_resets_running_tasks():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
@@ -1208,6 +1284,58 @@ def test_fail_task_syncs_structured_repair_failure_payload_back_to_origin():
     assert origin.output == "markdown broken"
     assert origin.output_payload is not None
     assert origin.output_payload["raw_content"] == "# repaired docs"
+
+
+def test_fail_task_syncs_redacted_repair_failure_back_to_origin():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write docs",
+            assigned_to="docs_writer",
+            status=TaskStatus.FAILED.value,
+            output="broken docs",
+            attempts=1,
+        )
+    )
+    repair_task = project._create_repair_task(
+        "docs",
+        "docs_writer",
+        {"cycle": 1, "instruction": "Repair the docs."},
+    )
+    assert repair_task is not None
+
+    project.start_task(repair_task.id)
+    project.fail_task(
+        repair_task.id,
+        RuntimeError("password=hunter2"),
+        provider_call={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "success": False,
+            "base_url": "https://alice:secret-pass@example.com/v1",
+            "error_message": "api_key=sk-secret-123456",
+        },
+        output=AgentOutput(summary="docs", raw_content="Authorization: Bearer sk-ant-secret-987654"),
+        error_category=FailureCategory.TASK_EXECUTION.value,
+    )
+
+    origin = require_task(project, "docs")
+
+    assert "hunter2" not in origin.last_error
+    assert origin.output == origin.last_error
+    assert origin.output_payload is not None
+    assert "sk-ant-secret-987654" not in origin.output_payload["raw_content"]
+    assert "secret-pass" not in str(origin.last_provider_call)
+    assert "sk-secret-123456" not in str(origin.last_provider_call)
+    assert "hunter2" not in origin.history[-1]["error_message"]
+    assert "[REDACTED]" in origin.last_error
+    assert "[REDACTED]" in origin.output_payload["raw_content"]
+    assert "[REDACTED]" in origin.last_provider_call["base_url"]
+    assert "[REDACTED]" in origin.last_provider_call["error_message"]
+    assert "[REDACTED]" in origin.history[-1]["error_message"]
+    assert origin.history[-1]["event"] == "repair_failed"
 
 
 def test_resume_failed_tasks_records_workflow_resumed_for_additional_ids_without_failed_tasks():
@@ -1524,7 +1652,7 @@ def test_plan_task_repair_and_repair_helpers_ignore_missing_origin():
         error_message="boom",
         error_type="RuntimeError",
         provider_call=None,
-        output=None,
+        output_payload=None,
         completed_at="2026-03-22T10:01:00+00:00",
         final_failure=True,
     )

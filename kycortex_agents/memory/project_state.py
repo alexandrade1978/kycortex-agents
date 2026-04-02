@@ -187,6 +187,17 @@ class ProjectState:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
                     self._record_task_event(task, "retry_scheduled")
+                    self._record_policy_enforcement_event(
+                        source_event="task_retry_scheduled",
+                        timestamp=task.history[-1]["timestamp"],
+                        task_id=task.id,
+                        status=task.status,
+                        category=task.last_error_category,
+                        message=error_message,
+                        error_type=task.last_error_type,
+                        provider_call=provider_call,
+                        retryable=True,
+                    )
                     self._record_execution_event(
                         event="task_retry_scheduled",
                         task_id=task.id,
@@ -219,6 +230,17 @@ class ProjectState:
                     task.output_payload = None
                 task.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(task, "failed", task.completed_at, error_message=error_message)
+                self._record_policy_enforcement_event(
+                    source_event="task_failed",
+                    timestamp=task.completed_at,
+                    task_id=task.id,
+                    status=task.status,
+                    category=task.last_error_category,
+                    message=error_message,
+                    error_type=error_type,
+                    provider_call=provider_call,
+                    retryable=False,
+                )
                 self._record_execution_event(
                     event="task_failed",
                     timestamp=task.completed_at,
@@ -895,6 +917,13 @@ class ProjectState:
         )
         self.acceptance_evaluation = dict(acceptance_evaluation or {})
         workflow_telemetry = self._workflow_telemetry_summary()
+        self._record_policy_enforcement_event(
+            source_event="workflow_finished",
+            timestamp=finished_at,
+            status=self.phase,
+            category=self.failure_category,
+            terminal_outcome=self.terminal_outcome,
+        )
         self._record_execution_event(
             event="workflow_finished",
             timestamp=finished_at,
@@ -1357,6 +1386,53 @@ class ProjectState:
                 "attempts": task.attempts,
                 "error_message": error_message,
             }
+        )
+
+    def _policy_area_for_category(self, category: Optional[str]) -> Optional[str]:
+        if category == FailureCategory.SANDBOX_SECURITY_VIOLATION.value:
+            return "sandbox"
+        if category == FailureCategory.DEPENDENCY_VALIDATION.value:
+            return "dependency_manifest"
+        return None
+
+    def _record_policy_enforcement_event(
+        self,
+        *,
+        source_event: str,
+        timestamp: Optional[str] = None,
+        task_id: Optional[str] = None,
+        status: Optional[str] = None,
+        category: Optional[str] = None,
+        message: Optional[str] = None,
+        error_type: Optional[str] = None,
+        provider_call: Optional[Dict[str, Any]] = None,
+        retryable: Optional[bool] = None,
+        terminal_outcome: Optional[str] = None,
+    ) -> None:
+        policy_area = self._policy_area_for_category(category)
+        if policy_area is None:
+            return
+        details: Dict[str, Any] = {
+            "policy_area": policy_area,
+            "source_event": source_event,
+            "failure_category": category,
+        }
+        if message is not None:
+            details["message"] = message
+        if error_type is not None:
+            details["error_type"] = error_type
+        if provider_call is not None:
+            details["provider_call"] = provider_call
+        if retryable is not None:
+            details["retryable"] = retryable
+        if terminal_outcome is not None:
+            details["terminal_outcome"] = terminal_outcome
+        self._record_execution_event(
+            event="policy_enforcement",
+            timestamp=timestamp,
+            task_id=task_id,
+            status=status,
+            details=details,
         )
 
     def _record_execution_event(

@@ -9669,6 +9669,10 @@ def test_execute_workflow_resume_failed_hard_stops_for_non_repairable_failed_tas
 
     assert project.phase == "failed"
     assert project.failure_category == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+    policy_event = next(event for event in project.execution_events if event["event"] == "policy_enforcement")
+    assert policy_event["details"]["policy_area"] == "sandbox"
+    assert policy_event["details"]["source_event"] == "workflow_finished"
+    assert policy_event["details"]["failure_category"] == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
     assert project.get_task("tests__repair_1") is None
     assert project.repair_cycle_count == 0
 

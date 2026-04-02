@@ -888,6 +888,35 @@ def test_fail_task_requeues_when_retry_budget_exists():
     assert project.should_retry_task("code") is True
 
 
+def test_fail_task_records_policy_enforcement_for_dependency_validation_retry():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="deps",
+            title="Dependencies",
+            description="Validate dependencies",
+            assigned_to="dependency_manager",
+            retry_limit=1,
+        )
+    )
+
+    project.start_task("deps")
+    project.fail_task(
+        "deps",
+        RuntimeError("Dependency manifest validation failed: unsupported dependency sources or installer directives"),
+        error_category=FailureCategory.DEPENDENCY_VALIDATION.value,
+    )
+
+    policy_event = next(event for event in project.execution_events if event["event"] == "policy_enforcement")
+
+    assert policy_event["task_id"] == "deps"
+    assert policy_event["details"]["policy_area"] == "dependency_manifest"
+    assert policy_event["details"]["source_event"] == "task_retry_scheduled"
+    assert policy_event["details"]["failure_category"] == FailureCategory.DEPENDENCY_VALIDATION.value
+    assert policy_event["details"]["retryable"] is True
+    assert project.execution_events[-1]["event"] == "task_retry_scheduled"
+
+
 def test_snapshot_hides_failed_output_after_task_is_requeued_for_retry():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
@@ -1712,6 +1741,28 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "pending_task_count": 0,
     }
     assert snapshot.workflow_telemetry["acceptance_summary"] == event["details"]["workflow_telemetry"]["acceptance_summary"]
+
+
+def test_mark_workflow_finished_records_policy_enforcement_for_security_failures():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    project.mark_workflow_running(acceptance_policy="required_tasks", repair_max_cycles=1)
+    project.mark_workflow_finished(
+        "failed",
+        acceptance_policy="required_tasks",
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+        acceptance_criteria_met=False,
+        acceptance_evaluation={"policy": "required_tasks", "accepted": False, "failed_task_ids": ["tests"]},
+    )
+
+    policy_event = next(event for event in project.execution_events if event["event"] == "policy_enforcement")
+
+    assert policy_event["details"]["policy_area"] == "sandbox"
+    assert policy_event["details"]["source_event"] == "workflow_finished"
+    assert policy_event["details"]["failure_category"] == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+    assert policy_event["details"]["terminal_outcome"] == WorkflowOutcome.FAILED.value
+    assert project.execution_events[-1]["event"] == "workflow_finished"
 
 
 def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_details():

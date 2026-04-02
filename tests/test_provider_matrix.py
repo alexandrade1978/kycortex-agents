@@ -352,6 +352,66 @@ def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
     assert summary["failed_task_ids"] == ["tests"]
 
 
+def test_provider_matrix_summary_redacts_public_error_and_project_name_fields(tmp_path):
+    from kycortex_agents.provider_matrix import summarize_workflow_run
+
+    project = ProjectState(
+        project_name="Demo api_key=sk-secret-123456",
+        goal="Validate provider summary output",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.phase = "failed"
+    project.terminal_outcome = "failed"
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Run tests",
+            assigned_to="qa_tester",
+            status="failed",
+            last_error="Authorization: Bearer sk-ant-secret-987654",
+            last_error_type="RuntimeError",
+            last_error_category="task_execution",
+        )
+    )
+
+    summary = summarize_workflow_run(
+        project,
+        provider="openai",
+        model="gpt-4o-mini",
+        output_dir="api_key=sk-secret-123456/output",
+    )
+
+    assert summary["project_name"] == "Demo api_key=[REDACTED]"
+    assert "sk-secret-123456" not in summary["output_dir"]
+    assert "[REDACTED]" in summary["output_dir"]
+    assert summary["task_summaries"][0]["last_error"] == "Authorization: Bearer [REDACTED]"
+    assert "sk-secret-123456" not in json.dumps(summary)
+    assert "sk-ant-secret-987654" not in json.dumps(summary)
+
+
+def test_write_summary_json_redacts_sensitive_strings_before_persisting(tmp_path):
+    from kycortex_agents.provider_matrix import write_summary_json
+
+    summary_path = tmp_path / "provider_matrix_summary.json"
+    write_summary_json(
+        {
+            "project_name": "Demo api_key=sk-secret-123456",
+            "task_summaries": [
+                {"last_error": "Authorization: Bearer sk-ant-secret-987654"}
+            ],
+        },
+        str(summary_path),
+    )
+
+    persisted = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    assert persisted["project_name"] == "Demo api_key=[REDACTED]"
+    assert persisted["task_summaries"][0]["last_error"] == "Authorization: Bearer [REDACTED]"
+    assert "sk-secret-123456" not in summary_path.read_text(encoding="utf-8")
+    assert "sk-ant-secret-987654" not in summary_path.read_text(encoding="utf-8")
+
+
 def test_provider_matrix_summary_includes_provider_budget(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

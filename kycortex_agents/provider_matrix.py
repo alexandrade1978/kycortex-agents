@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
 from kycortex_agents.config import resolve_provider_base_url
+from kycortex_agents.providers.base import redact_sensitive_data
 from kycortex_agents.types import FailureCategory, TaskStatus, WorkflowOutcome
 
 DEFAULT_PROVIDER_MODELS = {
@@ -404,10 +405,11 @@ def summarize_workflow_run(
             }
         )
 
-    return {
+    return redact_sensitive_data(
+        {
         "provider": provider,
         "model": model,
-        "project_name": project.project_name,
+        "project_name": snapshot.project_name,
         "phase": project.phase,
         "terminal_outcome": project.terminal_outcome,
         "failure_category": project.failure_category,
@@ -426,7 +428,8 @@ def summarize_workflow_run(
         "failed_task_ids": sorted(failed_task_ids),
         "repair_task_ids": sorted(repair_task_ids),
         "task_summaries": task_summaries,
-    }
+        }
+    )
 
 
 def _can_resume_failed_workflow(project: ProjectState) -> bool:
@@ -474,4 +477,4 @@ def write_summary_json(summary: dict[str, Any], path: str) -> None:
 
     summary_path = Path(path)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    summary_path.write_text(json.dumps(redact_sensitive_data(summary), indent=2, sort_keys=True), encoding="utf-8")

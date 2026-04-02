@@ -977,6 +977,7 @@ class Orchestrator:
             output = self._execute_agent(agent, agent_input)
             normalized_output = self._normalize_agent_result(output)
             normalized_output = self._unredacted_agent_result(agent, normalized_output)
+            normalized_output = self._sanitize_output_provider_call_metadata(normalized_output)
             self._validate_task_output(task, agent_input.context, normalized_output)
             self._persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:
@@ -1724,16 +1725,27 @@ class Orchestrator:
                 return line
         return combined_lines[-1][:240]
 
+    def _sanitize_provider_call_metadata(self, provider_call: Dict[str, Any]) -> Dict[str, Any]:
+        return cast(Dict[str, Any], redact_sensitive_data(dict(provider_call)))
+
+    def _sanitize_output_provider_call_metadata(self, output: AgentOutput) -> AgentOutput:
+        provider_call = output.metadata.get("provider_call") if isinstance(output.metadata, dict) else None
+        if not isinstance(provider_call, dict):
+            return output
+        output.metadata = dict(output.metadata)
+        output.metadata["provider_call"] = self._sanitize_provider_call_metadata(provider_call)
+        return output
+
     def _provider_call_metadata(self, agent: Any, output: Optional[AgentOutput] = None) -> Optional[Dict[str, Any]]:
         if output is not None:
             provider_call = output.metadata.get("provider_call")
             if isinstance(provider_call, dict):
-                return dict(provider_call)
+                return self._sanitize_provider_call_metadata(provider_call)
         getter = getattr(agent, "get_last_provider_call_metadata", None)
         if callable(getter):
             metadata = getter()
             if isinstance(metadata, dict):
-                return metadata
+                return self._sanitize_provider_call_metadata(metadata)
         return None
 
     def _persist_artifacts(self, artifacts: list[ArtifactRecord]) -> None:

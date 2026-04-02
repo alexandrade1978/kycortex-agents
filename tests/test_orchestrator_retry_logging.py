@@ -26,6 +26,8 @@ class ProviderFailingAgent:
             "model": "claude-3-5-sonnet",
             "success": False,
             "error_type": "RuntimeError",
+            "base_url": "https://alice:secret-pass@example.com/messages",
+            "error_message": "Authorization: Bearer sk-ant-secret-987654",
         }
 
 
@@ -111,6 +113,12 @@ def test_run_task_logs_terminal_failure_with_provider_metadata(tmp_path, caplog)
     assert task.last_provider_call is not None
     assert task.last_provider_call["provider"] == "anthropic"
     assert task.last_provider_call["model"] == "claude-3-5-sonnet"
+    assert "secret-pass" not in str(task.last_provider_call)
+    assert "sk-ant-secret-987654" not in str(task.last_provider_call)
+    assert "[REDACTED]" in task.last_provider_call["base_url"]
+    assert "[REDACTED]" in task.last_provider_call["error_message"]
     assert task.history[-1]["event"] == "failed"
     assert project.execution_events[-1]["event"] == "task_failed"
     assert project.execution_events[-1]["details"]["provider_call"]["provider"] == "anthropic"
+    assert "secret-pass" not in str(project.execution_events[-1]["details"]["provider_call"])
+    assert "sk-ant-secret-987654" not in str(project.execution_events[-1]["details"]["provider_call"])

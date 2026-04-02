@@ -1014,11 +1014,50 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
 
     class MetadataAgent:
         def get_last_provider_call_metadata(self):
-            return {"provider": "openai", "model": "gpt-test"}
+            return {
+                "provider": "openai",
+                "model": "gpt-test",
+                "base_url": "https://alice:secret-pass@example.com/v1",
+                "error_message": "api_key=sk-secret-123456",
+            }
 
     metadata = orchestrator._provider_call_metadata(MetadataAgent(), AgentOutput(summary="ok", raw_content="ok"))
 
-    assert metadata == {"provider": "openai", "model": "gpt-test"}
+    assert metadata is not None
+    assert metadata["provider"] == "openai"
+    assert metadata["model"] == "gpt-test"
+    assert "secret-pass" not in str(metadata)
+    assert "sk-secret-123456" not in str(metadata)
+    assert "[REDACTED]" in metadata["base_url"]
+    assert "[REDACTED]" in metadata["error_message"]
+
+
+def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    output = AgentOutput(
+        summary="ok",
+        raw_content="ok",
+        metadata={
+            "provider_call": {
+                "provider": "anthropic",
+                "model": "claude-test",
+                "base_url": "https://bob:secret-pass@example.com/messages",
+                "error_message": "Authorization: Bearer sk-ant-secret-987654",
+            }
+        },
+    )
+
+    metadata = orchestrator._provider_call_metadata(object(), output)
+
+    assert metadata is not None
+    assert metadata["provider"] == "anthropic"
+    assert metadata["model"] == "claude-test"
+    assert "secret-pass" not in str(metadata)
+    assert "sk-ant-secret-987654" not in str(metadata)
+    assert "[REDACTED]" in metadata["base_url"]
+    assert "[REDACTED]" in metadata["error_message"]
 
 
 def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
@@ -8454,6 +8493,54 @@ def test_run_task_persists_structured_agent_outputs(tmp_path):
     assert artifact["name"] == "architecture_doc"
     assert artifact["path"] == "artifacts/architecture.md"
     assert artifact["artifact_type"] == ArtifactType.DOCUMENT.value
+
+
+def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    class MetadataOutputAgent:
+        def execute(self, agent_input) -> AgentOutput:
+            return AgentOutput(
+                summary="Structured metadata",
+                raw_content="SAFE OUTPUT",
+                metadata={
+                    "provider_call": {
+                        "provider": "openai",
+                        "model": "gpt-test",
+                        "base_url": "https://alice:secret-pass@example.com/v1",
+                        "error_message": "api_key=sk-secret-123456",
+                    }
+                },
+            )
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": MetadataOutputAgent()}))
+
+    result = orchestrator.run_task(project.tasks[0], project)
+
+    assert result == "SAFE OUTPUT"
+    assert project.tasks[0].last_provider_call is not None
+    assert project.tasks[0].last_provider_call["provider"] == "openai"
+    assert project.tasks[0].last_provider_call["model"] == "gpt-test"
+    assert "secret-pass" not in str(project.tasks[0].last_provider_call)
+    assert "sk-secret-123456" not in str(project.tasks[0].last_provider_call)
+    assert "[REDACTED]" in project.tasks[0].last_provider_call["base_url"]
+    assert "[REDACTED]" in project.tasks[0].last_provider_call["error_message"]
+    payload = require_output_payload(project.tasks[0])
+    assert payload["metadata"]["provider_call"]["provider"] == "openai"
+    assert payload["metadata"]["provider_call"]["model"] == "gpt-test"
+    assert "secret-pass" not in str(payload["metadata"]["provider_call"])
+    assert "sk-secret-123456" not in str(payload["metadata"]["provider_call"])
+    assert "[REDACTED]" in payload["metadata"]["provider_call"]["base_url"]
+    assert "[REDACTED]" in payload["metadata"]["provider_call"]["error_message"]
 
 
 def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):

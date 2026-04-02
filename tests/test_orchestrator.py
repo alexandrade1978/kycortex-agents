@@ -4283,6 +4283,46 @@ def test_execute_generated_tests_blocks_network_calls_in_sandbox(tmp_path):
     assert result["sandbox"]["allow_network"] is False
 
 
+def test_execute_generated_tests_blocks_getaddrinfo_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import socket\n\n"
+        "def resolve_host():\n"
+        "    socket.getaddrinfo('example.com', 80)\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_host\n\n"
+        "def test_getaddrinfo_is_blocked():\n"
+        "    resolve_host()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+    assert result["sandbox"]["allow_network"] is False
+
+
+def test_execute_generated_tests_blocks_gethostbyname_in_sandbox(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    result = orchestrator._execute_generated_tests(
+        "code_under_test.py",
+        "import socket\n\n"
+        "def resolve_host():\n"
+        "    socket.gethostbyname('example.com')\n",
+        "tests_generated.py",
+        "from code_under_test import resolve_host\n\n"
+        "def test_gethostbyname_is_blocked():\n"
+        "    resolve_host()\n",
+    )
+
+    assert result["returncode"] != 0
+    assert "sandbox policy blocked this operation" in result["stdout"] or "sandbox policy blocked this operation" in result["stderr"]
+    assert result["sandbox"]["allow_network"] is False
+
+
 def test_execute_generated_tests_blocks_ctypes_loading_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

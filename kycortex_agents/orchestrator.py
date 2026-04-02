@@ -664,6 +664,9 @@ for _name in ("dup", "dup2"):
 if os.environ.get("KYCORTEX_SANDBOX_ALLOW_NETWORK") != "1":
     socket.socket = _blocked
     socket.create_connection = _blocked
+    for _name in ("getaddrinfo", "gethostbyname", "gethostbyname_ex", "getnameinfo", "gethostbyaddr"):
+        if hasattr(socket, _name):
+            setattr(socket, _name, _blocked)
 
 
 if os.environ.get("KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES") != "1":

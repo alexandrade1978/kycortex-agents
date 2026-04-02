@@ -67,15 +67,14 @@ class AnthropicProvider(BaseLLMProvider):
         return model_ids
 
     def health_check(self) -> dict[str, Any]:
-        client = self._get_client()
-        models_api = getattr(client, "models", None)
-        list_models = getattr(models_api, "list", None)
-        if not callable(list_models):
-            return super().health_check()
-
         timeout_seconds = self._health_check_timeout()
         started_at = perf_counter()
         try:
+            client = self._get_client()
+            models_api = getattr(client, "models", None)
+            list_models = getattr(models_api, "list", None)
+            if not callable(list_models):
+                return super().health_check()
             models_payload = list_models(timeout=timeout_seconds)
         except Exception as exc:
             self._last_call_metadata = None
@@ -126,8 +125,8 @@ class AnthropicProvider(BaseLLMProvider):
         raise AgentExecutionError("Anthropic provider returned an empty response")
 
     def generate(self, system_prompt: str, user_message: str) -> str:
-        client = self._get_client()
         try:
+            client = self._get_client()
             response = client.messages.create(
                 model=self.config.llm_model,
                 system=system_prompt,

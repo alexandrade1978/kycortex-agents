@@ -751,6 +751,46 @@ def test_openai_provider_treats_client_4xx_errors_as_deterministic(tmp_path):
     assert exc_info.type is AgentExecutionError
 
 
+def test_openai_provider_redacts_sdk_client_initialization_errors(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = OpenAIProvider(config)
+
+    def raise_client_init_error():
+        raise RuntimeError(
+            "invalid base_url=https://alice:secret-pass@example.com/v1 api_key=sk-secret-123456"
+        )
+
+    monkeypatch.setattr(provider, "_get_client", raise_client_init_error)
+
+    with pytest.raises(AgentExecutionError, match="rejected the model API request") as exc_info:
+        provider.generate("system", "message")
+
+    message = str(exc_info.value)
+    assert "alice" not in message
+    assert "secret-pass" not in message
+    assert "sk-secret-123456" not in message
+
+
+def test_openai_provider_redacts_sdk_client_initialization_errors_in_health_check(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = OpenAIProvider(config)
+
+    def raise_client_init_error():
+        raise RuntimeError(
+            "invalid base_url=https://alice:secret-pass@example.com/v1 api_key=sk-secret-123456"
+        )
+
+    monkeypatch.setattr(provider, "_get_client", raise_client_init_error)
+
+    with pytest.raises(AgentExecutionError, match="health check was rejected") as exc_info:
+        provider.health_check()
+
+    message = str(exc_info.value)
+    assert "alice" not in message
+    assert "secret-pass" not in message
+    assert "sk-secret-123456" not in message
+
+
 def test_openai_provider_treats_rate_limits_as_transient(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     provider = OpenAIProvider(config, client=build_client(error=FakeAPIError("rate limited", 429)))
@@ -979,6 +1019,46 @@ def test_anthropic_provider_health_check_treats_client_4xx_errors_as_determinist
         provider.health_check()
 
     assert exc_info.type is AgentExecutionError
+
+
+def test_anthropic_provider_redacts_sdk_client_initialization_errors(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(config)
+
+    def raise_client_init_error():
+        raise RuntimeError(
+            "invalid base_url=https://alice:secret-pass@example.com/v1 api_key=sk-ant-secret-987654"
+        )
+
+    monkeypatch.setattr(provider, "_get_client", raise_client_init_error)
+
+    with pytest.raises(AgentExecutionError, match="rejected the model API request") as exc_info:
+        provider.generate("system", "message")
+
+    message = str(exc_info.value)
+    assert "alice" not in message
+    assert "secret-pass" not in message
+    assert "sk-ant-secret-987654" not in message
+
+
+def test_anthropic_provider_redacts_sdk_client_initialization_errors_in_health_check(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic")
+    provider = AnthropicProvider(config)
+
+    def raise_client_init_error():
+        raise RuntimeError(
+            "invalid base_url=https://alice:secret-pass@example.com/v1 api_key=sk-ant-secret-987654"
+        )
+
+    monkeypatch.setattr(provider, "_get_client", raise_client_init_error)
+
+    with pytest.raises(AgentExecutionError, match="health check was rejected") as exc_info:
+        provider.health_check()
+
+    message = str(exc_info.value)
+    assert "alice" not in message
+    assert "secret-pass" not in message
+    assert "sk-ant-secret-987654" not in message
 
 
 def test_anthropic_provider_health_check_treats_server_5xx_errors_as_transient(tmp_path):

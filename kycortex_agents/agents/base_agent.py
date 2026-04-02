@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 import random
 import re
 from time import perf_counter, sleep
@@ -7,13 +8,13 @@ from typing import Any, Optional, cast
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
-from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_data, sanitize_prompt_input
+from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_data, redact_sensitive_text, sanitize_prompt_input
 from kycortex_agents.providers.factory import (
     _maybe_get_cached_health_snapshot,
     _store_health_snapshot,
     create_provider,
 )
-from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord
 
 
 class BaseAgent(ABC):
@@ -48,6 +49,7 @@ class BaseAgent(ABC):
         self._provider_last_health_checks: dict[str, dict[str, Any]] = {}
         self._provider_cancellation_requested = False
         self._provider_cancellation_reason: Optional[str] = None
+        self._last_unredacted_output: Optional[AgentOutput] = None
 
     def _get_provider(self) -> BaseLLMProvider:
         return self._get_provider_for(self.config.llm_provider, self.config.llm_model)
@@ -936,7 +938,15 @@ class BaseAgent(ABC):
         try:
             result = self.run_with_input(agent_input)
             output = self._normalize_output(result, agent_input)
-            return self.after_execute(agent_input, output)
+            unredacted_output = self._finalize_output(
+                agent_input,
+                deepcopy(output),
+                redact_output=False,
+                use_custom_validation=False,
+            )
+            finalized_output = self.after_execute(agent_input, output)
+            self._last_unredacted_output = unredacted_output
+            return finalized_output
         except Exception as exc:
             self.on_execution_error(agent_input, exc)
             raise AssertionError("on_execution_error must raise an exception") from exc
@@ -966,8 +976,23 @@ class BaseAgent(ABC):
 
     def after_execute(self, agent_input: AgentInput, output: AgentOutput) -> AgentOutput:
         """Hook invoked after normalization to finalize the public AgentOutput."""
+        return self._finalize_output(agent_input, output, redact_output=True)
+
+    def _finalize_output(
+        self,
+        agent_input: AgentInput,
+        output: AgentOutput,
+        *,
+        redact_output: bool,
+        use_custom_validation: bool = True,
+    ) -> AgentOutput:
         output = self._normalize_output_for_artifact_type(output)
-        self.validate_output(output)
+        if redact_output:
+            output = self._redact_output(output)
+        if use_custom_validation:
+            self.validate_output(output)
+        else:
+            BaseAgent.validate_output(self, output)
         output.metadata.setdefault("agent_name", self.name)
         output.metadata.setdefault("agent_role", self.role)
         output.metadata.setdefault("task_id", agent_input.task_id)
@@ -976,6 +1001,38 @@ class BaseAgent(ABC):
             output.metadata.setdefault("provider_call", redact_sensitive_data(dict(self._last_provider_call_metadata)))
         if not output.artifacts:
             output.artifacts.append(self._build_default_artifact(agent_input, output))
+        return output
+
+    def _redact_output(self, output: AgentOutput) -> AgentOutput:
+        output.summary = redact_sensitive_text(output.summary)
+        output.raw_content = redact_sensitive_text(output.raw_content)
+        output.artifacts = [self._redact_artifact_record(artifact) for artifact in output.artifacts]
+        output.decisions = [self._redact_decision_record(decision) for decision in output.decisions]
+        output.metadata = cast(dict[str, Any], redact_sensitive_data(output.metadata))
+        return output
+
+    def _redact_artifact_record(self, artifact: ArtifactRecord) -> ArtifactRecord:
+        return ArtifactRecord(
+            name=redact_sensitive_text(artifact.name),
+            artifact_type=artifact.artifact_type,
+            path=redact_sensitive_text(artifact.path) if artifact.path is not None else None,
+            content=redact_sensitive_text(artifact.content) if artifact.content is not None else None,
+            created_at=artifact.created_at,
+            metadata=cast(dict[str, Any], redact_sensitive_data(artifact.metadata)),
+        )
+
+    def _redact_decision_record(self, decision: DecisionRecord) -> DecisionRecord:
+        return DecisionRecord(
+            topic=redact_sensitive_text(decision.topic),
+            decision=redact_sensitive_text(decision.decision),
+            rationale=redact_sensitive_text(decision.rationale),
+            created_at=decision.created_at,
+            metadata=cast(dict[str, Any], redact_sensitive_data(decision.metadata)),
+        )
+
+    def _consume_last_unredacted_output(self) -> Optional[AgentOutput]:
+        output = self._last_unredacted_output
+        self._last_unredacted_output = None
         return output
 
     def _normalize_output_for_artifact_type(self, output: AgentOutput) -> AgentOutput:

@@ -7,7 +7,7 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers.base import BaseLLMProvider
 from kycortex_agents.providers import factory as provider_factory
-from kycortex_agents.types import AgentInput, AgentOutput, ArtifactType
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord
 
 
 class DummyAgent(BaseAgent):
@@ -382,6 +382,84 @@ def test_execute_redacts_sensitive_provider_metadata_before_exposing_provider_ca
     assert provider_call["api_key"] == "[REDACTED]"
     assert provider_call["nested"]["authorization"] == "[REDACTED]"
     assert provider_call["usage"]["total_tokens"] == 5
+
+
+def test_execute_redacts_sensitive_values_from_live_agent_output():
+    class StructuredSecretAgent(DummyAgent):
+        def run(self, task_description: str, context: dict) -> AgentOutput:
+            return AgentOutput(
+                summary="api_key=sk-secret-123456 summary",
+                raw_content="Authorization: Bearer sk-ant-secret-987654",
+                artifacts=[
+                    ArtifactRecord(
+                        name="secret_artifact",
+                        artifact_type=ArtifactType.TEXT,
+                        path="artifacts/sk-secret-123456.txt",
+                        content="password=hunter2",
+                        metadata={"session_token": "session-secret-token"},
+                    )
+                ],
+                decisions=[
+                    DecisionRecord(
+                        topic="Authorization: Bearer sk-ant-secret-987654",
+                        decision="Keep api_key=sk-secret-123456 hidden",
+                        rationale="password=hunter2",
+                        metadata={"refresh_token": "refresh-secret-token"},
+                    )
+                ],
+                metadata={"api_key": "sk-secret-123456", "nested": {"authorization": "Bearer sk-ant-secret-987654"}},
+            )
+
+    agent = StructuredSecretAgent(DummyProvider(response="ok"))
+
+    result = agent.execute(
+        AgentInput(
+            task_id="task-1",
+            task_title="Task",
+            task_description="message",
+            project_name="Demo",
+            project_goal="Build demo",
+            context={},
+        )
+    )
+
+    assert "sk-secret-123456" not in result.summary
+    assert "sk-ant-secret-987654" not in result.raw_content
+    assert result.metadata["api_key"] == "[REDACTED]"
+    assert result.metadata["nested"]["authorization"] == "[REDACTED]"
+    assert result.artifacts[0].path == "artifacts/[REDACTED].txt"
+    assert result.artifacts[0].content == "password=[REDACTED]"
+    assert result.artifacts[0].metadata["session_token"] == "[REDACTED]"
+    assert result.decisions[0].topic == "Authorization: Bearer [REDACTED]"
+    assert result.decisions[0].decision == "Keep api_key=[REDACTED] hidden"
+    assert result.decisions[0].rationale == "password=[REDACTED]"
+    assert result.decisions[0].metadata["refresh_token"] == "[REDACTED]"
+
+
+def test_after_execute_redacts_default_artifact_content_when_live_output_contains_secrets():
+    agent = DummyAgent(DummyProvider(response="ok"))
+    agent._last_provider_call_metadata = None
+    agent_input = AgentInput(
+        task_id="task-1",
+        task_title="Task",
+        task_description="message",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={},
+    )
+    output = AgentOutput(
+        summary="summary api_key=sk-secret-123456",
+        raw_content="Authorization: Bearer sk-ant-secret-987654",
+        artifacts=[],
+        decisions=[],
+        metadata={},
+    )
+
+    finalized = BaseAgent.after_execute(agent, agent_input, output)
+
+    assert finalized.raw_content == "Authorization: Bearer [REDACTED]"
+    assert finalized.summary == "summary api_key=[REDACTED]"
+    assert finalized.artifacts[0].content == "Authorization: Bearer [REDACTED]"
 
 
 def test_execute_sanitizes_task_description_before_provider_generate():

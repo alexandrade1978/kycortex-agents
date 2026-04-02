@@ -973,6 +973,7 @@ class Orchestrator:
         try:
             output = self._execute_agent(agent, agent_input)
             normalized_output = self._normalize_agent_result(output)
+            normalized_output = self._unredacted_agent_result(agent, normalized_output)
             self._validate_task_output(task, agent_input.context, normalized_output)
             self._persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:
@@ -5704,6 +5705,14 @@ class Orchestrator:
         if isinstance(result, AgentOutput):
             return result
         return AgentOutput(summary=self._summarize_output(result), raw_content=result)
+
+    def _unredacted_agent_result(self, agent: Any, result: AgentOutput) -> AgentOutput:
+        getter = getattr(agent, "_consume_last_unredacted_output", None)
+        if callable(getter):
+            unredacted = getter()
+            if isinstance(unredacted, AgentOutput):
+                return unredacted
+        return result
 
     def _summarize_output(self, raw_content: str) -> str:
         stripped = raw_content.strip()

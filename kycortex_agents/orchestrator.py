@@ -864,6 +864,22 @@ class Orchestrator:
             )
         return changed
 
+    def replay_workflow(self, project: ProjectState, *, reason: str = "manual_replay") -> list[str]:
+        """Reset a workflow so it can be executed again from its initial task set."""
+
+        replayed_task_ids = project.replay_workflow(reason=reason)
+        if replayed_task_ids:
+            project.save()
+            self._log_event(
+                "info",
+                "workflow_replayed",
+                project_name=project.project_name,
+                phase=project.phase,
+                reason=reason,
+                replayed_task_ids=list(replayed_task_ids),
+            )
+        return replayed_task_ids
+
     def _exit_if_workflow_paused(self, project: ProjectState) -> bool:
         if not project.is_workflow_paused():
             return False

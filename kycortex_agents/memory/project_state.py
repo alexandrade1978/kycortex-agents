@@ -308,6 +308,70 @@ class ProjectState:
         self._record_workflow_resumed(resumed_at, [], reason=resume_reason)
         return True
 
+    def replay_workflow(self, *, reason: str = "manual_replay") -> List[str]:
+        """Reset the workflow to its initial runnable state for a fresh replay."""
+
+        if any(task.status == TaskStatus.RUNNING.value for task in self.tasks):
+            raise ValueError("Cannot replay a workflow while tasks are still running")
+
+        replayed_at = datetime.now(timezone.utc).isoformat()
+        replay_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "manual_replay"
+        removed_task_ids = [task.id for task in self.tasks if self._is_repair_lineage_task(task)]
+        replayable_tasks = [task for task in self.tasks if not self._is_repair_lineage_task(task)]
+        replayed_task_ids = [task.id for task in replayable_tasks]
+
+        for task in replayable_tasks:
+            task.status = TaskStatus.PENDING.value
+            task.attempts = 0
+            task.last_error = None
+            task.last_error_type = None
+            task.last_error_category = None
+            task.repair_context = {}
+            task.repair_origin_task_id = None
+            task.repair_attempt = 0
+            task.output = None
+            task.output_payload = None
+            task.skip_reason_type = None
+            task.last_provider_call = None
+            task.started_at = None
+            task.last_attempt_started_at = None
+            task.last_resumed_at = None
+            task.completed_at = None
+            self._record_task_event(task, "replayed", replayed_at, error_message=replay_reason)
+
+        cleared_decision_count = len(self.decisions)
+        cleared_artifact_count = len(self.artifacts)
+        self.tasks = replayable_tasks
+        self.decisions = []
+        self.artifacts = []
+        self.phase = "init"
+        self.terminal_outcome = None
+        self.failure_category = None
+        self.acceptance_criteria_met = False
+        self.acceptance_evaluation = {}
+        self.workflow_started_at = None
+        self.workflow_finished_at = None
+        self.workflow_paused_at = None
+        self.workflow_pause_reason = None
+        self.workflow_last_resumed_at = None
+        self.repair_cycle_count = 0
+        self.repair_max_cycles = 0
+        self.repair_history = []
+        self._record_execution_event(
+            event="workflow_replayed",
+            timestamp=replayed_at,
+            status=self.phase,
+            details={
+                "reason": replay_reason,
+                "replayed_task_ids": replayed_task_ids,
+                "removed_task_ids": removed_task_ids,
+                "cleared_decision_count": cleared_decision_count,
+                "cleared_artifact_count": cleared_artifact_count,
+            },
+        )
+        self._touch(replayed_at)
+        return replayed_task_ids
+
     def resume_interrupted_tasks(self) -> List[str]:
         """Re-queue tasks left running by an interrupted workflow execution."""
 
@@ -908,6 +972,9 @@ class ProjectState:
         if dependency is None or dependency.status != TaskStatus.FAILED.value:
             return "manual"
         return "dependency_failed"
+
+    def _is_repair_lineage_task(self, task: Task) -> bool:
+        return bool(task.repair_origin_task_id) or "__repair_" in task.id
 
     def _extract_dependency_failed_task_id(self, task: Task) -> Optional[str]:
         reason = task.last_error or task.output or ""

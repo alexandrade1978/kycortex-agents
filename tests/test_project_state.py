@@ -1108,6 +1108,106 @@ def test_override_task_marks_task_done_and_records_manual_override_event():
     assert project.execution_events[-1]["details"]["reason"] == "manual_operator_override"
 
 
+def test_replay_workflow_resets_base_tasks_and_clears_run_metadata():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        decisions=[{"topic": "stack", "decision": "typed", "rationale": "safe", "at": "2026-03-22T10:00:00+00:00"}],
+        artifacts=[{"name": "architecture.md", "artifact_type": ArtifactType.DOCUMENT.value, "created_at": "2026-03-22T10:00:00+00:00"}],
+        phase="completed",
+        terminal_outcome=WorkflowOutcome.COMPLETED.value,
+        acceptance_criteria_met=True,
+        acceptance_evaluation={"accepted": True},
+        workflow_started_at="2026-03-22T10:00:00+00:00",
+        workflow_finished_at="2026-03-22T10:05:00+00:00",
+        workflow_paused_at="2026-03-22T10:03:00+00:00",
+        workflow_pause_reason="manual_pause",
+        workflow_last_resumed_at="2026-03-22T10:04:00+00:00",
+        repair_cycle_count=1,
+        repair_max_cycles=2,
+        repair_history=[{"cycle": 1, "reason": "resume_failed_tasks"}],
+    )
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            attempts=2,
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+            completed_at="2026-03-22T10:05:00+00:00",
+        )
+    )
+
+    replayed_task_ids = project.replay_workflow(reason="manual_replay")
+    task = require_task(project, "arch")
+    snapshot = project.snapshot()
+
+    assert replayed_task_ids == ["arch"]
+    assert task.status == TaskStatus.PENDING.value
+    assert task.attempts == 0
+    assert task.output is None
+    assert task.completed_at is None
+    assert task.history[-1]["event"] == "replayed"
+    assert project.decisions == []
+    assert project.artifacts == []
+    assert project.phase == "init"
+    assert project.terminal_outcome is None
+    assert project.workflow_started_at is None
+    assert project.workflow_finished_at is None
+    assert project.workflow_paused_at is None
+    assert project.workflow_pause_reason is None
+    assert project.workflow_last_resumed_at is None
+    assert project.repair_cycle_count == 0
+    assert project.repair_history == []
+    assert project.execution_events[-1]["event"] == "workflow_replayed"
+    assert project.execution_events[-1]["details"]["reason"] == "manual_replay"
+    assert snapshot.workflow_status == WorkflowStatus.INIT
+
+
+def test_replay_workflow_removes_repair_lineage_tasks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement",
+            assigned_to="code_engineer",
+            status=TaskStatus.FAILED.value,
+            output="boom",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair Implementation",
+            description="Repair",
+            assigned_to="code_engineer",
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            status=TaskStatus.FAILED.value,
+            output="still boom",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1__budget_plan",
+            title="Budget plan",
+            description="Plan",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="PLAN",
+        )
+    )
+
+    replayed_task_ids = project.replay_workflow(reason="manual_replay")
+
+    assert replayed_task_ids == ["code"]
+    assert [task.id for task in project.tasks] == ["code"]
+    assert project.execution_events[-1]["details"]["removed_task_ids"] == ["code__repair_1", "code__repair_1__budget_plan"]
+
+
 def test_resume_workflow_clears_pause_state_and_records_resume_summary():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

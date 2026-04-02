@@ -8948,6 +8948,54 @@ def test_orchestrator_skip_task_marks_task_skipped_without_manual_state_edit(tmp
     assert require_task(project, "docs").output == "manual_skip"
 
 
+def test_orchestrator_replay_workflow_resets_completed_run_and_reexecutes(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    architect = RecordingAgent("ARCHITECTURE DOC V1")
+    code_engineer = RecordingAgent("IMPLEMENTED CODE V1")
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry({"architect": architect, "code_engineer": code_engineer}),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    architect.response = "ARCHITECTURE DOC V2"
+    code_engineer.response = "IMPLEMENTED CODE V2"
+
+    replayed_task_ids = orchestrator.replay_workflow(project, reason="manual_replay")
+
+    assert replayed_task_ids == ["arch", "code"]
+    assert [task.status for task in project.tasks] == [TaskStatus.PENDING.value, TaskStatus.PENDING.value]
+    assert all(task.output is None for task in project.tasks)
+    assert project.phase == "init"
+
+    orchestrator.execute_workflow(project)
+
+    assert [task.status for task in project.tasks] == [TaskStatus.DONE.value, TaskStatus.DONE.value]
+    assert require_task(project, "arch").output == "ARCHITECTURE DOC V2"
+    assert require_task(project, "code").output == "IMPLEMENTED CODE V2"
+    assert any(event["event"] == "workflow_replayed" for event in project.execution_events)
+
+
 def test_execute_workflow_rejects_dependency_cycles(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

@@ -1,7 +1,8 @@
 """Public runtime configuration model and provider environment-variable mappings."""
 
 import os
-from dataclasses import dataclass, field, replace
+import re
+from dataclasses import dataclass, field, fields, replace
 from typing import Mapping, Optional
 
 from kycortex_agents.exceptions import ConfigValidationError
@@ -28,6 +29,10 @@ __all__ = [
     "KYCortexConfig",
     "PROVIDER_ENV_VARS",
 ]
+
+
+_REDACTED = "[REDACTED]"
+_URL_USERINFO_PATTERN = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@")
 
 
 def resolve_provider_base_url(
@@ -90,6 +95,19 @@ class KYCortexConfig:
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
+
+    def __repr__(self) -> str:
+        """Return a debug-safe representation that does not expose provider secrets."""
+
+        rendered_fields: list[str] = []
+        for config_field in fields(self):
+            value = getattr(self, config_field.name)
+            if config_field.name == "api_key" and isinstance(value, str) and value:
+                value = _REDACTED
+            elif config_field.name == "base_url" and isinstance(value, str):
+                value = _URL_USERINFO_PATTERN.sub(r"\1[REDACTED]:[REDACTED]@", value)
+            rendered_fields.append(f"{config_field.name}={value!r}")
+        return f"{self.__class__.__name__}({', '.join(rendered_fields)})"
 
     def __post_init__(self):
         """Normalize defaults, resolve provider settings, validate config, and create output storage."""

@@ -101,6 +101,32 @@ def test_config_initialization_does_not_create_output_dir(tmp_path):
     assert not output_dir.exists()
 
 
+def test_config_repr_redacts_api_key(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        api_key="sk-secret-1234567890",
+    )
+
+    rendered = repr(config)
+
+    assert "sk-secret-1234567890" not in rendered
+    assert "api_key='[REDACTED]'" in rendered
+
+
+def test_config_repr_redacts_base_url_userinfo(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        api_key="token",
+        base_url="https://alice:secret-pass@example.com/v1",
+    )
+
+    rendered = repr(config)
+
+    assert "alice" not in rendered
+    assert "secret-pass" not in rendered
+    assert "base_url='https://[REDACTED]:[REDACTED]@example.com/v1'" in rendered
+
+
 def test_config_rejects_invalid_timeout(tmp_path):
     with pytest.raises(ConfigValidationError, match="timeout_seconds must be greater than zero"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=0)

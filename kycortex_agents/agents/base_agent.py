@@ -7,7 +7,7 @@ from typing import Any, Optional, cast
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
-from kycortex_agents.providers.base import BaseLLMProvider
+from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_data
 from kycortex_agents.providers.factory import (
     _maybe_get_cached_health_snapshot,
     _store_health_snapshot,
@@ -334,7 +334,7 @@ class BaseAgent(ABC):
                     }
                     provider_metadata = provider.get_last_call_metadata()
                     if provider_metadata is not None:
-                        self._last_provider_call_metadata.update(provider_metadata)
+                        self._last_provider_call_metadata.update(redact_sensitive_data(provider_metadata))
                     return response
                 except ProviderTransientError as exc:
                     uncapped_backoff_seconds = self.config.provider_retry_backoff_seconds * (2 ** (attempt - 1))
@@ -623,11 +623,11 @@ class BaseAgent(ABC):
                 "last_health_check": (
                     None
                     if last_health_check is None
-                    else {
+                    else redact_sensitive_data({
                         key: value
                         for key, value in last_health_check.items()
                         if key != "checked_at"
-                    }
+                    })
                 ),
                 "last_health_check_age_seconds": (
                     None
@@ -648,7 +648,7 @@ class BaseAgent(ABC):
         snapshot: dict[str, Any]
         cached_snapshot = _maybe_get_cached_health_snapshot(runtime_config, started_at)
         if cached_snapshot is not None:
-            snapshot = dict(cached_snapshot)
+            snapshot = redact_sensitive_data(dict(cached_snapshot))
             self._provider_last_health_checks[provider_name] = snapshot
             error_message = str(
                 snapshot.get("error_message")
@@ -693,6 +693,7 @@ class BaseAgent(ABC):
                 "cooldown_cached": False,
                 "cooldown_remaining_seconds": 0.0,
             }
+            snapshot = redact_sensitive_data(snapshot)
             self._provider_last_health_checks[provider_name] = snapshot
             _store_health_snapshot(runtime_config, snapshot, completed_at)
             self._record_provider_failure(
@@ -719,6 +720,7 @@ class BaseAgent(ABC):
                 "cooldown_cached": False,
                 "cooldown_remaining_seconds": 0.0,
             }
+            snapshot = redact_sensitive_data(snapshot)
             self._provider_last_health_checks[provider_name] = snapshot
             _store_health_snapshot(runtime_config, snapshot, completed_at)
             self._record_provider_failure(
@@ -745,6 +747,7 @@ class BaseAgent(ABC):
         snapshot["checked_at"] = completed_at
         snapshot.setdefault("cooldown_cached", False)
         snapshot.setdefault("cooldown_remaining_seconds", 0.0)
+        snapshot = redact_sensitive_data(snapshot)
         self._provider_last_health_checks[provider_name] = snapshot
         _store_health_snapshot(runtime_config, snapshot, completed_at)
         if snapshot.get("active_check") and snapshot.get("status") in {"degraded", "failing"}:
@@ -844,10 +847,11 @@ class BaseAgent(ABC):
         *,
         retryable: bool,
     ) -> None:
+        sanitized_error_message = str(redact_sensitive_data(error_message))
         self._provider_last_outcomes[provider_name] = "failure"
         self._provider_last_failure_at[provider_name] = current_time
         self._provider_last_error_types[provider_name] = error_type
-        self._provider_last_error_messages[provider_name] = error_message
+        self._provider_last_error_messages[provider_name] = sanitized_error_message
         self._provider_last_retryable_failures[provider_name] = retryable
 
     def request_provider_cancellation(self, reason: Optional[str] = None) -> None:
@@ -967,7 +971,7 @@ class BaseAgent(ABC):
         output.metadata.setdefault("task_id", agent_input.task_id)
         output.metadata.setdefault("project_name", agent_input.project_name)
         if self._last_provider_call_metadata is not None:
-            output.metadata.setdefault("provider_call", dict(self._last_provider_call_metadata))
+            output.metadata.setdefault("provider_call", redact_sensitive_data(dict(self._last_provider_call_metadata)))
         if not output.artifacts:
             output.artifacts.append(self._build_default_artifact(agent_input, output))
         return output
@@ -1027,7 +1031,7 @@ class BaseAgent(ABC):
         raise AgentExecutionError(f"{self.name} failed during agent execution") from exc
 
     def _prefix_agent_execution_error(self, exc: AgentExecutionError) -> AgentExecutionError:
-        message = f"{self.name}: {exc}"
+        message = f"{self.name}: {redact_sensitive_data(str(exc))}"
         if isinstance(exc, ProviderTransientError):
             return ProviderTransientError(message)
         return AgentExecutionError(message)
@@ -1078,7 +1082,7 @@ class BaseAgent(ABC):
     def get_last_provider_call_metadata(self) -> Optional[dict[str, Any]]:
         if self._last_provider_call_metadata is None:
             return None
-        return dict(self._last_provider_call_metadata)
+        return redact_sensitive_data(dict(self._last_provider_call_metadata))
 
     @abstractmethod
     def run(self, task_description: str, context: dict) -> str | AgentOutput:

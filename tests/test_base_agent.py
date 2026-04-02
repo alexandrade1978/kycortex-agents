@@ -322,6 +322,71 @@ def test_chat_captures_failed_provider_call_metadata():
     ]
 
 
+def test_chat_redacts_sensitive_values_from_failed_provider_call_metadata():
+    provider = DummyProvider(error=RuntimeError("request failed api_key=sk-secret-123456 Authorization: Bearer sk-ant-secret-987654"))
+    agent = DummyAgent(provider)
+
+    with pytest.raises(AgentExecutionError):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+
+    assert metadata is not None
+    assert "sk-secret-123456" not in metadata["error_message"]
+    assert "sk-ant-secret-987654" not in metadata["error_message"]
+    assert "[REDACTED]" in metadata["error_message"]
+    assert "sk-secret-123456" not in metadata["attempt_history"][0]["error_message"]
+    assert "sk-ant-secret-987654" not in metadata["attempt_history"][0]["error_message"]
+
+
+def test_execute_redacts_sensitive_provider_metadata_before_exposing_provider_call():
+    provider = DummyProvider(
+        response="ok",
+        metadata={
+            "api_key": "sk-secret-123456",
+            "nested": {"authorization": "Bearer sk-ant-secret-987654"},
+            "usage": {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
+        },
+    )
+    agent = DummyAgent(provider)
+
+    result = agent.execute(
+        AgentInput(
+            task_id="task-1",
+            task_title="Task",
+            task_description="message",
+            project_name="Demo",
+            project_goal="Build demo",
+            context={},
+        )
+    )
+
+    provider_call = result.metadata["provider_call"]
+
+    assert provider_call["api_key"] == "[REDACTED]"
+    assert provider_call["nested"]["authorization"] == "[REDACTED]"
+    assert provider_call["usage"]["total_tokens"] == 5
+
+
+def test_chat_redacts_sensitive_values_from_provider_health_metadata():
+    provider = DummyProvider(
+        response="ok",
+        health_error=ProviderTransientError("Authorization: Bearer sk-ant-secret-987654"),
+    )
+    agent = DummyAgent(provider)
+
+    with pytest.raises(ProviderTransientError, match=r"\[REDACTED\]"):
+        agent.chat("system", "message")
+
+    metadata = agent.get_last_provider_call_metadata()
+
+    assert metadata is not None
+    provider_health = metadata["provider_health"]["openai"]
+    assert "sk-ant-secret-987654" not in provider_health["last_error_message"]
+    assert "[REDACTED]" in provider_health["last_error_message"]
+    assert "sk-ant-secret-987654" not in provider_health["last_health_check"]["error_message"]
+
+
 def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
     class FlakyProvider(DummyProvider):
         def __init__(self):

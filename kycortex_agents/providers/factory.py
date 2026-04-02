@@ -14,7 +14,7 @@ from kycortex_agents.exceptions import (
     ProviderTransientError,
 )
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
-from kycortex_agents.providers.base import BaseLLMProvider
+from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_data
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
 
@@ -50,7 +50,7 @@ def _health_probe_cooldown_seconds(config: KYCortexConfig) -> float:
 
 
 def _build_cached_health_snapshot(entry: dict[str, Any], remaining_seconds: float) -> dict[str, object]:
-    snapshot = dict(entry["snapshot"])
+    snapshot = redact_sensitive_data(dict(entry["snapshot"]))
     snapshot["checked_at"] = float(entry["checked_at"])
     snapshot["cooldown_cached"] = True
     snapshot["cooldown_remaining_seconds"] = round(remaining_seconds, 6)
@@ -80,11 +80,12 @@ def _store_health_snapshot(config: KYCortexConfig, snapshot: dict[str, object], 
     if snapshot.get("status") not in {"degraded", "failing"}:
         _HEALTH_PROBE_CACHE.pop(cache_key, None)
         return
+    sanitized_snapshot = redact_sensitive_data(snapshot)
     _HEALTH_PROBE_CACHE[cache_key] = {
         "checked_at": checked_at,
         "snapshot": {
             key: value
-            for key, value in snapshot.items()
+            for key, value in sanitized_snapshot.items()
             if key not in {"cooldown_cached", "cooldown_remaining_seconds"}
         },
     }
@@ -134,6 +135,7 @@ def probe_provider_health(config: KYCortexConfig) -> dict[str, object]:
             "cooldown_cached": False,
             "cooldown_remaining_seconds": 0.0,
         }
+        snapshot = redact_sensitive_data(snapshot)
         _store_health_snapshot(config, snapshot, completed_at)
         return snapshot
     except AgentExecutionError as exc:
@@ -150,6 +152,7 @@ def probe_provider_health(config: KYCortexConfig) -> dict[str, object]:
             "cooldown_cached": False,
             "cooldown_remaining_seconds": 0.0,
         }
+        snapshot = redact_sensitive_data(snapshot)
         _store_health_snapshot(config, snapshot, completed_at)
         return snapshot
     completed_at = perf_counter()
@@ -165,5 +168,6 @@ def probe_provider_health(config: KYCortexConfig) -> dict[str, object]:
     snapshot["latency_ms"] = round((completed_at - started_at) * 1000, 3)
     snapshot["cooldown_cached"] = False
     snapshot["cooldown_remaining_seconds"] = 0.0
+    snapshot = redact_sensitive_data(snapshot)
     _store_health_snapshot(config, snapshot, completed_at)
     return snapshot

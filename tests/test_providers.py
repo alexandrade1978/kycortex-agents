@@ -412,6 +412,35 @@ def test_probe_provider_health_caches_unhealthy_snapshot_during_cooldown(tmp_pat
     assert require_number(second_snapshot["cooldown_remaining_seconds"]) > 0
 
 
+def test_probe_provider_health_redacts_sensitive_error_messages_in_live_and_cached_snapshots(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        api_key="token",
+        provider_health_check_cooldown_seconds=30.0,
+    )
+
+    class UnhealthyProvider(BaseLLMProvider):
+        def generate(self, system_prompt: str, user_message: str) -> str:
+            return "ok"
+
+        def health_check(self) -> dict[str, object]:
+            raise ProviderTransientError("Authorization: Bearer sk-secret-123456")
+
+    monkeypatch.setattr(
+        "kycortex_agents.providers.factory.create_provider",
+        lambda runtime_config: UnhealthyProvider(),
+    )
+
+    first_snapshot = probe_provider_health(config)
+    second_snapshot = probe_provider_health(config)
+
+    for snapshot in (first_snapshot, second_snapshot):
+        assert "sk-secret-123456" not in require_text(snapshot["error_message"])
+        assert "[REDACTED]" in require_text(snapshot["error_message"])
+
+
 def test_probe_provider_health_does_not_share_unhealthy_cache_across_credentials(tmp_path, monkeypatch):
     provider_factory._HEALTH_PROBE_CACHE.clear()
     first_config = KYCortexConfig(

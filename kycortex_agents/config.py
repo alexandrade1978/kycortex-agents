@@ -26,9 +26,7 @@ __all__ = [
     "DEFAULT_CONFIG",
     "DEFAULT_PROVIDER_BASE_URLS",
     "KYCortexConfig",
-    "PROVIDER_BASE_URL_ENV_VARS",
     "PROVIDER_ENV_VARS",
-    "resolve_provider_base_url",
 ]
 
 

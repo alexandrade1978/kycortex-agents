@@ -5,6 +5,25 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType
 
 NO_EXTERNAL_DEPENDENCIES = "# No external runtime dependencies"
+_UNSAFE_REQUIREMENT_PREFIXES = (
+    "-e ",
+    "--editable ",
+    "-r ",
+    "--requirement ",
+    "-c ",
+    "--constraint ",
+    "-f ",
+    "--find-links ",
+    "--index-url ",
+    "--extra-index-url ",
+    "--trusted-host ",
+    "--no-binary ",
+    "--only-binary ",
+)
+_UNSAFE_DIRECT_REFERENCE_PATTERN = re.compile(
+    r"^(?:[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?\s*@\s*)?(?:git\+|hg\+|svn\+|bzr\+|https?://|file://|\./|\.\./|/)",
+    flags=re.IGNORECASE,
+)
 
 SYSTEM_PROMPT = """You are a Python Dependency and Packaging Specialist at KYCortex AI Software House.
 Your job is to infer the minimal runtime dependency manifest for the generated Python project.
@@ -12,7 +31,47 @@ Return only the plain text content of a requirements.txt file.
 List one dependency specifier per line.
 Prefer the smallest viable dependency set.
 Do not include standard library modules.
+Do not use editable installs, local paths, direct URLs, VCS references, or pip installer directives.
 If no third-party runtime dependencies are required, return exactly: # No external runtime dependencies"""
+
+
+def normalize_requirement_line(raw_line: str) -> str:
+    line = raw_line.strip()
+    if line.startswith(("- `", "* `")) and line.endswith("`"):
+        return line[3:-1].strip()
+    if line.startswith(("- ", "* ")):
+        return line[2:].strip()
+    return line
+
+
+def is_provenance_unsafe_requirement(line: str) -> bool:
+    normalized_line = normalize_requirement_line(line)
+    if not normalized_line or normalized_line.startswith("#"):
+        return False
+    lowered_line = normalized_line.lower()
+    if lowered_line.startswith(_UNSAFE_REQUIREMENT_PREFIXES):
+        return True
+    return bool(_UNSAFE_DIRECT_REFERENCE_PATTERN.match(normalized_line))
+
+
+def extract_requirement_name(line: str) -> str:
+    normalized_line = normalize_requirement_line(line)
+    if not normalized_line or normalized_line.startswith("#"):
+        return ""
+    editable_prefixes = ("-e ", "--editable ")
+    lowered_line = normalized_line.lower()
+    if lowered_line.startswith(editable_prefixes):
+        normalized_line = normalized_line.split(None, 1)[1].strip() if " " in normalized_line else ""
+    direct_reference_match = re.match(
+        r"^([A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?)\s*@\s+",
+        normalized_line,
+        flags=re.IGNORECASE,
+    )
+    if direct_reference_match is not None:
+        return direct_reference_match.group(1)
+    if is_provenance_unsafe_requirement(normalized_line):
+        return ""
+    return re.split(r"\s*(?:==|>=|<=|~=|!=|>|<)", normalized_line, maxsplit=1)[0].strip()
 
 
 class DependencyManagerAgent(BaseAgent):
@@ -56,6 +115,7 @@ Infer the minimal runtime requirements.txt for this generated module.
 Do not include Python itself.
 Do not include development-only tools such as pytest unless the task explicitly asks for them.
 Exclude standard library imports.
+Do not use editable installs, local paths, direct URLs, VCS references, or pip installer directives.
 If the module has no external runtime dependencies, return exactly `# No external runtime dependencies`."""
         raw_requirements = self.chat(SYSTEM_PROMPT, user_msg).strip()
         normalized_requirements = self._normalize_requirements(raw_requirements)
@@ -100,6 +160,7 @@ Infer the minimal runtime requirements.txt for this generated module.
 Do not include Python itself.
 Do not include development-only tools such as pytest unless the task explicitly asks for them.
 Exclude standard library imports.
+Do not use editable installs, local paths, direct URLs, VCS references, or pip installer directives.
 If the module has no external runtime dependencies, return exactly `# No external runtime dependencies`."""
         return self.chat(SYSTEM_PROMPT, user_msg)
 
@@ -112,16 +173,12 @@ If the module has no external runtime dependencies, return exactly `# No externa
 
         requirement_lines: list[str] = []
         for raw_line in candidate_text.splitlines():
-            line = raw_line.strip()
+            line = normalize_requirement_line(raw_line)
             if not line:
                 continue
             if line.startswith("#") and "external runtime dependencies" in line.lower():
                 return NO_EXTERNAL_DEPENDENCIES
-            if line.startswith(("- `", "* `")) and line.endswith("`"):
-                line = line[3:-1].strip()
-            elif line.startswith(("- ", "* ")):
-                line = line[2:].strip()
-            if self._looks_like_requirement(line):
+            if self._looks_like_requirement(line) or self._looks_like_provenance_unsafe_requirement(line):
                 requirement_lines.append(line)
 
         if requirement_lines:
@@ -141,3 +198,6 @@ If the module has no external runtime dependencies, return exactly `# No externa
         if " " in line and not any(op in line for op in ("==", ">=", "<=", "~=", "!=", ">", "<", "[")):
             return False
         return bool(re.match(r"^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?(?:\s*(?:==|>=|<=|~=|!=|>|<)\s*[A-Za-z0-9*_.+-]+)?$", line))
+
+    def _looks_like_provenance_unsafe_requirement(self, line: str) -> bool:
+        return is_provenance_unsafe_requirement(line)

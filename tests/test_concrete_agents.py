@@ -240,6 +240,22 @@ def test_dependency_manager_agent_normalizes_bulleted_requirements_and_deduplica
     assert normalized == "requests>=2.31.0\nnumpy==2.1.1"
 
 
+def test_dependency_manager_agent_preserves_provenance_unsafe_entries_for_policy_validation(tmp_path):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+
+    normalized = agent._normalize_requirements(
+        "requests @ https://example.com/requests.whl\n"
+        "-e ./vendor/package\n"
+        "--extra-index-url https://example.com/simple\n"
+    )
+
+    assert normalized == (
+        "requests @ https://example.com/requests.whl\n"
+        "-e ./vendor/package\n"
+        "--extra-index-url https://example.com/simple"
+    )
+
+
 def test_dependency_manager_after_execute_leaves_non_requirements_artifacts_unchanged(tmp_path):
     agent = CaptureDependencyManagerAgent(build_config(tmp_path))
     agent_input = AgentInput(
@@ -275,6 +291,21 @@ def test_dependency_manager_requirement_detection_filters_non_requirements(tmp_p
     agent = CaptureDependencyManagerAgent(build_config(tmp_path))
 
     assert agent._looks_like_requirement(line) is expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "requests @ https://example.com/requests.whl",
+        "-e ./vendor/package",
+        "git+https://example.com/org/repo.git",
+        "--extra-index-url https://example.com/simple",
+    ],
+)
+def test_dependency_manager_detects_provenance_unsafe_requirement_lines(tmp_path, line):
+    agent = CaptureDependencyManagerAgent(build_config(tmp_path))
+
+    assert agent._looks_like_provenance_unsafe_requirement(line) is True
 
 
 def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_path):

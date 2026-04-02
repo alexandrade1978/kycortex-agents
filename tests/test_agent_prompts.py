@@ -989,6 +989,7 @@ def test_dependency_manager_uses_code_context_and_requirements_prompt(tmp_path):
     assert "Module: demo_mod.py" in agent.last_user_message
     assert "requirements.txt" in agent.last_user_message
     assert "Do not include development-only tools such as pytest" in agent.last_user_message
+    assert "Do not use editable installs, local paths, direct URLs, VCS references, or pip installer directives" in agent.last_user_message
 
 
 def test_dependency_manager_run_uses_context_module_details(tmp_path):
@@ -1009,6 +1010,7 @@ def test_dependency_manager_run_uses_context_module_details(tmp_path):
     assert "Module: service_module.py" in agent.last_user_message
     assert "Code summary: import requests" in agent.last_user_message
     assert "Infer the minimal runtime requirements.txt" in agent.last_user_message
+    assert "Do not use editable installs, local paths, direct URLs, VCS references, or pip installer directives" in agent.last_user_message
 
 
 def test_legal_advisor_formats_dependencies_from_typed_context(tmp_path):

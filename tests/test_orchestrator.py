@@ -1633,6 +1633,25 @@ def test_analyze_dependency_manifest_skips_blank_requirement_names(tmp_path):
 
     assert analysis["declared_packages"] == ["requests"]
     assert analysis["missing_manifest_entries"] == []
+    assert analysis["provenance_violations"] == []
+
+
+def test_analyze_dependency_manifest_flags_provenance_violations(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    analysis = orchestrator._analyze_dependency_manifest(
+        "requests @ https://example.com/requests.whl\n--extra-index-url https://example.com/simple",
+        {"third_party_imports": ["requests"]},
+    )
+
+    assert analysis["declared_packages"] == ["requests"]
+    assert analysis["missing_manifest_entries"] == []
+    assert analysis["provenance_violations"] == [
+        "requests @ https://example.com/requests.whl",
+        "--extra-index-url https://example.com/simple",
+    ]
+    assert analysis["is_valid"] is False
 
 
 def test_build_generated_test_env_strips_additional_prefix_markers(tmp_path, monkeypatch):
@@ -1669,6 +1688,7 @@ def test_build_dependency_validation_summary_formats_failures_and_passes(tmp_pat
         "- Declared packages: urllib3\n"
         "- Missing manifest entries: requests\n"
         "- Unused manifest entries: urllib3\n"
+        "- Provenance violations: none\n"
         "- Verdict: FAIL"
     )
 
@@ -6933,6 +6953,56 @@ def test_run_task_fails_dependency_manager_when_manifest_misses_required_imports
 
     assert project.tasks[1].status == TaskStatus.FAILED.value
     assert project.tasks[1].output == "Dependency manifest validation failed: missing manifest entries for numpy"
+
+
+def test_run_task_fails_dependency_manager_when_manifest_uses_unsupported_dependency_sources(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="import numpy as np\n\ndef run():\n    return np.array([1])\n",
+            output_payload={
+                "summary": "import numpy as np",
+                "raw_content": "import numpy as np\n\ndef run():\n    return np.array([1])\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "import numpy as np\n\ndef run():\n    return np.array([1])\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="deps",
+            title="Dependencies",
+            description="Infer dependencies",
+            assigned_to="dependency_manager",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent("numpy @ https://example.com/numpy.whl")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"dependency_manager": agent}))
+
+    with pytest.raises(AgentExecutionError, match="unsupported dependency sources or installer directives"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    assert project.tasks[1].status == TaskStatus.FAILED.value
+    assert project.tasks[1].output == (
+        "Dependency manifest validation failed: unsupported dependency sources or installer directives: "
+        "numpy @ https://example.com/numpy.whl"
+    )
 
 
 def test_run_task_fails_code_engineer_when_generated_code_has_syntax_error(tmp_path):

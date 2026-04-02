@@ -20,6 +20,7 @@ try:
 except ImportError:  # pragma: no cover - non-POSIX fallback
     resource = None  # type: ignore[assignment]
 
+from kycortex_agents.agents.dependency_manager import extract_requirement_name, is_provenance_unsafe_requirement
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
@@ -1015,10 +1016,17 @@ class Orchestrator:
         self._record_output_validation(output, "dependency_analysis", dependency_analysis)
         if dependency_analysis.get("is_valid"):
             return
-        missing_entries = ", ".join(dependency_analysis.get("missing_manifest_entries") or []) or "unknown"
-        raise AgentExecutionError(
-            f"Dependency manifest validation failed: missing manifest entries for {missing_entries}"
-        )
+        validation_failures: list[str] = []
+        missing_entries = ", ".join(dependency_analysis.get("missing_manifest_entries") or [])
+        if missing_entries:
+            validation_failures.append(f"missing manifest entries for {missing_entries}")
+        provenance_violations = ", ".join(dependency_analysis.get("provenance_violations") or [])
+        if provenance_violations:
+            validation_failures.append(
+                f"unsupported dependency sources or installer directives: {provenance_violations}"
+            )
+        failure_summary = "; ".join(validation_failures) or "unknown dependency validation failure"
+        raise AgentExecutionError(f"Dependency manifest validation failed: {failure_summary}")
 
     def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
         code_artifact_content = self._artifact_content(output, ArtifactType.CODE)
@@ -2856,15 +2864,20 @@ class Orchestrator:
     def _analyze_dependency_manifest(self, manifest_content: str, code_analysis: Dict[str, Any]) -> Dict[str, Any]:
         declared_packages: list[str] = []
         normalized_declared_packages: set[str] = set()
+        provenance_violations: list[str] = []
         for raw_line in manifest_content.splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
-            package_name = re.split(r"\s*(?:==|>=|<=|~=|!=|>|<)", line, maxsplit=1)[0].strip()
+            package_name = extract_requirement_name(line)
             if not package_name:
+                if is_provenance_unsafe_requirement(line):
+                    provenance_violations.append(line)
                 continue
             declared_packages.append(package_name)
             normalized_declared_packages.add(self._normalize_package_name(package_name))
+            if is_provenance_unsafe_requirement(line):
+                provenance_violations.append(line)
 
         required_imports = sorted(code_analysis.get("third_party_imports") or []) if isinstance(code_analysis, dict) else []
         normalized_required_imports = {self._normalize_import_name(module_name) for module_name in required_imports}
@@ -2883,7 +2896,8 @@ class Orchestrator:
             "declared_packages": declared_packages,
             "missing_manifest_entries": missing_manifest_entries,
             "unused_manifest_entries": unused_manifest_entries,
-            "is_valid": not missing_manifest_entries,
+            "provenance_violations": provenance_violations,
+            "is_valid": not missing_manifest_entries and not provenance_violations,
         }
 
     def _build_dependency_validation_summary(self, dependency_analysis: Dict[str, Any]) -> str:
@@ -2899,6 +2913,9 @@ class Orchestrator:
         )
         lines.append(
             f"- Unused manifest entries: {', '.join(dependency_analysis.get('unused_manifest_entries') or ['none'])}"
+        )
+        lines.append(
+            f"- Provenance violations: {', '.join(dependency_analysis.get('provenance_violations') or ['none'])}"
         )
         lines.append(f"- Verdict: {'PASS' if dependency_analysis.get('is_valid') else 'FAIL'}")
         return "\n".join(lines)

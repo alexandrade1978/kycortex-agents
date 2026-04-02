@@ -1,10 +1,11 @@
 from collections import deque
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, cast
 from datetime import datetime, timezone
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.state_store import resolve_state_store
+from kycortex_agents.providers.base import redact_sensitive_data, redact_sensitive_text
 from kycortex_agents.types import (
     AgentOutput,
     ArtifactRecord,
@@ -42,6 +43,16 @@ def _migrate_project_state_v0_to_v1(data: Dict[str, Any]) -> Dict[str, Any]:
 _PROJECT_STATE_SCHEMA_MIGRATIONS: Dict[int, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     _LEGACY_PROJECT_STATE_SCHEMA_VERSION: _migrate_project_state_v0_to_v1,
 }
+
+
+def _redact_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    return redact_sensitive_text(value)
+
+
+def _redact_payload(value: Any) -> Any:
+    return redact_sensitive_data(value)
 
 @dataclass
 class Task:
@@ -930,7 +941,7 @@ class ProjectState:
 
         self._touch()
         state_store = resolve_state_store(self.state_file)
-        state_store.save(self.state_file, self._serialized_state())
+        state_store.save(self.state_file, cast(Dict[str, Any], _redact_payload(self._serialized_state())))
 
     @classmethod
     def load(cls, path: str) -> "ProjectState":
@@ -1222,30 +1233,35 @@ class ProjectState:
             resource_telemetry = self._task_resource_telemetry(task)
             if task_status == TaskStatus.FAILED:
                 failure = FailureRecord(
-                    message=task.output or task.last_error or "Task failed without output",
+                    message=_redact_text(task.output or task.last_error or "Task failed without output") or "Task failed without output",
                     error_type=task.last_error_type or "runtime_error",
                     category=task.last_error_category or FailureCategory.UNKNOWN.value,
                     retryable=task.attempts <= task.retry_limit,
-                    details={
-                        "attempts": task.attempts,
-                        "retry_limit": task.retry_limit,
-                        "error_type": task.last_error_type,
-                        "error_category": task.last_error_category,
-                        "provider_call": task.last_provider_call,
-                        "provider_budget": self._provider_budget_summary(task.last_provider_call),
-                        "started_at": task.started_at,
-                        "last_attempt_started_at": task.last_attempt_started_at,
-                        "last_resumed_at": task.last_resumed_at,
-                        "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
-                        "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
-                        "repair_context": task.repair_context,
-                        "repair_origin_task_id": task.repair_origin_task_id,
-                        "repair_attempt": task.repair_attempt,
-                        "history": task.history,
-                    },
+                    details=cast(
+                        Dict[str, Any],
+                        _redact_payload(
+                            {
+                                "attempts": task.attempts,
+                                "retry_limit": task.retry_limit,
+                                "error_type": task.last_error_type,
+                                "error_category": task.last_error_category,
+                                "provider_call": task.last_provider_call,
+                                "provider_budget": self._provider_budget_summary(task.last_provider_call),
+                                "started_at": task.started_at,
+                                "last_attempt_started_at": task.last_attempt_started_at,
+                                "last_resumed_at": task.last_resumed_at,
+                                "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
+                                "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
+                                "repair_context": task.repair_context,
+                                "repair_origin_task_id": task.repair_origin_task_id,
+                                "repair_attempt": task.repair_attempt,
+                                "history": task.history,
+                            }
+                        ),
+                    ),
                 )
             if task.output or task.output_payload:
-                output = self._build_agent_output(task)
+                output = self._redacted_agent_output(self._build_agent_output(task))
             results[task.id] = TaskResult(
                 task_id=task.id,
                 status=task_status,
@@ -1253,24 +1269,29 @@ class ProjectState:
                 output=output,
                 failure=failure,
                 resource_telemetry=resource_telemetry,
-                details={
-                    "attempts": task.attempts,
-                    "retry_limit": task.retry_limit,
-                    "required_for_acceptance": task.required_for_acceptance,
-                    "last_error": task.last_error,
-                    "last_error_type": task.last_error_type,
-                    "last_error_category": task.last_error_category,
-                    "last_provider_call": task.last_provider_call,
-                    "provider_budget": self._provider_budget_summary(task.last_provider_call),
-                    "repair_context": task.repair_context,
-                    "repair_origin_task_id": task.repair_origin_task_id,
-                    "repair_attempt": task.repair_attempt,
-                    "last_attempt_started_at": task.last_attempt_started_at,
-                    "last_resumed_at": task.last_resumed_at,
-                    "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
-                    "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
-                    "history": task.history,
-                },
+                details=cast(
+                    Dict[str, Any],
+                    _redact_payload(
+                        {
+                            "attempts": task.attempts,
+                            "retry_limit": task.retry_limit,
+                            "required_for_acceptance": task.required_for_acceptance,
+                            "last_error": task.last_error,
+                            "last_error_type": task.last_error_type,
+                            "last_error_category": task.last_error_category,
+                            "last_provider_call": task.last_provider_call,
+                            "provider_budget": self._provider_budget_summary(task.last_provider_call),
+                            "repair_context": task.repair_context,
+                            "repair_origin_task_id": task.repair_origin_task_id,
+                            "repair_attempt": task.repair_attempt,
+                            "last_attempt_started_at": task.last_attempt_started_at,
+                            "last_resumed_at": task.last_resumed_at,
+                            "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
+                            "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
+                            "history": task.history,
+                        }
+                    ),
+                ),
                 started_at=task.started_at,
                 completed_at=task.completed_at,
             )
@@ -1283,36 +1304,38 @@ class ProjectState:
         self._normalize_legacy_artifact_timestamps()
         workflow_telemetry = self._workflow_telemetry_summary()
         return ProjectSnapshot(
-            project_name=self.project_name,
-            goal=self.goal,
+            project_name=_redact_text(self.project_name) or "",
+            goal=_redact_text(self.goal) or "",
             workflow_status=self._workflow_status(),
             phase=self.phase,
             acceptance_policy=self.acceptance_policy,
             terminal_outcome=self.terminal_outcome,
             failure_category=self.failure_category,
             acceptance_criteria_met=self.acceptance_criteria_met,
-            acceptance_evaluation=dict(self.acceptance_evaluation),
+            acceptance_evaluation=cast(Dict[str, Any], _redact_payload(dict(self.acceptance_evaluation))),
             started_at=self.workflow_started_at,
             finished_at=self.workflow_finished_at,
             last_resumed_at=self.workflow_last_resumed_at,
             repair_cycle_count=self.repair_cycle_count,
             repair_max_cycles=self.repair_max_cycles,
             repair_budget_remaining=max(self.repair_max_cycles - self.repair_cycle_count, 0),
-            repair_history=list(self.repair_history),
+            repair_history=cast(List[Dict[str, Any]], _redact_payload(list(self.repair_history))),
             task_results=self.task_results(),
             workflow_telemetry=workflow_telemetry,
             decisions=[
-                DecisionRecord(
-                    topic=decision.get("topic", ""),
-                    decision=decision.get("decision", ""),
-                    rationale=decision.get("rationale", ""),
-                    created_at=decision.get("at", self._legacy_timestamp_fallback()),
-                    metadata=decision.get("metadata", {}),
+                self._redacted_decision_record(
+                    DecisionRecord(
+                        topic=decision.get("topic", ""),
+                        decision=decision.get("decision", ""),
+                        rationale=decision.get("rationale", ""),
+                        created_at=decision.get("at", self._legacy_timestamp_fallback()),
+                        metadata=decision.get("metadata", {}),
+                    )
                 )
                 for decision in self.decisions
             ],
-            artifacts=[self._deserialize_artifact_record(artifact) for artifact in self.artifacts],
-            execution_events=list(self.execution_events),
+            artifacts=[self._redacted_artifact_record(self._deserialize_artifact_record(artifact)) for artifact in self.artifacts],
+            execution_events=cast(List[Dict[str, Any]], _redact_payload(list(self.execution_events))),
             updated_at=self.updated_at,
         )
 
@@ -1879,6 +1902,34 @@ class ProjectState:
                 "assigned_to": task.assigned_to,
                 "status": task.status,
             },
+        )
+
+    def _redacted_agent_output(self, output: AgentOutput) -> AgentOutput:
+        return AgentOutput(
+            summary=_redact_text(output.summary) or "",
+            raw_content=_redact_text(output.raw_content) or "",
+            artifacts=[self._redacted_artifact_record(artifact) for artifact in output.artifacts],
+            decisions=[self._redacted_decision_record(decision) for decision in output.decisions],
+            metadata=cast(Dict[str, Any], _redact_payload(output.metadata)),
+        )
+
+    def _redacted_artifact_record(self, artifact: ArtifactRecord) -> ArtifactRecord:
+        return ArtifactRecord(
+            name=_redact_text(artifact.name) or "artifact",
+            artifact_type=artifact.artifact_type,
+            path=_redact_text(artifact.path),
+            content=_redact_text(artifact.content),
+            created_at=artifact.created_at,
+            metadata=cast(Dict[str, Any], _redact_payload(artifact.metadata)),
+        )
+
+    def _redacted_decision_record(self, decision: DecisionRecord) -> DecisionRecord:
+        return DecisionRecord(
+            topic=_redact_text(decision.topic) or "",
+            decision=_redact_text(decision.decision) or "",
+            rationale=_redact_text(decision.rationale) or "",
+            created_at=decision.created_at,
+            metadata=cast(Dict[str, Any], _redact_payload(decision.metadata)),
         )
 
     def _deserialize_agent_output(self, payload: Dict[str, Any]) -> AgentOutput:

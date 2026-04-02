@@ -326,6 +326,53 @@ def test_run_task_exposes_semantic_context(tmp_path):
     assert agent.last_context["module_filename"] == "code_implementation.py"
 
 
+def test_run_task_redacts_sensitive_agent_input_and_context(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo api_key=sk-secret-123456")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design with Authorization: Bearer sk-ant-secret-987654",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="api_key=sk-secret-123456",
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests password=hunter2",
+            description="Fix Authorization: Bearer sk-ant-secret-987654",
+            assigned_to="qa_tester",
+            repair_context={
+                "repair_owner": "qa_tester",
+                "failure_message": "api_key=sk-secret-123456",
+                "validation_summary": "Authorization: Bearer sk-ant-secret-987654",
+                "failed_output": "password=hunter2",
+            },
+        )
+    )
+
+    agent = RecordingAgent("TESTS FIXED")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    result = orchestrator.run_task(project.tasks[1], project)
+
+    assert result == "TESTS FIXED"
+    assert "sk-ant-secret-987654" not in agent.last_description
+    assert "[REDACTED]" in agent.last_description
+    assert agent.last_input.project_goal == "Build demo api_key=[REDACTED]"
+    assert agent.last_context["goal"] == "Build demo api_key=[REDACTED]"
+    assert agent.last_context["task"]["description"] == "Fix Authorization: Bearer [REDACTED]"
+    assert agent.last_context["architecture"] == "api_key=[REDACTED]"
+    assert agent.last_context["completed_tasks"]["arch"] == "api_key=[REDACTED]"
+    assert agent.last_context["repair_context"]["failure_message"] == "api_key=[REDACTED]"
+    assert agent.last_context["existing_tests"] == "password=[REDACTED]"
+    assert agent.last_context["test_validation_summary"] == "Authorization: Bearer [REDACTED]"
+    assert agent.last_context["snapshot"]["goal"] == "Build demo api_key=[REDACTED]"
+
+
 def test_run_task_exposes_generated_code_module_context_to_downstream_agents(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

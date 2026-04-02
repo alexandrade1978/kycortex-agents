@@ -686,6 +686,141 @@ def test_save_and_load_preserves_rich_artifact_records_sqlite(tmp_path):
     assert snapshot.artifacts[0].metadata["source"] == "qa_tester"
 
 
+@pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
+def test_save_redacts_secrets_from_persisted_state(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo api_key=sk-secret-123456",
+        state_file=str(state_path),
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement with Authorization: Bearer sk-ant-secret-987654",
+            assigned_to="code_engineer",
+        )
+    )
+    project.complete_task(
+        "code",
+        AgentOutput(
+            summary="Summary api_key=sk-secret-123456",
+            raw_content="api_key=sk-secret-123456\npassword=hunter2",
+            artifacts=[
+                ArtifactRecord(
+                    name="code_implementation",
+                    artifact_type=ArtifactType.CODE,
+                    path="artifacts/code.py",
+                    content="Authorization: Bearer sk-ant-secret-987654",
+                    metadata={"notes": "api_key=sk-secret-123456"},
+                )
+            ],
+            decisions=[
+                DecisionRecord(
+                    "security",
+                    "Do not persist api_key=sk-secret-123456",
+                    "Authorization: Bearer sk-ant-secret-987654",
+                )
+            ],
+            metadata={"diagnostic": "password=hunter2"},
+        ),
+    )
+    project.add_artifact_record(
+        ArtifactRecord(
+            name="audit",
+            artifact_type=ArtifactType.TEXT,
+            content="api_key=sk-secret-123456",
+            metadata={"detail": "Authorization: Bearer sk-ant-secret-987654"},
+        )
+    )
+    project._record_execution_event(
+        event="manual_audit",
+        details={"message": "password=hunter2", "provider_call": {"error_message": "api_key=sk-secret-123456"}},
+    )
+
+    project.save()
+    persisted = resolve_state_store(str(state_path)).load(str(state_path))
+
+    task_payload = persisted["tasks"][0]
+    assert persisted["goal"] == "Build demo api_key=[REDACTED]"
+    assert "sk-ant-secret-987654" not in task_payload["description"]
+    assert "[REDACTED]" in task_payload["description"]
+    assert "sk-secret-123456" not in task_payload["output"]
+    assert "hunter2" not in task_payload["output"]
+    assert "[REDACTED]" in task_payload["output_payload"]["raw_content"]
+    assert "sk-ant-secret-987654" not in task_payload["output_payload"]["artifacts"][0]["content"]
+    assert "[REDACTED]" in task_payload["output_payload"]["artifacts"][0]["content"]
+    assert "sk-secret-123456" not in persisted["artifacts"][0]["content"]
+    assert "[REDACTED]" in persisted["artifacts"][0]["content"]
+    assert "hunter2" not in persisted["execution_events"][-1]["details"]["message"]
+
+
+def test_snapshot_redacts_secrets_from_public_state_views():
+    project = ProjectState(project_name="Demo", goal="Build demo api_key=sk-secret-123456")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="api_key=sk-secret-123456",
+            output_payload={
+                "summary": "Summary api_key=sk-secret-123456",
+                "raw_content": "Authorization: Bearer sk-ant-secret-987654",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code.py",
+                        "content": "password=hunter2",
+                        "metadata": {"notes": "api_key=sk-secret-123456"},
+                    }
+                ],
+                "decisions": [
+                    {
+                        "topic": "security",
+                        "decision": "Authorization: Bearer sk-ant-secret-987654",
+                        "rationale": "password=hunter2",
+                    }
+                ],
+                "metadata": {"diagnostic": "api_key=sk-secret-123456"},
+            },
+        )
+    )
+    project.add_artifact_record(
+        ArtifactRecord(
+            name="audit",
+            artifact_type=ArtifactType.TEXT,
+            content="Authorization: Bearer sk-ant-secret-987654",
+            metadata={"detail": "password=hunter2"},
+        )
+    )
+    project.add_decision("security", "api_key=sk-secret-123456", "Authorization: Bearer sk-ant-secret-987654")
+    project._record_execution_event(event="manual_audit", details={"message": "password=hunter2"})
+
+    snapshot = project.snapshot()
+    result = snapshot.task_results["code"]
+
+    assert project.goal == "Build demo api_key=sk-secret-123456"
+    assert snapshot.goal == "Build demo api_key=[REDACTED]"
+    assert result.output is not None
+    assert "sk-ant-secret-987654" not in result.output.raw_content
+    assert "[REDACTED]" in result.output.raw_content
+    assert result.output.artifacts[0].content is not None
+    assert "hunter2" not in result.output.artifacts[0].content
+    assert "[REDACTED]" in result.output.artifacts[0].content
+    assert "sk-secret-123456" not in result.output.metadata["diagnostic"]
+    assert "[REDACTED]" in result.output.metadata["diagnostic"]
+    assert snapshot.artifacts[0].content is not None
+    assert "sk-ant-secret-987654" not in snapshot.artifacts[0].content
+    assert "[REDACTED]" in snapshot.artifacts[0].content
+    assert "sk-secret-123456" not in snapshot.decisions[0].decision
+    assert "[REDACTED]" in snapshot.decisions[0].decision
+    assert "hunter2" not in snapshot.execution_events[0]["details"]["message"]
+
+
 def test_snapshot_remains_backward_compatible_with_legacy_string_artifacts():
     project = ProjectState(project_name="Demo", goal="Build demo", artifacts=["legacy-report.md"])
 

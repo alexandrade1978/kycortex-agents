@@ -25,6 +25,7 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.providers.base import redact_sensitive_data, redact_sensitive_text
 from kycortex_agents.types import (
     AgentInput,
     AgentOutput,
@@ -1860,7 +1861,7 @@ class Orchestrator:
                     ctx["existing_dependency_manifest"] = repair_content
                 if "dependency_validation_summary" not in ctx and isinstance(validation_summary, str) and validation_summary.strip():
                     ctx["dependency_validation_summary"] = validation_summary
-        return ctx
+        return cast(Dict[str, Any], redact_sensitive_data(ctx))
 
     def _build_repair_instruction(self, task: Task, failure_category: str) -> str:
         instructions = {
@@ -5257,10 +5258,10 @@ class Orchestrator:
             task_description = "\n".join(repair_lines)
         return AgentInput(
             task_id=task.id,
-            task_title=task.title,
-            task_description=task_description,
-            project_name=project.project_name,
-            project_goal=project.goal,
+            task_title=redact_sensitive_text(task.title),
+            task_description=redact_sensitive_text(task_description),
+            project_name=redact_sensitive_text(project.project_name),
+            project_goal=redact_sensitive_text(project.goal),
             context=context,
         )
 

@@ -1057,6 +1057,67 @@ def test_resume_failed_tasks_records_workflow_resumed_for_additional_ids_without
     assert project.execution_events[-1]["details"]["task_ids"] == ["code__repair_1"]
 
 
+def test_pause_workflow_marks_snapshot_paused_and_suppresses_runnable_tasks():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+        )
+    )
+    project.mark_workflow_running()
+
+    changed = project.pause_workflow(reason="manual_operator_pause")
+    snapshot = project.snapshot()
+
+    assert changed is True
+    assert project.phase == WorkflowStatus.PAUSED.value
+    assert project.workflow_paused_at is not None
+    assert project.workflow_pause_reason == "manual_operator_pause"
+    assert snapshot.workflow_status == WorkflowStatus.PAUSED
+    assert project.runnable_tasks() == []
+    assert project.execution_events[-1]["event"] == "workflow_paused"
+    assert project.execution_events[-1]["details"]["reason"] == "manual_operator_pause"
+
+
+def test_resume_workflow_clears_pause_state_and_records_resume_summary():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+        )
+    )
+    project.mark_workflow_running()
+    project.pause_workflow(reason="manual_operator_pause")
+
+    changed = project.resume_workflow(reason="paused_workflow")
+    snapshot = project.snapshot()
+
+    assert changed is True
+    assert project.phase == "execution"
+    assert project.workflow_paused_at is None
+    assert project.workflow_pause_reason is None
+    assert project.workflow_last_resumed_at is not None
+    assert snapshot.workflow_status == WorkflowStatus.INIT
+    assert project.execution_events[-1]["event"] == "workflow_resumed"
+    assert project.execution_events[-1]["details"]["reason"] == "paused_workflow"
+    assert project.execution_events[-1]["details"]["task_ids"] == []
+    assert project.execution_events[-1]["details"]["provider_budget"] is None
+    assert snapshot.workflow_telemetry["resume_summary"] == {
+        "count": 1,
+        "reasons": {"paused_workflow": 1},
+        "task_count": 0,
+        "unique_task_count": 0,
+        "unique_task_ids": [],
+        "last_resumed_at": project.workflow_last_resumed_at,
+    }
+
+
 def test_resume_failed_tasks_without_failed_or_additional_ids_is_a_no_op():
     project = ProjectState(project_name="Demo", goal="Build demo")
 

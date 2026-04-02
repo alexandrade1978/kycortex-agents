@@ -91,6 +91,8 @@ class ProjectState:
     acceptance_evaluation: Dict[str, Any] = field(default_factory=dict)
     workflow_started_at: Optional[str] = None
     workflow_finished_at: Optional[str] = None
+    workflow_paused_at: Optional[str] = None
+    workflow_pause_reason: Optional[str] = None
     workflow_last_resumed_at: Optional[str] = None
     repair_cycle_count: int = 0
     repair_max_cycles: int = 0
@@ -268,6 +270,44 @@ class ProjectState:
                 self._sync_repair_origin_completion(t, provider_call)
                 self._touch(t.completed_at)
 
+    def is_workflow_paused(self) -> bool:
+        """Return whether the workflow is explicitly paused awaiting operator action."""
+
+        return self.phase == WorkflowStatus.PAUSED.value
+
+    def pause_workflow(self, *, reason: str) -> bool:
+        """Mark the workflow paused so new runnable tasks are not dispatched."""
+
+        if self._workflow_status() in {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}:
+            raise ValueError("Cannot pause a finished workflow")
+
+        paused_at = datetime.now(timezone.utc).isoformat()
+        pause_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "manual_pause"
+        self.phase = WorkflowStatus.PAUSED.value
+        self.workflow_finished_at = None
+        self.workflow_paused_at = paused_at
+        self.workflow_pause_reason = pause_reason
+        self._record_execution_event(
+            event="workflow_paused",
+            timestamp=paused_at,
+            status=self.phase,
+            details={"reason": pause_reason},
+        )
+        self._touch(paused_at)
+        return True
+
+    def resume_workflow(self, *, reason: str = "paused_workflow") -> bool:
+        """Resume a previously paused workflow and record resume metadata."""
+
+        if not self.is_workflow_paused():
+            return False
+
+        resumed_at = datetime.now(timezone.utc).isoformat()
+        resume_reason = reason.strip() if isinstance(reason, str) and reason.strip() else "paused_workflow"
+        self.phase = "execution"
+        self._record_workflow_resumed(resumed_at, [], reason=resume_reason)
+        return True
+
     def resume_interrupted_tasks(self) -> List[str]:
         """Re-queue tasks left running by an interrupted workflow execution."""
 
@@ -293,15 +333,7 @@ class ProjectState:
                 )
                 resumed_task_ids.append(task.id)
         if resumed_at is not None:
-            self.workflow_last_resumed_at = resumed_at
-            self.workflow_finished_at = None
-            self._record_execution_event(
-                event="workflow_resumed",
-                timestamp=resumed_at,
-                status=self.phase,
-                details={"reason": "interrupted_tasks", "task_ids": resumed_task_ids},
-            )
-            self._touch(resumed_at)
+            self._record_workflow_resumed(resumed_at, resumed_task_ids, reason="interrupted_tasks")
         return resumed_task_ids
 
     def resume_failed_tasks(
@@ -320,6 +352,7 @@ class ProjectState:
                 self._record_workflow_resumed(
                     resumed_at,
                     [task_id for task_id in additional_task_ids if isinstance(task_id, str) and task_id],
+                    reason="failed_workflow",
                 )
             return []
 
@@ -369,17 +402,19 @@ class ProjectState:
                 break
 
         resumed_ids = resumed_task_ids + [task_id for task_id in additional_task_ids or [] if task_id not in resumed_task_ids]
-        self._record_workflow_resumed(resumed_at, resumed_ids)
+        self._record_workflow_resumed(resumed_at, resumed_ids, reason="failed_workflow")
         return resumed_task_ids
 
-    def _record_workflow_resumed(self, resumed_at: str, task_ids: List[str]) -> None:
+    def _record_workflow_resumed(self, resumed_at: str, task_ids: List[str], *, reason: str) -> None:
         self.workflow_last_resumed_at = resumed_at
         self.workflow_finished_at = None
+        self.workflow_paused_at = None
+        self.workflow_pause_reason = None
         self._record_execution_event(
             event="workflow_resumed",
             timestamp=resumed_at,
             status=self.phase,
-            details={"reason": "failed_workflow", "task_ids": task_ids},
+            details={"reason": reason, "task_ids": task_ids},
         )
         self._touch(resumed_at)
 
@@ -670,6 +705,8 @@ class ProjectState:
         if self.workflow_started_at is None:
             self.workflow_started_at = started_at
         self.workflow_finished_at = None
+        self.workflow_paused_at = None
+        self.workflow_pause_reason = None
         self.phase = "execution"
         if acceptance_policy is not None:
             self.acceptance_policy = acceptance_policy
@@ -706,6 +743,8 @@ class ProjectState:
         finished_at = datetime.now(timezone.utc).isoformat()
         self.phase = phase
         self.workflow_finished_at = finished_at
+        self.workflow_paused_at = None
+        self.workflow_pause_reason = None
         if acceptance_policy is not None:
             self.acceptance_policy = acceptance_policy
         resolved_outcome = terminal_outcome or (
@@ -944,6 +983,8 @@ class ProjectState:
     def runnable_tasks(self) -> List[Task]:
         """Return pending tasks whose dependencies are already satisfied."""
 
+        if self.is_workflow_paused():
+            return []
         return [task for task in self.execution_plan() if self.is_task_ready(task)]
 
     def blocked_tasks(self) -> List[Task]:
@@ -1602,6 +1643,8 @@ class ProjectState:
         return round((finished_at - started_at).total_seconds() * 1000, 3)
 
     def _workflow_status(self) -> WorkflowStatus:
+        if self.is_workflow_paused():
+            return WorkflowStatus.PAUSED
         statuses = {task.status for task in self.tasks}
         if not self.tasks:
             return WorkflowStatus.INIT

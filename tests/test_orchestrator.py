@@ -89,6 +89,21 @@ class StructuredAgent:
         )
 
 
+class PausingAgent:
+    def __init__(self, responses: list[str], project: ProjectState, pause_reason: str):
+        self.responses = list(responses)
+        self.project = project
+        self.pause_reason = pause_reason
+        self.calls = 0
+
+    def run(self, task_description: str, context: dict[str, Any]) -> str:
+        response = self.responses[min(self.calls, len(self.responses) - 1)]
+        self.calls += 1
+        if self.calls == 1:
+            self.project.pause_workflow(reason=self.pause_reason)
+        return response
+
+
 class FakeHTTPResponse:
     def __init__(self, payload: str):
         self._payload = payload
@@ -8806,6 +8821,71 @@ def test_execute_workflow_resumes_interrupted_running_tasks(tmp_path):
     assert project.tasks[0].attempts == 2
     assert project.tasks[0].output == "ARCHITECTURE DOC"
     assert project.workflow_last_resumed_at is not None
+
+
+def test_execute_workflow_returns_without_failure_when_project_is_prepaused(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.pause_workflow(reason="manual_operator_pause")
+
+    agent = RecordingAgent("ARCHITECTURE DOC")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": agent}))
+
+    orchestrator.execute_workflow(project)
+
+    assert agent.last_input is None
+    assert project.phase == WorkflowStatus.PAUSED.value
+    assert project.workflow_finished_at is None
+    assert project.tasks[0].status == TaskStatus.PENDING.value
+    assert project.snapshot().workflow_status == WorkflowStatus.PAUSED
+
+
+def test_execute_workflow_can_pause_between_tasks_and_resume_later(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+    project.add_task(
+        Task(
+            id="docs",
+            title="Documentation",
+            description="Write the documentation",
+            assigned_to="architect",
+        )
+    )
+
+    pausing_agent = PausingAgent(["ARCHITECTURE DOC", "DOCUMENTATION"], project, "manual_operator_pause")
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": pausing_agent}))
+
+    orchestrator.execute_workflow(project)
+
+    assert pausing_agent.calls == 1
+    assert require_task(project, "arch").status == TaskStatus.DONE.value
+    assert require_task(project, "docs").status == TaskStatus.PENDING.value
+    assert project.phase == WorkflowStatus.PAUSED.value
+    assert project.workflow_finished_at is None
+
+    assert orchestrator.resume_workflow(project, reason="paused_workflow") is True
+    orchestrator.execute_workflow(project)
+
+    assert pausing_agent.calls == 2
+    assert [task.status for task in project.tasks] == [TaskStatus.DONE.value, TaskStatus.DONE.value]
+    assert project.phase == "completed"
+    assert project.terminal_outcome == WorkflowOutcome.COMPLETED.value
 
 
 def test_execute_workflow_rejects_dependency_cycles(tmp_path):

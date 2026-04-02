@@ -800,6 +800,49 @@ class Orchestrator:
             workflow_telemetry=workflow_telemetry,
         )
 
+    def pause_workflow(self, project: ProjectState, *, reason: str) -> bool:
+        """Pause a workflow so the orchestrator stops dispatching new runnable tasks."""
+
+        changed = project.pause_workflow(reason=reason)
+        if changed:
+            project.save()
+            self._log_event(
+                "info",
+                "workflow_paused",
+                project_name=project.project_name,
+                phase=project.phase,
+                reason=project.workflow_pause_reason,
+            )
+        return changed
+
+    def resume_workflow(self, project: ProjectState, *, reason: str = "paused_workflow") -> bool:
+        """Resume a paused workflow so execution can continue on the next run."""
+
+        changed = project.resume_workflow(reason=reason)
+        if changed:
+            project.save()
+            self._log_event(
+                "info",
+                "workflow_resumed",
+                project_name=project.project_name,
+                phase=project.phase,
+                reason=reason,
+            )
+        return changed
+
+    def _exit_if_workflow_paused(self, project: ProjectState) -> bool:
+        if not project.is_workflow_paused():
+            return False
+        project.save()
+        self._log_event(
+            "info",
+            "workflow_paused",
+            project_name=project.project_name,
+            phase=project.phase,
+            reason=project.workflow_pause_reason,
+        )
+        return True
+
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""
         execution_agent_name = self._execution_agent_name(task)
@@ -5616,7 +5659,6 @@ class Orchestrator:
         project.execution_plan()
         self._validate_agent_resolution(project)
         project.repair_max_cycles = self.config.workflow_max_repair_cycles
-        self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         resumed_task_ids = project.resume_interrupted_tasks()
         failed_task_ids = self._failed_task_ids_for_repair(project)
         if self.config.workflow_resume_policy == "resume_failed":
@@ -5690,10 +5732,14 @@ class Orchestrator:
         if resumed_task_ids:
             self._log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))
             project.save()
-        project.mark_workflow_running(
-            acceptance_policy=self.config.workflow_acceptance_policy,
-            repair_max_cycles=self.config.workflow_max_repair_cycles,
-        )
+        if self._exit_if_workflow_paused(project):
+            return
+        if project.workflow_started_at is None or project.phase != "execution":
+            project.mark_workflow_running(
+                acceptance_policy=self.config.workflow_acceptance_policy,
+                repair_max_cycles=self.config.workflow_max_repair_cycles,
+            )
+            self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
         while True:
             pending = project.pending_tasks()
             if not pending:
@@ -5713,6 +5759,8 @@ class Orchestrator:
                 project.save()
                 self._log_event("info", "workflow_completed", project_name=project.project_name, phase=project.phase)
                 break
+            if self._exit_if_workflow_paused(project):
+                return
             try:
                 runnable = project.runnable_tasks()
             except WorkflowDefinitionError:
@@ -5749,6 +5797,8 @@ class Orchestrator:
                     f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
                 )
             for task in runnable:
+                if self._exit_if_workflow_paused(project):
+                    return
                 try:
                     self.run_task(task, project)
                 except Exception as exc:

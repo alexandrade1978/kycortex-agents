@@ -1037,6 +1037,29 @@ def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
     assert persisted_path.read_text(encoding="utf-8") == "hello"
 
 
+def test_persist_artifacts_redacts_sensitive_content_before_disk_write(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    artifacts = [
+        ArtifactRecord(
+            name="credentials",
+            artifact_type=ArtifactType.TEXT,
+            content="api_key=sk-secret-123456\nAuthorization: Bearer sk-ant-secret-987654",
+            path="artifacts/credentials.txt",
+        )
+    ]
+
+    orchestrator._persist_artifacts(artifacts)
+
+    persisted_path = tmp_path / "output" / "artifacts" / "credentials.txt"
+    persisted_content = persisted_path.read_text(encoding="utf-8")
+
+    assert "sk-secret-123456" not in persisted_content
+    assert "sk-ant-secret-987654" not in persisted_content
+    assert persisted_content == "api_key=[REDACTED]\nAuthorization: Bearer [REDACTED]"
+    assert artifacts[0].content == persisted_content
+
+
 def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -8398,6 +8421,41 @@ def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):
     artifact = require_artifact(project)
     assert artifact["path"] == "artifacts/arch_output.txt"
     assert (tmp_path / "output" / "artifacts" / "arch_output.txt").read_text(encoding="utf-8") == "ARCHITECTURE DOC"
+
+
+def test_run_task_redacts_default_artifact_content_before_persisting_to_output_dir(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    from kycortex_agents.agents.base_agent import BaseAgent
+
+    class BaseArtifactAgent(BaseAgent):
+        def __init__(self, cfg):
+            super().__init__("Architect", "Architecture", cfg)
+
+        def run(self, task_description: str, context: dict) -> str:
+            return "api_key=sk-secret-123456\nAuthorization: Bearer sk-ant-secret-987654"
+
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": BaseArtifactAgent(config)}))
+
+    orchestrator.run_task(project.tasks[0], project)
+
+    artifact = require_artifact(project)
+    persisted_content = (tmp_path / "output" / "artifacts" / "arch_output.txt").read_text(encoding="utf-8")
+
+    assert project.tasks[0].output == "api_key=sk-secret-123456\nAuthorization: Bearer sk-ant-secret-987654"
+    assert artifact["content"] == "api_key=[REDACTED]\nAuthorization: Bearer [REDACTED]"
+    assert "sk-secret-123456" not in persisted_content
+    assert "sk-ant-secret-987654" not in persisted_content
+    assert persisted_content == artifact["content"]
 
 
 def test_run_task_writes_structured_artifact_content_to_relative_output_path(tmp_path):

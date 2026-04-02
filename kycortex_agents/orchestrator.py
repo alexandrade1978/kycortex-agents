@@ -1705,11 +1705,13 @@ class Orchestrator:
             content = artifact.content
             if not isinstance(content, str) or not content.strip():
                 continue
+            persisted_content = redact_sensitive_text(content)
             target_path = self._resolve_artifact_output_path(artifact)
             self._validate_artifact_output_path(target_path)
             target_path.parent.mkdir(parents=True, exist_ok=True)
             self._validate_artifact_output_path(target_path)
-            target_path.write_text(content, encoding="utf-8")
+            target_path.write_text(persisted_content, encoding="utf-8")
+            artifact.content = persisted_content
             artifact.path = self._artifact_record_path(target_path)
 
     def _resolve_artifact_output_path(self, artifact: ArtifactRecord) -> Path:

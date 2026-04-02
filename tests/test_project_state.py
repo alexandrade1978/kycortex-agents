@@ -6,7 +6,7 @@ from typing import Any, cast
 import pytest
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
-from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.memory.project_state import PROJECT_STATE_SCHEMA_VERSION, ProjectState, Task
 from kycortex_agents.memory.state_store import resolve_state_store
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, TaskStatus, WorkflowOutcome, WorkflowStatus
 
@@ -49,6 +49,7 @@ def test_save_and_load_project_state(tmp_path):
     assert loaded.tasks[0].id == "arch"
     assert loaded.updated_at is not None
     assert loaded.execution_events == []
+    assert loaded.schema_version == PROJECT_STATE_SCHEMA_VERSION
 
 
 def test_load_rejects_invalid_json(tmp_path):
@@ -99,6 +100,77 @@ def test_save_and_load_project_state_with_sqlite(tmp_path):
     assert loaded.project_name == "Demo"
     assert loaded.tasks[0].id == "arch"
     assert loaded.updated_at is not None
+    assert loaded.schema_version == PROJECT_STATE_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("state_filename", ["project_state.json", "project_state.sqlite"])
+def test_save_persists_current_schema_version(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))
+
+    project.save()
+
+    persisted = resolve_state_store(str(state_path)).load(str(state_path))
+
+    assert persisted["schema_version"] == PROJECT_STATE_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("state_filename", ["legacy-schema.json", "legacy-schema.sqlite"])
+def test_load_migrates_legacy_payloads_to_current_schema_version(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    legacy_payload = {
+        "project_name": "Legacy",
+        "goal": "Keep compatibility",
+        "tasks": [],
+        "decisions": [],
+        "artifacts": [],
+        "phase": "init",
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), legacy_payload)
+
+    loaded = ProjectState.load(str(state_path))
+    loaded.save()
+    persisted = resolve_state_store(str(state_path)).load(str(state_path))
+
+    assert loaded.schema_version == PROJECT_STATE_SCHEMA_VERSION
+    assert persisted["schema_version"] == PROJECT_STATE_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("state_filename", ["future-schema.json", "future-schema.sqlite"])
+def test_load_rejects_future_schema_versions(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    future_payload = {
+        "project_name": "Future",
+        "goal": "Reject unsupported versions",
+        "tasks": [],
+        "decisions": [],
+        "artifacts": [],
+        "schema_version": PROJECT_STATE_SCHEMA_VERSION + 1,
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), future_payload)
+
+    with pytest.raises(StatePersistenceError, match="newer than supported version"):
+        ProjectState.load(str(state_path))
+
+
+@pytest.mark.parametrize("state_filename", ["invalid-schema.json", "invalid-schema.sqlite"])
+def test_load_rejects_non_integer_schema_versions(tmp_path, state_filename):
+    state_path = tmp_path / state_filename
+    invalid_payload = {
+        "project_name": "Invalid",
+        "goal": "Reject invalid schema versions",
+        "tasks": [],
+        "decisions": [],
+        "artifacts": [],
+        "schema_version": "1",
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), invalid_payload)
+
+    with pytest.raises(StatePersistenceError, match="schema version is invalid"):
+        ProjectState.load(str(state_path))
 
 
 @pytest.mark.parametrize("state_filename", ["legacy.json", "legacy.sqlite"])

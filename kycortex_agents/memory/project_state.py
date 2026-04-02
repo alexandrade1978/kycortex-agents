@@ -1,6 +1,6 @@
 from collections import deque
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timezone
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
@@ -28,6 +28,20 @@ from kycortex_agents.types import (
     WorkflowStatus,
     WorkflowTelemetry,
 )
+
+PROJECT_STATE_SCHEMA_VERSION = 1
+_LEGACY_PROJECT_STATE_SCHEMA_VERSION = 0
+
+
+def _migrate_project_state_v0_to_v1(data: Dict[str, Any]) -> Dict[str, Any]:
+    migrated = dict(data)
+    migrated["schema_version"] = PROJECT_STATE_SCHEMA_VERSION
+    return migrated
+
+
+_PROJECT_STATE_SCHEMA_MIGRATIONS: Dict[int, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
+    _LEGACY_PROJECT_STATE_SCHEMA_VERSION: _migrate_project_state_v0_to_v1,
+}
 
 @dataclass
 class Task:
@@ -81,6 +95,7 @@ class ProjectState:
     repair_cycle_count: int = 0
     repair_max_cycles: int = 0
     repair_history: List[Dict[str, Any]] = field(default_factory=list)
+    schema_version: int = field(default=PROJECT_STATE_SCHEMA_VERSION, init=False)
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     state_file: str = "project_state.json"
 
@@ -751,24 +766,64 @@ class ProjectState:
 
         self._touch()
         state_store = resolve_state_store(self.state_file)
-        state_store.save(self.state_file, asdict(self))
+        state_store.save(self.state_file, self._serialized_state())
 
     @classmethod
     def load(cls, path: str) -> "ProjectState":
         """Load a project state from disk and normalize legacy persisted fields."""
 
-        data = resolve_state_store(path).load(path)
+        data = cls._migrate_persisted_state(resolve_state_store(path).load(path), path)
         tasks = [Task(**t) for t in data.pop("tasks", [])]
+        schema_version = data.pop("schema_version", PROJECT_STATE_SCHEMA_VERSION)
         try:
             obj = cls(**{k: v for k, v in data.items() if k != "tasks"})
         except TypeError as exc:
             raise StatePersistenceError(f"Project state data is invalid: {path}") from exc
         obj.tasks = tasks
+        obj.schema_version = schema_version
         obj.state_file = path
         obj._normalize_legacy_decision_timestamps()
         obj._normalize_legacy_artifact_timestamps()
         obj._infer_legacy_skip_reason_types()
         return obj
+
+    def _serialized_state(self) -> Dict[str, Any]:
+        self.schema_version = PROJECT_STATE_SCHEMA_VERSION
+        return asdict(self)
+
+    @classmethod
+    def _migrate_persisted_state(cls, data: Any, path: str) -> Dict[str, Any]:
+        if not isinstance(data, dict):
+            raise StatePersistenceError(f"Project state data is invalid: {path}")
+
+        raw_schema_version = data.get("schema_version", _LEGACY_PROJECT_STATE_SCHEMA_VERSION)
+        if type(raw_schema_version) is not int:
+            raise StatePersistenceError(f"Project state schema version is invalid: {path}")
+        if raw_schema_version < _LEGACY_PROJECT_STATE_SCHEMA_VERSION:
+            raise StatePersistenceError(f"Project state schema version is invalid: {path}")
+        if raw_schema_version > PROJECT_STATE_SCHEMA_VERSION:
+            raise StatePersistenceError(
+                f"Project state schema version {raw_schema_version} is newer than supported version {PROJECT_STATE_SCHEMA_VERSION}: {path}"
+            )
+
+        migrated = dict(data)
+        schema_version = raw_schema_version
+        while schema_version < PROJECT_STATE_SCHEMA_VERSION:
+            migration = _PROJECT_STATE_SCHEMA_MIGRATIONS.get(schema_version)
+            if migration is None:
+                raise StatePersistenceError(
+                    f"Project state schema version {schema_version} has no migration path: {path}"
+                )
+            migrated = migration(dict(migrated))
+            next_schema_version = migrated.get("schema_version")
+            if type(next_schema_version) is not int or next_schema_version <= schema_version:
+                raise StatePersistenceError(
+                    f"Project state schema migration did not advance the version: {path}"
+                )
+            schema_version = next_schema_version
+
+        migrated["schema_version"] = schema_version
+        return migrated
 
     def _normalize_legacy_decision_timestamps(self) -> None:
         normalized_decisions: List[Dict[str, Any]] = []

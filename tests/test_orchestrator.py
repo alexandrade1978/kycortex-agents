@@ -6650,6 +6650,29 @@ def test_build_generated_test_env_strips_credential_and_provider_markers(tmp_pat
     assert "HF_TOKEN" not in env
 
 
+def test_build_generated_test_env_strips_generic_secret_like_markers_from_sanitized_env(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    policy = config.execution_sandbox_policy()
+    policy.sanitized_env = {
+        "CUSTOM_API_TOKEN": "secret-token",
+        "DB_PASSWORD": "password123",
+        "PRIVATE_KEY_PATH": "/host/id_rsa",
+        "SERVICE_CLIENT_SECRET": "client-secret",
+        "TOKENIZERS_PARALLELISM": "false",
+        "APP_API_VERSION": "v1",
+    }
+
+    env = orchestrator._build_generated_test_env(tmp_path, policy)
+
+    assert "CUSTOM_API_TOKEN" not in env
+    assert "DB_PASSWORD" not in env
+    assert "PRIVATE_KEY_PATH" not in env
+    assert "SERVICE_CLIENT_SECRET" not in env
+    assert env["TOKENIZERS_PARALLELISM"] == "false"
+    assert env["APP_API_VERSION"] == "v1"
+
+
 def test_build_generated_test_env_strips_git_ssh_and_gnupg_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

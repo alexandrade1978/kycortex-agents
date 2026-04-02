@@ -770,6 +770,35 @@ module_spec.loader.exec_module(module)
 """
 
 
+_GENERIC_SECRET_ENV_TOKENS = {
+    "CREDENTIAL",
+    "CREDENTIALS",
+    "PASSWORD",
+    "PASSWD",
+    "SECRET",
+    "SECRETS",
+    "TOKEN",
+}
+
+_GENERIC_SECRET_ENV_TOKEN_PAIRS = {
+    frozenset({"ACCESS", "KEY"}),
+    frozenset({"API", "KEY"}),
+    frozenset({"AUTH", "TOKEN"}),
+    frozenset({"CLIENT", "SECRET"}),
+    frozenset({"PRIVATE", "KEY"}),
+    frozenset({"SESSION", "TOKEN"}),
+}
+
+
+def _looks_like_secret_env_var(env_name: str) -> bool:
+    tokens = {token for token in re.split(r"[^A-Za-z0-9]+", env_name.upper()) if token}
+    if not tokens:
+        return False
+    if _GENERIC_SECRET_ENV_TOKENS & tokens:
+        return True
+    return any(token_pair.issubset(tokens) for token_pair in _GENERIC_SECRET_ENV_TOKEN_PAIRS)
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -1548,6 +1577,9 @@ class Orchestrator:
                 env.pop(key, None)
         for key in list(env):
             if key.startswith(("AWS_", "AZURE_", "GCP_", "GOOGLE_", "HF_", "OLLAMA_")) or key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+                env.pop(key, None)
+        for key in list(env):
+            if _looks_like_secret_env_var(key):
                 env.pop(key, None)
         for key in list(env):
             if key.startswith(("GIT_", "SSH_")) or key == "GNUPGHOME":

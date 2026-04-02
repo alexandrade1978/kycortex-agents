@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers._error_classifier import is_retryable_http_status
-from kycortex_agents.providers.base import BaseLLMProvider
+from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_text
 
 
 class OllamaProvider(BaseLLMProvider):
@@ -36,6 +36,9 @@ class OllamaProvider(BaseLLMProvider):
     def _health_check_timeout(self) -> float:
         return min(self.config.timeout_seconds, 5.0)
 
+    def _public_base_url(self) -> str:
+        return redact_sensitive_text(str(self.config.base_url or ""))
+
     def _read_health_payload(self) -> dict[str, Any]:
         timeout_seconds = self._health_check_timeout()
         request = Request(self._health_endpoint(), method="GET")
@@ -46,29 +49,29 @@ class OllamaProvider(BaseLLMProvider):
             self._last_call_metadata = None
             error_type = ProviderTransientError if is_retryable_http_status(exc.code) else AgentExecutionError
             raise error_type(
-                f"Ollama health check failed at {self.config.base_url} with HTTP {exc.code}"
+                f"Ollama health check failed at {self._public_base_url()} with HTTP {exc.code}"
             ) from exc
         except (TimeoutError, socket.timeout) as exc:
             self._last_call_metadata = None
             raise ProviderTransientError(
-                f"Ollama server is not responding at {self.config.base_url} (health check timed out after {timeout_seconds:g} seconds)"
+                f"Ollama server is not responding at {self._public_base_url()} (health check timed out after {timeout_seconds:g} seconds)"
             ) from exc
         except (URLError, OSError) as exc:
             self._last_call_metadata = None
             raise ProviderTransientError(
-                f"Ollama server is not responding at {self.config.base_url}"
+                f"Ollama server is not responding at {self._public_base_url()}"
             ) from exc
         try:
             payload = json.loads(raw_payload)
         except json.JSONDecodeError as exc:
             self._last_call_metadata = None
             raise AgentExecutionError(
-                f"Ollama health check returned an invalid JSON response at {self.config.base_url}"
+                f"Ollama health check returned an invalid JSON response at {self._public_base_url()}"
             ) from exc
         if not isinstance(payload, dict):
             self._last_call_metadata = None
             raise AgentExecutionError(
-                f"Ollama health check returned an invalid payload shape at {self.config.base_url}"
+                f"Ollama health check returned an invalid payload shape at {self._public_base_url()}"
             )
         return payload
 
@@ -101,7 +104,7 @@ class OllamaProvider(BaseLLMProvider):
                 "retryable": False,
                 "backend_reachable": True,
                 "model_ready": False,
-                "base_url": self.config.base_url,
+                "base_url": self._public_base_url(),
                 "error_type": "AgentExecutionError",
                 "error_message": (
                     f"Ollama health check did not confirm configured model '{self.config.llm_model}'"
@@ -116,7 +119,7 @@ class OllamaProvider(BaseLLMProvider):
             "active_check": True,
             "backend_reachable": True,
             "model_ready": True,
-            "base_url": self.config.base_url,
+            "base_url": self._public_base_url(),
             "timeout_seconds": round(self._health_check_timeout(), 6),
             "latency_ms": round((completed_at - started_at) * 1000, 3),
         }
@@ -167,7 +170,7 @@ class OllamaProvider(BaseLLMProvider):
         except (URLError, OSError) as exc:
             self._last_call_metadata = None
             raise ProviderTransientError(
-                f"Ollama server is not responding at {self.config.base_url}"
+                f"Ollama server is not responding at {self._public_base_url()}"
             ) from exc
         except json.JSONDecodeError as exc:
             self._last_call_metadata = None

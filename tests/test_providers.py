@@ -1042,6 +1042,23 @@ def test_ollama_provider_health_check_returns_structured_success_snapshot(tmp_pa
     assert require_number(snapshot["latency_ms"]) >= 0
 
 
+def test_ollama_provider_health_check_redacts_base_url_userinfo(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="llama3",
+        base_url="http://alice:secret-pass@example.com:11434",
+    )
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload='{"models": [{"name": "llama3:latest"}]}'),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["base_url"] == "http://[REDACTED]:[REDACTED]@example.com:11434"
+
+
 def test_ollama_provider_health_check_reports_configured_model_not_ready(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -1371,6 +1388,27 @@ def test_ollama_provider_rejects_generation_connection_failure_after_preflight(t
         provider.generate("system", "message")
 
     assert exc_info.type is ProviderTransientError
+
+
+def test_ollama_provider_redacts_base_url_userinfo_in_direct_errors(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="llama3",
+        base_url="http://alice:secret-pass@example.com:11434",
+    )
+    provider = OllamaProvider(
+        config,
+        request_opener=build_ollama_opener(payload=['{"models": []}'], error=[None, OSError("down")]),
+    )
+
+    with pytest.raises(ProviderTransientError) as exc_info:
+        provider.generate("system", "message")
+
+    rendered = str(exc_info.value)
+    assert "alice" not in rendered
+    assert "secret-pass" not in rendered
+    assert rendered == "Ollama server is not responding at http://[REDACTED]:[REDACTED]@example.com:11434"
 
 
 def test_ollama_provider_metadata_is_none_before_calls(tmp_path):

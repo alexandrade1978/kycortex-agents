@@ -1,4 +1,6 @@
 from kycortex_agents import KYCortexConfig, ProjectState, Task
+from kycortex_agents.provider_matrix import _public_path_label
+from urllib.parse import urlsplit
 
 
 def build_demo_project() -> ProjectState:
@@ -53,7 +55,22 @@ def build_provider_configs() -> dict[str, KYCortexConfig]:
     }
 
 
-if __name__ == "__main__":
+def _public_base_url_label(base_url: str | None) -> str | None:
+    if base_url is None:
+        return None
+
+    parsed = urlsplit(base_url)
+    hostname = parsed.hostname
+    if not hostname:
+        return _public_path_label(base_url)
+
+    host_label = f"[{hostname}]" if ":" in hostname else hostname
+    if parsed.port is None:
+        return host_label
+    return f"{host_label}:{parsed.port}"
+
+
+def main() -> None:
     project = build_demo_project()
     configs = build_provider_configs()
 
@@ -61,12 +78,16 @@ if __name__ == "__main__":
     for provider_name, config in configs.items():
         print(f"Provider: {provider_name}")
         print(f"  model: {config.llm_model}")
-        print(f"  output_dir: {config.output_dir}")
+        print(f"  output_dir: {_public_path_label(config.output_dir or '')}")
         print(f"  task_count: {len(project.tasks)}")
         if provider_name == "ollama":
-            print(f"  base_url: {config.base_url}")
+            print(f"  base_url: {_public_base_url_label(config.base_url)}")
         else:
             print("  api_key: provided explicitly for demo purposes")
         print()
 
     print("Use one of these configurations with Orchestrator(config).execute_workflow(project).")
+
+
+if __name__ == "__main__":
+    main()

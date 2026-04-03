@@ -774,6 +774,60 @@ def test_provider_matrix_parser_defaults_to_all_supported_providers():
     assert module.resolve_requested_providers(args.providers) == ["anthropic", "ollama", "openai"]
 
 
+def test_multi_provider_example_limits_public_output_dir_and_base_url(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_multi_provider_public_output_test",
+        "examples/example_multi_provider.py",
+    )
+
+    monkeypatch.setattr(
+        module,
+        "build_provider_configs",
+        lambda: {
+            "openai": type(
+                "Config",
+                (),
+                {
+                    "llm_model": "gpt-4o-mini",
+                    "output_dir": "/srv/customer-secret-root/openai",
+                    "base_url": None,
+                },
+            )(),
+            "anthropic": type(
+                "Config",
+                (),
+                {
+                    "llm_model": "claude-haiku-4-5-20251001",
+                    "output_dir": "/srv/customer-secret-root/anthropic",
+                    "base_url": None,
+                },
+            )(),
+            "ollama": type(
+                "Config",
+                (),
+                {
+                    "llm_model": "qwen2.5-coder:7b",
+                    "output_dir": "/srv/customer-secret-root/ollama",
+                    "base_url": "http://operator:secret@localhost:11435/private/api",
+                },
+            )(),
+        },
+    )
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+
+    assert "  output_dir: openai" in captured
+    assert "  output_dir: anthropic" in captured
+    assert "  output_dir: ollama" in captured
+    assert "  base_url: localhost:11435" in captured
+    assert all("customer-secret-root" not in line for line in captured)
+    assert all("operator" not in line for line in captured)
+    assert all("secret" not in line for line in captured)
+    assert all("private/api" not in line for line in captured)
+
+
 def test_provider_matrix_parser_accepts_ollama_runtime_overrides():
     module = _load_example_module(
         "example_provider_matrix_validation_parser_ollama_override_test",

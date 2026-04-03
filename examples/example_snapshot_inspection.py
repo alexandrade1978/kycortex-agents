@@ -193,12 +193,12 @@ def main() -> None:
     print(snapshot.workflow_status)
     print("\nTask results:")
     for task_id, task_result in snapshot.task_results.items():
-        provider_call = task_result.details.get("last_provider_call")
+        resource_telemetry = task_result.resource_telemetry
         print(
             f"- {task_id}: status={task_result.status.value}, "
             f"summary={task_result.output.summary if task_result.output else None}, "
-            f"provider={provider_call['provider'] if provider_call else None}, "
-            f"model={provider_call['model'] if provider_call else None}"
+            f"provider={resource_telemetry['provider']}, "
+            f"model={resource_telemetry['model']}"
         )
 
     print("\nWorkflow telemetry:")

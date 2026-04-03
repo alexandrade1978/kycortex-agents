@@ -222,12 +222,11 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
         {
             "status": type("FakeStatus", (), {"value": "done"})(),
             "output": type("FakeOutput", (), {"summary": "Architecture snapshot ready"})(),
-            "details": {
-                "last_provider_call": {
-                    "provider": "openai",
-                    "model": "snapshot-openai-demo",
-                }
+            "resource_telemetry": {
+                "provider": "openai",
+                "model": "snapshot-openai-demo",
             },
+            "details": {"has_provider_call": True},
         },
     )()
     snapshot = type(

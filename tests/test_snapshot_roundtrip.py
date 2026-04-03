@@ -226,7 +226,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert arch_result.output.artifacts[0].metadata["source"] == "architect"
     assert arch_result.output.decisions[0].decision == "Persist snapshots"
     assert arch_result.output.decisions[0].metadata["priority"] == "high"
-    assert arch_result.details["last_provider_call"]["usage"]["total_tokens"] == 15
+    assert "last_provider_call" not in arch_result.details
     assert arch_result.resource_telemetry == {
         "has_provider_call": True,
         "provider": "openai",
@@ -241,7 +241,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.failure is not None
     assert review_result.failure.message == "Review failed"
     assert review_result.failure.error_type == "ValueError"
-    assert review_result.failure.details["provider_call"]["provider"] == "ollama"
+    assert "provider_call" not in review_result.failure.details
     assert review_result.failure.details["last_resumed_at"] == "2026-03-22T10:07:00+00:00"
     assert review_result.details["history"][1]["event"] == "failed"
     assert review_result.resource_telemetry == {

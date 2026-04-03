@@ -2062,7 +2062,7 @@ def test_snapshot_preserves_failure_record_for_failed_task_without_output():
     assert result.failure.message == "provider timeout"
     assert result.failure.error_type == "TimeoutError"
     assert result.failure.category == "unknown"
-    assert result.failure.details["provider_call"]["provider"] == "openai"
+    assert "provider_call" not in result.failure.details
     assert result.resource_telemetry["has_provider_call"] is True
     assert result.resource_telemetry["provider"] == "openai"
 
@@ -2884,7 +2884,7 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.output.summary == "Skipped because dependency 'arch' failed"
     assert result.details["has_provider_call"] is False
     assert result.details["last_error_present"] is True
-    assert result.details["last_provider_call"] is None
+    assert "last_provider_call" not in result.details
     assert "last_error_type" not in result.details
     assert result.details["last_attempt_started_at"] is None
     assert result.details["last_resumed_at"] is None

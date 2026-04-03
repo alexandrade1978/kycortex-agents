@@ -186,11 +186,10 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert code_provider_call["usage"]["cache_creation_input_tokens"] == 3
     assert review_provider_call["provider"] == "ollama"
     assert review_provider_call["timing"]["total_duration_ms"] == 125.0
-    assert snapshot.task_results["arch"].details["last_provider_call"]["model"] == "gpt-4o"
-    assert snapshot.task_results["code"].details["last_provider_call"]["model"] == "claude-3-5-sonnet"
-    assert snapshot.task_results["review"].details["last_provider_call"]["model"] == "llama3"
     assert snapshot.task_results["arch"].resource_telemetry["provider"] == "openai"
     assert snapshot.task_results["arch"].resource_telemetry["model"] == "gpt-4o"
+    assert snapshot.task_results["code"].resource_telemetry["model"] == "claude-3-5-sonnet"
+    assert snapshot.task_results["review"].resource_telemetry["model"] == "llama3"
     assert snapshot.task_results["arch"].resource_telemetry["provider_duration_ms"] == arch_provider_call["duration_ms"]
     assert snapshot.task_results["arch"].resource_telemetry["usage"] == {
         "input_tokens": 10,
@@ -200,6 +199,9 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert snapshot.task_results["review"].resource_telemetry["provider_duration_ms"] == review_provider_call["duration_ms"]
     assert snapshot.task_results["arch"].details["has_provider_call"] is True
     assert snapshot.task_results["arch"].details["last_error_present"] is False
+    assert "last_provider_call" not in snapshot.task_results["arch"].details
+    assert "last_provider_call" not in snapshot.task_results["code"].details
+    assert "last_provider_call" not in snapshot.task_results["review"].details
     assert "provider_budget" not in snapshot.task_results["arch"].details
     assert snapshot.workflow_telemetry["tasks_with_provider_calls"] == 3
     assert snapshot.workflow_telemetry["final_providers"] == ["anthropic", "ollama", "openai"]
@@ -316,8 +318,8 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert failed_provider_call["error_type"] == "ProviderTransientError"
     assert failed_provider_call["retryable"] is True
     assert failed_provider_call["error_message"] == "OpenAI provider failed to call the model API"
-    assert arch_failure.details["provider_call"]["model"] == "gpt-4o"
     assert arch_failure.details["has_provider_call"] is True
+    assert "provider_call" not in arch_failure.details
     assert "provider_budget" not in arch_failure.details
     assert snapshot.task_results["arch"].resource_telemetry["has_provider_call"] is True
     assert snapshot.task_results["arch"].resource_telemetry["provider"] == "openai"
@@ -440,7 +442,8 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
         }
     ]
     assert provider_call["provider_health"]["openai"]["status"] == "degraded"
-    assert snapshot.task_results["arch"].details["last_provider_call"]["provider"] == "anthropic"
+    assert snapshot.task_results["arch"].resource_telemetry["provider"] == "anthropic"
+    assert "last_provider_call" not in snapshot.task_results["arch"].details
     assert snapshot.workflow_telemetry["observed_providers"] == ["anthropic", "openai"]
     assert snapshot.workflow_telemetry["final_providers"] == ["anthropic"]
     assert snapshot.workflow_telemetry["fallback_summary"] == {
@@ -500,5 +503,7 @@ def test_provider_metadata_survives_save_load_round_trip(tmp_path, state_filenam
     reloaded_code = require_task(reloaded, "code")
     assert require_provider_call(reloaded_arch)["provider"] == "openai"
     assert require_provider_call(reloaded_code)["provider"] == "anthropic"
-    assert snapshot.task_results["arch"].details["last_provider_call"]["usage"]["total_tokens"] == 15
-    assert snapshot.task_results["code"].details["last_provider_call"]["usage"]["total_tokens"] == 20
+    assert snapshot.task_results["arch"].resource_telemetry["usage"]["total_tokens"] == 15
+    assert snapshot.task_results["code"].resource_telemetry["usage"]["total_tokens"] == 20
+    assert "last_provider_call" not in snapshot.task_results["arch"].details
+    assert "last_provider_call" not in snapshot.task_results["code"].details

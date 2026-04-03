@@ -1800,22 +1800,21 @@ class ProjectState:
             event for event in self.execution_events
             if isinstance(event, dict) and event.get("event") == "workflow_resumed"
         ]
-        reasons: Dict[str, int] = {}
+        reasons: set[str] = set()
         resumed_task_ids: List[str] = []
         for event in resumed_events:
             raw_details = event.get("details")
             details: Dict[str, Any] = raw_details if isinstance(raw_details, dict) else {}
             reason = details.get("reason")
             if isinstance(reason, str) and reason:
-                reasons[reason] = reasons.get(reason, 0) + 1
+                reasons.add(reason)
             resumed_task_ids.extend(self._string_list(details.get("task_ids")))
-        unique_task_ids = sorted(set(resumed_task_ids))
+        unique_task_count = len(set(resumed_task_ids))
         return {
             "count": len(resumed_events),
-            "reasons": dict(sorted(reasons.items())),
+            "reason_count": len(reasons),
             "task_count": len(resumed_task_ids),
-            "unique_task_count": len(unique_task_ids),
-            "unique_task_ids": unique_task_ids,
+            "unique_task_count": unique_task_count,
             "last_resumed_at": self.workflow_last_resumed_at,
         }
 

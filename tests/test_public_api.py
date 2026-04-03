@@ -291,10 +291,9 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
         },
         "resume_summary": {
             "count": 0,
-            "reasons": {},
+            "reason_count": 0,
             "task_count": 0,
             "unique_task_count": 0,
-            "unique_task_ids": [],
             "last_resumed_at": None,
         },
         "repair_summary": {

@@ -158,10 +158,9 @@ class WorkflowResumeSummary(TypedDict):
     """Workflow resume activity summary embedded in aggregate telemetry."""
 
     count: int
-    reasons: Dict[str, int]
+    reason_count: int
     task_count: int
     unique_task_count: int
-    unique_task_ids: List[str]
     last_resumed_at: Optional[str]
 
 
@@ -291,10 +290,9 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         },
         "resume_summary": {
             "count": 0,
-            "reasons": {},
+            "reason_count": 0,
             "task_count": 0,
             "unique_task_count": 0,
-            "unique_task_ids": [],
             "last_resumed_at": None,
         },
         "repair_summary": {

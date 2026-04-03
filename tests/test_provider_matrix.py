@@ -683,10 +683,9 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     }
     assert summary["workflow_telemetry"]["resume_summary"] == {
         "count": 1,
-        "reasons": {"failed_workflow": 1},
+        "reason_count": 1,
         "task_count": 1,
         "unique_task_count": 1,
-        "unique_task_ids": ["tests__repair_1"],
         "last_resumed_at": "2026-03-28T12:00:00+00:00",
     }
     assert summary["workflow_telemetry"]["repair_summary"] == {

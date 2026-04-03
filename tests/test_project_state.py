@@ -1155,10 +1155,9 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
     assert project.execution_events[-1]["details"]["task_ids"] == ["review", "arch__repair_1"]
     assert snapshot.workflow_telemetry["resume_summary"] == {
         "count": 1,
-        "reasons": {"failed_workflow": 1},
+        "reason_count": 1,
         "task_count": 2,
         "unique_task_count": 2,
-        "unique_task_ids": ["arch__repair_1", "review"],
         "last_resumed_at": project.workflow_last_resumed_at,
     }
 
@@ -1654,10 +1653,9 @@ def test_resume_workflow_clears_pause_state_and_records_resume_summary():
     assert project.execution_events[-1]["details"]["provider_budget"] is None
     assert snapshot.workflow_telemetry["resume_summary"] == {
         "count": 1,
-        "reasons": {"paused_workflow": 1},
+        "reason_count": 1,
         "task_count": 0,
         "unique_task_count": 0,
-        "unique_task_ids": [],
         "last_resumed_at": project.workflow_last_resumed_at,
     }
 
@@ -2162,8 +2160,8 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     telemetry = project.snapshot().workflow_telemetry
 
     assert telemetry["resume_summary"]["count"] == 1
-    assert telemetry["resume_summary"]["reasons"] == {}
-    assert telemetry["resume_summary"]["unique_task_ids"] == []
+    assert telemetry["resume_summary"]["reason_count"] == 0
+    assert telemetry["resume_summary"]["unique_task_count"] == 0
     assert telemetry["provider_summary"]["openai"]["task_count"] == 1
     assert telemetry["provider_summary"]["openai"]["success_count"] == 0
     assert telemetry["provider_summary"]["openai"]["failure_count"] == 0

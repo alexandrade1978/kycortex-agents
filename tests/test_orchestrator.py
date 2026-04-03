@@ -969,6 +969,35 @@ def test_execute_generated_module_import_reports_import_time_errors(tmp_path):
     assert "TypeError: non-default argument 'value' follows default argument" in result["summary"]
 
 
+def test_execute_generated_module_import_redacts_sensitive_subprocess_output(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    monkeypatch.setattr(
+        orchestrator_module.subprocess,
+        "run",
+        lambda *args, **kwargs: CompletedProcessStub(
+            returncode=1,
+            stdout="api_key=sk-secret-123456",
+            stderr="Authorization: Bearer sk-ant-secret-987654",
+        ),
+    )
+
+    result = orchestrator._execute_generated_module_import(
+        "generated_module.py",
+        "def ok():\n    return 1\n",
+    )
+
+    assert result["ran"] is True
+    assert result["returncode"] == 1
+    assert "sk-secret-123456" not in result["stdout"]
+    assert "sk-ant-secret-987654" not in result["stderr"]
+    assert "sk-ant-secret-987654" not in result["summary"]
+    assert "[REDACTED]" in result["stdout"]
+    assert "[REDACTED]" in result["stderr"]
+    assert "[REDACTED]" in result["summary"]
+
+
 def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monkeypatch):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -7256,6 +7285,78 @@ def test_run_task_fails_qa_tester_when_generated_tests_fail_pytest_execution(tmp
     assert project.tasks[1].output_payload is not None
     assert project.tasks[1].output_payload["raw_content"].startswith("from code_implementation import run")
     assert project.tasks[1].output_payload["metadata"]["validation"]["test_execution"]["returncode"] != 0
+
+
+def test_run_task_redacts_sensitive_pytest_validation_output_in_live_state(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def run():\n    return 1\n",
+            output_payload={
+                "summary": "def run():",
+                "raw_content": "def run():\n    return 1\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def run():\n    return 1\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    monkeypatch.setattr(
+        orchestrator_module.subprocess,
+        "run",
+        lambda *args, **kwargs: CompletedProcessStub(
+            returncode=1,
+            stdout=(
+                "FAILED tests_generated.py::test_run - Authorization: Bearer sk-ant-secret-987654\n"
+                "E   password=hunter2\n"
+            ),
+            stderr="api_key=sk-secret-123456",
+        ),
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import run\n\n"
+        "def test_run():\n"
+        "    assert run() == 2\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    with pytest.raises(AgentExecutionError, match="Generated test validation failed: pytest failed"):
+        orchestrator.run_task(project.tasks[1], project)
+
+    assert project.tasks[1].output is not None
+    assert "sk-secret-123456" not in project.tasks[1].output
+    assert "sk-ant-secret-987654" not in project.tasks[1].output
+    test_execution = project.tasks[1].output_payload["metadata"]["validation"]["test_execution"]
+    assert "sk-secret-123456" not in test_execution["stderr"]
+    assert "hunter2" not in test_execution["stdout"]
+    assert "sk-ant-secret-987654" not in test_execution["summary"]
+    assert "[REDACTED]" in test_execution["stdout"]
+    assert "[REDACTED]" in test_execution["stderr"]
+    assert "[REDACTED]" in test_execution["summary"]
 
 
 def test_generated_test_subprocess_strips_inherited_coverage_env(tmp_path, monkeypatch):

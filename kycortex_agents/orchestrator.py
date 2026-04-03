@@ -1162,7 +1162,7 @@ class Orchestrator:
                 result["ran"] = True
                 result["returncode"] = -1
                 result["summary"] = f"module import timed out after {wall_clock_seconds:g} seconds"
-                return result
+                return self._redact_validation_execution_result(result)
 
         result["ran"] = True
         result["returncode"] = completed.returncode
@@ -1183,7 +1183,7 @@ class Orchestrator:
             "max_wall_clock_seconds": sandbox_policy.max_wall_clock_seconds,
             "max_memory_mb": sandbox_policy.max_memory_mb,
         }
-        return result
+        return self._redact_validation_execution_result(result)
 
     def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:
         raw_code_analysis = context.get("code_analysis")
@@ -1469,10 +1469,10 @@ class Orchestrator:
         }
         if not result["available"]:
             result["summary"] = "pytest is not installed in the current environment"
-            return result
+            return self._redact_validation_execution_result(result)
         if not code_content.strip() or not test_content.strip():
             result["summary"] = "generated code or tests were empty"
-            return result
+            return self._redact_validation_execution_result(result)
 
         sandbox_policy = self.config.execution_sandbox_policy()
         wall_clock_seconds = sandbox_policy.max_wall_clock_seconds
@@ -1515,7 +1515,7 @@ class Orchestrator:
                 result["summary"] = (
                     f"pytest timed out after {wall_clock_seconds:g} seconds"
                 )
-                return result
+                return self._redact_validation_execution_result(result)
 
         result["ran"] = True
         result["returncode"] = completed.returncode
@@ -1530,7 +1530,7 @@ class Orchestrator:
             "max_wall_clock_seconds": sandbox_policy.max_wall_clock_seconds,
             "max_memory_mb": sandbox_policy.max_memory_mb,
         }
-        return result
+        return self._redact_validation_execution_result(result)
 
     def _build_generated_test_env(
         self,
@@ -1725,6 +1725,10 @@ class Orchestrator:
             if line.startswith("=") or line.startswith("FAILED") or line.startswith("ERROR") or "passed" in line:
                 return line
         return combined_lines[-1][:240]
+
+    @staticmethod
+    def _redact_validation_execution_result(result: Dict[str, Any]) -> Dict[str, Any]:
+        return cast(Dict[str, Any], redact_sensitive_data(result))
 
     def _sanitize_provider_call_metadata(self, provider_call: Dict[str, Any]) -> Dict[str, Any]:
         return cast(Dict[str, Any], redact_sensitive_data(dict(provider_call)))

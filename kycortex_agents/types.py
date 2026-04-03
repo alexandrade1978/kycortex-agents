@@ -207,8 +207,8 @@ class WorkflowFallbackSummary(TypedDict):
 
     task_count: int
     entry_count: int
-    by_provider: Dict[str, int]
-    by_status: Dict[str, int]
+    provider_count: int
+    status_count: int
 
 
 class WorkflowErrorSummary(TypedDict):
@@ -320,8 +320,8 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "fallback_summary": {
             "task_count": 0,
             "entry_count": 0,
-            "by_provider": {},
-            "by_status": {},
+            "provider_count": 0,
+            "status_count": 0,
         },
         "error_summary": {
             "final_error_count": 0,

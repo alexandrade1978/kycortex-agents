@@ -445,8 +445,8 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
     assert snapshot.workflow_telemetry["fallback_summary"] == {
         "task_count": 1,
         "entry_count": 1,
-        "by_provider": {"openai": 1},
-        "by_status": {"failed_health_check": 1},
+        "provider_count": 1,
+        "status_count": 1,
     }
     assert snapshot.workflow_telemetry["provider_health_summary"] == {
         "anthropic": {

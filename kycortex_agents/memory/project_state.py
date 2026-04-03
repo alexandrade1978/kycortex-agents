@@ -1557,8 +1557,8 @@ class ProjectState:
         retry_attempt_count = 0
         fallback_task_count = 0
         fallback_entry_count = 0
-        fallback_by_provider: Dict[str, int] = {}
-        fallback_by_status: Dict[str, int] = {}
+        fallback_providers: set[str] = set()
+        fallback_statuses: set[str] = set()
         final_error_count = 0
         fallback_error_count = 0
 
@@ -1673,10 +1673,10 @@ class ProjectState:
                 fallback_provider = entry.get("provider")
                 if isinstance(fallback_provider, str) and fallback_provider:
                     observed_providers.add(fallback_provider)
-                    fallback_by_provider[fallback_provider] = fallback_by_provider.get(fallback_provider, 0) + 1
+                    fallback_providers.add(fallback_provider)
                 fallback_status = entry.get("status")
                 if isinstance(fallback_status, str) and fallback_status:
-                    fallback_by_status[fallback_status] = fallback_by_status.get(fallback_status, 0) + 1
+                    fallback_statuses.add(fallback_status)
                 fallback_error_type = entry.get("error_type")
                 if isinstance(fallback_error_type, str) and fallback_error_type:
                     fallback_error_count += 1
@@ -1742,8 +1742,8 @@ class ProjectState:
             "fallback_summary": {
                 "task_count": fallback_task_count,
                 "entry_count": fallback_entry_count,
-                "by_provider": dict(sorted(fallback_by_provider.items())),
-                "by_status": dict(sorted(fallback_by_status.items())),
+                "provider_count": len(fallback_providers),
+                "status_count": len(fallback_statuses),
             },
             "error_summary": {
                 "final_error_count": final_error_count,

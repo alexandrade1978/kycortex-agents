@@ -41,19 +41,6 @@ def _public_path_label(path: str) -> str:
     return normalized.rsplit("/", 1)[-1]
 
 
-def _provider_budget_summary(provider_call: Mapping[str, Any] | None) -> dict[str, Any] | None:
-    if not isinstance(provider_call, Mapping):
-        return None
-    return {
-        "total_calls": provider_call.get("provider_call_count"),
-        "calls_by_provider": dict(provider_call.get("provider_call_counts_by_provider") or {}),
-        "max_calls_per_agent": provider_call.get("provider_max_calls_per_agent"),
-        "max_calls_by_provider": dict(provider_call.get("provider_max_calls_per_provider") or {}),
-        "remaining_calls": provider_call.get("provider_remaining_calls"),
-        "remaining_calls_by_provider": dict(provider_call.get("provider_remaining_calls_by_provider") or {}),
-    }
-
-
 def _ollama_base_url(base_url_override: str | None, *, environ: Mapping[str, str] | None = None) -> str:
     base_url = resolve_provider_base_url("ollama", base_url_override, environ=environ)
     if not isinstance(base_url, str) or not base_url.strip():
@@ -404,9 +391,11 @@ def summarize_workflow_run(
                 "assigned_to": task.assigned_to,
                 "attempts": task.attempts,
                 "last_error": task.last_error,
-                "last_error_type": task.last_error_type,
+                "last_error_present": bool(
+                    task.last_error or task.last_error_type or task.last_error_category
+                ),
                 "last_error_category": task.last_error_category,
-                "provider_budget": _provider_budget_summary(task.last_provider_call),
+                "has_provider_call": isinstance(task.last_provider_call, Mapping),
                 "repair_origin_task_id": task.repair_origin_task_id,
                 "repair_attempt": task.repair_attempt,
             }

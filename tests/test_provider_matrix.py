@@ -942,7 +942,13 @@ def test_provider_matrix_summary_redacts_public_error_and_project_name_fields(tm
     assert summary["project_name"] == "Demo api_key=[REDACTED]"
     assert summary["state_file"] == "project_state.json"
     assert summary["output_dir"] == "output"
-    assert summary["task_summaries"][0]["last_error"] == "Authorization: Bearer [REDACTED]"
+    task_summary = summary["task_summaries"][0]
+    assert task_summary["last_error"] == "Authorization: Bearer [REDACTED]"
+    assert task_summary["last_error_present"] is True
+    assert task_summary["last_error_category"] == "task_execution"
+    assert task_summary["has_provider_call"] is False
+    assert "last_error_type" not in task_summary
+    assert "provider_budget" not in task_summary
     assert "sk-secret-123456" not in json.dumps(summary)
     assert "sk-ant-secret-987654" not in json.dumps(summary)
 
@@ -992,7 +998,7 @@ def test_write_summary_json_redacts_sensitive_strings_before_persisting(tmp_path
     assert "sk-ant-secret-987654" not in summary_path.read_text(encoding="utf-8")
 
 
-def test_provider_matrix_summary_includes_provider_budget(tmp_path):
+def test_provider_matrix_summary_limits_public_task_metadata(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 
     project = ProjectState(
@@ -1025,14 +1031,12 @@ def test_provider_matrix_summary_includes_provider_budget(tmp_path):
         output_dir=str(tmp_path / "output"),
     )
 
-    assert summary["task_summaries"][0]["provider_budget"] == {
-        "total_calls": 2,
-        "calls_by_provider": {"openai": 1, "anthropic": 1},
-        "max_calls_per_agent": 3,
-        "max_calls_by_provider": {"openai": 2},
-        "remaining_calls": 1,
-        "remaining_calls_by_provider": {"openai": 1},
-    }
+    task_summary = summary["task_summaries"][0]
+
+    assert task_summary["has_provider_call"] is True
+    assert task_summary["last_error_present"] is False
+    assert "provider_budget" not in task_summary
+    assert "last_error_type" not in task_summary
 
 
 def test_provider_matrix_resolve_model_handles_override_and_ollama_probe(monkeypatch):

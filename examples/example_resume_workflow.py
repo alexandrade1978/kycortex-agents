@@ -1,4 +1,9 @@
 from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task
+from kycortex_agents.provider_matrix import _public_path_label
+
+
+STATE_PATH = "./output_resume_demo/project_state.sqlite"
+OUTPUT_DIR = "./output_resume_demo"
 
 
 class RecordingAgent(BaseAgent):
@@ -10,11 +15,11 @@ class RecordingAgent(BaseAgent):
         return self.response
 
 
-if __name__ == "__main__":
-    state_path = "./output_resume_demo/project_state.sqlite"
+def main() -> None:
+    state_path = STATE_PATH
     config = KYCortexConfig(
         project_name="resume-demo",
-        output_dir="./output_resume_demo",
+        output_dir=OUTPUT_DIR,
         workflow_resume_policy="resume_failed",
     )
 
@@ -58,5 +63,9 @@ if __name__ == "__main__":
 
     print("Reloaded workflow summary:")
     print(reloaded.summary())
-    print(f"State file: {state_path}")
+    print(f"State file: {_public_path_label(state_path)}")
     print(f"Workflow resumed at: {reloaded.workflow_last_resumed_at}")
+
+
+if __name__ == "__main__":
+    main()

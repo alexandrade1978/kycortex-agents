@@ -179,6 +179,37 @@ def test_simple_project_example_limits_public_output_dir(capsys, monkeypatch):
     assert all("customer-secret-root" not in line for line in captured)
 
 
+def test_resume_workflow_example_limits_public_state_file_path(tmp_path, capsys, monkeypatch):
+    module = _load_example_module(
+        "example_resume_workflow_public_state_file_test",
+        "examples/example_resume_workflow.py",
+    )
+
+    output_dir = tmp_path / "customer-secret-root" / "output_resume_demo"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    state_path = output_dir / "project_state.sqlite"
+
+    class FakeOrchestrator:
+        def __init__(self, config, registry=None):
+            self.config = config
+            self.registry = registry
+
+        def execute_workflow(self, project):
+            project.workflow_last_resumed_at = "2026-04-03T03:30:00+00:00"
+            return None
+
+    monkeypatch.setattr(module, "STATE_PATH", str(state_path))
+    monkeypatch.setattr(module, "OUTPUT_DIR", str(output_dir))
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+
+    assert "State file: project_state.sqlite" in captured
+    assert all("customer-secret-root" not in line for line in captured)
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

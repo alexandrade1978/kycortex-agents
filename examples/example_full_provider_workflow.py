@@ -2,6 +2,7 @@ import argparse
 
 from kycortex_agents.provider_matrix import (
     DEFAULT_PROVIDER_MODELS,
+    _public_path_label,
     build_full_workflow_config,
     build_full_workflow_project,
     execute_empirical_validation_workflow,
@@ -97,7 +98,7 @@ def main() -> None:
     print(f"phase={project.phase}")
     print(f"terminal_outcome={project.terminal_outcome}")
     print(f"repair_cycle_count={project.repair_cycle_count}")
-    print(f"output_dir={output_dir}")
+    print(f"output_dir={_public_path_label(output_dir)}")
     for task in project.tasks:
         print(f"task.{task.id}.status={task.status}")
 

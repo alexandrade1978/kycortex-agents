@@ -45,6 +45,58 @@ def test_full_provider_workflow_build_config_accepts_resume_controls(tmp_path):
     assert config.workflow_max_repair_cycles == 2
 
 
+def test_full_provider_workflow_example_limits_public_output_dir(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_full_provider_workflow_public_output_test",
+        "examples/example_full_provider_workflow.py",
+    )
+
+    output_dir = "/srv/customer-secret-root/full-provider-run"
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description="Design the architecture",
+        assigned_to="architect",
+        status="done",
+    )
+    project = type(
+        "FakeProject",
+        (),
+        {
+            "phase": "completed",
+            "terminal_outcome": "completed",
+            "repair_cycle_count": 0,
+            "tasks": [task],
+        },
+    )()
+
+    class FakeParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                provider="ollama",
+                model=None,
+                output_dir=output_dir,
+                failure_policy="continue",
+                resume_policy="resume_failed",
+                max_repair_cycles=1,
+                summary_json=None,
+            )
+
+    monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
+    monkeypatch.setattr(module, "resolve_model", lambda provider, model: "qwen2.5-coder:7b")
+    monkeypatch.setattr(module, "build_config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(module, "build_project", lambda output_dir, provider: project)
+    monkeypatch.setattr(module, "execute_empirical_validation_workflow", lambda config, project: None)
+    monkeypatch.setattr(module, "summarize_workflow_run", lambda *args, **kwargs: {})
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+
+    assert "output_dir=full-provider-run" in captured
+    assert all("customer-secret-root" not in line for line in captured)
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

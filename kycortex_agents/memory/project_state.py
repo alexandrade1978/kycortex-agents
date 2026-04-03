@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional, Callable, cast
 from datetime import datetime, timezone
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
-from kycortex_agents.memory.state_store import resolve_state_store
+from kycortex_agents.memory.state_store import _public_state_path_label, resolve_state_store
 from kycortex_agents.providers.base import redact_sensitive_data, redact_sensitive_text
 from kycortex_agents.types import (
     AgentOutput,
@@ -1041,7 +1041,9 @@ class ProjectState:
         try:
             obj = cls(**{k: v for k, v in data.items() if k != "tasks"})
         except TypeError as exc:
-            raise StatePersistenceError(f"Project state data is invalid: {path}") from exc
+            raise StatePersistenceError(
+                f"Project state data is invalid: {_public_state_path_label(path)}"
+            ) from exc
         obj.tasks = tasks
         obj.schema_version = schema_version
         obj.state_file = path
@@ -1057,16 +1059,24 @@ class ProjectState:
     @classmethod
     def _migrate_persisted_state(cls, data: Any, path: str) -> Dict[str, Any]:
         if not isinstance(data, dict):
-            raise StatePersistenceError(f"Project state data is invalid: {path}")
+            raise StatePersistenceError(
+                f"Project state data is invalid: {_public_state_path_label(path)}"
+            )
 
         raw_schema_version = data.get("schema_version", _LEGACY_PROJECT_STATE_SCHEMA_VERSION)
         if type(raw_schema_version) is not int:
-            raise StatePersistenceError(f"Project state schema version is invalid: {path}")
+            raise StatePersistenceError(
+                f"Project state schema version is invalid: {_public_state_path_label(path)}"
+            )
         if raw_schema_version < _LEGACY_PROJECT_STATE_SCHEMA_VERSION:
-            raise StatePersistenceError(f"Project state schema version is invalid: {path}")
+            raise StatePersistenceError(
+                f"Project state schema version is invalid: {_public_state_path_label(path)}"
+            )
         if raw_schema_version > PROJECT_STATE_SCHEMA_VERSION:
             raise StatePersistenceError(
-                f"Project state schema version {raw_schema_version} is newer than supported version {PROJECT_STATE_SCHEMA_VERSION}: {path}"
+                "Project state schema version "
+                f"{raw_schema_version} is newer than supported version {PROJECT_STATE_SCHEMA_VERSION}: "
+                f"{_public_state_path_label(path)}"
             )
 
         migrated = dict(data)
@@ -1075,13 +1085,15 @@ class ProjectState:
             migration = _PROJECT_STATE_SCHEMA_MIGRATIONS.get(schema_version)
             if migration is None:
                 raise StatePersistenceError(
-                    f"Project state schema version {schema_version} has no migration path: {path}"
+                    "Project state schema version "
+                    f"{schema_version} has no migration path: {_public_state_path_label(path)}"
                 )
             migrated = migration(dict(migrated))
             next_schema_version = migrated.get("schema_version")
             if type(next_schema_version) is not int or next_schema_version <= schema_version:
                 raise StatePersistenceError(
-                    f"Project state schema migration did not advance the version: {path}"
+                    "Project state schema migration did not advance the version: "
+                    f"{_public_state_path_label(path)}"
                 )
             schema_version = next_schema_version
 

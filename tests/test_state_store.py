@@ -121,6 +121,34 @@ def test_json_state_store_rejects_missing_and_invalid_files(tmp_path):
         store.load(str(invalid_path))
 
 
+def test_state_store_error_messages_limit_public_path_to_filename(tmp_path, monkeypatch):
+    public_dir = tmp_path / "customer-secret-root"
+    public_dir.mkdir()
+    state_path = public_dir / "project_state.json"
+    state_path.write_text("{not-json", encoding="utf-8")
+
+    json_store = JsonStateStore()
+    with pytest.raises(StatePersistenceError) as json_exc_info:
+        json_store.load(str(state_path))
+
+    assert "project_state.json" in str(json_exc_info.value)
+    assert "customer-secret-root" not in str(json_exc_info.value)
+
+    sqlite_path = public_dir / "project_state.sqlite"
+    sqlite_store = SqliteStateStore()
+
+    def failing_connect(path):
+        raise sqlite3.Error("boom")
+
+    monkeypatch.setattr("kycortex_agents.memory.state_store.sqlite3.connect", failing_connect)
+
+    with pytest.raises(StatePersistenceError) as sqlite_exc_info:
+        sqlite_store.save(str(sqlite_path), {"project_name": "Demo"})
+
+    assert "project_state.sqlite" in str(sqlite_exc_info.value)
+    assert "customer-secret-root" not in str(sqlite_exc_info.value)
+
+
 def test_sqlite_state_store_save_and_load_round_trip(tmp_path):
     state_path = tmp_path / "state" / "project_state.sqlite"
     store = SqliteStateStore()

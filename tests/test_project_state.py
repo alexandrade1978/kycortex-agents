@@ -67,6 +67,29 @@ def test_load_rejects_missing_file(tmp_path):
         ProjectState.load(str(state_path))
 
 
+@pytest.mark.parametrize("state_filename", ["invalid-schema.json", "invalid-schema.sqlite"])
+def test_project_state_load_errors_limit_public_path_to_filename(tmp_path, state_filename):
+    public_dir = tmp_path / "tenant-private-root"
+    public_dir.mkdir()
+    state_path = public_dir / state_filename
+    invalid_payload = {
+        "project_name": "Invalid",
+        "goal": "Reject invalid schema versions",
+        "tasks": [],
+        "decisions": [],
+        "artifacts": [],
+        "schema_version": "1",
+    }
+
+    resolve_state_store(str(state_path)).save(str(state_path), invalid_payload)
+
+    with pytest.raises(StatePersistenceError) as exc_info:
+        ProjectState.load(str(state_path))
+
+    assert state_filename in str(exc_info.value)
+    assert "tenant-private-root" not in str(exc_info.value)
+
+
 def test_save_writes_valid_json(tmp_path):
     state_path = tmp_path / "project_state.json"
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))

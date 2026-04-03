@@ -16,6 +16,13 @@ from kycortex_agents.exceptions import StatePersistenceError
 __all__ = ["BaseStateStore", "JsonStateStore", "SqliteStateStore", "resolve_state_store"]
 
 
+def _public_state_path_label(path: str) -> str:
+    normalized = path.replace("\\", "/").rstrip("/")
+    if not normalized:
+        return ""
+    return normalized.rsplit("/", 1)[-1]
+
+
 class BaseStateStore(ABC):
     """Abstract persistence backend for saving and loading project state payloads."""
 
@@ -50,16 +57,22 @@ class JsonStateStore(BaseStateStore):
                 os.remove(temp_path)
             except OSError:
                 pass
-            raise StatePersistenceError(f"Failed to save project state to {path}") from exc
+            raise StatePersistenceError(
+                f"Failed to save project state to {_public_state_path_label(path)}"
+            ) from exc
 
     def load(self, path: str) -> Dict[str, Any]:
         try:
             with open(path) as file_handle:
                 return json.load(file_handle)
         except FileNotFoundError as exc:
-            raise StatePersistenceError(f"Project state file not found: {path}") from exc
+            raise StatePersistenceError(
+                f"Project state file not found: {_public_state_path_label(path)}"
+            ) from exc
         except json.JSONDecodeError as exc:
-            raise StatePersistenceError(f"Project state file is invalid JSON: {path}") from exc
+            raise StatePersistenceError(
+                f"Project state file is invalid JSON: {_public_state_path_label(path)}"
+            ) from exc
 
 
 class SqliteStateStore(BaseStateStore):
@@ -94,23 +107,33 @@ class SqliteStateStore(BaseStateStore):
                         (payload, datetime.now(timezone.utc).isoformat()),
                     )
         except sqlite3.Error as exc:
-            raise StatePersistenceError(f"Failed to save project state to {path}") from exc
+            raise StatePersistenceError(
+                f"Failed to save project state to {_public_state_path_label(path)}"
+            ) from exc
 
     def load(self, path: str) -> Dict[str, Any]:
         if not os.path.exists(path):
-            raise StatePersistenceError(f"Project state file not found: {path}")
+            raise StatePersistenceError(
+                f"Project state file not found: {_public_state_path_label(path)}"
+            )
         try:
             with closing(sqlite3.connect(path)) as connection:
                 row = connection.execute("SELECT payload FROM project_state WHERE id = 1").fetchone()
         except sqlite3.Error as exc:
-            raise StatePersistenceError(f"Project state file is invalid SQLite: {path}") from exc
+            raise StatePersistenceError(
+                f"Project state file is invalid SQLite: {_public_state_path_label(path)}"
+            ) from exc
 
         if row is None:
-            raise StatePersistenceError(f"Project state file is invalid SQLite: {path}")
+            raise StatePersistenceError(
+                f"Project state file is invalid SQLite: {_public_state_path_label(path)}"
+            )
         try:
             return json.loads(row[0])
         except json.JSONDecodeError as exc:
-            raise StatePersistenceError(f"Project state file is invalid SQLite: {path}") from exc
+            raise StatePersistenceError(
+                f"Project state file is invalid SQLite: {_public_state_path_label(path)}"
+            ) from exc
 
 
 def resolve_state_store(path: str) -> BaseStateStore:

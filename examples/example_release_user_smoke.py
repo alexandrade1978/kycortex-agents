@@ -216,7 +216,7 @@ def main() -> None:
         if artifact_paths:
             print("artifacts=")
             for path in artifact_paths:
-                print(path)
+                print(_public_path_label(path))
         preview = _preview_text(task.output or "")
         if preview:
             print("preview=")

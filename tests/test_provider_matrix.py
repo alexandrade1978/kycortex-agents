@@ -1134,7 +1134,9 @@ def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkey
     captured = capsys.readouterr().out.splitlines()
 
     assert "output_dir=release-user-smoke" in captured
+    assert "budget_planner.py" in captured
     assert "validated_artifact=budget_planner.py" in captured
+    assert all("artifacts/budget_planner.py" not in line for line in captured)
     assert all("customer-secret-root" not in line for line in captured)
 
 

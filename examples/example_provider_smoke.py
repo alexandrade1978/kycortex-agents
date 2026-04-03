@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
+from kycortex_agents.provider_matrix import _public_path_label
 
 
 DEFAULT_MODELS = {
@@ -81,7 +82,7 @@ def main() -> None:
     print(f"provider={provider}")
     print(f"model={model}")
     print(f"phase={project.phase}")
-    print(f"output_dir={output_dir}")
+    print(f"output_dir={_public_path_label(output_dir)}")
     print(f"task_status={task.status}")
     print("preview=")
     print((task.output or "")[:400])

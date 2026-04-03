@@ -97,6 +97,58 @@ def test_full_provider_workflow_example_limits_public_output_dir(capsys, monkeyp
     assert all("customer-secret-root" not in line for line in captured)
 
 
+def test_provider_smoke_example_limits_public_output_dir(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_provider_smoke_public_output_test",
+        "examples/example_provider_smoke.py",
+    )
+
+    output_dir = "/srv/customer-secret-root/provider-smoke"
+    task = Task(
+        id="arch",
+        title="Architecture",
+        description="Produce a concise architecture note.",
+        assigned_to="architect",
+        status="done",
+        output="A short architecture preview.",
+    )
+    project = type(
+        "FakeProject",
+        (),
+        {
+            "phase": "completed",
+            "tasks": [task],
+        },
+    )()
+
+    class FakeParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                provider="ollama",
+                model=None,
+                output_dir=output_dir,
+            )
+
+    class FakeOrchestrator:
+        def __init__(self, config):
+            self.config = config
+
+        def execute_workflow(self, project):
+            return None
+
+    monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
+    monkeypatch.setattr(module, "build_config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(module, "build_project", lambda output_dir, provider: project)
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+
+    assert "output_dir=provider-smoke" in captured
+    assert all("customer-secret-root" not in line for line in captured)
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

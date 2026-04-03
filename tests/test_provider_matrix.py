@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import json
 import sys
@@ -823,6 +824,62 @@ def test_provider_matrix_parser_rejects_unsupported_provider():
         )
     else:  # pragma: no cover - defensive guard
         raise AssertionError("Expected unsupported provider to raise SystemExit")
+
+
+def test_provider_matrix_example_limits_public_report_paths_and_base_url(tmp_path, monkeypatch, capsys):
+    module = _load_example_module(
+        "example_provider_matrix_validation_public_report_test",
+        "examples/example_provider_matrix_validation.py",
+    )
+
+    output_root = tmp_path / "customer-secret-root" / "provider-runs"
+    summary_path = tmp_path / "customer-secret-root" / "reports" / "provider_matrix_summary.json"
+
+    class FakeParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                providers=["ollama"],
+                output_root=str(output_root),
+                failure_policy="continue",
+                resume_policy="resume_failed",
+                max_repair_cycles=1,
+                summary_json=str(summary_path),
+                ollama_base_url="http://operator:secret@localhost:11435/private/api",
+                ollama_num_ctx=16384,
+                max_tokens=3200,
+            )
+
+    monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
+    monkeypatch.setattr(module, "resolve_requested_providers", lambda providers: providers)
+    monkeypatch.setattr(
+        module,
+        "run_provider",
+        lambda provider, **kwargs: {
+            "provider": provider,
+            "available": True,
+            "status": "completed",
+            "summary": {
+                "phase": "completed",
+                "terminal_outcome": "completed",
+                "repair_cycle_count": 0,
+            },
+        },
+    )
+
+    module.main()
+
+    persisted_text = summary_path.read_text(encoding="utf-8")
+    persisted = json.loads(persisted_text)
+    captured = capsys.readouterr().out.splitlines()
+
+    assert persisted["output_root"] == "provider-runs"
+    assert persisted["ollama_base_url"] == "localhost:11435"
+    assert "customer-secret-root" not in persisted_text
+    assert "operator" not in persisted_text
+    assert "secret" not in persisted_text
+    assert "private/api" not in persisted_text
+    assert "summary_json=provider_matrix_summary.json" in captured
+    assert all("customer-secret-root" not in line for line in captured)
 
 
 def test_provider_matrix_example_passes_completion_budget_override(tmp_path, monkeypatch):

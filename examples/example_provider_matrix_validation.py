@@ -1,8 +1,10 @@
 import argparse
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from kycortex_agents.provider_matrix import (
     DEFAULT_PROVIDER_MODELS,
+    _public_path_label,
     build_full_workflow_config,
     build_full_workflow_project,
     execute_empirical_validation_workflow,
@@ -11,6 +13,21 @@ from kycortex_agents.provider_matrix import (
     summarize_workflow_run,
     write_summary_json,
 )
+
+
+def _public_ollama_base_url_label(base_url: str | None) -> str | None:
+    if base_url is None:
+        return None
+
+    parsed = urlsplit(base_url)
+    hostname = parsed.hostname
+    if not hostname:
+        return _public_path_label(base_url)
+
+    host_label = f"[{hostname}]" if ":" in hostname else hostname
+    if parsed.port is None:
+        return host_label
+    return f"{host_label}:{parsed.port}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -182,15 +199,15 @@ def main() -> None:
         "failure_policy": args.failure_policy,
         "resume_policy": args.resume_policy,
         "max_repair_cycles": args.max_repair_cycles,
-        "ollama_base_url": args.ollama_base_url,
+        "ollama_base_url": _public_ollama_base_url_label(args.ollama_base_url),
         "ollama_num_ctx": args.ollama_num_ctx,
         "max_tokens": args.max_tokens,
-        "output_root": output_root,
+        "output_root": _public_path_label(output_root),
     }
     summary_path = args.summary_json or str(Path(output_root) / "provider_matrix_summary.json")
     write_summary_json(report, summary_path)
 
-    print(f"summary_json={summary_path}")
+    print(f"summary_json={_public_path_label(summary_path)}")
     for result in results:
         print(f"provider={result['provider']}")
         print(f"available={result['available']}")

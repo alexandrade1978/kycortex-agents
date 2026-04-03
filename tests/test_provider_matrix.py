@@ -694,11 +694,10 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "max_cycles": 1,
         "budget_remaining": 0,
         "history_count": 1,
-        "reasons": {},
-        "last_reason": None,
-        "failure_categories": {},
+        "reason_count": 0,
+        "last_reason_present": False,
+        "failure_category_count": 0,
         "failed_task_count": 1,
-        "failed_task_ids": ["tests"],
     }
 
 

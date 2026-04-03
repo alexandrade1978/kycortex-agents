@@ -172,11 +172,10 @@ class WorkflowRepairSummary(TypedDict):
     max_cycles: int
     budget_remaining: int
     history_count: int
-    reasons: Dict[str, int]
-    last_reason: Optional[str]
-    failure_categories: Dict[str, int]
+    reason_count: int
+    last_reason_present: bool
+    failure_category_count: int
     failed_task_count: int
-    failed_task_ids: List[str]
 
 
 class WorkflowProviderSummary(TypedDict):
@@ -303,11 +302,10 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "max_cycles": 0,
             "budget_remaining": 0,
             "history_count": 0,
-            "reasons": {},
-            "last_reason": None,
-            "failure_categories": {},
+            "reason_count": 0,
+            "last_reason_present": False,
+            "failure_category_count": 0,
             "failed_task_count": 0,
-            "failed_task_ids": [],
         },
         "final_providers": [],
         "observed_providers": [],

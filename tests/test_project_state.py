@@ -1827,11 +1827,10 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
         "max_cycles": 2,
         "budget_remaining": 1,
         "history_count": 1,
-        "reasons": {"resume_failed_tasks": 1},
-        "last_reason": "resume_failed_tasks",
-        "failure_categories": {"test_validation": 1},
+        "reason_count": 1,
+        "last_reason_present": True,
+        "failure_category_count": 1,
         "failed_task_count": 1,
-        "failed_task_ids": ["tests"],
     }
 
 
@@ -1854,11 +1853,10 @@ def test_repair_summary_aggregates_repair_reasons_across_cycles():
         "max_cycles": 3,
         "budget_remaining": 1,
         "history_count": 2,
-        "reasons": {"manual_retry": 1, "resume_failed_tasks": 1},
-        "last_reason": "manual_retry",
-        "failure_categories": {"dependency_validation": 1, "test_validation": 1},
+        "reason_count": 2,
+        "last_reason_present": True,
+        "failure_category_count": 2,
         "failed_task_count": 2,
-        "failed_task_ids": ["deps", "tests"],
     }
 
 
@@ -1883,11 +1881,10 @@ def test_repair_summary_ignores_malformed_entries_and_non_list_failed_task_ids()
         "max_cycles": 5,
         "budget_remaining": 3,
         "history_count": 2,
-        "reasons": {"manual_retry": 1},
-        "last_reason": "manual_retry",
-        "failure_categories": {"test_validation": 1},
+        "reason_count": 1,
+        "last_reason_present": True,
+        "failure_category_count": 1,
         "failed_task_count": 2,
-        "failed_task_ids": ["code", "tests"],
     }
 
 

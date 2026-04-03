@@ -365,6 +365,56 @@ def test_failure_recovery_example_limits_public_exception_message(capsys, monkey
     assert "failure-state.sqlite" not in rendered
 
 
+def test_failure_recovery_example_limits_public_task_history_events(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_failure_recovery_public_history_test",
+        "examples/example_failure_recovery.py",
+    )
+
+    failed_arch = type(
+        "FakeTask",
+        (),
+        {
+            "id": "arch",
+            "status": "failed",
+            "attempts": 2,
+            "last_error_type": "RuntimeError",
+            "history": [{"event": "task_started"}, {"event": "task_failed"}],
+        },
+    )()
+    failed = type(
+        "FakeFailedProject",
+        (),
+        {
+            "workflow_last_resumed_at": "2026-04-03T04:10:00+00:00",
+            "tasks": [failed_arch],
+            "get_task": lambda self, task_id: failed_arch if task_id == "arch" else None,
+            "summary": lambda self: "Workflow failed once and then recovered.",
+        },
+    )()
+
+    class FakeOrchestrator:
+        def __init__(self, config, registry=None):
+            self.config = config
+            self.registry = registry
+
+        def execute_workflow(self, project):
+            return None
+
+    monkeypatch.setattr(module, "build_recovery_project", lambda state_path: object())
+    monkeypatch.setattr(module.ProjectState, "load", staticmethod(lambda state_path: failed))
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
+
+    assert "- arch: status=failed, attempts=2, history_event_count=2" in captured
+    assert "task_started" not in rendered
+    assert "task_failed" not in rendered
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

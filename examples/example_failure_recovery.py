@@ -94,7 +94,10 @@ def main() -> None:
     print("\nTask histories:")
     for task in failed.tasks:
         history_events = [entry["event"] for entry in task.history]
-        print(f"- {task.id}: status={task.status}, attempts={task.attempts}, history={history_events}")
+        print(
+            f"- {task.id}: status={task.status}, attempts={task.attempts}, "
+            f"history_event_count={len(history_events)}"
+        )
 
 
 if __name__ == "__main__":

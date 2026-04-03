@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Mapping
 
 from kycortex_agents import AgentRegistry, ArtifactType, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task
 from kycortex_agents.providers import BaseLLMProvider
@@ -139,7 +139,33 @@ def build_snapshot_project(state_path: str) -> ProjectState:
     return project
 
 
-if __name__ == "__main__":
+def _format_csv(values: list[str]) -> str:
+    return ", ".join(values) if values else "none"
+
+
+def _format_counts(values: dict[str, int]) -> str:
+    if not values:
+        return "none"
+    return ", ".join(f"{name}:{values[name]}" for name in sorted(values))
+
+
+def _print_provider_health_summary(provider_health_summary: Mapping[str, Mapping[str, Any]]) -> None:
+    if not provider_health_summary:
+        print("- none")
+        return
+
+    for provider_name in sorted(provider_health_summary):
+        health = provider_health_summary[provider_name]
+        models = [str(model) for model in health.get("models", []) if model]
+        print(
+            f"- {provider_name}: models={_format_csv(models)}; "
+            f"statuses={_format_counts(health.get('status_counts', {}))}; "
+            f"outcomes={_format_counts(health.get('last_outcome_counts', {}))}; "
+            f"active_checks={health.get('active_health_check_count', 0)}"
+        )
+
+
+def main() -> None:
     state_path = "./output_snapshot_inspection_demo/project_state.json"
     config = KYCortexConfig(
         project_name="snapshot-inspection-demo",
@@ -151,6 +177,9 @@ if __name__ == "__main__":
     Orchestrator(config, registry=registry).execute_workflow(project)
 
     snapshot = project.snapshot()
+    workflow_telemetry = snapshot.workflow_telemetry
+    progress_summary = snapshot.workflow_telemetry["progress_summary"]
+    provider_health_summary = snapshot.workflow_telemetry["provider_health_summary"]
 
     print("Snapshot workflow status:")
     print(snapshot.workflow_status)
@@ -165,11 +194,22 @@ if __name__ == "__main__":
         )
 
     print("\nWorkflow telemetry:")
-    print(snapshot.workflow_telemetry)
+    print(f"task_count={workflow_telemetry['task_count']}")
+    print(f"tasks_with_provider_calls={workflow_telemetry['tasks_with_provider_calls']}")
+    print(f"tasks_without_provider_calls={workflow_telemetry['tasks_without_provider_calls']}")
+    print(f"observed_providers={_format_csv(workflow_telemetry['observed_providers'])}")
+    print(f"final_providers={_format_csv(workflow_telemetry['final_providers'])}")
+    print(f"attempt_count={workflow_telemetry['attempt_count']}")
+    print(f"retry_attempt_count={workflow_telemetry['retry_attempt_count']}")
     print("\nWorkflow progress summary:")
-    print(snapshot.workflow_telemetry["progress_summary"])
+    print(f"pending_tasks={progress_summary['pending_task_count']}")
+    print(f"running_tasks={progress_summary['running_task_count']}")
+    print(f"runnable_tasks={progress_summary['runnable_task_count']}")
+    print(f"blocked_tasks={progress_summary['blocked_task_count']}")
+    print(f"terminal_tasks={progress_summary['terminal_task_count']}")
+    print(f"completion_percent={progress_summary['completion_percent']}")
     print("\nWorkflow provider health summary:")
-    print(snapshot.workflow_telemetry["provider_health_summary"])
+    _print_provider_health_summary(provider_health_summary)
 
     print("\nArtifacts:")
     print([artifact.name for artifact in snapshot.artifacts])
@@ -177,3 +217,7 @@ if __name__ == "__main__":
     print([decision.topic for decision in snapshot.decisions])
     print("\nExecution events:")
     print([event["event"] for event in snapshot.execution_events])
+
+
+if __name__ == "__main__":
+    main()

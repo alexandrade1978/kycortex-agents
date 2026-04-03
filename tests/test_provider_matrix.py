@@ -210,6 +210,96 @@ def test_resume_workflow_example_limits_public_state_file_path(tmp_path, capsys,
     assert all("customer-secret-root" not in line for line in captured)
 
 
+def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_snapshot_inspection_public_telemetry_test",
+        "examples/example_snapshot_inspection.py",
+    )
+
+    task_result = type(
+        "FakeTaskResult",
+        (),
+        {
+            "status": type("FakeStatus", (), {"value": "done"})(),
+            "output": type("FakeOutput", (), {"summary": "Architecture snapshot ready"})(),
+            "details": {
+                "last_provider_call": {
+                    "provider": "openai",
+                    "model": "snapshot-openai-demo",
+                }
+            },
+        },
+    )()
+    snapshot = type(
+        "FakeSnapshot",
+        (),
+        {
+            "workflow_status": "completed",
+            "task_results": {"arch": task_result},
+            "workflow_telemetry": {
+                "task_count": 2,
+                "tasks_with_provider_calls": 1,
+                "tasks_without_provider_calls": 1,
+                "observed_providers": ["openai", "anthropic"],
+                "final_providers": ["openai"],
+                "attempt_count": 2,
+                "retry_attempt_count": 0,
+                "progress_summary": {
+                    "pending_task_count": 0,
+                    "running_task_count": 0,
+                    "runnable_task_count": 0,
+                    "blocked_task_count": 0,
+                    "terminal_task_count": 2,
+                    "completion_percent": 100.0,
+                },
+                "provider_health_summary": {
+                    "openai": {
+                        "models": ["snapshot-openai-demo"],
+                        "status_counts": {"healthy": 1},
+                        "last_outcome_counts": {"success": 1},
+                        "circuit_open_count": 2,
+                        "retryable_failure_count": 3,
+                        "active_health_check_count": 1,
+                        "last_error_types": {"TimeoutError": 1},
+                    }
+                },
+            },
+            "artifacts": [type("FakeArtifact", (), {"name": "architecture"})()],
+            "decisions": [type("FakeDecision", (), {"topic": "architecture_snapshot"})()],
+            "execution_events": [{"event": "workflow_finished"}],
+        },
+    )()
+
+    fake_project = type("FakeProject", (), {"snapshot": lambda self: snapshot})()
+
+    class FakeOrchestrator:
+        def __init__(self, config, registry=None):
+            self.config = config
+            self.registry = registry
+
+        def execute_workflow(self, project):
+            return None
+
+    monkeypatch.setattr(module, "build_snapshot_project", lambda state_path: fake_project)
+    monkeypatch.setattr(module, "build_snapshot_registry", lambda config: object())
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
+
+    assert "task_count=2" in captured
+    assert "completion_percent=100.0" in captured
+    assert "- openai: models=snapshot-openai-demo; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
+    assert "TimeoutError" not in rendered
+    assert "last_error_types" not in rendered
+    assert "circuit_open_count" not in rendered
+    assert "retryable_failure_count" not in rendered
+    assert "{" not in rendered
+    assert "}" not in rendered
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

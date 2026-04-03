@@ -165,6 +165,14 @@ def _print_provider_health_summary(provider_health_summary: Mapping[str, Mapping
         )
 
 
+def _print_execution_event_summary(execution_events: list[dict[str, Any]]) -> None:
+    print(f"event_count={len(execution_events)}")
+    if execution_events:
+        print(f"last_event={execution_events[-1].get('event', 'unknown')}")
+    else:
+        print("last_event=none")
+
+
 def main() -> None:
     state_path = "./output_snapshot_inspection_demo/project_state.json"
     config = KYCortexConfig(
@@ -216,7 +224,7 @@ def main() -> None:
     print("\nDecisions:")
     print([decision.topic for decision in snapshot.decisions])
     print("\nExecution events:")
-    print([event["event"] for event in snapshot.execution_events])
+    _print_execution_event_summary(snapshot.execution_events)
 
 
 if __name__ == "__main__":

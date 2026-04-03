@@ -266,7 +266,10 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
             },
             "artifacts": [type("FakeArtifact", (), {"name": "architecture"})()],
             "decisions": [type("FakeDecision", (), {"topic": "architecture_snapshot"})()],
-            "execution_events": [{"event": "workflow_finished"}],
+            "execution_events": [
+                {"event": "workflow_started"},
+                {"event": "workflow_finished"},
+            ],
         },
     )()
 
@@ -292,10 +295,13 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "task_count=2" in captured
     assert "completion_percent=100.0" in captured
     assert "- openai: models=snapshot-openai-demo; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
+    assert "event_count=2" in captured
+    assert "last_event=workflow_finished" in captured
     assert "TimeoutError" not in rendered
     assert "last_error_types" not in rendered
     assert "circuit_open_count" not in rendered
     assert "retryable_failure_count" not in rendered
+    assert "workflow_started" not in rendered
     assert "{" not in rendered
     assert "}" not in rendered
 

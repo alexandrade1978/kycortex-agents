@@ -2138,4 +2138,5 @@ class ProjectState:
         """Return a compact human-readable summary of workflow progress."""
 
         done = sum(1 for t in self.tasks if t.status == TaskStatus.DONE.value)
-        return f"Project: {self.project_name} | Phase: {self.phase} | Tasks: {done}/{len(self.tasks)} done"
+        project_name = _redact_text(self.project_name) or ""
+        return f"Project: {project_name} | Phase: {self.phase} | Tasks: {done}/{len(self.tasks)} done"

@@ -2619,6 +2619,17 @@ def test_project_summary_reports_done_task_counts():
     assert project.summary() == "Project: Demo | Phase: running | Tasks: 1/2 done"
 
 
+def test_project_summary_redacts_sensitive_project_name():
+    project = ProjectState(
+        project_name="Customer api_key=sk-secret-123456",
+        goal="Build demo",
+        phase="running",
+    )
+
+    assert "sk-secret-123456" not in project.summary()
+    assert project.summary() == "Project: Customer api_key=[REDACTED] | Phase: running | Tasks: 0/0 done"
+
+
 def test_save_and_load_preserves_execution_events_json(tmp_path):
     state_path = tmp_path / "project_state.json"
     project = ProjectState(project_name="Demo", goal="Build demo", state_file=str(state_path))

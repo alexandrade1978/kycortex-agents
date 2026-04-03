@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import pytest
 import sys
 from pathlib import Path
 from urllib.error import URLError
@@ -880,6 +881,105 @@ def test_provider_matrix_example_limits_public_report_paths_and_base_url(tmp_pat
     assert "private/api" not in persisted_text
     assert "summary_json=provider_matrix_summary.json" in captured
     assert all("customer-secret-root" not in line for line in captured)
+
+
+def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkeypatch, capsys):
+    module = _load_example_module(
+        "example_release_user_smoke_public_paths_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    output_dir = tmp_path / "customer-secret-root" / "release-user-smoke"
+    validated_artifact = output_dir / "artifacts" / "budget_planner.py"
+
+    class FakeParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                provider="ollama",
+                model=None,
+                output_dir=str(output_dir),
+                base_url=None,
+                ollama_num_ctx=16384,
+                failure_policy="continue",
+                max_repair_cycles=1,
+            )
+
+    class FakeOrchestrator:
+        def __init__(self, config):
+            self.config = config
+
+        def execute_workflow(self, project):
+            return None
+
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement the budget planner",
+        assigned_to="code_engineer",
+        status="done",
+        output="def calculate_budget_balance(income, expenses):\n    return income - sum(expenses)\n",
+    )
+    code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
+    fake_project = type(
+        "FakeProject",
+        (),
+        {
+            "phase": "completed",
+            "terminal_outcome": "completed",
+            "repair_cycle_count": 0,
+            "tasks": [code_task],
+        },
+    )()
+
+    monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
+    monkeypatch.setattr(module, "build_config", lambda args, output_dir: type("Config", (), {"llm_model": "qwen2.5-coder:7b"})())
+    monkeypatch.setattr(module, "build_project", lambda output_dir, provider: fake_project)
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+    monkeypatch.setattr(
+        module,
+        "_validate_generated_code",
+        lambda task, output_dir: (2650.0, str(validated_artifact)),
+    )
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+
+    assert "output_dir=release-user-smoke" in captured
+    assert "validated_artifact=budget_planner.py" in captured
+    assert all("customer-secret-root" not in line for line in captured)
+
+
+def test_release_user_smoke_validation_errors_limit_public_artifact_path_to_filename(tmp_path, monkeypatch):
+    module = _load_example_module(
+        "example_release_user_smoke_validation_error_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    output_dir = tmp_path / "customer-secret-root" / "release-user-smoke"
+    artifact_path = output_dir / "artifacts" / "budget_planner.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "def calculate_budget_balance(income: float, expenses: list[float]) -> float:\n    return income - sum(expenses)\n",
+        encoding="utf-8",
+    )
+
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement the budget planner",
+        assigned_to="code_engineer",
+        status="done",
+    )
+    code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
+
+    monkeypatch.setattr(module.importlib.util, "spec_from_file_location", lambda *args, **kwargs: None)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        module._validate_generated_code(code_task, str(output_dir))
+
+    assert str(exc_info.value) == "Could not load generated code artifact: budget_planner.py"
+    assert "customer-secret-root" not in str(exc_info.value)
 
 
 def test_provider_matrix_example_passes_completion_budget_override(tmp_path, monkeypatch):

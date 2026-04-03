@@ -4,6 +4,7 @@ from pathlib import Path
 import py_compile
 
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
+from kycortex_agents.provider_matrix import _public_path_label
 
 
 DEFAULT_MODELS = {
@@ -169,7 +170,9 @@ def _validate_generated_code(task: Task, output_dir: str) -> tuple[float, str]:
 
     spec = importlib.util.spec_from_file_location("release_user_smoke_generated", artifact_path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load generated code artifact: {artifact_path}")
+        raise RuntimeError(
+            f"Could not load generated code artifact: {_public_path_label(str(artifact_path))}"
+        )
 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -203,7 +206,7 @@ def main() -> None:
     print(f"phase={project.phase}")
     print(f"terminal_outcome={project.terminal_outcome}")
     print(f"repair_cycle_count={project.repair_cycle_count}")
-    print(f"output_dir={output_dir}")
+    print(f"output_dir={_public_path_label(output_dir)}")
     print()
 
     for task in project.tasks:
@@ -226,7 +229,7 @@ def main() -> None:
 
     sample_balance, artifact_path = _validate_generated_code(code_task, output_dir)
     print("artifact_validation=passed")
-    print(f"validated_artifact={artifact_path}")
+    print(f"validated_artifact={_public_path_label(artifact_path)}")
     print(f"sample_balance={sample_balance:.2f}")
 
 

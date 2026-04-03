@@ -468,6 +468,60 @@ def test_failure_recovery_example_limits_public_last_error_type(capsys, monkeypa
     assert "ProviderSDKInitializationError" not in rendered
 
 
+def test_complex_workflow_example_limits_public_list_output(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_complex_workflow_public_list_test",
+        "examples/example_complex_workflow.py",
+    )
+
+    docs_task = type("FakeTask", (), {"output": "Merged documentation bundle ready."})()
+    snapshot = type(
+        "FakeSnapshot",
+        (),
+        {
+            "artifacts": [
+                type("FakeArtifact", (), {"name": "architecture"})(),
+                type("FakeArtifact", (), {"name": "implementation"})(),
+            ],
+            "decisions": [
+                type("FakeDecision", (), {"topic": "architecture_style"})(),
+                type("FakeDecision", (), {"topic": "review_status"})(),
+            ],
+        },
+    )()
+    project = type(
+        "FakeProject",
+        (),
+        {
+            "snapshot": lambda self: snapshot,
+            "get_task": lambda self, task_id: docs_task if task_id == "docs" else None,
+            "summary": lambda self: "Complex workflow completed.",
+        },
+    )()
+
+    class FakeOrchestrator:
+        def __init__(self, config, registry=None):
+            self.config = config
+            self.registry = registry
+
+        def execute_workflow(self, project):
+            return None
+
+    monkeypatch.setattr(module, "build_complex_registry", lambda config: object())
+    monkeypatch.setattr(module, "build_complex_project", lambda state_path: project)
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
+
+    assert "artifact_names=architecture, implementation" in captured
+    assert "decision_topics=architecture_style, review_status" in captured
+    assert "[" not in rendered
+    assert "]" not in rendered
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

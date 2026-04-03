@@ -187,7 +187,11 @@ def build_complex_project(state_path: str) -> ProjectState:
     return project
 
 
-if __name__ == "__main__":
+def _format_csv(values: list[str]) -> str:
+    return ", ".join(values) if values else "none"
+
+
+def main() -> None:
     state_path = "./output_complex_workflow_demo/project_state.json"
     config = KYCortexConfig(
         project_name="complex-workflow-demo",
@@ -208,6 +212,10 @@ if __name__ == "__main__":
     print("\nMerged documentation output:")
     print(docs_task.output)
     print("\nArtifact names:")
-    print([artifact.name for artifact in snapshot.artifacts])
+    print(f"artifact_names={_format_csv([artifact.name for artifact in snapshot.artifacts])}")
     print("\nDecision topics:")
-    print([decision.topic for decision in snapshot.decisions])
+    print(f"decision_topics={_format_csv([decision.topic for decision in snapshot.decisions])}")
+
+
+if __name__ == "__main__":
+    main()

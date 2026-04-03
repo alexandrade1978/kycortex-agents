@@ -241,7 +241,7 @@ def test_public_type_module_defines_docstrings():
     assert types_module.WorkflowProviderHealthSummary.__doc__ == "Per-provider health-state aggregate rolled up across workflow execution."
     assert types_module.WorkflowProviderSummary.__doc__ == "Per-provider aggregate telemetry rolled up across workflow execution."
     assert types_module.WorkflowFallbackSummary.__doc__ == "Workflow-level fallback routing summary embedded in aggregate telemetry."
-    assert types_module.WorkflowErrorSummary.__doc__ == "Workflow-level final and fallback error-type tallies."
+    assert types_module.WorkflowErrorSummary.__doc__ == "Workflow-level final and fallback error tallies."
     assert types_module.WorkflowTelemetry.__doc__ == "Aggregate workflow observability payload exposed through public snapshots."
     assert types_module.ProjectSnapshot.__doc__ == "Immutable workflow snapshot consumed by agents, callers, and tests."
 
@@ -329,8 +329,8 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "by_status": {},
         },
         "error_summary": {
-            "final_error_types": {},
-            "fallback_error_types": {},
+            "final_error_count": 0,
+            "fallback_error_count": 0,
         },
     }
 

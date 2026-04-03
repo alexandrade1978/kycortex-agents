@@ -1559,8 +1559,8 @@ class ProjectState:
         fallback_entry_count = 0
         fallback_by_provider: Dict[str, int] = {}
         fallback_by_status: Dict[str, int] = {}
-        final_error_types: Dict[str, int] = {}
-        fallback_error_types: Dict[str, int] = {}
+        final_error_count = 0
+        fallback_error_count = 0
 
         for task in self.tasks:
             task_status_counts[task.status] = task_status_counts.get(task.status, 0) + 1
@@ -1660,7 +1660,7 @@ class ProjectState:
             if provider_call.get("success") is False:
                 error_type = provider_call.get("error_type")
                 if isinstance(error_type, str) and error_type:
-                    final_error_types[error_type] = final_error_types.get(error_type, 0) + 1
+                    final_error_count += 1
 
             fallback_history = provider_call.get("fallback_history")
             if not isinstance(fallback_history, list) or not fallback_history:
@@ -1679,7 +1679,7 @@ class ProjectState:
                     fallback_by_status[fallback_status] = fallback_by_status.get(fallback_status, 0) + 1
                 fallback_error_type = entry.get("error_type")
                 if isinstance(fallback_error_type, str) and fallback_error_type:
-                    fallback_error_types[fallback_error_type] = fallback_error_types.get(fallback_error_type, 0) + 1
+                    fallback_error_count += 1
 
         normalized_provider_summary: Dict[str, WorkflowProviderSummary] = {}
         for provider_name in sorted(provider_summary):
@@ -1746,8 +1746,8 @@ class ProjectState:
                 "by_status": dict(sorted(fallback_by_status.items())),
             },
             "error_summary": {
-                "final_error_types": dict(sorted(final_error_types.items())),
-                "fallback_error_types": dict(sorted(fallback_error_types.items())),
+                "final_error_count": final_error_count,
+                "fallback_error_count": fallback_error_count,
             },
         }
 

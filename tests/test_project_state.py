@@ -2191,8 +2191,8 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
         "by_status": {"failed_health_check": 1},
     }
     assert telemetry["error_summary"] == {
-        "final_error_types": {"AgentExecutionError": 1},
-        "fallback_error_types": {"ProviderTransientError": 1},
+        "final_error_count": 1,
+        "fallback_error_count": 1,
     }
 
 

@@ -77,7 +77,8 @@ def main() -> None:
     print("\nPersisted failed state:")
     print(f"- arch status: {failed_arch.status}")
     print(f"- arch attempts: {failed_arch.attempts}")
-    print(f"- last error type: {failed_arch.last_error_type}")
+    persisted_error_state = "present" if failed_arch.last_error_type else "none"
+    print(f"- persisted error: {persisted_error_state}")
 
     resume_registry = AgentRegistry(
         {

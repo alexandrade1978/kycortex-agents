@@ -300,6 +300,65 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "}" not in rendered
 
 
+def test_failure_recovery_example_limits_public_exception_message(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_failure_recovery_public_exception_test",
+        "examples/example_failure_recovery.py",
+    )
+
+    failed_arch = type(
+        "FakeTask",
+        (),
+        {
+            "id": "arch",
+            "status": "failed",
+            "attempts": 2,
+            "last_error_type": "RuntimeError",
+            "history": [{"event": "task_started"}, {"event": "task_failed"}],
+        },
+    )()
+    failed = type(
+        "FakeFailedProject",
+        (),
+        {
+            "workflow_last_resumed_at": None,
+            "tasks": [failed_arch],
+            "get_task": lambda self, task_id: failed_arch if task_id == "arch" else None,
+            "summary": lambda self: "Workflow failed once and then recovered.",
+        },
+    )()
+
+    class FakeOrchestrator:
+        call_count = 0
+
+        def __init__(self, config, registry=None):
+            self.config = config
+            self.registry = registry
+
+        def execute_workflow(self, project):
+            type(self).call_count += 1
+            if type(self).call_count == 1:
+                raise RuntimeError(
+                    "token=sk-live-secret-123 path=/srv/customer-secret-root/failure-state.sqlite"
+                )
+            project.workflow_last_resumed_at = "2026-04-03T04:00:00+00:00"
+            return None
+
+    monkeypatch.setattr(module, "build_recovery_project", lambda state_path: object())
+    monkeypatch.setattr(module.ProjectState, "load", staticmethod(lambda state_path: failed))
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
+
+    assert "First run failed with RuntimeError" in captured
+    assert "sk-live-secret-123" not in rendered
+    assert "customer-secret-root" not in rendered
+    assert "failure-state.sqlite" not in rendered
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

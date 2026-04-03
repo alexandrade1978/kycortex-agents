@@ -46,7 +46,7 @@ def build_recovery_project(state_path: str) -> ProjectState:
     return project
 
 
-if __name__ == "__main__":
+def main() -> None:
     state_path = "./output_failure_recovery_demo/project_state.sqlite"
     config = KYCortexConfig(
         project_name="failure-recovery-demo",
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     try:
         first_orchestrator.execute_workflow(project)
     except Exception as exc:
-        print(f"First run failed with {type(exc).__name__}: {exc}")
+        print(f"First run failed with {type(exc).__name__}")
 
     failed = ProjectState.load(state_path)
     failed_arch = failed.get_task("arch")
@@ -95,3 +95,7 @@ if __name__ == "__main__":
     for task in failed.tasks:
         history_events = [entry["event"] for entry in task.history]
         print(f"- {task.id}: status={task.status}, attempts={task.attempts}, history={history_events}")
+
+
+if __name__ == "__main__":
+    main()

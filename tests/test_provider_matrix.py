@@ -149,6 +149,36 @@ def test_provider_smoke_example_limits_public_output_dir(capsys, monkeypatch):
     assert all("customer-secret-root" not in line for line in captured)
 
 
+def test_simple_project_example_limits_public_output_dir(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_simple_project_public_output_test",
+        "examples/example_simple_project.py",
+    )
+
+    output_dir = "/srv/customer-secret-root/simple-api"
+
+    class FakeOrchestrator:
+        def __init__(self, config):
+            self.config = config
+
+        def execute_workflow(self, project):
+            return None
+
+    monkeypatch.setattr(
+        module,
+        "KYCortexConfig",
+        lambda **kwargs: type("Config", (), {"output_dir": output_dir})(),
+    )
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+
+    assert "Artifact files saved to simple-api" in captured
+    assert all("customer-secret-root" not in line for line in captured)
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

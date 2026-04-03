@@ -383,11 +383,34 @@ def test_provider_matrix_summary_redacts_public_error_and_project_name_fields(tm
     )
 
     assert summary["project_name"] == "Demo api_key=[REDACTED]"
-    assert "sk-secret-123456" not in summary["output_dir"]
-    assert "[REDACTED]" in summary["output_dir"]
+    assert summary["state_file"] == "project_state.json"
+    assert summary["output_dir"] == "output"
     assert summary["task_summaries"][0]["last_error"] == "Authorization: Bearer [REDACTED]"
     assert "sk-secret-123456" not in json.dumps(summary)
     assert "sk-ant-secret-987654" not in json.dumps(summary)
+
+
+def test_provider_matrix_summary_limits_public_path_fields_to_filenames():
+    from kycortex_agents.provider_matrix import summarize_workflow_run
+
+    project = ProjectState(
+        project_name="Demo",
+        goal="Validate provider summary output",
+        state_file="/srv/acme-customer/provider-runs/project_state.json",
+    )
+    project.phase = "completed"
+    project.terminal_outcome = "completed"
+
+    summary = summarize_workflow_run(
+        project,
+        provider="openai",
+        model="gpt-4o-mini",
+        output_dir="/srv/acme-customer/provider-runs/output",
+    )
+
+    assert summary["state_file"] == "project_state.json"
+    assert summary["output_dir"] == "output"
+    assert "acme-customer" not in json.dumps(summary)
 
 
 def test_write_summary_json_redacts_sensitive_strings_before_persisting(tmp_path):

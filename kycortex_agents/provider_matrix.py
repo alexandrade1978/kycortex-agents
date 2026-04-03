@@ -34,6 +34,13 @@ REPAIRABLE_FAILURE_CATEGORIES = {
 }
 
 
+def _public_path_label(path: str) -> str:
+    normalized = path.replace("\\", "/").rstrip("/")
+    if not normalized:
+        return ""
+    return normalized.rsplit("/", 1)[-1]
+
+
 def _provider_budget_summary(provider_call: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(provider_call, Mapping):
         return None
@@ -422,8 +429,8 @@ def summarize_workflow_run(
         "workflow_last_resumed_at": project.workflow_last_resumed_at,
         "workflow_finished_at": project.workflow_finished_at,
         "workflow_telemetry": snapshot.workflow_telemetry,
-        "state_file": project.state_file,
-        "output_dir": output_dir,
+        "state_file": _public_path_label(project.state_file),
+        "output_dir": _public_path_label(output_dir),
         "task_status_counts": task_status_counts,
         "failed_task_ids": sorted(failed_task_ids),
         "repair_task_ids": sorted(repair_task_ids),

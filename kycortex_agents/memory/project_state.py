@@ -1332,6 +1332,8 @@ class ProjectState:
             failure = None
             output = None
             resource_telemetry = self._task_resource_telemetry(task)
+            has_provider_call = isinstance(task.last_provider_call, dict)
+            last_error_present = bool(task.last_error or task.last_error_type or task.last_error_category)
             if task_status == TaskStatus.FAILED:
                 failure = FailureRecord(
                     message=_redact_text(task.output or task.last_error or "Task failed without output") or "Task failed without output",
@@ -1344,10 +1346,9 @@ class ProjectState:
                             {
                                 "attempts": task.attempts,
                                 "retry_limit": task.retry_limit,
-                                "error_type": task.last_error_type,
                                 "error_category": task.last_error_category,
                                 "provider_call": task.last_provider_call,
-                                "provider_budget": self._provider_budget_summary(task.last_provider_call),
+                                "has_provider_call": has_provider_call,
                                 "started_at": task.started_at,
                                 "last_attempt_started_at": task.last_attempt_started_at,
                                 "last_resumed_at": task.last_resumed_at,
@@ -1378,10 +1379,10 @@ class ProjectState:
                             "retry_limit": task.retry_limit,
                             "required_for_acceptance": task.required_for_acceptance,
                             "last_error": task.last_error,
-                            "last_error_type": task.last_error_type,
+                            "last_error_present": last_error_present,
                             "last_error_category": task.last_error_category,
                             "last_provider_call": task.last_provider_call,
-                            "provider_budget": self._provider_budget_summary(task.last_provider_call),
+                            "has_provider_call": has_provider_call,
                             "repair_context": task.repair_context,
                             "repair_origin_task_id": task.repair_origin_task_id,
                             "repair_attempt": task.repair_attempt,

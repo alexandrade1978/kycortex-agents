@@ -198,14 +198,9 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
         "total_tokens": 15,
     }
     assert snapshot.task_results["review"].resource_telemetry["provider_duration_ms"] == review_provider_call["duration_ms"]
-    assert snapshot.task_results["arch"].details["provider_budget"] == {
-        "total_calls": 1,
-        "calls_by_provider": {"openai": 1},
-        "max_calls_per_agent": 0,
-        "max_calls_by_provider": {},
-        "remaining_calls": None,
-        "remaining_calls_by_provider": {},
-    }
+    assert snapshot.task_results["arch"].details["has_provider_call"] is True
+    assert snapshot.task_results["arch"].details["last_error_present"] is False
+    assert "provider_budget" not in snapshot.task_results["arch"].details
     assert snapshot.workflow_telemetry["tasks_with_provider_calls"] == 3
     assert snapshot.workflow_telemetry["final_providers"] == ["anthropic", "ollama", "openai"]
     assert snapshot.workflow_telemetry["acceptance_summary"]["accepted"] is True
@@ -322,17 +317,11 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert failed_provider_call["retryable"] is True
     assert failed_provider_call["error_message"] == "OpenAI provider failed to call the model API"
     assert arch_failure.details["provider_call"]["model"] == "gpt-4o"
+    assert arch_failure.details["has_provider_call"] is True
+    assert "provider_budget" not in arch_failure.details
     assert snapshot.task_results["arch"].resource_telemetry["has_provider_call"] is True
     assert snapshot.task_results["arch"].resource_telemetry["provider"] == "openai"
     assert snapshot.task_results["arch"].resource_telemetry["model"] == "gpt-4o"
-    assert arch_failure.details["provider_budget"] == {
-        "total_calls": 1,
-        "calls_by_provider": {"openai": 1},
-        "max_calls_per_agent": 0,
-        "max_calls_by_provider": {},
-        "remaining_calls": None,
-        "remaining_calls_by_provider": {},
-    }
     assert completed_provider_call["usage"]["total_tokens"] == 13
 
 

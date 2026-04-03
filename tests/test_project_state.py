@@ -2013,7 +2013,8 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.failure.error_type == "RuntimeError"
     assert result.failure.details["attempts"] == 2
     assert result.failure.details["retry_limit"] == 1
-    assert result.failure.details["error_type"] == "RuntimeError"
+    assert result.failure.details["has_provider_call"] is False
+    assert "error_type" not in result.failure.details
     assert result.failure.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
     assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
     assert result.failure.details["task_duration_ms"] == 360000.0
@@ -2027,6 +2028,8 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
         "provider_duration_ms": None,
         "usage": {},
     }
+    assert result.details["has_provider_call"] is False
+    assert result.details["last_error_present"] is True
     assert result.details["task_duration_ms"] == 360000.0
     assert result.details["last_attempt_duration_ms"] == 60000.0
     assert result.details["history"][0]["event"] == "failed"
@@ -2879,8 +2882,10 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.started_at is None
     assert result.output is not None
     assert result.output.summary == "Skipped because dependency 'arch' failed"
+    assert result.details["has_provider_call"] is False
+    assert result.details["last_error_present"] is True
     assert result.details["last_provider_call"] is None
-    assert result.details["last_error_type"] is None
+    assert "last_error_type" not in result.details
     assert result.details["last_attempt_started_at"] is None
     assert result.details["last_resumed_at"] is None
     assert result.details["task_duration_ms"] is None

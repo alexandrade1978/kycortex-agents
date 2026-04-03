@@ -54,7 +54,11 @@ def build_test_project() -> ProjectState:
     return project
 
 
-if __name__ == "__main__":
+def _format_output_presence(output: str | None) -> str:
+    return "present" if output else "none"
+
+
+def main() -> None:
     config = KYCortexConfig(
         project_name="test-mode-demo",
         output_dir="./output_test_mode_demo",
@@ -72,4 +76,8 @@ if __name__ == "__main__":
         task = project.get_task(task_id)
         if task is None:
             raise RuntimeError(f"missing task: {task_id}")
-        print(f"- {task_id}: {task.output}")
+        print(f"- {task_id}: status={task.status}, output_present={_format_output_presence(task.output)}")
+
+
+if __name__ == "__main__":
+    main()

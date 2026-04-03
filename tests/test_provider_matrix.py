@@ -522,6 +522,84 @@ def test_complex_workflow_example_limits_public_list_output(capsys, monkeypatch)
     assert "]" not in rendered
 
 
+def test_custom_agent_example_limits_public_task_output(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_custom_agent_public_output_test",
+        "examples/example_custom_agent.py",
+    )
+
+    class FakeOrchestrator:
+        def __init__(self, config, registry=None):
+            self.config = config
+            self.registry = registry
+
+        def execute_workflow(self, project):
+            arch_task = project.get_task("arch")
+            summary_task = project.get_task("summary")
+            assert arch_task is not None
+            assert summary_task is not None
+            arch_task.status = "done"
+            arch_task.output = "Service boundary: token=sk-live-secret-123"
+            summary_task.status = "done"
+            summary_task.output = (
+                "Architecture summary: token=sk-live-secret-123 "
+                "path=/srv/customer-secret-root/custom-agent-summary.txt"
+            )
+            return None
+
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
+
+    assert "summary_task_status=done" in captured
+    assert "summary_output_present=present" in captured
+    assert "Architecture summary:" not in rendered
+    assert "sk-live-secret-123" not in rendered
+    assert "customer-secret-root" not in rendered
+
+
+def test_test_mode_example_limits_public_task_output(capsys, monkeypatch):
+    module = _load_example_module(
+        "example_test_mode_public_output_test",
+        "examples/example_test_mode.py",
+    )
+
+    class FakeOrchestrator:
+        def __init__(self, config, registry=None):
+            self.config = config
+            self.registry = registry
+
+        def execute_workflow(self, project):
+            for task_id in ["arch", "code", "review"]:
+                task = project.get_task(task_id)
+                assert task is not None
+                task.status = "done"
+                task.output = (
+                    f"{task_id.upper()} token=sk-live-secret-123 "
+                    "path=/srv/customer-secret-root/test-mode-output.txt"
+                )
+            return None
+
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    module.main()
+
+    captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
+
+    assert "- arch: status=done, output_present=present" in captured
+    assert "- code: status=done, output_present=present" in captured
+    assert "- review: status=done, output_present=present" in captured
+    assert "sk-live-secret-123" not in rendered
+    assert "customer-secret-root" not in rendered
+    assert "ARCH token=" not in rendered
+    assert "CODE token=" not in rendered
+    assert "REVIEW token=" not in rendered
+
+
 def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     from kycortex_agents.provider_matrix import summarize_workflow_run
 

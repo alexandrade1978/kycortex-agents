@@ -32,7 +32,11 @@ class RecordingArchitectAgent(BaseAgent):
         return self.response
 
 
-if __name__ == "__main__":
+def _format_output_presence(output: str | None) -> str:
+    return "present" if output else "none"
+
+
+def main() -> None:
     config = KYCortexConfig(
         project_name="custom-agent-demo",
         output_dir="./output_custom_agent_demo",
@@ -76,4 +80,9 @@ if __name__ == "__main__":
     print("Custom agent workflow summary:")
     print(project.summary())
     print("\nSummary output:")
-    print(summary_task.output)
+    print(f"summary_task_status={summary_task.status}")
+    print(f"summary_output_present={_format_output_presence(summary_task.output)}")
+
+
+if __name__ == "__main__":
+    main()

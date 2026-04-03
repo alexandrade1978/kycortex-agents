@@ -228,7 +228,6 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
-            "last_error_types": {},
         },
         "ollama": {
             "models": ["llama3"],
@@ -237,7 +236,6 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
-            "last_error_types": {},
         },
         "openai": {
             "models": ["gpt-4o"],
@@ -246,7 +244,6 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
-            "last_error_types": {},
         },
     }
     assert snapshot.workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
@@ -369,7 +366,6 @@ def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_
             "circuit_open_count": 0,
             "retryable_failure_count": 1,
             "active_health_check_count": 0,
-            "last_error_types": {"ProviderTransientError": 1},
         }
     }
 
@@ -460,7 +456,6 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
-            "last_error_types": {},
         },
         "openai": {
             "models": ["gpt-4o"],
@@ -469,7 +464,6 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "circuit_open_count": 0,
             "retryable_failure_count": 1,
             "active_health_check_count": 1,
-            "last_error_types": {"ProviderTransientError": 1},
         },
     }
     assert snapshot.workflow_telemetry["error_summary"]["fallback_error_types"] == {

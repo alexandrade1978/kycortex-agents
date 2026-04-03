@@ -259,7 +259,6 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                         "circuit_open_count": 2,
                         "retryable_failure_count": 3,
                         "active_health_check_count": 1,
-                        "last_error_types": {"TimeoutError": 1},
                     }
                 },
             },

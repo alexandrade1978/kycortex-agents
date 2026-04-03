@@ -2179,7 +2179,6 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
         "circuit_open_count": 1,
         "retryable_failure_count": 1,
         "active_health_check_count": 1,
-        "last_error_types": {"TimeoutError": 1},
     }
     assert telemetry["final_providers"] == ["openai"]
     assert telemetry["observed_providers"] == ["anthropic", "openai"]

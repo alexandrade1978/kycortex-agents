@@ -1630,7 +1630,6 @@ class ProjectState:
                             "circuit_open_count": 0,
                             "retryable_failure_count": 0,
                             "active_health_check_count": 0,
-                            "last_error_types": {},
                         },
                     )
                     model_name = raw_health_entry.get("model")
@@ -1650,11 +1649,6 @@ class ProjectState:
                         health_summary["circuit_open_count"] += 1
                     if raw_health_entry.get("last_failure_retryable") is True:
                         health_summary["retryable_failure_count"] += 1
-                    last_error_type = raw_health_entry.get("last_error_type")
-                    if isinstance(last_error_type, str) and last_error_type:
-                        health_summary["last_error_types"][last_error_type] = (
-                            health_summary["last_error_types"].get(last_error_type, 0) + 1
-                        )
                     last_health_check = raw_health_entry.get("last_health_check")
                     if (
                         isinstance(last_health_check, dict)
@@ -1726,7 +1720,6 @@ class ProjectState:
                 "circuit_open_count": int(raw_health_summary.get("circuit_open_count", 0)),
                 "retryable_failure_count": int(raw_health_summary.get("retryable_failure_count", 0)),
                 "active_health_check_count": int(raw_health_summary.get("active_health_check_count", 0)),
-                "last_error_types": dict(sorted(raw_health_summary.get("last_error_types", {}).items())),
             }
 
         return {

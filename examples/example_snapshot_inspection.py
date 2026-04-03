@@ -220,9 +220,9 @@ def main() -> None:
     _print_provider_health_summary(provider_health_summary)
 
     print("\nArtifacts:")
-    print([artifact.name for artifact in snapshot.artifacts])
+    print(f"artifact_names={_format_csv([artifact.name for artifact in snapshot.artifacts])}")
     print("\nDecisions:")
-    print([decision.topic for decision in snapshot.decisions])
+    print(f"decision_topics={_format_csv([decision.topic for decision in snapshot.decisions])}")
     print("\nExecution events:")
     _print_execution_event_summary(snapshot.execution_events)
 

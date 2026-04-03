@@ -295,6 +295,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "task_count=2" in captured
     assert "completion_percent=100.0" in captured
     assert "- openai: models=snapshot-openai-demo; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
+    assert "artifact_names=architecture" in captured
+    assert "decision_topics=architecture_snapshot" in captured
     assert "event_count=2" in captured
     assert "last_event=workflow_finished" in captured
     assert "TimeoutError" not in rendered
@@ -304,6 +306,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "workflow_started" not in rendered
     assert "{" not in rendered
     assert "}" not in rendered
+    assert "[" not in rendered
+    assert "]" not in rendered
 
 
 def test_failure_recovery_example_limits_public_exception_message(capsys, monkeypatch):

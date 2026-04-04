@@ -142,6 +142,7 @@ def build_tasks():
             repair_context={
                 "cycle": 2,
                 "failure_category": "code_validation",
+                "failure_message": "Generated module failed import validation.",
                 "failed_artifact_content": "def broken():\n    return missing_symbol",
                 "failed_output": "def broken():\n    return missing_symbol",
                 "validation_summary": "Generated code validation:\n- Syntax OK: no",
@@ -258,12 +259,14 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.details["repair_context"]["cycle"] == 2
     assert review_result.details["repair_context"]["failure_category"] == "code_validation"
     assert review_result.details["repair_context"]["has_failed_artifact_content"] is True
+    assert review_result.details["repair_context"]["has_failure_message"] is True
     assert review_result.details["repair_context"]["has_failed_output"] is True
     assert review_result.details["repair_context"]["has_validation_summary"] is True
     assert review_result.details["repair_context"]["has_existing_tests"] is True
     assert review_result.details["repair_context"]["has_source_failure_task"] is True
     assert review_result.details["repair_context"]["has_provider_call"] is True
     assert "failed_artifact_content" not in review_result.details["repair_context"]
+    assert "failure_message" not in review_result.details["repair_context"]
     assert "failed_output" not in review_result.details["repair_context"]
     assert "validation_summary" not in review_result.details["repair_context"]
     assert "existing_tests" not in review_result.details["repair_context"]
@@ -271,12 +274,14 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.details["history"][1]["has_error_message"] is True
     assert "error_message" not in review_result.details["history"][1]
     assert review_result.failure.details["repair_context"]["has_failed_artifact_content"] is True
+    assert review_result.failure.details["repair_context"]["has_failure_message"] is True
     assert review_result.failure.details["repair_context"]["has_failed_output"] is True
     assert review_result.failure.details["repair_context"]["has_validation_summary"] is True
     assert review_result.failure.details["repair_context"]["has_existing_tests"] is True
     assert review_result.failure.details["repair_context"]["has_source_failure_task"] is True
     assert review_result.failure.details["repair_context"]["has_provider_call"] is True
     assert "failed_artifact_content" not in review_result.failure.details["repair_context"]
+    assert "failure_message" not in review_result.failure.details["repair_context"]
     assert "failed_output" not in review_result.failure.details["repair_context"]
     assert "validation_summary" not in review_result.failure.details["repair_context"]
     assert "existing_tests" not in review_result.failure.details["repair_context"]

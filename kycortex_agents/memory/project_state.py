@@ -2120,6 +2120,10 @@ class ProjectState:
         if self._presence_flag(details, "failure_task_id", "has_failure_task"):
             public_details["has_failure_task"] = True
         public_details.pop("failure_task_id", None)
+
+        if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
+            public_details["has_provider_call"] = True
+        public_details.pop("provider_call", None)
         return public_details
 
     def _identifier_present(self, value: Any) -> bool:

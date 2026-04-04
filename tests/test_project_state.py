@@ -1891,6 +1891,7 @@ def test_snapshot_exposes_task_repair_context_details():
                 "failure_category": "test_validation",
                 "instruction": "Repair the generated pytest suite.",
                 "failure_message": "Generated pytest suite failed validation.",
+                "failure_error_type": "PytestCollectionError",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
                 "failed_output": "def test_generated_suite():\n    assert False",
                 "validation_summary": "Generated test validation:\n- Pytest collection failed",
@@ -1905,11 +1906,13 @@ def test_snapshot_exposes_task_repair_context_details():
     assert result.details["repair_context"]["failure_category"] == "test_validation"
     assert result.details["repair_context"]["has_failed_artifact_content"] is True
     assert result.details["repair_context"]["has_failure_message"] is True
+    assert result.details["repair_context"]["has_failure_error_type"] is True
     assert result.details["repair_context"]["has_failed_output"] is True
     assert result.details["repair_context"]["has_validation_summary"] is True
     assert result.details["repair_context"]["has_existing_tests"] is True
     assert "failed_artifact_content" not in result.details["repair_context"]
     assert "failure_message" not in result.details["repair_context"]
+    assert "failure_error_type" not in result.details["repair_context"]
     assert "failed_output" not in result.details["repair_context"]
     assert "validation_summary" not in result.details["repair_context"]
     assert "existing_tests" not in result.details["repair_context"]
@@ -1935,6 +1938,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
                 "failure_category": "test_validation",
                 "instruction": "Repair the generated pytest suite.",
                 "failure_message": "Generated pytest suite failed validation.",
+                "failure_error_type": "PytestCollectionError",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
                 "failed_output": "def test_generated_suite():\n    assert False",
                 "validation_summary": "Generated test validation:\n- Pytest collection failed",
@@ -1952,6 +1956,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.details["repair_context"]["failure_category"] == "test_validation"
     assert result.details["repair_context"]["has_failed_artifact_content"] is True
     assert result.details["repair_context"]["has_failure_message"] is True
+    assert result.details["repair_context"]["has_failure_error_type"] is True
     assert result.details["repair_context"]["has_source_failure_task"] is True
     assert result.details["repair_context"]["has_budget_decomposition_plan"] is True
     assert result.details["repair_context"]["has_provider_call"] is True
@@ -1960,6 +1965,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.details["repair_context"]["has_failed_output"] is True
     assert "failed_artifact_content" not in result.details["repair_context"]
     assert "failure_message" not in result.details["repair_context"]
+    assert "failure_error_type" not in result.details["repair_context"]
     assert "failed_output" not in result.details["repair_context"]
     assert "source_failure_task_id" not in result.details["repair_context"]
     assert "budget_decomposition_plan_task_id" not in result.details["repair_context"]
@@ -1971,6 +1977,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.failure is not None
     assert result.failure.details["repair_context"]["has_failed_artifact_content"] is True
     assert result.failure.details["repair_context"]["has_failure_message"] is True
+    assert result.failure.details["repair_context"]["has_failure_error_type"] is True
     assert result.failure.details["repair_context"]["has_source_failure_task"] is True
     assert result.failure.details["repair_context"]["has_budget_decomposition_plan"] is True
     assert result.failure.details["repair_context"]["has_provider_call"] is True
@@ -1979,6 +1986,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.failure.details["repair_context"]["has_failed_output"] is True
     assert "failed_artifact_content" not in result.failure.details["repair_context"]
     assert "failure_message" not in result.failure.details["repair_context"]
+    assert "failure_error_type" not in result.failure.details["repair_context"]
     assert "failed_output" not in result.failure.details["repair_context"]
     assert "source_failure_task_id" not in result.failure.details["repair_context"]
     assert "budget_decomposition_plan_task_id" not in result.failure.details["repair_context"]
@@ -2006,6 +2014,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
         "failure_category": FailureCategory.CODE_VALIDATION.value,
         "instruction": "Repair the generated Python module.",
         "failure_message": "Generated module failed import validation.",
+        "failure_error_type": "ImportError",
         "failed_artifact_content": "def broken():\n    return missing_symbol",
         "failed_output": "def broken():\n    return missing_symbol",
         "validation_summary": "Generated code validation:\n- Syntax OK: no",
@@ -2049,6 +2058,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert planned_event["details"]["has_provider_call"] is True
     assert planned_event["details"]["failed_artifact_content"] == "def broken():\n    return missing_symbol"
     assert planned_event["details"]["failure_message"] == "Generated module failed import validation."
+    assert planned_event["details"]["failure_error_type"] == "ImportError"
     assert planned_event["details"]["failed_output"] == "def broken():\n    return missing_symbol"
     assert planned_event["details"]["validation_summary"] == "Generated code validation:\n- Syntax OK: no"
     assert planned_event["details"]["existing_tests"] == "def test_broken():\n    assert broken() == 1"

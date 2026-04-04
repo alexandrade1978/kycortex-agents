@@ -147,11 +147,8 @@ def _artifact_paths(task: Task) -> list[str]:
     return paths
 
 
-def _preview_text(text: str, limit: int = 500) -> str:
-    normalized = text.strip()
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[:limit].rstrip() + "\n..."
+def _format_output_presence(output: str | None) -> str:
+    return "present" if output else "none"
 
 
 def _code_artifact_path(task: Task, output_dir: str) -> Path | None:
@@ -217,10 +214,7 @@ def main() -> None:
             print("artifacts=")
             for path in artifact_paths:
                 print(_public_path_label(path))
-        preview = _preview_text(task.output or "")
-        if preview:
-            print("preview=")
-            print(preview)
+        print(f"output_present={_format_output_presence(task.output)}")
         print("---")
 
     code_task = next((task for task in project.tasks if task.id == "code"), None)

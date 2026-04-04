@@ -67,6 +67,10 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
     return project
 
 
+def _format_output_presence(output: str | None) -> str:
+    return "present" if output else "none"
+
+
 def main() -> None:
     args = build_parser().parse_args()
     provider = args.provider
@@ -84,8 +88,7 @@ def main() -> None:
     print(f"phase={project.phase}")
     print(f"output_dir={_public_path_label(output_dir)}")
     print(f"task_status={task.status}")
-    print("preview=")
-    print((task.output or "")[:400])
+    print(f"output_present={_format_output_presence(task.output)}")
 
 
 if __name__ == "__main__":

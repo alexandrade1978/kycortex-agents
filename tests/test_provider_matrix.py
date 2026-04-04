@@ -110,7 +110,7 @@ def test_provider_smoke_example_limits_public_output_dir(capsys, monkeypatch):
         description="Produce a concise architecture note.",
         assigned_to="architect",
         status="done",
-        output="A short architecture preview.",
+        output="api_key=sk-secret-123456\nA short architecture preview.",
     )
     project = type(
         "FakeProject",
@@ -144,8 +144,13 @@ def test_provider_smoke_example_limits_public_output_dir(capsys, monkeypatch):
     module.main()
 
     captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
 
     assert "output_dir=provider-smoke" in captured
+    assert "output_present=present" in captured
+    assert "preview=" not in rendered
+    assert "A short architecture preview." not in rendered
+    assert "sk-secret-123456" not in rendered
     assert all("customer-secret-root" not in line for line in captured)
 
 
@@ -472,7 +477,11 @@ def test_complex_workflow_example_limits_public_list_output(capsys, monkeypatch)
         "examples/example_complex_workflow.py",
     )
 
-    docs_task = type("FakeTask", (), {"output": "Merged documentation bundle ready."})()
+    docs_task = type(
+        "FakeTask",
+        (),
+        {"output": "Merged documentation bundle ready. token=sk-secret-123456"},
+    )()
     snapshot = type(
         "FakeSnapshot",
         (),
@@ -514,8 +523,11 @@ def test_complex_workflow_example_limits_public_list_output(capsys, monkeypatch)
     captured = capsys.readouterr().out.splitlines()
     rendered = "\n".join(captured)
 
+    assert "docs_output_present=present" in captured
     assert "artifact_names=architecture, implementation" in captured
     assert "decision_topics=architecture_style, review_status" in captured
+    assert "Merged documentation bundle ready." not in rendered
+    assert "sk-secret-123456" not in rendered
     assert "[" not in rendered
     assert "]" not in rendered
 
@@ -1536,7 +1548,11 @@ def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkey
         description="Implement the budget planner",
         assigned_to="code_engineer",
         status="done",
-        output="def calculate_budget_balance(income, expenses):\n    return income - sum(expenses)\n",
+        output=(
+            "api_key=sk-secret-123456\n"
+            "def calculate_budget_balance(income, expenses):\n"
+            "    return income - sum(expenses)\n"
+        ),
     )
     code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
     fake_project = type(
@@ -1563,10 +1579,15 @@ def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkey
     module.main()
 
     captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
 
     assert "output_dir=release-user-smoke" in captured
     assert "budget_planner.py" in captured
     assert "validated_artifact=budget_planner.py" in captured
+    assert "output_present=present" in captured
+    assert "preview=" not in rendered
+    assert "calculate_budget_balance" not in rendered
+    assert "sk-secret-123456" not in rendered
     assert all("artifacts/budget_planner.py" not in line for line in captured)
     assert all("customer-secret-root" not in line for line in captured)
 

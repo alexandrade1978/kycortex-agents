@@ -191,6 +191,10 @@ def _format_csv(values: list[str]) -> str:
     return ", ".join(values) if values else "none"
 
 
+def _format_output_presence(output: str | None) -> str:
+    return "present" if output else "none"
+
+
 def main() -> None:
     state_path = "./output_complex_workflow_demo/project_state.json"
     config = KYCortexConfig(
@@ -210,7 +214,7 @@ def main() -> None:
     print("Complex workflow summary:")
     print(project.summary())
     print("\nMerged documentation output:")
-    print(docs_task.output)
+    print(f"docs_output_present={_format_output_presence(docs_task.output)}")
     print("\nArtifact names:")
     print(f"artifact_names={_format_csv([artifact.name for artifact in snapshot.artifacts])}")
     print("\nDecision topics:")

@@ -1823,6 +1823,23 @@ class Orchestrator:
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", artifact.name).strip("._") or "artifact"
         return f"artifacts/{safe_name}{suffix_map.get(artifact.artifact_type, '.artifact')}"
 
+    @staticmethod
+    def _agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:
+        normalized_execution_agent = AgentRegistry.normalize_key(execution_agent_name)
+        if normalized_execution_agent not in {"code_engineer", "qa_tester", "dependency_manager"}:
+            return dict(repair_context)
+        visible_keys = (
+            "cycle",
+            "failure_category",
+            "repair_owner",
+            "original_assigned_to",
+        )
+        return {
+            key: repair_context[key]
+            for key in visible_keys
+            if key in repair_context
+        }
+
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
         snapshot = project.snapshot()
         execution_agent_name = self._execution_agent_name(task)
@@ -1879,7 +1896,7 @@ class Orchestrator:
                 if AgentRegistry.normalize_key(prev_task.assigned_to) == "qa_tester":
                     ctx.update(self._test_artifact_context(prev_task, ctx))
         if repair_context:
-            ctx["repair_context"] = dict(repair_context)
+            ctx["repair_context"] = self._agent_visible_repair_context(repair_context, execution_agent_name)
             if budget_decomposition_plan_task_id is not None:
                 ctx["budget_decomposition_plan_task_id"] = budget_decomposition_plan_task_id
             validation_summary = repair_context.get("validation_summary")

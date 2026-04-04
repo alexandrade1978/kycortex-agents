@@ -367,7 +367,7 @@ def test_run_task_redacts_sensitive_agent_input_and_context(tmp_path):
     assert agent.last_context["task"]["description"] == "Fix Authorization: Bearer [REDACTED]"
     assert agent.last_context["architecture"] == "api_key=[REDACTED]"
     assert agent.last_context["completed_tasks"]["arch"] == "api_key=[REDACTED]"
-    assert agent.last_context["repair_context"]["failure_message"] == "api_key=[REDACTED]"
+    assert agent.last_context["repair_context"] == {"repair_owner": "qa_tester"}
     assert agent.last_context["existing_tests"] == "password=[REDACTED]"
     assert agent.last_context["test_validation_summary"] == "Authorization: Bearer [REDACTED]"
     assert agent.last_context["snapshot"]["goal"] == "Build demo api_key=[REDACTED]"
@@ -471,7 +471,11 @@ def test_run_task_uses_repair_owner_and_failure_context_for_code_validation(tmp_
 
     assert result == "def repaired() -> int:\n    return 1"
     assert repair_task.status == TaskStatus.DONE.value
-    assert engineer.last_context["repair_context"]["repair_owner"] == "code_engineer"
+    assert engineer.last_context["repair_context"] == {
+        "cycle": 1,
+        "failure_category": FailureCategory.CODE_VALIDATION.value,
+        "repair_owner": "code_engineer",
+    }
     assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
     assert engineer.last_context["repair_validation_summary"].startswith("Generated code validation:")
     assert "Repair objective:" in engineer.last_description
@@ -9840,8 +9844,12 @@ def test_execute_workflow_resume_failed_routes_by_failure_category(tmp_path):
     assert review_task.output == "def repaired() -> int:\n    return 1"
     assert repair_task.status == TaskStatus.DONE.value
     assert repair_task.repair_origin_task_id == "review"
-    assert engineer.last_context["repair_context"]["original_assigned_to"] == "code_reviewer"
-    assert engineer.last_context["repair_context"]["failure_category"] == FailureCategory.CODE_VALIDATION.value
+    assert engineer.last_context["repair_context"] == {
+        "cycle": 1,
+        "failure_category": FailureCategory.CODE_VALIDATION.value,
+        "repair_owner": "code_engineer",
+        "original_assigned_to": "code_reviewer",
+    }
     assert engineer.last_context["existing_code"] == "def broken(:\n    pass"
     assert any(event["event"] == "task_repair_planned" for event in project.execution_events)
     assert any(event["event"] == "task_repair_created" for event in project.execution_events)
@@ -10234,7 +10242,11 @@ def test_build_agent_input_includes_test_repair_context(tmp_path):
 
     assert "Repair objective:" in agent_input.task_description
     assert "Previous failure category: test_validation" in agent_input.task_description
-    assert agent_input.context["repair_context"]["repair_owner"] == "qa_tester"
+    assert agent_input.context["repair_context"] == {
+        "cycle": 1,
+        "failure_category": FailureCategory.TEST_VALIDATION.value,
+        "repair_owner": "qa_tester",
+    }
     assert agent_input.context["existing_tests"] == "from code_implementation import missing_symbol"
     assert agent_input.context["test_validation_summary"].endswith("Verdict: FAIL")
     assert agent_input.context["repair_helper_surface_usages"] == ["RiskScoringService (line 33)"]
@@ -12409,9 +12421,46 @@ def test_build_context_includes_dependency_repair_manifest_and_summary(tmp_path)
 
     context = orchestrator._build_context(require_task(project, "deps"), project)
 
-    assert context["repair_context"]["repair_owner"] == "dependency_manager"
+    assert context["repair_context"] == {
+        "cycle": 1,
+        "failure_category": FailureCategory.DEPENDENCY_VALIDATION.value,
+        "repair_owner": "dependency_manager",
+    }
     assert context["existing_dependency_manifest"] == "# No external runtime dependencies"
     assert context["dependency_validation_summary"].startswith("Dependency manifest validation:")
+
+
+def test_build_context_preserves_full_repair_context_for_custom_repair_owner(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="custom_repair",
+            title="Repair custom task",
+            description="Repair custom output",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 2,
+                "failure_category": FailureCategory.TASK_EXECUTION.value,
+                "repair_owner": "custom_specialist",
+                "failure_message": "Custom runtime mismatch",
+                "validation_summary": "Custom validation failed",
+                "failed_output": "bad output",
+            },
+        )
+    )
+
+    context = orchestrator._build_context(require_task(project, "custom_repair"), project)
+
+    assert context["repair_context"] == {
+        "cycle": 2,
+        "failure_category": FailureCategory.TASK_EXECUTION.value,
+        "repair_owner": "custom_specialist",
+        "failure_message": "Custom runtime mismatch",
+        "validation_summary": "Custom validation failed",
+        "failed_output": "bad output",
+    }
 
 
 def test_repair_helper_fallbacks_cover_missing_validation_payload(tmp_path):

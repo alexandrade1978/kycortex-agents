@@ -139,6 +139,13 @@ def build_tasks():
             output="Review failed",
             last_error="Review failed",
             last_error_type="ValueError",
+            repair_context={
+                "cycle": 2,
+                "failure_category": "code_validation",
+                "validation_summary": "Generated code validation:\n- Syntax OK: no",
+                "source_failure_task_id": "arch",
+                "provider_call": {"provider": "ollama", "success": False},
+            },
             last_provider_call={
                 "provider": "ollama",
                 "model": "llama3",
@@ -245,9 +252,19 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.failure.details["last_resumed_at"] == "2026-03-22T10:07:00+00:00"
     assert review_result.details["last_error_present"] is True
     assert "last_error" not in review_result.details
+    assert review_result.details["repair_context"]["cycle"] == 2
+    assert review_result.details["repair_context"]["failure_category"] == "code_validation"
+    assert review_result.details["repair_context"]["has_validation_summary"] is True
+    assert review_result.details["repair_context"]["has_source_failure_task"] is True
+    assert review_result.details["repair_context"]["has_provider_call"] is True
+    assert "validation_summary" not in review_result.details["repair_context"]
     assert review_result.details["history"][1]["event"] == "failed"
     assert review_result.details["history"][1]["has_error_message"] is True
     assert "error_message" not in review_result.details["history"][1]
+    assert review_result.failure.details["repair_context"]["has_validation_summary"] is True
+    assert review_result.failure.details["repair_context"]["has_source_failure_task"] is True
+    assert review_result.failure.details["repair_context"]["has_provider_call"] is True
+    assert "validation_summary" not in review_result.failure.details["repair_context"]
     assert review_result.failure.details["history"][1]["has_error_message"] is True
     assert "error_message" not in review_result.failure.details["history"][1]
     assert review_result.resource_telemetry == {

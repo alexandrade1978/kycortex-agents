@@ -1890,6 +1890,7 @@ def test_snapshot_exposes_task_repair_context_details():
                 "cycle": 2,
                 "failure_category": "test_validation",
                 "instruction": "Repair the generated pytest suite.",
+                "validation_summary": "Generated test validation:\n- Pytest collection failed",
             },
         )
     )
@@ -1898,6 +1899,8 @@ def test_snapshot_exposes_task_repair_context_details():
 
     assert result.details["repair_context"]["cycle"] == 2
     assert result.details["repair_context"]["failure_category"] == "test_validation"
+    assert result.details["repair_context"]["has_validation_summary"] is True
+    assert "validation_summary" not in result.details["repair_context"]
 
 
 def test_snapshot_minimizes_public_task_repair_lineage_details():
@@ -1919,6 +1922,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
                 "cycle": 2,
                 "failure_category": "test_validation",
                 "instruction": "Repair the generated pytest suite.",
+                "validation_summary": "Generated test validation:\n- Pytest collection failed",
                 "source_failure_task_id": "tests",
                 "budget_decomposition_plan_task_id": "tests__repair_2__budget_plan",
                 "provider_call": {"provider": "openai", "success": False},
@@ -1933,18 +1937,22 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.details["repair_context"]["has_source_failure_task"] is True
     assert result.details["repair_context"]["has_budget_decomposition_plan"] is True
     assert result.details["repair_context"]["has_provider_call"] is True
+    assert result.details["repair_context"]["has_validation_summary"] is True
     assert "source_failure_task_id" not in result.details["repair_context"]
     assert "budget_decomposition_plan_task_id" not in result.details["repair_context"]
     assert "provider_call" not in result.details["repair_context"]
+    assert "validation_summary" not in result.details["repair_context"]
     assert result.details["has_repair_origin"] is True
     assert "repair_origin_task_id" not in result.details
     assert result.failure is not None
     assert result.failure.details["repair_context"]["has_source_failure_task"] is True
     assert result.failure.details["repair_context"]["has_budget_decomposition_plan"] is True
     assert result.failure.details["repair_context"]["has_provider_call"] is True
+    assert result.failure.details["repair_context"]["has_validation_summary"] is True
     assert "source_failure_task_id" not in result.failure.details["repair_context"]
     assert "budget_decomposition_plan_task_id" not in result.failure.details["repair_context"]
     assert "provider_call" not in result.failure.details["repair_context"]
+    assert "validation_summary" not in result.failure.details["repair_context"]
     assert result.failure.details["has_repair_origin"] is True
     assert "repair_origin_task_id" not in result.failure.details
 
@@ -1965,6 +1973,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
         "cycle": 1,
         "failure_category": FailureCategory.CODE_VALIDATION.value,
         "instruction": "Repair the generated Python module.",
+        "validation_summary": "Generated code validation:\n- Syntax OK: no",
         "source_failure_task_id": "tests",
         "provider_call": {"provider": "openai", "success": False, "provider_call_count": 2},
     }
@@ -2002,6 +2011,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert planned_event["details"]["has_source_failure_task"] is True
     assert planned_event["details"]["has_budget_decomposition_plan"] is True
     assert planned_event["details"]["has_provider_call"] is True
+    assert planned_event["details"]["validation_summary"] == "Generated code validation:\n- Syntax OK: no"
     assert "source_failure_task_id" not in planned_event["details"]
     assert "budget_decomposition_plan_task_id" not in planned_event["details"]
     assert "provider_call" not in planned_event["details"]

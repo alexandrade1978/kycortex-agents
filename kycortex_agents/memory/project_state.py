@@ -1334,7 +1334,7 @@ class ProjectState:
             failure = None
             output = None
             resource_telemetry = self._task_resource_telemetry(task)
-            public_repair_context = self._public_repair_context(task.repair_context)
+            public_repair_context = self._public_task_results_repair_context(task.repair_context)
             public_history = self._public_task_history(task.history)
             has_provider_call = isinstance(task.last_provider_call, dict)
             last_error_present = bool(task.last_error or task.last_error_type or task.last_error_category)
@@ -2279,6 +2279,20 @@ class ProjectState:
             return True
         raw_flag = details.get(flag_key)
         return raw_flag is True
+
+    def _public_task_results_repair_context(self, repair_context: Any) -> Dict[str, Any]:
+        raw_context = repair_context if isinstance(repair_context, dict) else {}
+        public_context = self._public_repair_context(raw_context)
+
+        raw_validation_summary = raw_context.get("validation_summary")
+        if (
+            isinstance(raw_validation_summary, str)
+            and bool(raw_validation_summary.strip())
+        ) or raw_context.get("has_validation_summary") is True:
+            public_context["has_validation_summary"] = True
+        public_context.pop("validation_summary", None)
+
+        return public_context
 
     def _public_repair_context(self, repair_context: Any) -> Dict[str, Any]:
         raw_context = repair_context if isinstance(repair_context, dict) else {}

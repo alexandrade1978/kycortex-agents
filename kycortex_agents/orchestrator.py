@@ -821,8 +821,37 @@ class Orchestrator:
 
     def _log_event(self, level: str, event: str, **fields: Any) -> None:
         log_method = getattr(self.logger, level)
-        safe_fields = cast(Dict[str, Any], redact_sensitive_data(fields))
+        safe_fields = cast(Dict[str, Any], redact_sensitive_data(self._privacy_safe_log_fields(fields)))
         log_method(event, extra={"event": event, **safe_fields})
+
+    @staticmethod
+    def _privacy_safe_log_fields(fields: Dict[str, Any]) -> Dict[str, Any]:
+        safe_fields: Dict[str, Any] = {}
+        for field_name, value in fields.items():
+            minimized_field_name = Orchestrator._task_id_count_log_field_name(field_name)
+            if minimized_field_name is not None:
+                count = Orchestrator._task_id_collection_count(value)
+                if count is not None:
+                    safe_fields[minimized_field_name] = count
+                    continue
+            safe_fields[field_name] = value
+        return safe_fields
+
+    @staticmethod
+    def _task_id_collection_count(value: Any) -> Optional[int]:
+        if isinstance(value, (list, tuple, set)):
+            return len(value)
+        if isinstance(value, str):
+            return 1 if value else 0
+        if value is None:
+            return 0
+        return None
+
+    @staticmethod
+    def _task_id_count_log_field_name(field_name: str) -> Optional[str]:
+        if field_name == "task_ids" or field_name.endswith("_task_ids"):
+            return f"{field_name[:-len('_ids')]}_count"
+        return None
 
     def _emit_workflow_progress(self, project: ProjectState, *, task: Optional[Task] = None) -> None:
         workflow_telemetry = project.record_workflow_progress(

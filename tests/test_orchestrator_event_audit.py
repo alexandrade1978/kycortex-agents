@@ -78,7 +78,8 @@ def test_execute_workflow_logs_workflow_blocked_for_persisted_unsatisfied_depend
 
     assert blocked_record.project_name == "Demo"
     assert blocked_record.phase == "failed"
-    assert blocked_record.blocked_task_ids == "review"
+    assert not hasattr(blocked_record, "blocked_task_ids")
+    assert blocked_record.blocked_task_count == 1
     assert project.phase == "failed"
     assert project.execution_events[0]["event"] == "workflow_started"
     assert project.execution_events[-1]["event"] == "workflow_finished"
@@ -143,7 +144,8 @@ def test_execute_workflow_logs_cascading_dependent_tasks_skipped(tmp_path, caplo
 
     assert skipped_record.project_name == "Demo"
     assert skipped_record.task_id == "arch"
-    assert skipped_record.skipped_task_ids == ["code", "review", "tests"]
+    assert not hasattr(skipped_record, "skipped_task_ids")
+    assert skipped_record.skipped_task_count == 3
     arch_task = require_task(project, "arch")
     code_task = require_task(project, "code")
     review_task = require_task(project, "review")

@@ -9096,6 +9096,73 @@ def test_orchestrator_control_logs_redact_sensitive_reasons(tmp_path, caplog):
     assert "[REDACTED]" in pause_record.reason
     assert "[REDACTED]" in skip_record.reason
     assert "[REDACTED]" in cancel_record.reason
+    assert not hasattr(cancel_record, "cancelled_task_ids")
+    assert cancel_record.cancelled_task_count == 1
+
+
+def test_orchestrator_log_event_minimizes_task_id_lists(tmp_path, caplog):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config, registry=AgentRegistry({}))
+
+    with caplog.at_level("INFO", logger="Orchestrator"):
+        orchestrator._log_event("info", "workflow_resumed", project_name="Demo", task_ids=["arch", "code"])
+        orchestrator._log_event(
+            "warning",
+            "workflow_replayed",
+            project_name="Demo",
+            replayed_task_ids=["arch"],
+            removed_task_ids=["code__repair_1", "code__repair_2"],
+        )
+        orchestrator._log_event(
+            "error",
+            "workflow_repair_budget_exhausted",
+            project_name="Demo",
+            failed_task_ids=["arch", "code"],
+        )
+        orchestrator._log_event(
+            "warning",
+            "workflow_blocked",
+            project_name="Demo",
+            blocked_task_ids=["docs"],
+        )
+        orchestrator._log_event(
+            "warning",
+            "dependent_tasks_skipped",
+            project_name="Demo",
+            task_id="arch",
+            skipped_task_ids=["docs", "legal"],
+        )
+        orchestrator._log_event(
+            "info",
+            "task_repair_chained",
+            project_name="Demo",
+            task_id="arch",
+            repair_task_ids=["arch__repair_1"],
+        )
+
+    resumed_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_resumed")
+    replayed_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_replayed")
+    exhausted_record = next(
+        record for record in caplog.records if getattr(record, "event", None) == "workflow_repair_budget_exhausted"
+    )
+    blocked_record = next(record for record in caplog.records if getattr(record, "event", None) == "workflow_blocked")
+    skipped_record = next(record for record in caplog.records if getattr(record, "event", None) == "dependent_tasks_skipped")
+    repair_record = next(record for record in caplog.records if getattr(record, "event", None) == "task_repair_chained")
+
+    assert not hasattr(resumed_record, "task_ids")
+    assert resumed_record.task_count == 2
+    assert not hasattr(replayed_record, "replayed_task_ids")
+    assert not hasattr(replayed_record, "removed_task_ids")
+    assert replayed_record.replayed_task_count == 1
+    assert replayed_record.removed_task_count == 2
+    assert not hasattr(exhausted_record, "failed_task_ids")
+    assert exhausted_record.failed_task_count == 2
+    assert not hasattr(blocked_record, "blocked_task_ids")
+    assert blocked_record.blocked_task_count == 1
+    assert not hasattr(skipped_record, "skipped_task_ids")
+    assert skipped_record.skipped_task_count == 2
+    assert not hasattr(repair_record, "repair_task_ids")
+    assert repair_record.repair_task_count == 1
 
 
 def test_execute_workflow_respects_task_dependencies(tmp_path):

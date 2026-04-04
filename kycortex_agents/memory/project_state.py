@@ -1595,6 +1595,14 @@ class ProjectState:
             details.clear()
             details.update(cast(Dict[str, Any], public_requeued_details))
             return redacted_event
+        if event_name == "task_retry_scheduled":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_retry_scheduled_details = self._public_task_retry_scheduled_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_retry_scheduled_details))
+            return redacted_event
         if event_name == "task_repair_started":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
@@ -2116,6 +2124,13 @@ class ProjectState:
             public_details["has_error_type"] = True
         public_details.pop("error_type", None)
 
+        if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
+            public_details["has_provider_call"] = True
+        public_details.pop("provider_call", None)
+        return public_details
+
+    def _public_task_retry_scheduled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)

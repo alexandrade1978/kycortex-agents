@@ -2357,10 +2357,11 @@ def test_snapshot_minimizes_public_policy_enforcement_provider_call_details():
     assert policy_event["details"]["policy_area"] == "sandbox"
     assert policy_event["details"]["source_event"] == "task_failed"
     assert policy_event["details"]["failure_category"] == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
-    assert policy_event["details"]["error_type"] == "RuntimeError"
     assert policy_event["details"]["has_message"] is True
+    assert policy_event["details"]["has_error_type"] is True
     assert policy_event["details"]["has_provider_call"] is True
     assert "message" not in policy_event["details"]
+    assert "error_type" not in policy_event["details"]
     assert "provider_call" not in policy_event["details"]
 
 
@@ -2398,10 +2399,11 @@ def test_snapshot_policy_enforcement_events_use_presence_flags_for_legacy_provid
     assert policy_event["details"]["policy_area"] == "sandbox"
     assert policy_event["details"]["source_event"] == "task_failed"
     assert policy_event["details"]["failure_category"] == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
-    assert policy_event["details"]["error_type"] == "RuntimeError"
     assert policy_event["details"]["has_message"] is True
+    assert policy_event["details"]["has_error_type"] is True
     assert policy_event["details"]["has_provider_call"] is True
     assert "message" not in policy_event["details"]
+    assert "error_type" not in policy_event["details"]
     assert "provider_call" not in policy_event["details"]
 
 

@@ -2284,6 +2284,14 @@ class ProjectState:
         raw_context = repair_context if isinstance(repair_context, dict) else {}
         public_context = self._public_repair_context(raw_context)
 
+        raw_failed_artifact_content = raw_context.get("failed_artifact_content")
+        if (
+            isinstance(raw_failed_artifact_content, str)
+            and bool(raw_failed_artifact_content.strip())
+        ) or raw_context.get("has_failed_artifact_content") is True:
+            public_context["has_failed_artifact_content"] = True
+        public_context.pop("failed_artifact_content", None)
+
         raw_validation_summary = raw_context.get("validation_summary")
         if (
             isinstance(raw_validation_summary, str)

@@ -1465,6 +1465,11 @@ def test_cancel_workflow_marks_terminal_state_and_skips_pending_tasks():
     assert project.execution_events[-1]["event"] == "workflow_cancelled"
     assert project.execution_events[-1]["details"]["reason"] == "manual_operator_cancel"
     assert project.execution_events[-1]["details"]["cancelled_task_ids"] == ["docs"]
+    assert snapshot.execution_events[-1]["details"]["reason"] == "manual_operator_cancel"
+    assert snapshot.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.CANCELLED.value
+    assert snapshot.execution_events[-1]["details"]["cancelled_task_count"] == 1
+    assert "provider_budget" not in snapshot.execution_events[-1]["details"]
+    assert "cancelled_task_ids" not in snapshot.execution_events[-1]["details"]
 
 
 def test_cancel_workflow_redacts_sensitive_operator_reason():
@@ -1482,6 +1487,7 @@ def test_cancel_workflow_redacts_sensitive_operator_reason():
     task = require_task(project, "docs")
     task_cancelled_event = next(event for event in project.execution_events if event["event"] == "task_cancelled")
     workflow_cancelled_event = next(event for event in project.execution_events if event["event"] == "workflow_cancelled")
+    snapshot = project.snapshot()
 
     assert cancelled_task_ids == ["docs"]
     assert "hunter2" not in task.last_error
@@ -1492,6 +1498,11 @@ def test_cancel_workflow_redacts_sensitive_operator_reason():
     assert task.output == task.last_error
     assert "[REDACTED]" in task_cancelled_event["details"]["reason"]
     assert "[REDACTED]" in workflow_cancelled_event["details"]["reason"]
+    assert snapshot.execution_events[-1]["details"]["reason"] == workflow_cancelled_event["details"]["reason"]
+    assert snapshot.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.CANCELLED.value
+    assert snapshot.execution_events[-1]["details"]["cancelled_task_count"] == 1
+    assert "provider_budget" not in snapshot.execution_events[-1]["details"]
+    assert "cancelled_task_ids" not in snapshot.execution_events[-1]["details"]
 
 
 def test_pause_workflow_rejects_cancelled_workflow():
@@ -2003,6 +2014,31 @@ def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
         "unique_task_count": 2,
         "last_resumed_at": None,
     }
+
+
+def test_snapshot_workflow_cancelled_events_use_task_counts_for_legacy_entries():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.execution_events = [
+        {
+            "event": "workflow_cancelled",
+            "timestamp": "2026-03-22T10:01:00+00:00",
+            "task_id": None,
+            "status": WorkflowStatus.CANCELLED.value,
+            "details": {
+                "reason": "manual_operator_cancel",
+                "cancelled_task_ids": ["docs", "review"],
+                "terminal_outcome": WorkflowOutcome.CANCELLED.value,
+            },
+        }
+    ]
+
+    snapshot = project.snapshot()
+
+    assert snapshot.execution_events[0]["details"]["reason"] == "manual_operator_cancel"
+    assert snapshot.execution_events[0]["details"]["terminal_outcome"] == WorkflowOutcome.CANCELLED.value
+    assert snapshot.execution_events[0]["details"]["cancelled_task_count"] == 2
+    assert "provider_budget" not in snapshot.execution_events[0]["details"]
+    assert "cancelled_task_ids" not in snapshot.execution_events[0]["details"]
 
 
 def test_provider_attempt_and_retry_helpers_handle_scalar_fallbacks():

@@ -1546,6 +1546,14 @@ class ProjectState:
             details.clear()
             details.update(cast(Dict[str, Any], public_resume_details))
             return redacted_event
+        if event_name == "workflow_cancelled":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_cancelled_details = self._public_workflow_cancelled_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_cancelled_details))
+            return redacted_event
         if event_name == "workflow_repair_cycle_started":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
@@ -1966,6 +1974,25 @@ class ProjectState:
             "reason": reason,
             "task_count": task_count,
             "unique_task_count": unique_task_count,
+        }
+
+    def _public_workflow_cancelled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        reason = details.get("reason") if isinstance(details.get("reason"), str) else None
+        terminal_outcome = details.get("terminal_outcome") if isinstance(details.get("terminal_outcome"), str) else None
+        cancelled_task_ids = self._string_list(details.get("cancelled_task_ids"))
+        if cancelled_task_ids:
+            cancelled_task_count = len(cancelled_task_ids)
+        else:
+            raw_cancelled_task_count = details.get("cancelled_task_count")
+            cancelled_task_count = (
+                max(int(raw_cancelled_task_count), 0)
+                if isinstance(raw_cancelled_task_count, (int, float)) and not isinstance(raw_cancelled_task_count, bool)
+                else 0
+            )
+        return {
+            "reason": reason,
+            "terminal_outcome": terminal_outcome,
+            "cancelled_task_count": cancelled_task_count,
         }
 
     def _list_like_values(self, value: Any) -> List[Any]:

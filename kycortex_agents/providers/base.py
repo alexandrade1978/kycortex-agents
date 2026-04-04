@@ -90,17 +90,39 @@ def redact_sensitive_data(value: Any) -> Any:
 
 
 def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[str, Any]:
-    """Return provider-call metadata with secrets redacted and exact budget telemetry minimized."""
+    """Return provider-call metadata with secrets redacted and surfaced retry/budget details minimized."""
 
     sanitized = redact_sensitive_data(dict(provider_call))
     if not isinstance(sanitized, dict):
         return {}
+    _sanitize_provider_call_attempt_history(sanitized)
     _sanitize_provider_call_budget_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
     error_message = sanitized.get("error_message")
     if isinstance(error_message, str):
         sanitized["error_message"] = _sanitize_provider_call_budget_message(error_message)
     return sanitized
+
+
+def _sanitize_provider_call_attempt_history(provider_call: dict[str, Any]) -> None:
+    attempt_history = provider_call.get("attempt_history")
+    if not isinstance(attempt_history, list):
+        return
+
+    sanitized_history: list[Any] = []
+    for entry in attempt_history:
+        if not isinstance(entry, dict):
+            sanitized_history.append(entry)
+            continue
+
+        sanitized_entry = dict(entry)
+        error_message = sanitized_entry.get("error_message")
+        if isinstance(error_message, str):
+            sanitized_entry["has_error_message"] = bool(error_message)
+            sanitized_entry.pop("error_message", None)
+        sanitized_history.append(sanitized_entry)
+
+    provider_call["attempt_history"] = sanitized_history
 
 
 def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> None:

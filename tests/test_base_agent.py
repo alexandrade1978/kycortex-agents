@@ -316,7 +316,7 @@ def test_chat_captures_failed_provider_call_metadata():
             "success": False,
             "retryable": False,
             "error_type": "RuntimeError",
-            "error_message": "provider down",
+            "has_error_message": True,
             "backoff_seconds": 0.0,
         }
     ]
@@ -335,8 +335,8 @@ def test_chat_redacts_sensitive_values_from_failed_provider_call_metadata():
     assert "sk-secret-123456" not in metadata["error_message"]
     assert "sk-ant-secret-987654" not in metadata["error_message"]
     assert "[REDACTED]" in metadata["error_message"]
-    assert "sk-secret-123456" not in metadata["attempt_history"][0]["error_message"]
-    assert "sk-ant-secret-987654" not in metadata["attempt_history"][0]["error_message"]
+    assert metadata["attempt_history"][0]["has_error_message"] is True
+    assert "error_message" not in metadata["attempt_history"][0]
 
 
 def test_chat_sanitizes_prompt_input_before_provider_generate():
@@ -609,7 +609,7 @@ def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
             "success": False,
             "retryable": True,
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
@@ -654,7 +654,7 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
             "success": False,
             "retryable": True,
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
@@ -665,7 +665,7 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
             "success": False,
             "retryable": True,
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
@@ -765,7 +765,7 @@ def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkey
             "success": False,
             "retryable": True,
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
@@ -836,7 +836,7 @@ def test_chat_provider_specific_budget_blocks_additional_retry_attempts_after_fi
             "success": False,
             "retryable": True,
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
@@ -877,7 +877,7 @@ def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attemp
             "success": False,
             "retryable": True,
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
@@ -1064,7 +1064,7 @@ def test_chat_cancels_during_retry_backoff(monkeypatch):
             "success": False,
             "retryable": True,
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "uncapped_backoff_seconds": 0.2,
             "base_backoff_seconds": 0.2,
             "jitter_seconds": 0.0,

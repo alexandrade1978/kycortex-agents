@@ -8656,6 +8656,16 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                         "model": "gpt-test",
                         "base_url": "https://alice:secret-pass@example.com/v1",
                         "error_message": "api_key=sk-secret-123456",
+                        "attempt_history": [
+                            {
+                                "attempt": 1,
+                                "success": False,
+                                "retryable": False,
+                                "error_type": "AgentExecutionError",
+                                "error_message": "api_key=sk-secret-123456",
+                                "backoff_seconds": 0.0,
+                            }
+                        ],
                     }
                 },
             )
@@ -8672,6 +8682,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "sk-secret-123456" not in str(project.tasks[0].last_provider_call)
     assert "[REDACTED]" in project.tasks[0].last_provider_call["base_url"]
     assert "[REDACTED]" in project.tasks[0].last_provider_call["error_message"]
+    assert project.tasks[0].last_provider_call["attempt_history"][0]["has_error_message"] is True
+    assert "error_message" not in project.tasks[0].last_provider_call["attempt_history"][0]
     payload = require_output_payload(project.tasks[0])
     assert payload["metadata"]["provider_call"]["provider"] == "openai"
     assert payload["metadata"]["provider_call"]["model"] == "gpt-test"
@@ -8679,6 +8691,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "sk-secret-123456" not in str(payload["metadata"]["provider_call"])
     assert "[REDACTED]" in payload["metadata"]["provider_call"]["base_url"]
     assert "[REDACTED]" in payload["metadata"]["provider_call"]["error_message"]
+    assert payload["metadata"]["provider_call"]["attempt_history"][0]["has_error_message"] is True
+    assert "error_message" not in payload["metadata"]["provider_call"]["attempt_history"][0]
 
 
 def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):

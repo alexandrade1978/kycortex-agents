@@ -281,6 +281,8 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(
     else:
         assert metadata["attempt_history"][0]["error_type"] == "ProviderTransientError"
         assert metadata["attempt_history"][0]["base_backoff_seconds"] == 0.0
+        assert metadata["attempt_history"][0]["has_error_message"] is True
+        assert "error_message" not in metadata["attempt_history"][0]
     assert expected_message in metadata["error_message"]
     assert metadata["duration_ms"] >= 0
 
@@ -326,6 +328,9 @@ def test_execute_records_retry_attempt_metadata_for_transient_provider_recovery(
     assert result.metadata["provider_call"]["attempts_used"] == 2
     assert result.metadata["provider_call"]["max_attempts"] == 2
     assert len(result.metadata["provider_call"]["attempt_history"]) == 2
+    assert result.metadata["provider_call"]["attempt_history"][0]["has_error_message"] is True
+    assert "error_message" not in result.metadata["provider_call"]["attempt_history"][0]
+    assert "has_error_message" not in result.metadata["provider_call"]["attempt_history"][1]
     assert result.metadata["provider_call"]["usage"]["total_tokens"] == 5
 
 
@@ -358,6 +363,8 @@ def test_execute_does_not_retry_deterministic_provider_request_failures():
     assert len(metadata["attempt_history"]) == 1
     assert metadata["attempt_history"][0]["retryable"] is False
     assert metadata["attempt_history"][0]["error_type"] == "AgentExecutionError"
+    assert metadata["attempt_history"][0]["has_error_message"] is True
+    assert "error_message" not in metadata["attempt_history"][0]
 
 
 def test_execute_falls_back_to_secondary_provider_after_transient_primary_failure(monkeypatch):

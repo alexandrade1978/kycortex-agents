@@ -375,7 +375,7 @@ def test_completed_workflow_persists_fallback_provider_metadata_after_reload(tmp
             "model": "gpt-4o",
             "status": "failed_transient",
             "error_type": "ProviderTransientError",
-            "error_message": "primary temporarily unavailable",
+            "has_error_message": True,
             "attempts_used": 1,
         }
     ]

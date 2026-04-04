@@ -1375,7 +1375,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
             "model": "gpt-4o",
             "status": "failed_transient",
             "error_type": "ProviderTransientError",
-            "error_message": "primary temporarily unavailable",
+            "has_error_message": True,
             "attempts_used": 1,
         }
     ]
@@ -1420,7 +1420,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
             "model": "gpt-4o",
             "status": "failed_transient",
             "error_type": "ProviderTransientError",
-            "error_message": "primary temporarily unavailable",
+            "has_error_message": True,
             "attempts_used": 1,
         }
     ]
@@ -1561,7 +1561,7 @@ def test_chat_falls_back_after_primary_provider_transient_failure(monkeypatch):
             "model": "gpt-4o",
             "status": "failed_transient",
             "error_type": "ProviderTransientError",
-            "error_message": "provider temporarily unavailable",
+            "has_error_message": True,
             "attempts_used": 1,
         }
     ]
@@ -1595,7 +1595,7 @@ def test_chat_falls_back_after_transient_provider_health_check_failure(monkeypat
             "model": "gpt-4o",
             "status": "failed_health_check",
             "error_type": "ProviderTransientError",
-            "error_message": "provider health check timed out",
+            "has_error_message": True,
             "retryable": True,
         }
     ]

@@ -1096,6 +1096,7 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
                         "status": "failed_call_budget_exhausted",
                         "provider_call_count": 1,
                         "provider_max_calls": 1,
+                        "error_message": "Authorization: Bearer sk-ant-secret-987654",
                     }
                 ],
             }
@@ -1121,6 +1122,7 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
             "model": "claude-test",
             "status": "failed_call_budget_exhausted",
             "call_budget_exhausted": True,
+            "has_error_message": True,
         }
     ]
     assert "provider_call_counts_by_provider" not in metadata
@@ -8666,6 +8668,16 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                                 "backoff_seconds": 0.0,
                             }
                         ],
+                        "fallback_history": [
+                            {
+                                "provider": "anthropic",
+                                "model": "claude-test",
+                                "status": "failed_health_check",
+                                "error_type": "AgentExecutionError",
+                                "error_message": "api_key=sk-secret-123456",
+                                "retryable": False,
+                            }
+                        ],
                     }
                 },
             )
@@ -8684,6 +8696,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "[REDACTED]" in project.tasks[0].last_provider_call["error_message"]
     assert project.tasks[0].last_provider_call["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in project.tasks[0].last_provider_call["attempt_history"][0]
+    assert project.tasks[0].last_provider_call["fallback_history"][0]["has_error_message"] is True
+    assert "error_message" not in project.tasks[0].last_provider_call["fallback_history"][0]
     payload = require_output_payload(project.tasks[0])
     assert payload["metadata"]["provider_call"]["provider"] == "openai"
     assert payload["metadata"]["provider_call"]["model"] == "gpt-test"
@@ -8693,6 +8707,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "[REDACTED]" in payload["metadata"]["provider_call"]["error_message"]
     assert payload["metadata"]["provider_call"]["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in payload["metadata"]["provider_call"]["attempt_history"][0]
+    assert payload["metadata"]["provider_call"]["fallback_history"][0]["has_error_message"] is True
+    assert "error_message" not in payload["metadata"]["provider_call"]["fallback_history"][0]
 
 
 def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):

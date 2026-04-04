@@ -439,7 +439,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "model": "gpt-4o",
             "status": "failed_health_check",
             "error_type": "ProviderTransientError",
-            "error_message": "OpenAI provider health check failed",
+            "has_error_message": True,
             "retryable": True,
         }
     ]

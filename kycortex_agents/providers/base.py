@@ -116,13 +116,17 @@ def _sanitize_provider_call_attempt_history(provider_call: dict[str, Any]) -> No
             continue
 
         sanitized_entry = dict(entry)
-        error_message = sanitized_entry.get("error_message")
-        if isinstance(error_message, str):
-            sanitized_entry["has_error_message"] = bool(error_message)
-            sanitized_entry.pop("error_message", None)
+        _minimize_nested_provider_error_message(sanitized_entry)
         sanitized_history.append(sanitized_entry)
 
     provider_call["attempt_history"] = sanitized_history
+
+
+def _minimize_nested_provider_error_message(provider_call_entry: dict[str, Any]) -> None:
+    error_message = provider_call_entry.get("error_message")
+    if isinstance(error_message, str):
+        provider_call_entry["has_error_message"] = bool(error_message)
+        provider_call_entry.pop("error_message", None)
 
 
 def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> None:
@@ -189,9 +193,7 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
         sanitized_entry.pop("provider_call_count", None)
         sanitized_entry.pop("provider_max_calls", None)
 
-        error_message = sanitized_entry.get("error_message")
-        if isinstance(error_message, str):
-            sanitized_entry["error_message"] = _sanitize_provider_call_budget_message(error_message)
+        _minimize_nested_provider_error_message(sanitized_entry)
         sanitized_history.append(sanitized_entry)
 
     provider_call["fallback_history"] = sanitized_history

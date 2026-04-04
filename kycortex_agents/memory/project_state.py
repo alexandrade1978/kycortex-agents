@@ -1617,7 +1617,7 @@ class ProjectState:
                 return redacted_event
             public_repair_failure_details = self._public_task_repair_failure_details(
                 details,
-                minimize_error_type=False,
+                minimize_error_type=True,
             )
             details.clear()
             details.update(cast(Dict[str, Any], public_repair_failure_details))

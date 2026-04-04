@@ -1745,6 +1745,9 @@ def test_fail_task_syncs_repair_retry_without_finalizing_origin_output():
 
     origin = require_task(project, "docs")
     repair = require_task(project, repair_task.id)
+    internal_retry_event = next(event for event in project.execution_events if event["event"] == "task_repair_retry_scheduled")
+    snapshot = project.snapshot()
+    retry_event = next(event for event in snapshot.execution_events if event["event"] == "task_repair_retry_scheduled")
 
     assert repair.status == TaskStatus.PENDING.value
     assert origin.status == TaskStatus.FAILED.value
@@ -1752,6 +1755,42 @@ def test_fail_task_syncs_repair_retry_without_finalizing_origin_output():
     assert origin.output_payload is None
     assert origin.completed_at is None
     assert origin.history[-1]["event"] == "repair_retry_scheduled"
+    assert internal_retry_event["details"]["error_type"] == "RuntimeError"
+    assert retry_event["details"]["has_repair_task"] is True
+    assert retry_event["details"]["has_error_type"] is True
+    assert "repair_task_id" not in retry_event["details"]
+    assert "error_type" not in retry_event["details"]
+
+
+def test_snapshot_task_repair_retry_scheduled_events_use_presence_flags_for_legacy_error_type_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_repair_retry_scheduled",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": "docs",
+                "status": "failed",
+                "details": {
+                    "repair_task_id": "docs__repair_1",
+                    "repair_attempt": 1,
+                    "error_type": "RuntimeError",
+                    "error_category": "task_execution",
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    retry_event = snapshot.execution_events[0]
+
+    assert retry_event["event"] == "task_repair_retry_scheduled"
+    assert retry_event["details"]["has_repair_task"] is True
+    assert retry_event["details"]["has_error_type"] is True
+    assert "repair_task_id" not in retry_event["details"]
+    assert "error_type" not in retry_event["details"]
 
 
 def test_plan_task_repair_and_repair_helpers_ignore_missing_origin():

@@ -2348,6 +2348,14 @@ class ProjectState:
             public_context["has_helper_surface_symbols"] = True
         public_context.pop("helper_surface_symbols", None)
 
+        raw_decomposition_mode = raw_context.get("decomposition_mode")
+        if (
+            isinstance(raw_decomposition_mode, str)
+            and bool(raw_decomposition_mode.strip())
+        ) or raw_context.get("has_decomposition_mode") is True:
+            public_context["has_decomposition_mode"] = True
+        public_context.pop("decomposition_mode", None)
+
         raw_failure_message = raw_context.get("failure_message")
         if (
             isinstance(raw_failure_message, str)

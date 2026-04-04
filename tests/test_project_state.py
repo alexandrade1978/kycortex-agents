@@ -2407,6 +2407,80 @@ def test_snapshot_policy_enforcement_events_use_presence_flags_for_legacy_provid
     assert "provider_call" not in policy_event["details"]
 
 
+def test_snapshot_minimizes_public_task_failed_provider_call_details():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            retry_limit=0,
+        )
+    )
+
+    project.mark_workflow_running(acceptance_policy="required_tasks", repair_max_cycles=1)
+    project.start_task("tests")
+    project.fail_task(
+        "tests",
+        RuntimeError("provider call failed"),
+        provider_call={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "success": False,
+            "base_url": "https://example.com/v1",
+        },
+        error_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+    )
+
+    internal_task_failed_event = next(event for event in project.execution_events if event["event"] == "task_failed")
+    assert internal_task_failed_event["details"]["provider_call"]["provider"] == "openai"
+
+    snapshot = project.snapshot()
+    task_failed_event = next(event for event in snapshot.execution_events if event["event"] == "task_failed")
+
+    assert task_failed_event["details"]["error_message"] == "provider call failed"
+    assert task_failed_event["details"]["error_type"] == "RuntimeError"
+    assert task_failed_event["details"]["has_provider_call"] is True
+    assert "provider_call" not in task_failed_event["details"]
+
+
+def test_snapshot_task_failed_events_use_presence_flags_for_legacy_provider_call_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_failed",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": "tests",
+                "status": "failed",
+                "details": {
+                    "attempts": 1,
+                    "error_message": "provider call failed",
+                    "error_type": "RuntimeError",
+                    "error_category": FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+                    "provider_call": {
+                        "provider": "openai",
+                        "model": "gpt-4o",
+                        "success": False,
+                    },
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    task_failed_event = snapshot.execution_events[0]
+
+    assert task_failed_event["event"] == "task_failed"
+    assert task_failed_event["details"]["error_message"] == "provider call failed"
+    assert task_failed_event["details"]["error_type"] == "RuntimeError"
+    assert task_failed_event["details"]["has_provider_call"] is True
+    assert "provider_call" not in task_failed_event["details"]
+
+
 def test_snapshot_minimizes_public_workflow_finished_failure_task_details():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

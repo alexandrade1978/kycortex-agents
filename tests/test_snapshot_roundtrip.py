@@ -246,6 +246,10 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.details["last_error_present"] is True
     assert "last_error" not in review_result.details
     assert review_result.details["history"][1]["event"] == "failed"
+    assert review_result.details["history"][1]["has_error_message"] is True
+    assert "error_message" not in review_result.details["history"][1]
+    assert review_result.failure.details["history"][1]["has_error_message"] is True
+    assert "error_message" not in review_result.failure.details["history"][1]
     assert review_result.resource_telemetry == {
         "has_provider_call": True,
         "provider": "ollama",
@@ -276,6 +280,9 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert tests_result.output.metadata["assigned_to"] == "qa_tester"
     assert tests_result.details["last_error_present"] is False
     assert "last_error" not in tests_result.details
+    assert tests_result.details["history"][0]["event"] == "skipped"
+    assert tests_result.details["history"][0]["has_error_message"] is True
+    assert "error_message" not in tests_result.details["history"][0]
     assert tests_result.resource_telemetry["has_provider_call"] is False
 
     assert snapshot.decisions[0].topic == "architecture"

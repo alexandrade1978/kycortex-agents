@@ -1335,6 +1335,7 @@ class ProjectState:
             output = None
             resource_telemetry = self._task_resource_telemetry(task)
             public_repair_context = self._public_repair_context(task.repair_context)
+            public_history = self._public_task_history(task.history)
             has_provider_call = isinstance(task.last_provider_call, dict)
             last_error_present = bool(task.last_error or task.last_error_type or task.last_error_category)
             if task_status == TaskStatus.FAILED:
@@ -1350,7 +1351,7 @@ class ProjectState:
                     "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     "repair_context": public_repair_context,
                     "repair_attempt": task.repair_attempt,
-                    "history": task.history,
+                    "history": public_history,
                 }
                 if self._identifier_present(task.repair_origin_task_id):
                     failure_details["has_repair_origin"] = True
@@ -1379,7 +1380,7 @@ class ProjectState:
                 "last_resumed_at": task.last_resumed_at,
                 "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
                 "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
-                "history": task.history,
+                "history": public_history,
             }
             if self._identifier_present(task.repair_origin_task_id):
                 public_details["has_repair_origin"] = True
@@ -2143,6 +2144,34 @@ class ProjectState:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)
         return public_details
+
+    def _public_task_history_entry(self, entry: Any) -> Dict[str, Any]:
+        if not isinstance(entry, dict):
+            return {}
+
+        public_entry: Dict[str, Any] = {
+            "event": entry.get("event"),
+            "timestamp": entry.get("timestamp"),
+            "status": entry.get("status"),
+            "attempts": entry.get("attempts"),
+        }
+
+        raw_error_message = entry.get("error_message")
+        if (isinstance(raw_error_message, str) and bool(raw_error_message)) or entry.get("has_error_message") is True:
+            public_entry["has_error_message"] = True
+
+        return cast(Dict[str, Any], _redact_payload(public_entry))
+
+    def _public_task_history(self, history: Any) -> List[Dict[str, Any]]:
+        if not isinstance(history, list):
+            return []
+
+        public_history: List[Dict[str, Any]] = []
+        for entry in history:
+            public_entry = self._public_task_history_entry(entry)
+            if public_entry:
+                public_history.append(public_entry)
+        return public_history
 
     def _public_task_failed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))

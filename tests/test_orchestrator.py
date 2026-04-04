@@ -1052,6 +1052,9 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
                 "model": "gpt-test",
                 "base_url": "https://alice:secret-pass@example.com/v1",
                 "error_message": "api_key=sk-secret-123456",
+                "provider_call_count": 2,
+                "provider_max_calls_per_agent": 3,
+                "provider_remaining_calls": 1,
             }
 
     metadata = orchestrator._provider_call_metadata(MetadataAgent(), AgentOutput(summary="ok", raw_content="ok"))
@@ -1063,6 +1066,11 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
     assert "sk-secret-123456" not in str(metadata)
     assert "[REDACTED]" in metadata["base_url"]
     assert "[REDACTED]" in metadata["error_message"]
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == []
+    assert metadata["provider_call_budget_exhausted_providers"] == []
+    assert "provider_call_count" not in metadata
 
 
 def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
@@ -1078,6 +1086,18 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
                 "model": "claude-test",
                 "base_url": "https://bob:secret-pass@example.com/messages",
                 "error_message": "Authorization: Bearer sk-ant-secret-987654",
+                "provider_call_counts_by_provider": {"anthropic": 1},
+                "provider_max_calls_per_provider": {"anthropic": 1},
+                "provider_remaining_calls_by_provider": {"anthropic": 0},
+                "fallback_history": [
+                    {
+                        "provider": "anthropic",
+                        "model": "claude-test",
+                        "status": "failed_call_budget_exhausted",
+                        "provider_call_count": 1,
+                        "provider_max_calls": 1,
+                    }
+                ],
             }
         },
     )
@@ -1091,6 +1111,19 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
     assert "sk-ant-secret-987654" not in str(metadata)
     assert "[REDACTED]" in metadata["base_url"]
     assert "[REDACTED]" in metadata["error_message"]
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == ["anthropic"]
+    assert metadata["provider_call_budget_exhausted_providers"] == ["anthropic"]
+    assert metadata["fallback_history"] == [
+        {
+            "provider": "anthropic",
+            "model": "claude-test",
+            "status": "failed_call_budget_exhausted",
+            "call_budget_exhausted": True,
+        }
+    ]
+    assert "provider_call_counts_by_provider" not in metadata
 
 
 def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):

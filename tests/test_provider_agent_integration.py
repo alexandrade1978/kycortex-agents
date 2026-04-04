@@ -596,13 +596,13 @@ def test_execute_falls_back_to_secondary_provider_after_primary_provider_budget_
             "provider": "openai",
             "model": "gpt-4o",
             "status": "skipped_call_budget_exhausted",
-            "provider_call_count": 1,
-            "provider_max_calls": 1,
+            "call_budget_exhausted": True,
         }
     ]
-    assert metadata["provider_call_counts_by_provider"] == {"openai": 1, "anthropic": 1}
-    assert metadata["provider_max_calls_per_provider"] == {"openai": 1}
-    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == ["openai"]
+    assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
 
 
 def test_execute_surfaces_provider_specific_timeout_metadata_and_runtime_override(monkeypatch):

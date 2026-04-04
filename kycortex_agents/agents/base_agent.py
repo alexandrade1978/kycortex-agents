@@ -8,7 +8,13 @@ from typing import Any, Optional, cast
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
-from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_data, redact_sensitive_text, sanitize_prompt_input
+from kycortex_agents.providers.base import (
+    BaseLLMProvider,
+    redact_sensitive_data,
+    redact_sensitive_text,
+    sanitize_prompt_input,
+    sanitize_provider_call_metadata,
+)
 from kycortex_agents.providers.factory import (
     _maybe_get_cached_health_snapshot,
     _store_health_snapshot,
@@ -144,10 +150,7 @@ class BaseAgent(ABC):
                         }
                     )
                     continue
-                message = (
-                    f"{self.name}: provider call budget exhausted for {provider_name} "
-                    f"after {provider_call_count} calls"
-                )
+                message = f"{self.name}: provider call budget exhausted for {provider_name}"
                 self._last_provider_call_metadata = {
                     "provider": provider_name,
                     "model": model_name,
@@ -241,10 +244,7 @@ class BaseAgent(ABC):
                     }
                     raise AgentExecutionError(message)
                 if self._is_provider_call_budget_exhausted():
-                    message = (
-                        f"{self.name}: provider call budget exhausted after "
-                        f"{self._provider_call_count} calls"
-                    )
+                    message = f"{self.name}: provider call budget exhausted"
                     self._last_provider_call_metadata = {
                         "provider": provider_name,
                         "model": model_name,
@@ -280,10 +280,7 @@ class BaseAgent(ABC):
                             }
                         )
                         break
-                    message = (
-                        f"{self.name}: provider call budget exhausted for {provider_name} "
-                        f"after {provider_call_count} calls"
-                    )
+                    message = f"{self.name}: provider call budget exhausted for {provider_name}"
                     self._last_provider_call_metadata = {
                         "provider": provider_name,
                         "model": model_name,
@@ -1003,8 +1000,14 @@ class BaseAgent(ABC):
         output.metadata.setdefault("agent_role", self.role)
         output.metadata.setdefault("task_id", agent_input.task_id)
         output.metadata.setdefault("project_name", agent_input.project_name)
-        if self._last_provider_call_metadata is not None:
-            output.metadata.setdefault("provider_call", redact_sensitive_data(dict(self._last_provider_call_metadata)))
+        provider_call = output.metadata.get("provider_call") if isinstance(output.metadata, dict) else None
+        if isinstance(provider_call, Mapping):
+            output.metadata["provider_call"] = sanitize_provider_call_metadata(provider_call)
+        elif self._last_provider_call_metadata is not None:
+            output.metadata.setdefault(
+                "provider_call",
+                sanitize_provider_call_metadata(self._last_provider_call_metadata),
+            )
         if not output.artifacts:
             output.artifacts.append(self._build_default_artifact(agent_input, output))
         return output
@@ -1147,7 +1150,7 @@ class BaseAgent(ABC):
     def get_last_provider_call_metadata(self) -> Optional[dict[str, Any]]:
         if self._last_provider_call_metadata is None:
             return None
-        return redact_sensitive_data(dict(self._last_provider_call_metadata))
+        return sanitize_provider_call_metadata(self._last_provider_call_metadata)
 
     @abstractmethod
     def run(self, task_description: str, context: dict) -> str | AgentOutput:

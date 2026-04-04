@@ -25,7 +25,11 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.providers.base import redact_sensitive_data, redact_sensitive_text
+from kycortex_agents.providers.base import (
+    redact_sensitive_data,
+    redact_sensitive_text,
+    sanitize_provider_call_metadata,
+)
 from kycortex_agents.types import (
     AgentInput,
     AgentOutput,
@@ -1731,7 +1735,7 @@ class Orchestrator:
         return cast(Dict[str, Any], redact_sensitive_data(result))
 
     def _sanitize_provider_call_metadata(self, provider_call: Dict[str, Any]) -> Dict[str, Any]:
-        return cast(Dict[str, Any], redact_sensitive_data(dict(provider_call)))
+        return sanitize_provider_call_metadata(provider_call)
 
     def _sanitize_output_provider_call_metadata(self, output: AgentOutput) -> AgentOutput:
         provider_call = output.metadata.get("provider_call") if isinstance(output.metadata, dict) else None

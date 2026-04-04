@@ -80,12 +80,12 @@ def test_chat_returns_response_content():
     assert provider.calls == [("system", "message")]
     metadata = agent.get_last_provider_call_metadata()
     assert metadata is not None
-    assert metadata["provider_call_count"] == 1
-    assert metadata["provider_call_counts_by_provider"] == {"openai": 1}
-    assert metadata["provider_max_calls_per_agent"] == 0
-    assert metadata["provider_max_calls_per_provider"] == {}
-    assert metadata["provider_remaining_calls"] is None
-    assert metadata["provider_remaining_calls_by_provider"] == {}
+    assert metadata["provider_call_budget_limited"] is False
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == []
+    assert metadata["provider_call_budget_exhausted_providers"] == []
+    assert "provider_call_count" not in metadata
+    assert "provider_remaining_calls" not in metadata
     assert metadata["provider_timeout_seconds"] == 60.0
     assert metadata["provider_timeout_seconds_by_provider"] == {"openai": 60.0}
     assert metadata["provider_max_elapsed_seconds_per_call"] == 0.0
@@ -716,7 +716,7 @@ def test_chat_fails_fast_when_provider_call_budget_is_exhausted():
 
     first_result = agent.chat("system", "message")
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted after 1 calls"):
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted"):
         agent.chat("system", "second-message")
 
     metadata = agent.get_last_provider_call_metadata()
@@ -725,9 +725,11 @@ def test_chat_fails_fast_when_provider_call_budget_is_exhausted():
     assert metadata["success"] is False
     assert metadata["retryable"] is False
     assert metadata["attempts_used"] == 0
-    assert metadata["provider_call_count"] == 1
-    assert metadata["provider_max_calls_per_agent"] == 1
-    assert metadata["provider_remaining_calls"] == 0
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is True
+    assert metadata["provider_call_budget_limited_providers"] == []
+    assert metadata["provider_call_budget_exhausted_providers"] == []
+    assert "provider_call_count" not in metadata
     assert metadata["attempt_history"] == []
     assert provider.calls == [("system", "message")]
 
@@ -745,7 +747,7 @@ def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkey
     agent.config.provider_max_calls_per_agent = 1
     monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted after 1 calls"):
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted"):
         agent.chat("system", "message")
 
     metadata = agent.get_last_provider_call_metadata()
@@ -753,8 +755,10 @@ def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkey
     assert metadata["success"] is False
     assert metadata["retryable"] is False
     assert metadata["attempts_used"] == 1
-    assert metadata["provider_call_count"] == 1
-    assert metadata["provider_remaining_calls"] == 0
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is True
+    assert metadata["provider_call_budget_limited_providers"] == []
+    assert metadata["provider_call_budget_exhausted_providers"] == []
     assert metadata["attempt_history"] == [
         {
             "attempt": 1,
@@ -780,7 +784,7 @@ def test_chat_fails_fast_when_provider_specific_call_budget_is_exhausted():
 
     first_result = agent.chat("system", "message")
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted for openai after 1 calls"):
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted for openai"):
         agent.chat("system", "second-message")
 
     metadata = agent.get_last_provider_call_metadata()
@@ -789,10 +793,11 @@ def test_chat_fails_fast_when_provider_specific_call_budget_is_exhausted():
     assert metadata["success"] is False
     assert metadata["retryable"] is False
     assert metadata["attempts_used"] == 0
-    assert metadata["provider_call_count"] == 1
-    assert metadata["provider_call_counts_by_provider"] == {"openai": 1}
-    assert metadata["provider_max_calls_per_provider"] == {"openai": 1}
-    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == ["openai"]
+    assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
+    assert "provider_call_counts_by_provider" not in metadata
     assert metadata["attempt_history"] == []
     assert provider.calls == [("system", "message")]
 
@@ -813,7 +818,7 @@ def test_chat_provider_specific_budget_blocks_additional_retry_attempts_after_fi
     agent = DummyAgent(provider, config)
     monkeypatch.setattr("kycortex_agents.agents.base_agent.random.uniform", lambda start, end: 0.0)
 
-    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted for openai after 1 calls"):
+    with pytest.raises(AgentExecutionError, match="Dummy: provider call budget exhausted for openai"):
         agent.chat("system", "message")
 
     metadata = agent.get_last_provider_call_metadata()
@@ -821,9 +826,10 @@ def test_chat_provider_specific_budget_blocks_additional_retry_attempts_after_fi
     assert metadata["success"] is False
     assert metadata["retryable"] is False
     assert metadata["attempts_used"] == 1
-    assert metadata["provider_call_count"] == 1
-    assert metadata["provider_call_counts_by_provider"] == {"openai": 1}
-    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == ["openai"]
+    assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
     assert metadata["attempt_history"] == [
         {
             "attempt": 1,
@@ -925,7 +931,8 @@ def test_chat_fails_before_first_attempt_when_elapsed_budget_is_already_exhauste
     assert metadata["success"] is False
     assert metadata["attempts_used"] == 0
     assert metadata["attempt_history"] == []
-    assert metadata["provider_call_count"] == 0
+    assert metadata["provider_call_budget_limited"] is False
+    assert metadata["provider_call_budget_exhausted"] is False
     assert provider.calls == []
 
 
@@ -1460,12 +1467,13 @@ def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monk
             "provider": "openai",
             "model": "gpt-4o",
             "status": "skipped_call_budget_exhausted",
-            "provider_call_count": 1,
-            "provider_max_calls": 1,
+            "call_budget_exhausted": True,
         }
     ]
-    assert metadata["provider_call_counts_by_provider"] == {"openai": 1, "anthropic": 1}
-    assert metadata["provider_remaining_calls_by_provider"] == {"openai": 0}
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == ["openai"]
+    assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
     assert primary_provider.calls == [("system", "message")]
     assert fallback_provider.calls == [("system", "second-message")]
 
@@ -1506,11 +1514,14 @@ def test_chat_falls_back_after_primary_provider_budget_is_exhausted_mid_retry(mo
             "provider": "openai",
             "model": "gpt-4o",
             "status": "failed_call_budget_exhausted",
-            "provider_call_count": 1,
-            "provider_max_calls": 1,
+            "call_budget_exhausted": True,
             "attempts_used": 1,
         }
     ]
+    assert metadata["provider_call_budget_limited"] is True
+    assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_call_budget_limited_providers"] == ["openai"]
+    assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
     assert metadata["attempt_history"][0]["retryable"] is True
     assert primary_provider.calls == [("system", "message")]
     assert fallback_provider.calls == [("system", "message")]
@@ -1975,7 +1986,13 @@ def test_require_context_value_returns_non_empty_value_and_provider_metadata_acc
     metadata_copy["provider"] = "mutated"
 
     assert agent.require_context_value(agent_input, "architecture") == "Layered runtime"
-    assert agent.get_last_provider_call_metadata() == {"provider": "openai"}
+    assert agent.get_last_provider_call_metadata() == {
+        "provider": "openai",
+        "provider_call_budget_limited": False,
+        "provider_call_budget_exhausted": False,
+        "provider_call_budget_limited_providers": [],
+        "provider_call_budget_exhausted_providers": [],
+    }
 
 
 def test_get_last_provider_call_metadata_returns_none_when_no_call_has_run():

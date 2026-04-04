@@ -262,7 +262,13 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     }
     assert any(
         event["task_id"] == "arch"
-        and (event["details"].get("provider_budget") or {}).get("calls_by_provider") == {"openai": 1}
+        and (event["details"].get("provider_budget") or {})
+        == {
+            "call_budget_limited": False,
+            "call_budget_exhausted": False,
+            "limited_providers": [],
+            "exhausted_providers": [],
+        }
         for event in project.execution_events
     )
 

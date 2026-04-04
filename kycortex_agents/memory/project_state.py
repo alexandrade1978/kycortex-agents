@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
 from kycortex_agents.memory.state_store import _public_state_path_label, resolve_state_store
-from kycortex_agents.providers.base import redact_sensitive_data, redact_sensitive_text
+from kycortex_agents.providers.base import (
+    redact_sensitive_data,
+    redact_sensitive_text,
+    sanitize_provider_call_metadata,
+)
 from kycortex_agents.types import (
     AgentOutput,
     ArtifactRecord,
@@ -59,7 +63,7 @@ def _redact_payload(value: Any) -> Any:
 def _redact_provider_call(provider_call: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if provider_call is None:
         return None
-    return cast(Dict[str, Any], _redact_payload(provider_call))
+    return sanitize_provider_call_metadata(provider_call)
 
 
 def _normalized_redacted_reason(reason: Any, default: str) -> str:
@@ -1689,13 +1693,18 @@ class ProjectState:
     ) -> Optional[Dict[str, Any]]:
         if not isinstance(provider_call, dict):
             return None
+        sanitized_provider_call = sanitize_provider_call_metadata(provider_call)
         return {
-            "total_calls": provider_call.get("provider_call_count"),
-            "calls_by_provider": dict(provider_call.get("provider_call_counts_by_provider") or {}),
-            "max_calls_per_agent": provider_call.get("provider_max_calls_per_agent"),
-            "max_calls_by_provider": dict(provider_call.get("provider_max_calls_per_provider") or {}),
-            "remaining_calls": provider_call.get("provider_remaining_calls"),
-            "remaining_calls_by_provider": dict(provider_call.get("provider_remaining_calls_by_provider") or {}),
+            "call_budget_limited": bool(sanitized_provider_call.get("provider_call_budget_limited")),
+            "call_budget_exhausted": bool(
+                sanitized_provider_call.get("provider_call_budget_exhausted")
+            ),
+            "limited_providers": list(
+                sanitized_provider_call.get("provider_call_budget_limited_providers") or []
+            ),
+            "exhausted_providers": list(
+                sanitized_provider_call.get("provider_call_budget_exhausted_providers") or []
+            ),
         }
 
     def _workflow_telemetry_summary(self) -> WorkflowTelemetry:

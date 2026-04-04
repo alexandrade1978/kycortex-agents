@@ -2308,6 +2308,14 @@ class ProjectState:
             public_context["has_existing_tests"] = True
         public_context.pop("existing_tests", None)
 
+        raw_instruction = raw_context.get("instruction")
+        if (
+            isinstance(raw_instruction, str)
+            and bool(raw_instruction.strip())
+        ) or raw_context.get("has_instruction") is True:
+            public_context["has_instruction"] = True
+        public_context.pop("instruction", None)
+
         raw_failure_message = raw_context.get("failure_message")
         if (
             isinstance(raw_failure_message, str)

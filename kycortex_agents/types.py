@@ -143,6 +143,22 @@ class WorkflowAcceptanceSummary(TypedDict):
     pending_task_count: int
 
 
+def empty_workflow_acceptance_summary() -> WorkflowAcceptanceSummary:
+    return {
+        "policy": None,
+        "accepted": False,
+        "reason": None,
+        "terminal_outcome": None,
+        "failure_category": None,
+        "evaluated_task_count": 0,
+        "required_task_count": 0,
+        "completed_task_count": 0,
+        "failed_task_count": 0,
+        "skipped_task_count": 0,
+        "pending_task_count": 0,
+    }
+
+
 class WorkflowProgressSummary(TypedDict):
     """Workflow execution-progress summary embedded in aggregate telemetry."""
 
@@ -275,19 +291,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         },
         "tasks_with_provider_calls": 0,
         "tasks_without_provider_calls": 0,
-        "acceptance_summary": {
-            "policy": None,
-            "accepted": False,
-            "reason": None,
-            "terminal_outcome": None,
-            "failure_category": None,
-            "evaluated_task_count": 0,
-            "required_task_count": 0,
-            "completed_task_count": 0,
-            "failed_task_count": 0,
-            "skipped_task_count": 0,
-            "pending_task_count": 0,
-        },
+        "acceptance_summary": empty_workflow_acceptance_summary(),
         "resume_summary": {
             "count": 0,
             "reason_count": 0,
@@ -427,7 +431,7 @@ class ProjectSnapshot:
     terminal_outcome: Optional[str] = None
     failure_category: Optional[str] = None
     acceptance_criteria_met: bool = False
-    acceptance_evaluation: Dict[str, Any] = field(default_factory=dict)
+    acceptance_evaluation: WorkflowAcceptanceSummary = field(default_factory=empty_workflow_acceptance_summary)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     last_resumed_at: Optional[str] = None

@@ -933,6 +933,7 @@ class ProjectState:
         self.acceptance_evaluation = dict(acceptance_evaluation or {})
         terminal_failure_context = self._terminal_failure_context(self.failure_category)
         workflow_telemetry = self._workflow_telemetry_summary()
+        public_acceptance_evaluation = cast(Dict[str, Any], dict(workflow_telemetry["acceptance_summary"]))
         self._record_policy_enforcement_event(
             source_event="workflow_finished",
             timestamp=finished_at,
@@ -950,7 +951,7 @@ class ProjectState:
             "terminal_outcome": self.terminal_outcome,
             "failure_category": self.failure_category,
             "acceptance_criteria_met": self.acceptance_criteria_met,
-            "acceptance_evaluation": self.acceptance_evaluation,
+            "acceptance_evaluation": public_acceptance_evaluation,
             "workflow_telemetry": workflow_telemetry,
         }
         if terminal_failure_context:
@@ -1403,6 +1404,10 @@ class ProjectState:
         self._normalize_legacy_decision_timestamps()
         self._normalize_legacy_artifact_timestamps()
         workflow_telemetry = self._workflow_telemetry_summary()
+        public_acceptance_evaluation = cast(
+            WorkflowAcceptanceSummary,
+            dict(workflow_telemetry["acceptance_summary"]),
+        )
         return ProjectSnapshot(
             project_name=_redact_text(self.project_name) or "",
             goal=_redact_text(self.goal) or "",
@@ -1412,7 +1417,7 @@ class ProjectState:
             terminal_outcome=self.terminal_outcome,
             failure_category=self.failure_category,
             acceptance_criteria_met=self.acceptance_criteria_met,
-            acceptance_evaluation=cast(Dict[str, Any], _redact_payload(dict(self.acceptance_evaluation))),
+            acceptance_evaluation=public_acceptance_evaluation,
             started_at=self.workflow_started_at,
             finished_at=self.workflow_finished_at,
             last_resumed_at=self.workflow_last_resumed_at,
@@ -1435,7 +1440,7 @@ class ProjectState:
                 for decision in self.decisions
             ],
             artifacts=[self._redacted_artifact_record(self._deserialize_artifact_record(artifact)) for artifact in self.artifacts],
-            execution_events=cast(List[Dict[str, Any]], _redact_payload(list(self.execution_events))),
+            execution_events=[self._redacted_execution_event(event) for event in self.execution_events],
             updated_at=self.updated_at,
         )
 
@@ -1528,6 +1533,31 @@ class ProjectState:
                 "details": normalized_details,
             }
         )
+
+    def _redacted_execution_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        redacted_event = cast(Dict[str, Any], _redact_payload(dict(event)))
+        if redacted_event.get("event") != "workflow_finished":
+            return redacted_event
+        details = redacted_event.get("details")
+        if not isinstance(details, dict):
+            return redacted_event
+        workflow_telemetry = details.get("workflow_telemetry")
+        if isinstance(workflow_telemetry, dict):
+            acceptance_summary = workflow_telemetry.get("acceptance_summary")
+            if isinstance(acceptance_summary, dict):
+                details["acceptance_evaluation"] = cast(Dict[str, Any], _redact_payload(dict(acceptance_summary)))
+                return redacted_event
+        details["acceptance_evaluation"] = cast(
+            Dict[str, Any],
+            self._public_acceptance_evaluation(
+                details.get("acceptance_evaluation"),
+                acceptance_policy=details.get("acceptance_policy"),
+                acceptance_criteria_met=details.get("acceptance_criteria_met"),
+                terminal_outcome=details.get("terminal_outcome"),
+                failure_category=details.get("failure_category"),
+            ),
+        )
+        return redacted_event
 
     def _provider_budget_summary(
         self,
@@ -1780,19 +1810,52 @@ class ProjectState:
         }
 
     def _acceptance_summary(self) -> WorkflowAcceptanceSummary:
-        acceptance_evaluation = self.acceptance_evaluation if isinstance(self.acceptance_evaluation, dict) else {}
+        return self._public_acceptance_evaluation(
+            self.acceptance_evaluation,
+            acceptance_policy=self.acceptance_policy,
+            acceptance_criteria_met=self.acceptance_criteria_met,
+            terminal_outcome=self.terminal_outcome,
+            failure_category=self.failure_category,
+        )
+
+    def _public_acceptance_evaluation(
+        self,
+        acceptance_evaluation: Any,
+        *,
+        acceptance_policy: Any,
+        acceptance_criteria_met: Any,
+        terminal_outcome: Any,
+        failure_category: Any,
+    ) -> WorkflowAcceptanceSummary:
+        normalized_evaluation = acceptance_evaluation if isinstance(acceptance_evaluation, dict) else {}
+        policy = acceptance_policy if isinstance(acceptance_policy, str) and acceptance_policy else None
+        if policy is None:
+            raw_policy = normalized_evaluation.get("policy")
+            policy = raw_policy if isinstance(raw_policy, str) and raw_policy else None
+        accepted = acceptance_criteria_met if isinstance(acceptance_criteria_met, bool) else False
+        if not isinstance(acceptance_criteria_met, bool):
+            raw_accepted = normalized_evaluation.get("accepted")
+            accepted = raw_accepted if isinstance(raw_accepted, bool) else False
+        outcome = terminal_outcome if isinstance(terminal_outcome, str) and terminal_outcome else None
+        if outcome is None:
+            raw_outcome = normalized_evaluation.get("terminal_outcome")
+            outcome = raw_outcome if isinstance(raw_outcome, str) and raw_outcome else None
+        category = failure_category if isinstance(failure_category, str) and failure_category else None
+        if category is None:
+            raw_category = normalized_evaluation.get("failure_category")
+            category = raw_category if isinstance(raw_category, str) and raw_category else None
         return {
-            "policy": self.acceptance_policy,
-            "accepted": self.acceptance_criteria_met,
-            "reason": acceptance_evaluation.get("reason"),
-            "terminal_outcome": self.terminal_outcome,
-            "failure_category": self.failure_category,
-            "evaluated_task_count": len(self._list_like_values(acceptance_evaluation.get("evaluated_task_ids"))),
-            "required_task_count": len(self._list_like_values(acceptance_evaluation.get("required_task_ids"))),
-            "completed_task_count": len(self._list_like_values(acceptance_evaluation.get("completed_task_ids"))),
-            "failed_task_count": len(self._list_like_values(acceptance_evaluation.get("failed_task_ids"))),
-            "skipped_task_count": len(self._list_like_values(acceptance_evaluation.get("skipped_task_ids"))),
-            "pending_task_count": len(self._list_like_values(acceptance_evaluation.get("pending_task_ids"))),
+            "policy": policy,
+            "accepted": accepted,
+            "reason": normalized_evaluation.get("reason") if isinstance(normalized_evaluation.get("reason"), str) else None,
+            "terminal_outcome": outcome,
+            "failure_category": category,
+            "evaluated_task_count": self._acceptance_task_count(normalized_evaluation, "evaluated_task_ids", "evaluated_task_count"),
+            "required_task_count": self._acceptance_task_count(normalized_evaluation, "required_task_ids", "required_task_count"),
+            "completed_task_count": self._acceptance_task_count(normalized_evaluation, "completed_task_ids", "completed_task_count"),
+            "failed_task_count": self._acceptance_task_count(normalized_evaluation, "failed_task_ids", "failed_task_count"),
+            "skipped_task_count": self._acceptance_task_count(normalized_evaluation, "skipped_task_ids", "skipped_task_count"),
+            "pending_task_count": self._acceptance_task_count(normalized_evaluation, "pending_task_ids", "pending_task_count"),
         }
 
     def _resume_summary(self) -> WorkflowResumeSummary:
@@ -1849,6 +1912,15 @@ class ProjectState:
         if not isinstance(value, list):
             return []
         return list(value)
+
+    def _acceptance_task_count(self, acceptance_evaluation: Dict[str, Any], task_ids_key: str, count_key: str) -> int:
+        task_ids = self._list_like_values(acceptance_evaluation.get(task_ids_key))
+        if task_ids:
+            return len(task_ids)
+        raw_count = acceptance_evaluation.get(count_key)
+        if isinstance(raw_count, (int, float)) and not isinstance(raw_count, bool):
+            return max(int(raw_count), 0)
+        return 0
 
     def _string_list(self, value: Any) -> List[str]:
         if not isinstance(value, list):

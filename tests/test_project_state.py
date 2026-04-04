@@ -1921,6 +1921,19 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
     snapshot = project.snapshot()
 
     assert event["event"] == "workflow_finished"
+    assert event["details"]["acceptance_evaluation"] == {
+        "policy": "required_tasks",
+        "accepted": True,
+        "reason": "all_required_tasks_done",
+        "terminal_outcome": WorkflowOutcome.COMPLETED.value,
+        "failure_category": None,
+        "evaluated_task_count": 2,
+        "required_task_count": 1,
+        "completed_task_count": 2,
+        "failed_task_count": 0,
+        "skipped_task_count": 0,
+        "pending_task_count": 0,
+    }
     assert event["details"]["workflow_telemetry"]["acceptance_summary"] == {
         "policy": "required_tasks",
         "accepted": True,
@@ -1974,6 +1987,19 @@ def test_mark_workflow_finished_records_policy_enforcement_for_security_failures
     assert policy_event["details"]["message"] == "sandbox policy blocked filesystem write outside sandbox root"
     assert policy_event["details"]["error_type"] == "RuntimeError"
     assert policy_event["details"]["terminal_outcome"] == WorkflowOutcome.FAILED.value
+    assert workflow_event["details"]["acceptance_evaluation"] == {
+        "policy": "required_tasks",
+        "accepted": False,
+        "reason": None,
+        "terminal_outcome": WorkflowOutcome.FAILED.value,
+        "failure_category": FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+        "evaluated_task_count": 0,
+        "required_task_count": 0,
+        "completed_task_count": 0,
+        "failed_task_count": 1,
+        "skipped_task_count": 0,
+        "pending_task_count": 0,
+    }
     assert workflow_event["details"]["failure_task_id"] == "tests"
     assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
     assert workflow_event["details"]["failure_error_type"] == "RuntimeError"
@@ -2370,9 +2396,22 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.acceptance_policy == "required_tasks"
     assert snapshot.terminal_outcome == "completed"
     assert snapshot.acceptance_criteria_met is True
-    assert snapshot.acceptance_evaluation["required_task_ids"] == ["arch"]
+    assert snapshot.acceptance_evaluation == {
+        "policy": "required_tasks",
+        "accepted": True,
+        "reason": None,
+        "terminal_outcome": "completed",
+        "failure_category": None,
+        "evaluated_task_count": 0,
+        "required_task_count": 1,
+        "completed_task_count": 1,
+        "failed_task_count": 0,
+        "skipped_task_count": 0,
+        "pending_task_count": 0,
+    }
     assert snapshot.execution_events[0]["event"] == "workflow_started"
     assert snapshot.execution_events[1]["details"]["workflow_duration_ms"] == 360000.0
+    assert snapshot.execution_events[1]["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
     assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
 
 

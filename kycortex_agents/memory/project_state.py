@@ -1611,11 +1611,25 @@ class ProjectState:
             details.clear()
             details.update(cast(Dict[str, Any], public_repair_started_details))
             return redacted_event
-        if event_name in {"task_repair_retry_scheduled", "task_repair_failed"}:
+        if event_name == "task_repair_retry_scheduled":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
                 return redacted_event
-            public_repair_failure_details = self._public_task_repair_failure_details(details)
+            public_repair_failure_details = self._public_task_repair_failure_details(
+                details,
+                minimize_error_type=False,
+            )
+            details.clear()
+            details.update(cast(Dict[str, Any], public_repair_failure_details))
+            return redacted_event
+        if event_name == "task_repair_failed":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_repair_failure_details = self._public_task_repair_failure_details(
+                details,
+                minimize_error_type=True,
+            )
             details.clear()
             details.update(cast(Dict[str, Any], public_repair_failure_details))
             return redacted_event
@@ -2291,7 +2305,12 @@ class ProjectState:
             public_details["has_repair_task"] = True
         return public_details
 
-    def _public_task_repair_failure_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+    def _public_task_repair_failure_details(
+        self,
+        details: Dict[str, Any],
+        *,
+        minimize_error_type: bool,
+    ) -> Dict[str, Any]:
         raw_repair_attempt = details.get("repair_attempt")
         public_details: Dict[str, Any] = {
             "repair_attempt": (
@@ -2299,9 +2318,13 @@ class ProjectState:
                 if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
                 else 0
             ),
-            "error_type": details.get("error_type") if isinstance(details.get("error_type"), str) else None,
             "error_category": details.get("error_category") if isinstance(details.get("error_category"), str) else None,
         }
+        if minimize_error_type:
+            if self._presence_flag(details, "error_type", "has_error_type"):
+                public_details["has_error_type"] = True
+        else:
+            public_details["error_type"] = details.get("error_type") if isinstance(details.get("error_type"), str) else None
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):
             public_details["has_repair_task"] = True
         return public_details

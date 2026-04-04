@@ -1956,7 +1956,40 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert "repair_task_id" not in started_event["details"]
 
     assert failed_event["details"]["has_repair_task"] is True
+    assert failed_event["details"]["has_error_type"] is True
+    assert "error_type" not in failed_event["details"]
     assert "repair_task_id" not in failed_event["details"]
+
+
+def test_snapshot_task_repair_failed_events_use_presence_flags_for_legacy_error_type_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_repair_failed",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": "code",
+                "status": "failed",
+                "details": {
+                    "repair_task_id": "repair-code",
+                    "repair_attempt": 1,
+                    "error_type": "RuntimeError",
+                    "error_category": FailureCategory.CODE_VALIDATION.value,
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    failed_event = snapshot.execution_events[0]
+
+    assert failed_event["event"] == "task_repair_failed"
+    assert failed_event["details"]["has_repair_task"] is True
+    assert failed_event["details"]["has_error_type"] is True
+    assert "repair_task_id" not in failed_event["details"]
+    assert "error_type" not in failed_event["details"]
 
 
 def test_start_repair_cycle_updates_snapshot_and_execution_history():

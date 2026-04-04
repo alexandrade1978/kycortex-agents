@@ -1845,6 +1845,120 @@ def test_snapshot_exposes_task_repair_context_details():
     assert result.details["repair_context"]["failure_category"] == "test_validation"
 
 
+def test_snapshot_minimizes_public_task_repair_lineage_details():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests__repair_2",
+            title="Repair tests",
+            description="Repair tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            output="repair failed",
+            last_error="repair failed",
+            last_error_type="RuntimeError",
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            repair_origin_task_id="tests",
+            repair_attempt=2,
+            repair_context={
+                "cycle": 2,
+                "failure_category": "test_validation",
+                "instruction": "Repair the generated pytest suite.",
+                "source_failure_task_id": "tests",
+                "budget_decomposition_plan_task_id": "tests__repair_2__budget_plan",
+                "provider_call": {"provider": "openai", "success": False},
+            },
+        )
+    )
+
+    result = project.snapshot().task_results["tests__repair_2"]
+
+    assert result.details["repair_context"]["cycle"] == 2
+    assert result.details["repair_context"]["failure_category"] == "test_validation"
+    assert result.details["repair_context"]["has_source_failure_task"] is True
+    assert result.details["repair_context"]["has_budget_decomposition_plan"] is True
+    assert result.details["repair_context"]["has_provider_call"] is True
+    assert "source_failure_task_id" not in result.details["repair_context"]
+    assert "budget_decomposition_plan_task_id" not in result.details["repair_context"]
+    assert "provider_call" not in result.details["repair_context"]
+    assert result.details["has_repair_origin"] is True
+    assert "repair_origin_task_id" not in result.details
+    assert result.failure is not None
+    assert result.failure.details["repair_context"]["has_source_failure_task"] is True
+    assert result.failure.details["repair_context"]["has_budget_decomposition_plan"] is True
+    assert result.failure.details["repair_context"]["has_provider_call"] is True
+    assert "source_failure_task_id" not in result.failure.details["repair_context"]
+    assert "budget_decomposition_plan_task_id" not in result.failure.details["repair_context"]
+    assert "provider_call" not in result.failure.details["repair_context"]
+    assert result.failure.details["has_repair_origin"] is True
+    assert "repair_origin_task_id" not in result.failure.details
+
+
+def test_snapshot_minimizes_public_repair_lineage_event_details():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement",
+            assigned_to="code_engineer",
+            status=TaskStatus.FAILED.value,
+            output="broken code",
+        )
+    )
+    repair_context = {
+        "cycle": 1,
+        "failure_category": FailureCategory.CODE_VALIDATION.value,
+        "instruction": "Repair the generated Python module.",
+        "source_failure_task_id": "tests",
+        "provider_call": {"provider": "openai", "success": False, "provider_call_count": 2},
+    }
+
+    decomposition_task = project._create_budget_decomposition_task("code", repair_context)
+    assert decomposition_task is not None
+    repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
+    project._plan_task_repair("code", repair_context)
+    repair_task = project._create_repair_task("code", "code_engineer", repair_context)
+    assert repair_task is not None
+    project.start_task(repair_task.id)
+    project.fail_task(repair_task.id, RuntimeError("repair failed"), error_category=FailureCategory.CODE_VALIDATION.value)
+
+    snapshot = project.snapshot()
+    planned_event = next(event for event in snapshot.execution_events if event["event"] == "task_repair_planned")
+    decomposition_event = next(event for event in snapshot.execution_events if event["event"] == "task_budget_decomposition_created")
+    created_event = next(event for event in snapshot.execution_events if event["event"] == "task_repair_created")
+    requeued_event = next(
+        event
+        for event in snapshot.execution_events
+        if event["event"] == "task_requeued" and event["details"].get("has_repair_task") is True
+    )
+    started_event = next(event for event in snapshot.execution_events if event["event"] == "task_repair_started")
+    failed_event = next(event for event in snapshot.execution_events if event["event"] == "task_repair_failed")
+
+    assert planned_event["details"]["has_source_failure_task"] is True
+    assert planned_event["details"]["has_budget_decomposition_plan"] is True
+    assert planned_event["details"]["has_provider_call"] is True
+    assert "source_failure_task_id" not in planned_event["details"]
+    assert "budget_decomposition_plan_task_id" not in planned_event["details"]
+    assert "provider_call" not in planned_event["details"]
+    assert "provider_budget" not in planned_event["details"]
+
+    assert decomposition_event["details"]["has_decomposition_target_task"] is True
+    assert "decomposition_target_task_id" not in decomposition_event["details"]
+
+    assert created_event["details"]["has_repair_origin"] is True
+    assert "repair_origin_task_id" not in created_event["details"]
+
+    assert requeued_event["details"]["has_repair_task"] is True
+    assert "repair_task_id" not in requeued_event["details"]
+
+    assert started_event["details"]["has_repair_task"] is True
+    assert "repair_task_id" not in started_event["details"]
+
+    assert failed_event["details"]["has_repair_task"] is True
+    assert "repair_task_id" not in failed_event["details"]
+
+
 def test_start_repair_cycle_updates_snapshot_and_execution_history():
     project = ProjectState(project_name="Demo", goal="Build demo", repair_max_cycles=2)
 

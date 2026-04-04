@@ -1334,9 +1334,26 @@ class ProjectState:
             failure = None
             output = None
             resource_telemetry = self._task_resource_telemetry(task)
+            public_repair_context = self._public_repair_context(task.repair_context)
             has_provider_call = isinstance(task.last_provider_call, dict)
             last_error_present = bool(task.last_error or task.last_error_type or task.last_error_category)
             if task_status == TaskStatus.FAILED:
+                failure_details: Dict[str, Any] = {
+                    "attempts": task.attempts,
+                    "retry_limit": task.retry_limit,
+                    "error_category": task.last_error_category,
+                    "has_provider_call": has_provider_call,
+                    "started_at": task.started_at,
+                    "last_attempt_started_at": task.last_attempt_started_at,
+                    "last_resumed_at": task.last_resumed_at,
+                    "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
+                    "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
+                    "repair_context": public_repair_context,
+                    "repair_attempt": task.repair_attempt,
+                    "history": task.history,
+                }
+                if self._identifier_present(task.repair_origin_task_id):
+                    failure_details["has_repair_origin"] = True
                 failure = FailureRecord(
                     message=_redact_text(task.output or task.last_error or "Task failed without output") or "Task failed without output",
                     error_type=task.last_error_type or "runtime_error",
@@ -1344,27 +1361,29 @@ class ProjectState:
                     retryable=task.attempts <= task.retry_limit,
                     details=cast(
                         Dict[str, Any],
-                        _redact_payload(
-                            {
-                                "attempts": task.attempts,
-                                "retry_limit": task.retry_limit,
-                                "error_category": task.last_error_category,
-                                "has_provider_call": has_provider_call,
-                                "started_at": task.started_at,
-                                "last_attempt_started_at": task.last_attempt_started_at,
-                                "last_resumed_at": task.last_resumed_at,
-                                "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
-                                "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
-                                "repair_context": task.repair_context,
-                                "repair_origin_task_id": task.repair_origin_task_id,
-                                "repair_attempt": task.repair_attempt,
-                                "history": task.history,
-                            }
-                        ),
+                        _redact_payload(failure_details),
                     ),
                 )
             if task.output or task.output_payload:
                 output = self._redacted_agent_output(self._build_agent_output(task))
+            public_details: Dict[str, Any] = {
+                "attempts": task.attempts,
+                "retry_limit": task.retry_limit,
+                "required_for_acceptance": task.required_for_acceptance,
+                "last_error": task.last_error,
+                "last_error_present": last_error_present,
+                "last_error_category": task.last_error_category,
+                "has_provider_call": has_provider_call,
+                "repair_context": public_repair_context,
+                "repair_attempt": task.repair_attempt,
+                "last_attempt_started_at": task.last_attempt_started_at,
+                "last_resumed_at": task.last_resumed_at,
+                "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
+                "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
+                "history": task.history,
+            }
+            if self._identifier_present(task.repair_origin_task_id):
+                public_details["has_repair_origin"] = True
             results[task.id] = TaskResult(
                 task_id=task.id,
                 status=task_status,
@@ -1374,25 +1393,7 @@ class ProjectState:
                 resource_telemetry=resource_telemetry,
                 details=cast(
                     Dict[str, Any],
-                    _redact_payload(
-                        {
-                            "attempts": task.attempts,
-                            "retry_limit": task.retry_limit,
-                            "required_for_acceptance": task.required_for_acceptance,
-                            "last_error": task.last_error,
-                            "last_error_present": last_error_present,
-                            "last_error_category": task.last_error_category,
-                            "has_provider_call": has_provider_call,
-                            "repair_context": task.repair_context,
-                            "repair_origin_task_id": task.repair_origin_task_id,
-                            "repair_attempt": task.repair_attempt,
-                            "last_attempt_started_at": task.last_attempt_started_at,
-                            "last_resumed_at": task.last_resumed_at,
-                            "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
-                            "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
-                            "history": task.history,
-                        }
-                    ),
+                    _redact_payload(public_details),
                 ),
                 started_at=task.started_at,
                 completed_at=task.completed_at,
@@ -1561,6 +1562,62 @@ class ProjectState:
             public_replayed_details = self._public_workflow_replayed_details(details)
             details.clear()
             details.update(cast(Dict[str, Any], public_replayed_details))
+            return redacted_event
+        if event_name == "task_repair_planned":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_repair_context = self._public_repair_context(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_repair_context))
+            return redacted_event
+        if event_name == "task_budget_decomposition_created":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_decomposition_details = self._public_task_budget_decomposition_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_decomposition_details))
+            return redacted_event
+        if event_name == "task_repair_created":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_repair_created_details = self._public_task_repair_created_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_repair_created_details))
+            return redacted_event
+        if event_name == "task_requeued":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_requeued_details = self._public_task_requeued_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_requeued_details))
+            return redacted_event
+        if event_name == "task_repair_started":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_repair_started_details = self._public_task_repair_started_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_repair_started_details))
+            return redacted_event
+        if event_name in {"task_repair_retry_scheduled", "task_repair_failed"}:
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_repair_failure_details = self._public_task_repair_failure_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_repair_failure_details))
+            return redacted_event
+        if event_name == "task_repaired":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_repaired_details = self._public_task_repaired_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_repaired_details))
             return redacted_event
         if event_name == "workflow_repair_cycle_started":
             details = redacted_event.get("details")
@@ -2042,6 +2099,117 @@ class ProjectState:
                 else 0
             ),
         }
+
+    def _identifier_present(self, value: Any) -> bool:
+        return isinstance(value, str) and bool(value.strip())
+
+    def _presence_flag(self, details: Dict[str, Any], identifier_key: str, flag_key: str) -> bool:
+        if self._identifier_present(details.get(identifier_key)):
+            return True
+        raw_flag = details.get(flag_key)
+        return raw_flag is True
+
+    def _public_repair_context(self, repair_context: Any) -> Dict[str, Any]:
+        raw_context = repair_context if isinstance(repair_context, dict) else {}
+        public_context = cast(Dict[str, Any], _redact_payload(dict(raw_context)))
+
+        if self._presence_flag(raw_context, "source_failure_task_id", "has_source_failure_task"):
+            public_context["has_source_failure_task"] = True
+        public_context.pop("source_failure_task_id", None)
+
+        if self._presence_flag(raw_context, "budget_decomposition_plan_task_id", "has_budget_decomposition_plan"):
+            public_context["has_budget_decomposition_plan"] = True
+        public_context.pop("budget_decomposition_plan_task_id", None)
+
+        if self._presence_flag(raw_context, "decomposition_target_task_id", "has_decomposition_target_task"):
+            public_context["has_decomposition_target_task"] = True
+        public_context.pop("decomposition_target_task_id", None)
+
+        if isinstance(raw_context.get("provider_call"), dict) or raw_context.get("has_provider_call") is True:
+            public_context["has_provider_call"] = True
+        public_context.pop("provider_call", None)
+        public_context.pop("provider_budget", None)
+
+        return public_context
+
+    def _public_task_budget_decomposition_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        raw_repair_attempt = details.get("repair_attempt")
+        public_details: Dict[str, Any] = {
+            "repair_attempt": (
+                max(int(raw_repair_attempt), 0)
+                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
+                else 0
+            ),
+            "assigned_to": details.get("assigned_to") if isinstance(details.get("assigned_to"), str) else None,
+        }
+        if self._presence_flag(details, "decomposition_target_task_id", "has_decomposition_target_task"):
+            public_details["has_decomposition_target_task"] = True
+        return public_details
+
+    def _public_task_repair_created_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        raw_repair_attempt = details.get("repair_attempt")
+        public_details: Dict[str, Any] = {
+            "repair_attempt": (
+                max(int(raw_repair_attempt), 0)
+                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
+                else 0
+            ),
+            "assigned_to": details.get("assigned_to") if isinstance(details.get("assigned_to"), str) else None,
+        }
+        if self._presence_flag(details, "repair_origin_task_id", "has_repair_origin"):
+            public_details["has_repair_origin"] = True
+        return public_details
+
+    def _public_task_requeued_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details: Dict[str, Any] = {
+            "reason": details.get("reason") if isinstance(details.get("reason"), str) else None,
+        }
+        if self._presence_flag(details, "repair_task_id", "has_repair_task"):
+            public_details["has_repair_task"] = True
+        return public_details
+
+    def _public_task_repair_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        raw_repair_attempt = details.get("repair_attempt")
+        public_details: Dict[str, Any] = {
+            "repair_attempt": (
+                max(int(raw_repair_attempt), 0)
+                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
+                else 0
+            ),
+            "assigned_to": details.get("assigned_to") if isinstance(details.get("assigned_to"), str) else None,
+        }
+        if self._presence_flag(details, "repair_task_id", "has_repair_task"):
+            public_details["has_repair_task"] = True
+        return public_details
+
+    def _public_task_repair_failure_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        raw_repair_attempt = details.get("repair_attempt")
+        public_details: Dict[str, Any] = {
+            "repair_attempt": (
+                max(int(raw_repair_attempt), 0)
+                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
+                else 0
+            ),
+            "error_type": details.get("error_type") if isinstance(details.get("error_type"), str) else None,
+            "error_category": details.get("error_category") if isinstance(details.get("error_category"), str) else None,
+        }
+        if self._presence_flag(details, "repair_task_id", "has_repair_task"):
+            public_details["has_repair_task"] = True
+        return public_details
+
+    def _public_task_repaired_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        raw_repair_attempt = details.get("repair_attempt")
+        public_details: Dict[str, Any] = {
+            "repair_attempt": (
+                max(int(raw_repair_attempt), 0)
+                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
+                else 0
+            ),
+            "assigned_to": details.get("assigned_to") if isinstance(details.get("assigned_to"), str) else None,
+        }
+        if self._presence_flag(details, "repair_task_id", "has_repair_task"):
+            public_details["has_repair_task"] = True
+        return public_details
 
     def _list_like_values(self, value: Any) -> List[Any]:
         if not isinstance(value, list):

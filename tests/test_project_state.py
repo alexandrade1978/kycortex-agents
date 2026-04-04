@@ -1891,6 +1891,7 @@ def test_snapshot_exposes_task_repair_context_details():
                 "failure_category": "test_validation",
                 "instruction": "Repair the generated pytest suite.",
                 "repair_owner": "qa_tester",
+                "original_assigned_to": "qa_tester",
                 "failure_message": "Generated pytest suite failed validation.",
                 "failure_error_type": "PytestCollectionError",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
@@ -1908,6 +1909,7 @@ def test_snapshot_exposes_task_repair_context_details():
     assert result.details["repair_context"]["has_failed_artifact_content"] is True
     assert result.details["repair_context"]["has_instruction"] is True
     assert result.details["repair_context"]["has_repair_owner"] is True
+    assert result.details["repair_context"]["has_original_assigned_to"] is True
     assert result.details["repair_context"]["has_failure_message"] is True
     assert result.details["repair_context"]["has_failure_error_type"] is True
     assert result.details["repair_context"]["has_failed_output"] is True
@@ -1916,6 +1918,7 @@ def test_snapshot_exposes_task_repair_context_details():
     assert "failed_artifact_content" not in result.details["repair_context"]
     assert "instruction" not in result.details["repair_context"]
     assert "repair_owner" not in result.details["repair_context"]
+    assert "original_assigned_to" not in result.details["repair_context"]
     assert "failure_message" not in result.details["repair_context"]
     assert "failure_error_type" not in result.details["repair_context"]
     assert "failed_output" not in result.details["repair_context"]
@@ -1943,6 +1946,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
                 "failure_category": "test_validation",
                 "instruction": "Repair the generated pytest suite.",
                 "repair_owner": "qa_tester",
+                "original_assigned_to": "qa_tester",
                 "failure_message": "Generated pytest suite failed validation.",
                 "failure_error_type": "PytestCollectionError",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
@@ -1963,6 +1967,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.details["repair_context"]["has_failed_artifact_content"] is True
     assert result.details["repair_context"]["has_instruction"] is True
     assert result.details["repair_context"]["has_repair_owner"] is True
+    assert result.details["repair_context"]["has_original_assigned_to"] is True
     assert result.details["repair_context"]["has_failure_message"] is True
     assert result.details["repair_context"]["has_failure_error_type"] is True
     assert result.details["repair_context"]["has_source_failure_task"] is True
@@ -1974,6 +1979,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert "failed_artifact_content" not in result.details["repair_context"]
     assert "instruction" not in result.details["repair_context"]
     assert "repair_owner" not in result.details["repair_context"]
+    assert "original_assigned_to" not in result.details["repair_context"]
     assert "failure_message" not in result.details["repair_context"]
     assert "failure_error_type" not in result.details["repair_context"]
     assert "failed_output" not in result.details["repair_context"]
@@ -1988,6 +1994,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.failure.details["repair_context"]["has_failed_artifact_content"] is True
     assert result.failure.details["repair_context"]["has_instruction"] is True
     assert result.failure.details["repair_context"]["has_repair_owner"] is True
+    assert result.failure.details["repair_context"]["has_original_assigned_to"] is True
     assert result.failure.details["repair_context"]["has_failure_message"] is True
     assert result.failure.details["repair_context"]["has_failure_error_type"] is True
     assert result.failure.details["repair_context"]["has_source_failure_task"] is True
@@ -1999,6 +2006,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert "failed_artifact_content" not in result.failure.details["repair_context"]
     assert "instruction" not in result.failure.details["repair_context"]
     assert "repair_owner" not in result.failure.details["repair_context"]
+    assert "original_assigned_to" not in result.failure.details["repair_context"]
     assert "failure_message" not in result.failure.details["repair_context"]
     assert "failure_error_type" not in result.failure.details["repair_context"]
     assert "failed_output" not in result.failure.details["repair_context"]
@@ -2028,6 +2036,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
         "failure_category": FailureCategory.CODE_VALIDATION.value,
         "instruction": "Repair the generated Python module.",
         "repair_owner": "code_engineer",
+        "original_assigned_to": "code_engineer",
         "failure_message": "Generated module failed import validation.",
         "failure_error_type": "ImportError",
         "failed_artifact_content": "def broken():\n    return missing_symbol",
@@ -2073,6 +2082,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert planned_event["details"]["has_provider_call"] is True
     assert planned_event["details"]["instruction"] == "Repair the generated Python module."
     assert planned_event["details"]["repair_owner"] == "code_engineer"
+    assert planned_event["details"]["original_assigned_to"] == "code_engineer"
     assert planned_event["details"]["failed_artifact_content"] == "def broken():\n    return missing_symbol"
     assert planned_event["details"]["failure_message"] == "Generated module failed import validation."
     assert planned_event["details"]["failure_error_type"] == "ImportError"

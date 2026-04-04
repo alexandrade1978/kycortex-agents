@@ -2324,6 +2324,14 @@ class ProjectState:
             public_context["has_repair_owner"] = True
         public_context.pop("repair_owner", None)
 
+        raw_original_assigned_to = raw_context.get("original_assigned_to")
+        if (
+            isinstance(raw_original_assigned_to, str)
+            and bool(raw_original_assigned_to.strip())
+        ) or raw_context.get("has_original_assigned_to") is True:
+            public_context["has_original_assigned_to"] = True
+        public_context.pop("original_assigned_to", None)
+
         raw_failure_message = raw_context.get("failure_message")
         if (
             isinstance(raw_failure_message, str)

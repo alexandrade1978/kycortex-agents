@@ -144,6 +144,7 @@ def build_tasks():
                 "failure_category": "code_validation",
                 "instruction": "Repair the generated Python module.",
                 "repair_owner": "code_engineer",
+                "original_assigned_to": "code_engineer",
                 "failure_message": "Generated module failed import validation.",
                 "failure_error_type": "ImportError",
                 "failed_artifact_content": "def broken():\n    return missing_symbol",
@@ -264,6 +265,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.details["repair_context"]["has_failed_artifact_content"] is True
     assert review_result.details["repair_context"]["has_instruction"] is True
     assert review_result.details["repair_context"]["has_repair_owner"] is True
+    assert review_result.details["repair_context"]["has_original_assigned_to"] is True
     assert review_result.details["repair_context"]["has_failure_message"] is True
     assert review_result.details["repair_context"]["has_failure_error_type"] is True
     assert review_result.details["repair_context"]["has_failed_output"] is True
@@ -274,6 +276,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "failed_artifact_content" not in review_result.details["repair_context"]
     assert "instruction" not in review_result.details["repair_context"]
     assert "repair_owner" not in review_result.details["repair_context"]
+    assert "original_assigned_to" not in review_result.details["repair_context"]
     assert "failure_message" not in review_result.details["repair_context"]
     assert "failure_error_type" not in review_result.details["repair_context"]
     assert "failed_output" not in review_result.details["repair_context"]
@@ -285,6 +288,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.failure.details["repair_context"]["has_failed_artifact_content"] is True
     assert review_result.failure.details["repair_context"]["has_instruction"] is True
     assert review_result.failure.details["repair_context"]["has_repair_owner"] is True
+    assert review_result.failure.details["repair_context"]["has_original_assigned_to"] is True
     assert review_result.failure.details["repair_context"]["has_failure_message"] is True
     assert review_result.failure.details["repair_context"]["has_failure_error_type"] is True
     assert review_result.failure.details["repair_context"]["has_failed_output"] is True
@@ -295,6 +299,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "failed_artifact_content" not in review_result.failure.details["repair_context"]
     assert "instruction" not in review_result.failure.details["repair_context"]
     assert "repair_owner" not in review_result.failure.details["repair_context"]
+    assert "original_assigned_to" not in review_result.failure.details["repair_context"]
     assert "failure_message" not in review_result.failure.details["repair_context"]
     assert "failure_error_type" not in review_result.failure.details["repair_context"]
     assert "failed_output" not in review_result.failure.details["repair_context"]

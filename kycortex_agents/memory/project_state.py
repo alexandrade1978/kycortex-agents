@@ -2131,6 +2131,12 @@ class ProjectState:
 
     def _public_task_retry_scheduled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+
+        raw_error_type = details.get("error_type")
+        if (isinstance(raw_error_type, str) and bool(raw_error_type)) or public_details.get("has_error_type") is True:
+            public_details["has_error_type"] = True
+        public_details.pop("error_type", None)
+
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)

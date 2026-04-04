@@ -2516,8 +2516,9 @@ def test_snapshot_minimizes_public_task_retry_scheduled_provider_call_details():
     snapshot = project.snapshot()
     retry_event = next(event for event in snapshot.execution_events if event["event"] == "task_retry_scheduled")
 
-    assert retry_event["details"]["error_type"] == "RuntimeError"
+    assert retry_event["details"]["has_error_type"] is True
     assert retry_event["details"]["has_provider_call"] is True
+    assert "error_type" not in retry_event["details"]
     assert "provider_call" not in retry_event["details"]
 
 
@@ -2551,8 +2552,9 @@ def test_snapshot_task_retry_scheduled_events_use_presence_flags_for_legacy_prov
     retry_event = snapshot.execution_events[0]
 
     assert retry_event["event"] == "task_retry_scheduled"
-    assert retry_event["details"]["error_type"] == "RuntimeError"
+    assert retry_event["details"]["has_error_type"] is True
     assert retry_event["details"]["has_provider_call"] is True
+    assert "error_type" not in retry_event["details"]
     assert "provider_call" not in retry_event["details"]
 
 

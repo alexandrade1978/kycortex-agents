@@ -2097,6 +2097,12 @@ class ProjectState:
 
     def _public_policy_enforcement_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+
+        raw_message = details.get("message")
+        if (isinstance(raw_message, str) and bool(raw_message)) or public_details.get("has_message") is True:
+            public_details["has_message"] = True
+        public_details.pop("message", None)
+
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)

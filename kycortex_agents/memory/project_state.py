@@ -2359,8 +2359,9 @@ class ProjectState:
                 if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
                 else 0
             ),
-            "assigned_to": details.get("assigned_to") if isinstance(details.get("assigned_to"), str) else None,
         }
+        if self._presence_flag(details, "assigned_to", "has_assigned_to"):
+            public_details["has_assigned_to"] = True
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):
             public_details["has_repair_task"] = True
         return public_details

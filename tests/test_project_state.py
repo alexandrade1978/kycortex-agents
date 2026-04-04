@@ -1245,7 +1245,17 @@ def test_complete_task_syncs_repair_result_back_to_origin():
     assert origin.output == "def repaired() -> int:\n    return 1"
     assert origin.attempts == 2
     assert origin.history[-1]["event"] == "repaired"
-    assert any(event["event"] == "task_repaired" for event in project.execution_events)
+    internal_repaired_event = next(event for event in project.execution_events if event["event"] == "task_repaired")
+    assert internal_repaired_event["details"]["assigned_to"] == "code_engineer"
+
+    snapshot = project.snapshot()
+    repaired_event = next(event for event in snapshot.execution_events if event["event"] == "task_repaired")
+
+    assert repaired_event["details"]["repair_attempt"] == 1
+    assert repaired_event["details"]["has_assigned_to"] is True
+    assert repaired_event["details"]["has_repair_task"] is True
+    assert "assigned_to" not in repaired_event["details"]
+    assert "repair_task_id" not in repaired_event["details"]
 
 
 def test_fail_task_syncs_repair_failure_back_to_origin():
@@ -2069,6 +2079,37 @@ def test_snapshot_task_repair_started_events_use_presence_flags_for_legacy_assig
     assert started_event["details"]["has_repair_task"] is True
     assert "assigned_to" not in started_event["details"]
     assert "repair_task_id" not in started_event["details"]
+
+
+def test_snapshot_task_repaired_events_use_presence_flags_for_legacy_assigned_to_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_repaired",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": "code",
+                "status": "done",
+                "details": {
+                    "repair_task_id": "code__repair_1",
+                    "repair_attempt": 1,
+                    "assigned_to": "code_engineer",
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    repaired_event = snapshot.execution_events[0]
+
+    assert repaired_event["event"] == "task_repaired"
+    assert repaired_event["details"]["repair_attempt"] == 1
+    assert repaired_event["details"]["has_assigned_to"] is True
+    assert repaired_event["details"]["has_repair_task"] is True
+    assert "assigned_to" not in repaired_event["details"]
+    assert "repair_task_id" not in repaired_event["details"]
 
 
 def test_snapshot_task_repair_failed_events_use_presence_flags_for_legacy_error_type_details():

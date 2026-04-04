@@ -2105,6 +2105,12 @@ class ProjectState:
 
     def _public_task_failed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+
+        raw_error_message = details.get("error_message")
+        if (isinstance(raw_error_message, str) and bool(raw_error_message)) or public_details.get("has_error_message") is True:
+            public_details["has_error_message"] = True
+        public_details.pop("error_message", None)
+
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)

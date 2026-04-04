@@ -2136,6 +2136,10 @@ class ProjectState:
     def _public_task_completed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
 
+        if self._presence_flag(details, "assigned_to", "has_assigned_to"):
+            public_details["has_assigned_to"] = True
+        public_details.pop("assigned_to", None)
+
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)

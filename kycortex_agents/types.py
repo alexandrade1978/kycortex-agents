@@ -27,6 +27,7 @@ __all__ = [
     "WorkflowOutcome",
     "WorkflowProgressSummary",
     "WorkflowProviderHealthSummary",
+    "WorkflowRepairHistoryEntry",
     "WorkflowProviderSummary",
     "WorkflowRepairSummary",
     "WorkflowResumeSummary",
@@ -191,6 +192,17 @@ class WorkflowRepairSummary(TypedDict):
     last_reason_present: bool
     failure_category_count: int
     failed_task_count: int
+
+
+class WorkflowRepairHistoryEntry(TypedDict):
+    """Public workflow repair-history entry exposed through snapshots."""
+
+    cycle: int
+    started_at: Optional[str]
+    reason: Optional[str]
+    failure_category: Optional[str]
+    failed_task_count: int
+    budget_remaining: int
 
 
 class WorkflowProviderSummary(TypedDict):
@@ -438,7 +450,7 @@ class ProjectSnapshot:
     repair_cycle_count: int = 0
     repair_max_cycles: int = 0
     repair_budget_remaining: int = 0
-    repair_history: List[Dict[str, Any]] = field(default_factory=list)
+    repair_history: List[WorkflowRepairHistoryEntry] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
     workflow_telemetry: WorkflowTelemetry = field(default_factory=empty_workflow_telemetry)
     decisions: List[DecisionRecord] = field(default_factory=list)

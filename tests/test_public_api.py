@@ -163,6 +163,7 @@ def test_public_contract_modules_define_explicit_exports():
         "WorkflowOutcome",
         "WorkflowProgressSummary",
         "WorkflowProviderHealthSummary",
+        "WorkflowRepairHistoryEntry",
         "WorkflowProviderSummary",
         "WorkflowRepairSummary",
         "WorkflowResumeSummary",
@@ -237,6 +238,7 @@ def test_public_type_module_defines_docstrings():
     assert types_module.WorkflowAcceptanceSummary.__doc__ == "Workflow-level acceptance outcome summary embedded in aggregate telemetry."
     assert types_module.WorkflowProgressSummary.__doc__ == "Workflow execution-progress summary embedded in aggregate telemetry."
     assert types_module.WorkflowResumeSummary.__doc__ == "Workflow resume activity summary embedded in aggregate telemetry."
+    assert types_module.WorkflowRepairHistoryEntry.__doc__ == "Public workflow repair-history entry exposed through snapshots."
     assert types_module.WorkflowRepairSummary.__doc__ == "Workflow repair-cycle usage summary embedded in aggregate telemetry."
     assert types_module.WorkflowProviderHealthSummary.__doc__ == "Per-provider health-state aggregate rolled up across workflow execution."
     assert types_module.WorkflowProviderSummary.__doc__ == "Per-provider aggregate telemetry rolled up across workflow execution."

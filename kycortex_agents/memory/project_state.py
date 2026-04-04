@@ -23,6 +23,7 @@ from kycortex_agents.types import (
     WorkflowOutcome,
     WorkflowProgressSummary,
     WorkflowProviderHealthSummary,
+    WorkflowRepairHistoryEntry,
     WorkflowProviderSummary,
     WorkflowRepairSummary,
     WorkflowResumeSummary,
@@ -1424,7 +1425,7 @@ class ProjectState:
             repair_cycle_count=self.repair_cycle_count,
             repair_max_cycles=self.repair_max_cycles,
             repair_budget_remaining=max(self.repair_max_cycles - self.repair_cycle_count, 0),
-            repair_history=cast(List[Dict[str, Any]], _redact_payload(list(self.repair_history))),
+            repair_history=[self._public_repair_history_entry(entry) for entry in self.repair_history if isinstance(entry, dict)],
             task_results=self.task_results(),
             workflow_telemetry=workflow_telemetry,
             decisions=[
@@ -1536,7 +1537,16 @@ class ProjectState:
 
     def _redacted_execution_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         redacted_event = cast(Dict[str, Any], _redact_payload(dict(event)))
-        if redacted_event.get("event") != "workflow_finished":
+        event_name = redacted_event.get("event")
+        if event_name == "workflow_repair_cycle_started":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_details = self._public_repair_history_entry(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_details))
+            return redacted_event
+        if event_name != "workflow_finished":
             return redacted_event
         details = redacted_event.get("details")
         if not isinstance(details, dict):
@@ -1908,6 +1918,21 @@ class ProjectState:
             "failed_task_count": len(failed_task_ids),
         }
 
+    def _public_repair_history_entry(self, entry: Dict[str, Any]) -> WorkflowRepairHistoryEntry:
+        started_at = entry.get("started_at") if isinstance(entry.get("started_at"), str) else None
+        reason = entry.get("reason") if isinstance(entry.get("reason"), str) else None
+        failure_category = entry.get("failure_category") if isinstance(entry.get("failure_category"), str) else None
+        cycle = entry.get("cycle")
+        budget_remaining = entry.get("budget_remaining")
+        return {
+            "cycle": max(int(cycle), 0) if isinstance(cycle, (int, float)) and not isinstance(cycle, bool) else 0,
+            "started_at": started_at,
+            "reason": reason,
+            "failure_category": failure_category,
+            "failed_task_count": self._repair_history_failed_task_count(entry),
+            "budget_remaining": max(int(budget_remaining), 0) if isinstance(budget_remaining, (int, float)) and not isinstance(budget_remaining, bool) else 0,
+        }
+
     def _list_like_values(self, value: Any) -> List[Any]:
         if not isinstance(value, list):
             return []
@@ -1918,6 +1943,15 @@ class ProjectState:
         if task_ids:
             return len(task_ids)
         raw_count = acceptance_evaluation.get(count_key)
+        if isinstance(raw_count, (int, float)) and not isinstance(raw_count, bool):
+            return max(int(raw_count), 0)
+        return 0
+
+    def _repair_history_failed_task_count(self, entry: Dict[str, Any]) -> int:
+        failed_task_ids = self._string_list(entry.get("failed_task_ids"))
+        if failed_task_ids:
+            return len(failed_task_ids)
+        raw_count = entry.get("failed_task_count")
         if isinstance(raw_count, (int, float)) and not isinstance(raw_count, bool):
             return max(int(raw_count), 0)
         return 0

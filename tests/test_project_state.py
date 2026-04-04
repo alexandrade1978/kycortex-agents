@@ -1972,8 +1972,12 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     project.start_task(repair_task.id)
     project.fail_task(repair_task.id, RuntimeError("repair failed"), error_category=FailureCategory.CODE_VALIDATION.value)
 
+    internal_decomposition_event = next(
+        event for event in project.execution_events if event["event"] == "task_budget_decomposition_created"
+    )
     internal_created_event = next(event for event in project.execution_events if event["event"] == "task_repair_created")
     internal_started_event = next(event for event in project.execution_events if event["event"] == "task_repair_started")
+    assert internal_decomposition_event["details"]["assigned_to"] == "architect"
     assert internal_created_event["details"]["assigned_to"] == "code_engineer"
     assert internal_started_event["details"]["assigned_to"] == "code_engineer"
 
@@ -1997,7 +2001,9 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert "provider_call" not in planned_event["details"]
     assert "provider_budget" not in planned_event["details"]
 
+    assert decomposition_event["details"]["has_assigned_to"] is True
     assert decomposition_event["details"]["has_decomposition_target_task"] is True
+    assert "assigned_to" not in decomposition_event["details"]
     assert "decomposition_target_task_id" not in decomposition_event["details"]
 
     assert created_event["details"]["has_assigned_to"] is True
@@ -2079,6 +2085,37 @@ def test_snapshot_task_repair_started_events_use_presence_flags_for_legacy_assig
     assert started_event["details"]["has_repair_task"] is True
     assert "assigned_to" not in started_event["details"]
     assert "repair_task_id" not in started_event["details"]
+
+
+def test_snapshot_task_budget_decomposition_events_use_presence_flags_for_legacy_assigned_to_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_budget_decomposition_created",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": "code__repair_1__budget_plan",
+                "status": "pending",
+                "details": {
+                    "decomposition_target_task_id": "code",
+                    "repair_attempt": 1,
+                    "assigned_to": "architect",
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    decomposition_event = snapshot.execution_events[0]
+
+    assert decomposition_event["event"] == "task_budget_decomposition_created"
+    assert decomposition_event["details"]["repair_attempt"] == 1
+    assert decomposition_event["details"]["has_assigned_to"] is True
+    assert decomposition_event["details"]["has_decomposition_target_task"] is True
+    assert "assigned_to" not in decomposition_event["details"]
+    assert "decomposition_target_task_id" not in decomposition_event["details"]
 
 
 def test_snapshot_task_repaired_events_use_presence_flags_for_legacy_assigned_to_details():

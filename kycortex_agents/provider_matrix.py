@@ -375,15 +375,15 @@ def summarize_workflow_run(
     snapshot = project.snapshot()
     task_status_counts: dict[str, int] = {}
     task_summaries = []
-    repair_task_ids = []
-    failed_task_ids = []
+    repair_task_count = 0
+    failed_task_count = 0
 
     for task in project.tasks:
         task_status_counts[task.status] = task_status_counts.get(task.status, 0) + 1
         if task.repair_origin_task_id:
-            repair_task_ids.append(task.id)
+            repair_task_count += 1
         if task.status == "failed" and not task.repair_origin_task_id:
-            failed_task_ids.append(task.id)
+            failed_task_count += 1
         task_summaries.append(
             {
                 "id": task.id,
@@ -414,15 +414,15 @@ def summarize_workflow_run(
         "repair_cycle_count": project.repair_cycle_count,
         "repair_max_cycles": project.repair_max_cycles,
         "repair_budget_remaining": max(project.repair_max_cycles - project.repair_cycle_count, 0),
-        "repair_history": list(project.repair_history),
+        "repair_history": list(snapshot.repair_history),
         "workflow_last_resumed_at": project.workflow_last_resumed_at,
         "workflow_finished_at": project.workflow_finished_at,
         "workflow_telemetry": snapshot.workflow_telemetry,
         "state_file": _public_path_label(project.state_file),
         "output_dir": _public_path_label(output_dir),
         "task_status_counts": task_status_counts,
-        "failed_task_ids": sorted(failed_task_ids),
-        "repair_task_ids": sorted(repair_task_ids),
+        "failed_task_count": failed_task_count,
+        "repair_task_count": repair_task_count,
         "task_summaries": task_summaries,
         }
     )

@@ -666,8 +666,18 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
 
     assert summary["terminal_outcome"] == "completed"
     assert summary["repair_cycle_count"] == 1
-    assert summary["repair_task_ids"] == ["tests__repair_1"]
+    assert summary["repair_task_count"] == 1
     assert summary["task_status_counts"] == {"done": 2}
+    assert summary["repair_history"] == [
+        {
+            "cycle": 1,
+            "started_at": None,
+            "reason": None,
+            "failure_category": None,
+            "failed_task_count": 1,
+            "budget_remaining": 0,
+        }
+    ]
     assert summary["workflow_telemetry"]["acceptance_summary"] == {
         "policy": "required_tasks",
         "accepted": True,
@@ -902,7 +912,7 @@ def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
         output_dir=str(tmp_path / "output"),
     )
 
-    assert summary["failed_task_ids"] == ["tests"]
+    assert summary["failed_task_count"] == 1
 
 
 def test_provider_matrix_summary_redacts_public_error_and_project_name_fields(tmp_path):

@@ -462,6 +462,80 @@ def test_after_execute_redacts_default_artifact_content_when_live_output_contain
     assert finalized.artifacts[0].content == "Authorization: Bearer [REDACTED]"
 
 
+def test_execute_reapplies_public_redaction_when_after_execute_bypasses_super():
+    class UnsafeAfterExecuteAgent(DummyAgent):
+        def run(self, task_description: str, context: dict) -> AgentOutput:
+            return AgentOutput(
+                summary="api_key=sk-secret-123456 summary",
+                raw_content="Authorization: Bearer sk-ant-secret-987654",
+                artifacts=[
+                    ArtifactRecord(
+                        name="secret_artifact",
+                        artifact_type=ArtifactType.TEXT,
+                        path="artifacts/secret.txt",
+                        content="password=hunter2",
+                    )
+                ],
+                metadata={"api_key": "sk-secret-123456"},
+            )
+
+        def after_execute(self, agent_input: AgentInput, output: AgentOutput) -> AgentOutput:
+            output.metadata["unsafe_hook"] = "Authorization: Bearer sk-ant-secret-987654"
+            return output
+
+    agent = UnsafeAfterExecuteAgent(DummyProvider(response="ok"))
+
+    result = agent.execute(
+        AgentInput(
+            task_id="task-1",
+            task_title="Task",
+            task_description="message",
+            project_name="Demo",
+            project_goal="Build demo",
+            context={},
+        )
+    )
+
+    assert result.summary == "api_key=[REDACTED] summary"
+    assert result.raw_content == "Authorization: Bearer [REDACTED]"
+    assert result.metadata["api_key"] == "[REDACTED]"
+    assert result.metadata["unsafe_hook"] == "Authorization: Bearer [REDACTED]"
+    assert result.artifacts[0].content == "password=[REDACTED]"
+
+
+def test_execute_preserves_internal_unredacted_output_when_after_execute_bypasses_super():
+    class UnsafeAfterExecuteAgent(DummyAgent):
+        def run(self, task_description: str, context: dict) -> AgentOutput:
+            return AgentOutput(
+                summary="api_key=sk-secret-123456 summary",
+                raw_content="Authorization: Bearer sk-ant-secret-987654",
+                metadata={"api_key": "sk-secret-123456"},
+            )
+
+        def after_execute(self, agent_input: AgentInput, output: AgentOutput) -> AgentOutput:
+            return output
+
+    agent = UnsafeAfterExecuteAgent(DummyProvider(response="ok"))
+
+    result = agent.execute(
+        AgentInput(
+            task_id="task-1",
+            task_title="Task",
+            task_description="message",
+            project_name="Demo",
+            project_goal="Build demo",
+            context={},
+        )
+    )
+    internal_output = agent._consume_last_unredacted_output()
+
+    assert result.raw_content == "Authorization: Bearer [REDACTED]"
+    assert internal_output is not None
+    assert internal_output.raw_content == "Authorization: Bearer sk-ant-secret-987654"
+    assert internal_output.metadata["api_key"] == "sk-secret-123456"
+    assert agent._consume_last_unredacted_output() is None
+
+
 def test_execute_sanitizes_task_description_before_provider_generate():
     provider = DummyProvider(response="ok")
     agent = DummyAgent(provider)

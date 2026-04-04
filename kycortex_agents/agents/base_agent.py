@@ -945,6 +945,12 @@ class BaseAgent(ABC):
                 use_custom_validation=False,
             )
             finalized_output = self.after_execute(agent_input, output)
+            finalized_output = self._finalize_output(
+                agent_input,
+                finalized_output,
+                redact_output=True,
+                use_custom_validation=False,
+            )
             self._last_unredacted_output = unredacted_output
             return finalized_output
         except Exception as exc:

@@ -2364,6 +2364,14 @@ class ProjectState:
             public_context["has_decomposition_target_agent"] = True
         public_context.pop("decomposition_target_agent", None)
 
+        raw_decomposition_failure_category = raw_context.get("decomposition_failure_category")
+        if (
+            isinstance(raw_decomposition_failure_category, str)
+            and bool(raw_decomposition_failure_category.strip())
+        ) or raw_context.get("has_decomposition_failure_category") is True:
+            public_context["has_decomposition_failure_category"] = True
+        public_context.pop("decomposition_failure_category", None)
+
         raw_failure_message = raw_context.get("failure_message")
         if (
             isinstance(raw_failure_message, str)

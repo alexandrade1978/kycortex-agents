@@ -149,6 +149,7 @@ def build_tasks():
                 "helper_surface_symbols": ["RiskScoringService"],
                 "decomposition_mode": "budget_compaction_planner",
                 "decomposition_target_agent": "architect",
+                "decomposition_failure_category": "code_validation",
                 "failure_message": "Generated module failed import validation.",
                 "failure_error_type": "ImportError",
                 "failed_artifact_content": "def broken():\n    return missing_symbol",
@@ -274,6 +275,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.details["repair_context"]["has_helper_surface_symbols"] is True
     assert review_result.details["repair_context"]["has_decomposition_mode"] is True
     assert review_result.details["repair_context"]["has_decomposition_target_agent"] is True
+    assert review_result.details["repair_context"]["has_decomposition_failure_category"] is True
     assert review_result.details["repair_context"]["has_failure_message"] is True
     assert review_result.details["repair_context"]["has_failure_error_type"] is True
     assert review_result.details["repair_context"]["has_failed_output"] is True
@@ -289,6 +291,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "helper_surface_symbols" not in review_result.details["repair_context"]
     assert "decomposition_mode" not in review_result.details["repair_context"]
     assert "decomposition_target_agent" not in review_result.details["repair_context"]
+    assert "decomposition_failure_category" not in review_result.details["repair_context"]
     assert "failure_message" not in review_result.details["repair_context"]
     assert "failure_error_type" not in review_result.details["repair_context"]
     assert "failed_output" not in review_result.details["repair_context"]
@@ -305,6 +308,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.failure.details["repair_context"]["has_helper_surface_symbols"] is True
     assert review_result.failure.details["repair_context"]["has_decomposition_mode"] is True
     assert review_result.failure.details["repair_context"]["has_decomposition_target_agent"] is True
+    assert review_result.failure.details["repair_context"]["has_decomposition_failure_category"] is True
     assert review_result.failure.details["repair_context"]["has_failure_message"] is True
     assert review_result.failure.details["repair_context"]["has_failure_error_type"] is True
     assert review_result.failure.details["repair_context"]["has_failed_output"] is True
@@ -320,6 +324,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "helper_surface_symbols" not in review_result.failure.details["repair_context"]
     assert "decomposition_mode" not in review_result.failure.details["repair_context"]
     assert "decomposition_target_agent" not in review_result.failure.details["repair_context"]
+    assert "decomposition_failure_category" not in review_result.failure.details["repair_context"]
     assert "failure_message" not in review_result.failure.details["repair_context"]
     assert "failure_error_type" not in review_result.failure.details["repair_context"]
     assert "failed_output" not in review_result.failure.details["repair_context"]

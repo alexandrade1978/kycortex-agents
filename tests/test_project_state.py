@@ -1893,6 +1893,7 @@ def test_snapshot_exposes_task_repair_context_details():
                 "repair_owner": "qa_tester",
                 "original_assigned_to": "qa_tester",
                 "helper_surface_usages": ["RiskScoringService (line 33)"],
+                "helper_surface_symbols": ["RiskScoringService"],
                 "failure_message": "Generated pytest suite failed validation.",
                 "failure_error_type": "PytestCollectionError",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
@@ -1912,6 +1913,7 @@ def test_snapshot_exposes_task_repair_context_details():
     assert result.details["repair_context"]["has_repair_owner"] is True
     assert result.details["repair_context"]["has_original_assigned_to"] is True
     assert result.details["repair_context"]["has_helper_surface_usages"] is True
+    assert result.details["repair_context"]["has_helper_surface_symbols"] is True
     assert result.details["repair_context"]["has_failure_message"] is True
     assert result.details["repair_context"]["has_failure_error_type"] is True
     assert result.details["repair_context"]["has_failed_output"] is True
@@ -1922,6 +1924,7 @@ def test_snapshot_exposes_task_repair_context_details():
     assert "repair_owner" not in result.details["repair_context"]
     assert "original_assigned_to" not in result.details["repair_context"]
     assert "helper_surface_usages" not in result.details["repair_context"]
+    assert "helper_surface_symbols" not in result.details["repair_context"]
     assert "failure_message" not in result.details["repair_context"]
     assert "failure_error_type" not in result.details["repair_context"]
     assert "failed_output" not in result.details["repair_context"]
@@ -1951,6 +1954,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
                 "repair_owner": "qa_tester",
                 "original_assigned_to": "qa_tester",
                 "helper_surface_usages": ["RiskScoringService (line 33)"],
+                "helper_surface_symbols": ["RiskScoringService"],
                 "failure_message": "Generated pytest suite failed validation.",
                 "failure_error_type": "PytestCollectionError",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
@@ -1973,6 +1977,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.details["repair_context"]["has_repair_owner"] is True
     assert result.details["repair_context"]["has_original_assigned_to"] is True
     assert result.details["repair_context"]["has_helper_surface_usages"] is True
+    assert result.details["repair_context"]["has_helper_surface_symbols"] is True
     assert result.details["repair_context"]["has_failure_message"] is True
     assert result.details["repair_context"]["has_failure_error_type"] is True
     assert result.details["repair_context"]["has_source_failure_task"] is True
@@ -1986,6 +1991,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert "repair_owner" not in result.details["repair_context"]
     assert "original_assigned_to" not in result.details["repair_context"]
     assert "helper_surface_usages" not in result.details["repair_context"]
+    assert "helper_surface_symbols" not in result.details["repair_context"]
     assert "failure_message" not in result.details["repair_context"]
     assert "failure_error_type" not in result.details["repair_context"]
     assert "failed_output" not in result.details["repair_context"]
@@ -2002,6 +2008,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.failure.details["repair_context"]["has_repair_owner"] is True
     assert result.failure.details["repair_context"]["has_original_assigned_to"] is True
     assert result.failure.details["repair_context"]["has_helper_surface_usages"] is True
+    assert result.failure.details["repair_context"]["has_helper_surface_symbols"] is True
     assert result.failure.details["repair_context"]["has_failure_message"] is True
     assert result.failure.details["repair_context"]["has_failure_error_type"] is True
     assert result.failure.details["repair_context"]["has_source_failure_task"] is True
@@ -2015,6 +2022,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert "repair_owner" not in result.failure.details["repair_context"]
     assert "original_assigned_to" not in result.failure.details["repair_context"]
     assert "helper_surface_usages" not in result.failure.details["repair_context"]
+    assert "helper_surface_symbols" not in result.failure.details["repair_context"]
     assert "failure_message" not in result.failure.details["repair_context"]
     assert "failure_error_type" not in result.failure.details["repair_context"]
     assert "failed_output" not in result.failure.details["repair_context"]
@@ -2046,6 +2054,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
         "repair_owner": "code_engineer",
         "original_assigned_to": "code_engineer",
         "helper_surface_usages": ["RiskScoringService (line 33)"],
+        "helper_surface_symbols": ["RiskScoringService"],
         "failure_message": "Generated module failed import validation.",
         "failure_error_type": "ImportError",
         "failed_artifact_content": "def broken():\n    return missing_symbol",
@@ -2093,6 +2102,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert planned_event["details"]["repair_owner"] == "code_engineer"
     assert planned_event["details"]["original_assigned_to"] == "code_engineer"
     assert planned_event["details"]["helper_surface_usages"] == ["RiskScoringService (line 33)"]
+    assert planned_event["details"]["helper_surface_symbols"] == ["RiskScoringService"]
     assert planned_event["details"]["failed_artifact_content"] == "def broken():\n    return missing_symbol"
     assert planned_event["details"]["failure_message"] == "Generated module failed import validation."
     assert planned_event["details"]["failure_error_type"] == "ImportError"

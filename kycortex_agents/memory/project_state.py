@@ -2340,6 +2340,14 @@ class ProjectState:
             public_context["has_helper_surface_usages"] = True
         public_context.pop("helper_surface_usages", None)
 
+        raw_helper_surface_symbols = raw_context.get("helper_surface_symbols")
+        if (
+            isinstance(raw_helper_surface_symbols, list)
+            and any(isinstance(item, str) and bool(item.strip()) for item in raw_helper_surface_symbols)
+        ) or raw_context.get("has_helper_surface_symbols") is True:
+            public_context["has_helper_surface_symbols"] = True
+        public_context.pop("helper_surface_symbols", None)
+
         raw_failure_message = raw_context.get("failure_message")
         if (
             isinstance(raw_failure_message, str)

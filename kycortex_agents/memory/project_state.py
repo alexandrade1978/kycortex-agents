@@ -2121,6 +2121,11 @@ class ProjectState:
             public_details["has_failure_task"] = True
         public_details.pop("failure_task_id", None)
 
+        raw_failure_message = details.get("failure_message")
+        if (isinstance(raw_failure_message, str) and bool(raw_failure_message)) or public_details.get("has_failure_message") is True:
+            public_details["has_failure_message"] = True
+        public_details.pop("failure_message", None)
+
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)

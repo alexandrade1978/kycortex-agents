@@ -2354,8 +2354,9 @@ def test_snapshot_minimizes_public_workflow_finished_failure_task_details():
 
     assert workflow_event["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
     assert workflow_event["details"]["has_failure_task"] is True
+    assert workflow_event["details"]["has_failure_message"] is True
     assert "failure_task_id" not in workflow_event["details"]
-    assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
+    assert "failure_message" not in workflow_event["details"]
     assert workflow_event["details"]["failure_error_type"] == "RuntimeError"
 
 
@@ -2402,8 +2403,9 @@ def test_snapshot_workflow_finished_events_use_presence_flags_for_legacy_failure
 
     assert workflow_event["event"] == "workflow_finished"
     assert workflow_event["details"]["has_failure_task"] is True
+    assert workflow_event["details"]["has_failure_message"] is True
     assert "failure_task_id" not in workflow_event["details"]
-    assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
+    assert "failure_message" not in workflow_event["details"]
     assert workflow_event["details"]["failure_error_type"] == "RuntimeError"
     assert workflow_event["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
 
@@ -2445,8 +2447,9 @@ def test_snapshot_minimizes_public_workflow_finished_provider_call_details():
     workflow_event = next(event for event in snapshot.execution_events if event["event"] == "workflow_finished")
 
     assert workflow_event["details"]["has_provider_call"] is True
+    assert workflow_event["details"]["has_failure_message"] is True
     assert "provider_call" not in workflow_event["details"]
-    assert workflow_event["details"]["failure_message"] == "provider call failed"
+    assert "failure_message" not in workflow_event["details"]
 
 
 def test_snapshot_workflow_finished_events_use_presence_flags_for_legacy_provider_call_details():
@@ -2495,8 +2498,9 @@ def test_snapshot_workflow_finished_events_use_presence_flags_for_legacy_provide
 
     assert workflow_event["event"] == "workflow_finished"
     assert workflow_event["details"]["has_provider_call"] is True
+    assert workflow_event["details"]["has_failure_message"] is True
     assert "provider_call" not in workflow_event["details"]
-    assert workflow_event["details"]["failure_message"] == "provider call failed"
+    assert "failure_message" not in workflow_event["details"]
 
 
 def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_details():

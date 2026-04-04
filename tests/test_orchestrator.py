@@ -3599,7 +3599,7 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
     assert "Line count: 176/90" in syntax_summary
     assert "Top-level test functions: 0" in syntax_summary
     assert "Fixture count: 0" in syntax_summary
-    assert "Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, stop_reason=max_tokens, tokens=1600/1600" in syntax_summary
+    assert "Completion diagnostics: likely truncated at completion limit, token usage recorded" in syntax_summary
     assert syntax_summary.endswith("- Verdict: FAIL")
     assert "- Pytest execution: unavailable (pytest missing)" in unavailable_summary
     assert unavailable_summary.endswith("- Verdict: PASS")
@@ -3753,9 +3753,9 @@ def test_truncation_and_completion_helpers_cover_edge_cases(tmp_path):
     assert orchestrator._completion_diagnostics_summary({}) == "none"
     assert orchestrator._completion_diagnostics_summary(
         {"done_reason": "length", "requested_max_tokens": 10}
-    ) == "done_reason=length, tokens=unknown/10"
-    assert orchestrator._completion_diagnostics_summary({"done_reason": "stop"}) == "done_reason=stop"
-    assert orchestrator._completion_diagnostics_summary({"output_tokens": 7}) == "tokens=7/unknown"
+    ) == "completion limit reached, token usage recorded"
+    assert orchestrator._completion_diagnostics_summary({"done_reason": "stop"}) == "provider termination reason recorded"
+    assert orchestrator._completion_diagnostics_summary({"output_tokens": 7}) == "token usage recorded"
     assert orchestrator._pytest_failure_details(None) == []
 
 
@@ -11987,7 +11987,7 @@ def test_build_agent_input_adds_code_truncation_repair_priority(tmp_path):
                 "validation_summary": (
                     "Generated code validation:\n"
                     "- Syntax OK: no\n"
-                    "- Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, finish_reason=length, tokens=900/900\n"
+                    "- Completion diagnostics: likely truncated at completion limit, token usage recorded\n"
                     "- Verdict: FAIL"
                 ),
                 "failed_output": "def run():\n    values = [1, 2,\n",
@@ -12595,7 +12595,7 @@ def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
     summary = orchestrator._build_repair_validation_summary(task, FailureCategory.TEST_VALIDATION.value)
 
     assert "Missing function imports: add (line 4)" in summary
-    assert "Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, finish_reason=length, tokens=900/900" in summary
+    assert "Completion diagnostics: likely truncated at completion limit, token usage recorded" in summary
     assert "Pytest execution: FAIL" in summary
     assert summary.endswith("Verdict: FAIL")
 
@@ -12622,7 +12622,7 @@ def test_build_code_validation_summary_includes_completion_diagnostics(tmp_path)
         },
     )
 
-    assert "Completion diagnostics: likely truncated at completion limit, output_tokens reached requested_max_tokens, finish_reason=length, tokens=900/900" in summary
+    assert "Completion diagnostics: likely truncated at completion limit, token usage recorded" in summary
 
 
 def test_completion_diagnostics_marks_syntax_invalid_length_limited_output_as_truncated(tmp_path):
@@ -12700,7 +12700,7 @@ def test_build_code_validation_summary_describes_structural_truncation(tmp_path)
         },
     )
 
-    assert "Completion diagnostics: likely truncated before the file ended cleanly, tokens=508/3200" in summary
+    assert "Completion diagnostics: likely truncated before the file ended cleanly, token usage recorded" in summary
 
 
 def test_execute_workflow_fails_when_repair_budget_is_exhausted(tmp_path):

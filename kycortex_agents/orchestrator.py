@@ -2095,25 +2095,23 @@ class Orchestrator:
         if not completion_diagnostics:
             return "none"
         details: list[str] = []
+        hit_limit = self._completion_hit_limit(completion_diagnostics)
         if completion_diagnostics.get("likely_truncated"):
-            if self._completion_hit_limit(completion_diagnostics):
+            if hit_limit:
                 details.append("likely truncated at completion limit")
             else:
                 details.append("likely truncated before the file ended cleanly")
-        if completion_diagnostics.get("hit_token_limit"):
-            details.append("output_tokens reached requested_max_tokens")
-        if completion_diagnostics.get("finish_reason"):
-            details.append(f"finish_reason={completion_diagnostics['finish_reason']}")
-        if completion_diagnostics.get("stop_reason"):
-            details.append(f"stop_reason={completion_diagnostics['stop_reason']}")
-        if completion_diagnostics.get("done_reason"):
-            details.append(f"done_reason={completion_diagnostics['done_reason']}")
+        elif hit_limit:
+            details.append("completion limit reached")
+
+        if any(completion_diagnostics.get(field_name) for field_name in ("finish_reason", "stop_reason", "done_reason")):
+            if not hit_limit:
+                details.append("provider termination reason recorded")
+
         requested_max_tokens = completion_diagnostics.get("requested_max_tokens")
         output_tokens = completion_diagnostics.get("output_tokens")
         if requested_max_tokens is not None or output_tokens is not None:
-            details.append(
-                f"tokens={output_tokens if output_tokens is not None else 'unknown'}/{requested_max_tokens if requested_max_tokens is not None else 'unknown'}"
-            )
+            details.append("token usage recorded")
         return ", ".join(details) if details else "none"
 
     def _pytest_failure_details(self, test_execution: Optional[Dict[str, Any]], limit: int = 3) -> list[str]:

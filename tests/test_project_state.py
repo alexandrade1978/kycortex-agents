@@ -1892,6 +1892,7 @@ def test_snapshot_exposes_task_repair_context_details():
                 "instruction": "Repair the generated pytest suite.",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
                 "validation_summary": "Generated test validation:\n- Pytest collection failed",
+                "existing_tests": "def test_existing_suite():\n    assert True",
             },
         )
     )
@@ -1902,8 +1903,10 @@ def test_snapshot_exposes_task_repair_context_details():
     assert result.details["repair_context"]["failure_category"] == "test_validation"
     assert result.details["repair_context"]["has_failed_artifact_content"] is True
     assert result.details["repair_context"]["has_validation_summary"] is True
+    assert result.details["repair_context"]["has_existing_tests"] is True
     assert "failed_artifact_content" not in result.details["repair_context"]
     assert "validation_summary" not in result.details["repair_context"]
+    assert "existing_tests" not in result.details["repair_context"]
 
 
 def test_snapshot_minimizes_public_task_repair_lineage_details():
@@ -1927,6 +1930,7 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
                 "instruction": "Repair the generated pytest suite.",
                 "failed_artifact_content": "def test_generated_suite():\n    assert False",
                 "validation_summary": "Generated test validation:\n- Pytest collection failed",
+                "existing_tests": "def test_existing_suite():\n    assert True",
                 "source_failure_task_id": "tests",
                 "budget_decomposition_plan_task_id": "tests__repair_2__budget_plan",
                 "provider_call": {"provider": "openai", "success": False},
@@ -1943,11 +1947,13 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.details["repair_context"]["has_budget_decomposition_plan"] is True
     assert result.details["repair_context"]["has_provider_call"] is True
     assert result.details["repair_context"]["has_validation_summary"] is True
+    assert result.details["repair_context"]["has_existing_tests"] is True
     assert "failed_artifact_content" not in result.details["repair_context"]
     assert "source_failure_task_id" not in result.details["repair_context"]
     assert "budget_decomposition_plan_task_id" not in result.details["repair_context"]
     assert "provider_call" not in result.details["repair_context"]
     assert "validation_summary" not in result.details["repair_context"]
+    assert "existing_tests" not in result.details["repair_context"]
     assert result.details["has_repair_origin"] is True
     assert "repair_origin_task_id" not in result.details
     assert result.failure is not None
@@ -1956,11 +1962,13 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert result.failure.details["repair_context"]["has_budget_decomposition_plan"] is True
     assert result.failure.details["repair_context"]["has_provider_call"] is True
     assert result.failure.details["repair_context"]["has_validation_summary"] is True
+    assert result.failure.details["repair_context"]["has_existing_tests"] is True
     assert "failed_artifact_content" not in result.failure.details["repair_context"]
     assert "source_failure_task_id" not in result.failure.details["repair_context"]
     assert "budget_decomposition_plan_task_id" not in result.failure.details["repair_context"]
     assert "provider_call" not in result.failure.details["repair_context"]
     assert "validation_summary" not in result.failure.details["repair_context"]
+    assert "existing_tests" not in result.failure.details["repair_context"]
     assert result.failure.details["has_repair_origin"] is True
     assert "repair_origin_task_id" not in result.failure.details
 
@@ -1983,6 +1991,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
         "instruction": "Repair the generated Python module.",
         "failed_artifact_content": "def broken():\n    return missing_symbol",
         "validation_summary": "Generated code validation:\n- Syntax OK: no",
+        "existing_tests": "def test_broken():\n    assert broken() == 1",
         "source_failure_task_id": "tests",
         "provider_call": {"provider": "openai", "success": False, "provider_call_count": 2},
     }
@@ -2022,6 +2031,7 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert planned_event["details"]["has_provider_call"] is True
     assert planned_event["details"]["failed_artifact_content"] == "def broken():\n    return missing_symbol"
     assert planned_event["details"]["validation_summary"] == "Generated code validation:\n- Syntax OK: no"
+    assert planned_event["details"]["existing_tests"] == "def test_broken():\n    assert broken() == 1"
     assert "source_failure_task_id" not in planned_event["details"]
     assert "budget_decomposition_plan_task_id" not in planned_event["details"]
     assert "provider_call" not in planned_event["details"]

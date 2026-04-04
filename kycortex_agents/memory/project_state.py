@@ -2300,6 +2300,14 @@ class ProjectState:
             public_context["has_validation_summary"] = True
         public_context.pop("validation_summary", None)
 
+        raw_existing_tests = raw_context.get("existing_tests")
+        if (
+            isinstance(raw_existing_tests, str)
+            and bool(raw_existing_tests.strip())
+        ) or raw_context.get("has_existing_tests") is True:
+            public_context["has_existing_tests"] = True
+        public_context.pop("existing_tests", None)
+
         return public_context
 
     def _public_repair_context(self, repair_context: Any) -> Dict[str, Any]:

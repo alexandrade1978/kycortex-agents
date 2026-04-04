@@ -2322,6 +2322,92 @@ def test_mark_workflow_finished_records_policy_enforcement_for_security_failures
     assert project.execution_events[-1]["event"] == "workflow_finished"
 
 
+def test_snapshot_minimizes_public_workflow_finished_failure_task_details():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            output="sandbox policy blocked filesystem write outside sandbox root",
+            last_error="sandbox policy blocked filesystem write outside sandbox root",
+            last_error_type="RuntimeError",
+            last_error_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    project.mark_workflow_running(acceptance_policy="required_tasks", repair_max_cycles=1)
+    project.mark_workflow_finished(
+        "failed",
+        acceptance_policy="required_tasks",
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+        acceptance_criteria_met=False,
+        acceptance_evaluation={"policy": "required_tasks", "accepted": False, "failed_task_ids": ["tests"]},
+    )
+
+    snapshot = project.snapshot()
+    workflow_event = next(event for event in snapshot.execution_events if event["event"] == "workflow_finished")
+
+    assert workflow_event["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
+    assert workflow_event["details"]["has_failure_task"] is True
+    assert "failure_task_id" not in workflow_event["details"]
+    assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
+    assert workflow_event["details"]["failure_error_type"] == "RuntimeError"
+
+
+def test_snapshot_workflow_finished_events_use_presence_flags_for_legacy_failure_task_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "workflow_finished",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": None,
+                "status": "failed",
+                "details": {
+                    "workflow_duration_ms": 360000.0,
+                    "acceptance_policy": "required_tasks",
+                    "terminal_outcome": WorkflowOutcome.FAILED.value,
+                    "failure_category": FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+                    "acceptance_criteria_met": False,
+                    "acceptance_evaluation": {
+                        "policy": "required_tasks",
+                        "accepted": False,
+                        "failed_task_ids": ["tests"],
+                    },
+                    "failure_task_id": "tests",
+                    "failure_message": "sandbox policy blocked filesystem write outside sandbox root",
+                    "failure_error_type": "RuntimeError",
+                },
+            }
+        ],
+        workflow_started_at="2026-03-22T10:00:00+00:00",
+        workflow_finished_at="2026-03-22T10:06:00+00:00",
+        updated_at="2026-03-22T10:06:00+00:00",
+        phase="failed",
+        acceptance_policy="required_tasks",
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        acceptance_criteria_met=False,
+        failure_category=FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
+        acceptance_evaluation={"policy": "required_tasks", "accepted": False, "failed_task_ids": ["tests"]},
+    )
+
+    snapshot = project.snapshot()
+    workflow_event = snapshot.execution_events[0]
+
+    assert workflow_event["event"] == "workflow_finished"
+    assert workflow_event["details"]["has_failure_task"] is True
+    assert "failure_task_id" not in workflow_event["details"]
+    assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
+    assert workflow_event["details"]["failure_error_type"] == "RuntimeError"
+    assert workflow_event["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
+
+
 def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_details():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

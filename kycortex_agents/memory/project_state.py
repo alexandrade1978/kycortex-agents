@@ -1632,22 +1632,9 @@ class ProjectState:
         details = redacted_event.get("details")
         if not isinstance(details, dict):
             return redacted_event
-        workflow_telemetry = details.get("workflow_telemetry")
-        if isinstance(workflow_telemetry, dict):
-            acceptance_summary = workflow_telemetry.get("acceptance_summary")
-            if isinstance(acceptance_summary, dict):
-                details["acceptance_evaluation"] = cast(Dict[str, Any], _redact_payload(dict(acceptance_summary)))
-                return redacted_event
-        details["acceptance_evaluation"] = cast(
-            Dict[str, Any],
-            self._public_acceptance_evaluation(
-                details.get("acceptance_evaluation"),
-                acceptance_policy=details.get("acceptance_policy"),
-                acceptance_criteria_met=details.get("acceptance_criteria_met"),
-                terminal_outcome=details.get("terminal_outcome"),
-                failure_category=details.get("failure_category"),
-            ),
-        )
+        public_finished_details = self._public_workflow_finished_details(details)
+        details.clear()
+        details.update(cast(Dict[str, Any], public_finished_details))
         return redacted_event
 
     def _provider_budget_summary(
@@ -2099,6 +2086,41 @@ class ProjectState:
                 else 0
             ),
         }
+
+    def _public_workflow_finished_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+        workflow_telemetry = public_details.get("workflow_telemetry")
+        if isinstance(workflow_telemetry, dict):
+            acceptance_summary = workflow_telemetry.get("acceptance_summary")
+            if isinstance(acceptance_summary, dict):
+                public_details["acceptance_evaluation"] = cast(Dict[str, Any], _redact_payload(dict(acceptance_summary)))
+            else:
+                public_details["acceptance_evaluation"] = cast(
+                    Dict[str, Any],
+                    self._public_acceptance_evaluation(
+                        public_details.get("acceptance_evaluation"),
+                        acceptance_policy=public_details.get("acceptance_policy"),
+                        acceptance_criteria_met=public_details.get("acceptance_criteria_met"),
+                        terminal_outcome=public_details.get("terminal_outcome"),
+                        failure_category=public_details.get("failure_category"),
+                    ),
+                )
+        else:
+            public_details["acceptance_evaluation"] = cast(
+                Dict[str, Any],
+                self._public_acceptance_evaluation(
+                    public_details.get("acceptance_evaluation"),
+                    acceptance_policy=public_details.get("acceptance_policy"),
+                    acceptance_criteria_met=public_details.get("acceptance_criteria_met"),
+                    terminal_outcome=public_details.get("terminal_outcome"),
+                    failure_category=public_details.get("failure_category"),
+                ),
+            )
+
+        if self._presence_flag(details, "failure_task_id", "has_failure_task"):
+            public_details["has_failure_task"] = True
+        public_details.pop("failure_task_id", None)
+        return public_details
 
     def _identifier_present(self, value: Any) -> bool:
         return isinstance(value, str) and bool(value.strip())

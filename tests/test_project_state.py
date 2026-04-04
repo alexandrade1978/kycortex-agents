@@ -966,6 +966,8 @@ def test_snapshot_hides_failed_output_after_task_is_requeued_for_retry():
     assert result.output is None
     assert result.failure is None
     assert result.completed_at is None
+    assert result.details["last_error_present"] is True
+    assert "last_error" not in result.details
     assert result.details["history"][-1]["event"] == "retry_scheduled"
 
 
@@ -3141,6 +3143,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     }
     assert result.details["has_provider_call"] is False
     assert result.details["last_error_present"] is True
+    assert "last_error" not in result.details
     assert result.details["task_duration_ms"] == 360000.0
     assert result.details["last_attempt_duration_ms"] == 60000.0
     assert result.details["history"][0]["event"] == "failed"
@@ -4007,6 +4010,7 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.output.summary == "Skipped because dependency 'arch' failed"
     assert result.details["has_provider_call"] is False
     assert result.details["last_error_present"] is True
+    assert "last_error" not in result.details
     assert "last_provider_call" not in result.details
     assert "last_error_type" not in result.details
     assert result.details["last_attempt_started_at"] is None

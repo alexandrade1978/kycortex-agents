@@ -1370,7 +1370,6 @@ class ProjectState:
                 "attempts": task.attempts,
                 "retry_limit": task.retry_limit,
                 "required_for_acceptance": task.required_for_acceptance,
-                "last_error": task.last_error,
                 "last_error_present": last_error_present,
                 "last_error_category": task.last_error_category,
                 "has_provider_call": has_provider_call,

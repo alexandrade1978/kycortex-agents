@@ -1538,13 +1538,21 @@ class ProjectState:
     def _redacted_execution_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         redacted_event = cast(Dict[str, Any], _redact_payload(dict(event)))
         event_name = redacted_event.get("event")
+        if event_name == "workflow_resumed":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_resume_details = self._public_workflow_resumed_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_resume_details))
+            return redacted_event
         if event_name == "workflow_repair_cycle_started":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
                 return redacted_event
-            public_details = self._public_repair_history_entry(details)
+            public_repair_details = self._public_repair_history_entry(details)
             details.clear()
-            details.update(cast(Dict[str, Any], public_details))
+            details.update(cast(Dict[str, Any], public_repair_details))
             return redacted_event
         if event_name != "workflow_finished":
             return redacted_event
@@ -1931,6 +1939,33 @@ class ProjectState:
             "failure_category": failure_category,
             "failed_task_count": self._repair_history_failed_task_count(entry),
             "budget_remaining": max(int(budget_remaining), 0) if isinstance(budget_remaining, (int, float)) and not isinstance(budget_remaining, bool) else 0,
+        }
+
+    def _public_workflow_resumed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        reason = details.get("reason") if isinstance(details.get("reason"), str) else None
+        task_ids = self._string_list(details.get("task_ids"))
+        if task_ids:
+            task_count = len(task_ids)
+            unique_task_count = len(set(task_ids))
+        else:
+            raw_task_count = details.get("task_count")
+            task_count = (
+                max(int(raw_task_count), 0)
+                if isinstance(raw_task_count, (int, float)) and not isinstance(raw_task_count, bool)
+                else 0
+            )
+            raw_unique_task_count = details.get("unique_task_count")
+            unique_task_count = (
+                max(int(raw_unique_task_count), 0)
+                if isinstance(raw_unique_task_count, (int, float)) and not isinstance(raw_unique_task_count, bool)
+                else task_count
+            )
+            if unique_task_count > task_count:
+                unique_task_count = task_count
+        return {
+            "reason": reason,
+            "task_count": task_count,
+            "unique_task_count": unique_task_count,
         }
 
     def _list_like_values(self, value: Any) -> List[Any]:

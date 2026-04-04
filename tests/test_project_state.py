@@ -1153,6 +1153,11 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
     assert review_task.status == TaskStatus.PENDING.value
     assert project.execution_events[-1]["event"] == "workflow_resumed"
     assert project.execution_events[-1]["details"]["task_ids"] == ["review", "arch__repair_1"]
+    assert snapshot.execution_events[-1]["details"]["reason"] == "failed_workflow"
+    assert snapshot.execution_events[-1]["details"]["task_count"] == 2
+    assert snapshot.execution_events[-1]["details"]["unique_task_count"] == 2
+    assert "provider_budget" not in snapshot.execution_events[-1]["details"]
+    assert "task_ids" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_telemetry["resume_summary"] == {
         "count": 1,
         "reason_count": 1,
@@ -1364,11 +1369,17 @@ def test_resume_failed_tasks_records_workflow_resumed_for_additional_ids_without
     project = ProjectState(project_name="Demo", goal="Build demo")
 
     resumed = project.resume_failed_tasks(include_failed_tasks=False, failed_task_ids=[], additional_task_ids=["code__repair_1"])
+    snapshot = project.snapshot()
 
     assert resumed == []
     assert project.workflow_last_resumed_at is not None
     assert project.execution_events[-1]["event"] == "workflow_resumed"
     assert project.execution_events[-1]["details"]["task_ids"] == ["code__repair_1"]
+    assert snapshot.execution_events[-1]["details"]["reason"] == "failed_workflow"
+    assert snapshot.execution_events[-1]["details"]["task_count"] == 1
+    assert snapshot.execution_events[-1]["details"]["unique_task_count"] == 1
+    assert "provider_budget" not in snapshot.execution_events[-1]["details"]
+    assert "task_ids" not in snapshot.execution_events[-1]["details"]
 
 
 def test_pause_workflow_marks_snapshot_paused_and_suppresses_runnable_tasks():
@@ -1651,6 +1662,11 @@ def test_resume_workflow_clears_pause_state_and_records_resume_summary():
     assert project.execution_events[-1]["details"]["reason"] == "paused_workflow"
     assert project.execution_events[-1]["details"]["task_ids"] == []
     assert project.execution_events[-1]["details"]["provider_budget"] is None
+    assert snapshot.execution_events[-1]["details"]["reason"] == "paused_workflow"
+    assert snapshot.execution_events[-1]["details"]["task_count"] == 0
+    assert snapshot.execution_events[-1]["details"]["unique_task_count"] == 0
+    assert "provider_budget" not in snapshot.execution_events[-1]["details"]
+    assert "task_ids" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_telemetry["resume_summary"] == {
         "count": 1,
         "reason_count": 1,
@@ -1956,6 +1972,37 @@ def test_snapshot_repair_history_uses_failed_task_counts_for_legacy_entries():
     assert snapshot.execution_events[0]["details"]["budget_remaining"] == 1
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "failed_task_ids" not in snapshot.execution_events[0]["details"]
+
+
+def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.execution_events = [
+        {
+            "event": "workflow_resumed",
+            "timestamp": "2026-03-22T10:01:00+00:00",
+            "task_id": None,
+            "status": "execution",
+            "details": {
+                "reason": "failed_workflow",
+                "task_ids": ["tests__repair_1", "tests__repair_1", "review"],
+            },
+        }
+    ]
+
+    snapshot = project.snapshot()
+
+    assert snapshot.execution_events[0]["details"]["reason"] == "failed_workflow"
+    assert snapshot.execution_events[0]["details"]["task_count"] == 3
+    assert snapshot.execution_events[0]["details"]["unique_task_count"] == 2
+    assert "provider_budget" not in snapshot.execution_events[0]["details"]
+    assert "task_ids" not in snapshot.execution_events[0]["details"]
+    assert snapshot.workflow_telemetry["resume_summary"] == {
+        "count": 1,
+        "reason_count": 1,
+        "task_count": 3,
+        "unique_task_count": 2,
+        "last_resumed_at": None,
+    }
 
 
 def test_provider_attempt_and_retry_helpers_handle_scalar_fallbacks():

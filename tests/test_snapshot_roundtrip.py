@@ -283,7 +283,9 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert snapshot.artifacts[2].name == "legacy-report.md"
     assert snapshot.artifacts[2].artifact_type == ArtifactType.OTHER
     assert snapshot.execution_events[1]["details"]["has_provider_call"] is True
+    assert snapshot.execution_events[1]["details"]["has_error_type"] is True
     assert "provider_call" not in snapshot.execution_events[1]["details"]
+    assert "error_type" not in snapshot.execution_events[1]["details"]
     assert snapshot.workflow_telemetry == {
         "task_count": 4,
         "task_status_counts": {

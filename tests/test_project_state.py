@@ -2440,9 +2440,10 @@ def test_snapshot_minimizes_public_task_failed_provider_call_details():
     task_failed_event = next(event for event in snapshot.execution_events if event["event"] == "task_failed")
 
     assert task_failed_event["details"]["has_error_message"] is True
-    assert task_failed_event["details"]["error_type"] == "RuntimeError"
+    assert task_failed_event["details"]["has_error_type"] is True
     assert task_failed_event["details"]["has_provider_call"] is True
     assert "error_message" not in task_failed_event["details"]
+    assert "error_type" not in task_failed_event["details"]
     assert "provider_call" not in task_failed_event["details"]
 
 
@@ -2477,9 +2478,10 @@ def test_snapshot_task_failed_events_use_presence_flags_for_legacy_provider_call
 
     assert task_failed_event["event"] == "task_failed"
     assert task_failed_event["details"]["has_error_message"] is True
-    assert task_failed_event["details"]["error_type"] == "RuntimeError"
+    assert task_failed_event["details"]["has_error_type"] is True
     assert task_failed_event["details"]["has_provider_call"] is True
     assert "error_message" not in task_failed_event["details"]
+    assert "error_type" not in task_failed_event["details"]
     assert "provider_call" not in task_failed_event["details"]
 
 

@@ -1649,6 +1649,14 @@ class ProjectState:
             details.clear()
             details.update(cast(Dict[str, Any], public_repair_details))
             return redacted_event
+        if event_name == "task_completed":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_task_completed_details = self._public_task_completed_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_task_completed_details))
+            return redacted_event
         if event_name == "task_failed":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
@@ -2124,6 +2132,14 @@ class ProjectState:
                 else 0
             ),
         }
+
+    def _public_task_completed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+
+        if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
+            public_details["has_provider_call"] = True
+        public_details.pop("provider_call", None)
+        return public_details
 
     def _public_task_failed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))

@@ -2479,6 +2479,77 @@ def test_snapshot_policy_enforcement_events_use_presence_flags_for_legacy_provid
     assert "provider_call" not in policy_event["details"]
 
 
+def test_snapshot_minimizes_public_task_completed_provider_call_details():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    project.start_task("arch")
+    project.complete_task(
+        "arch",
+        "ARCHITECTURE DOC",
+        provider_call={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "success": True,
+            "base_url": "https://example.com/v1",
+        },
+    )
+
+    internal_completed_event = next(event for event in project.execution_events if event["event"] == "task_completed")
+    assert internal_completed_event["details"]["provider_call"]["provider"] == "openai"
+
+    snapshot = project.snapshot()
+    completed_event = next(event for event in snapshot.execution_events if event["event"] == "task_completed")
+
+    assert completed_event["details"]["assigned_to"] == "architect"
+    assert completed_event["details"]["has_provider_call"] is True
+    assert "provider_call" not in completed_event["details"]
+
+
+def test_snapshot_task_completed_events_use_presence_flags_for_legacy_provider_call_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_completed",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": "arch",
+                "status": "done",
+                "details": {
+                    "attempts": 1,
+                    "assigned_to": "architect",
+                    "provider_call": {
+                        "provider": "openai",
+                        "model": "gpt-4o",
+                        "success": True,
+                    },
+                    "last_attempt_duration_ms": 1234.0,
+                    "task_duration_ms": 2345.0,
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    completed_event = snapshot.execution_events[0]
+
+    assert completed_event["event"] == "task_completed"
+    assert completed_event["details"]["assigned_to"] == "architect"
+    assert completed_event["details"]["has_provider_call"] is True
+    assert completed_event["details"]["last_attempt_duration_ms"] == 1234.0
+    assert completed_event["details"]["task_duration_ms"] == 2345.0
+    assert "provider_call" not in completed_event["details"]
+
+
 def test_snapshot_minimizes_public_task_failed_provider_call_details():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

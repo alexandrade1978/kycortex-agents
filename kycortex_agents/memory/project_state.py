@@ -1554,6 +1554,14 @@ class ProjectState:
             details.clear()
             details.update(cast(Dict[str, Any], public_cancelled_details))
             return redacted_event
+        if event_name == "workflow_replayed":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_replayed_details = self._public_workflow_replayed_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_replayed_details))
+            return redacted_event
         if event_name == "workflow_repair_cycle_started":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
@@ -1993,6 +2001,46 @@ class ProjectState:
             "reason": reason,
             "terminal_outcome": terminal_outcome,
             "cancelled_task_count": cancelled_task_count,
+        }
+
+    def _public_workflow_replayed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        reason = details.get("reason") if isinstance(details.get("reason"), str) else None
+        replayed_task_ids = self._string_list(details.get("replayed_task_ids"))
+        removed_task_ids = self._string_list(details.get("removed_task_ids"))
+        if replayed_task_ids:
+            replayed_task_count = len(replayed_task_ids)
+        else:
+            raw_replayed_task_count = details.get("replayed_task_count")
+            replayed_task_count = (
+                max(int(raw_replayed_task_count), 0)
+                if isinstance(raw_replayed_task_count, (int, float)) and not isinstance(raw_replayed_task_count, bool)
+                else 0
+            )
+        if removed_task_ids:
+            removed_task_count = len(removed_task_ids)
+        else:
+            raw_removed_task_count = details.get("removed_task_count")
+            removed_task_count = (
+                max(int(raw_removed_task_count), 0)
+                if isinstance(raw_removed_task_count, (int, float)) and not isinstance(raw_removed_task_count, bool)
+                else 0
+            )
+        cleared_decision_count = details.get("cleared_decision_count")
+        cleared_artifact_count = details.get("cleared_artifact_count")
+        return {
+            "reason": reason,
+            "replayed_task_count": replayed_task_count,
+            "removed_task_count": removed_task_count,
+            "cleared_decision_count": (
+                max(int(cleared_decision_count), 0)
+                if isinstance(cleared_decision_count, (int, float)) and not isinstance(cleared_decision_count, bool)
+                else 0
+            ),
+            "cleared_artifact_count": (
+                max(int(cleared_artifact_count), 0)
+                if isinstance(cleared_artifact_count, (int, float)) and not isinstance(cleared_artifact_count, bool)
+                else 0
+            ),
         }
 
     def _list_like_values(self, value: Any) -> List[Any]:

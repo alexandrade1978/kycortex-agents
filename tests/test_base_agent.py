@@ -78,6 +78,7 @@ def test_chat_returns_response_content():
             "model": "gpt-4o",
             "status": "ready",
             "active_check": False,
+            "checked_at": 123.0,
             "timeout_seconds": 5.0,
         },
     )
@@ -116,6 +117,7 @@ def test_chat_returns_response_content():
     assert "last_health_check_age_seconds" not in metadata["provider_health"]["openai"]
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "ready"
     assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
+    assert "checked_at" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "timeout_seconds" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "model" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "latency_ms" not in metadata["provider_health"]["openai"]["last_health_check"]

@@ -308,7 +308,8 @@ def test_chat_captures_failed_provider_call_metadata():
     assert metadata["model"] == "gpt-4o"
     assert metadata["success"] is False
     assert metadata["error_type"] == "RuntimeError"
-    assert metadata["error_message"] == "provider down"
+    assert metadata["has_error_message"] is True
+    assert "error_message" not in metadata
     assert metadata["duration_ms"] >= 0
     assert metadata["attempt_history"] == [
         {
@@ -332,9 +333,10 @@ def test_chat_redacts_sensitive_values_from_failed_provider_call_metadata():
     metadata = agent.get_last_provider_call_metadata()
 
     assert metadata is not None
-    assert "sk-secret-123456" not in metadata["error_message"]
-    assert "sk-ant-secret-987654" not in metadata["error_message"]
-    assert "[REDACTED]" in metadata["error_message"]
+    assert metadata["has_error_message"] is True
+    assert "error_message" not in metadata
+    assert "sk-secret-123456" not in str(metadata)
+    assert "sk-ant-secret-987654" not in str(metadata)
     assert metadata["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in metadata["attempt_history"][0]
 
@@ -1712,7 +1714,8 @@ def test_chat_fails_fast_when_last_provider_health_check_is_deterministically_un
     assert metadata["attempts_used"] == 0
     assert metadata["attempt_history"] == []
     assert metadata["error_type"] == "AgentExecutionError"
-    assert metadata["error_message"] == "provider health check rejected backend"
+    assert metadata["has_error_message"] is True
+    assert "error_message" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "failing"
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "failing"
     assert provider.calls == []
@@ -1734,7 +1737,8 @@ def test_chat_fails_fast_when_last_provider_health_check_is_transient():
     assert metadata["attempts_used"] == 0
     assert metadata["attempt_history"] == []
     assert metadata["error_type"] == "ProviderTransientError"
-    assert metadata["error_message"] == "provider health check timed out"
+    assert metadata["has_error_message"] is True
+    assert "error_message" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "degraded"
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"
     assert provider.calls == []

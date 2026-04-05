@@ -283,7 +283,8 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(
         assert metadata["attempt_history"][0]["base_backoff_seconds"] == 0.0
         assert metadata["attempt_history"][0]["has_error_message"] is True
         assert "error_message" not in metadata["attempt_history"][0]
-    assert expected_message in metadata["error_message"]
+    assert metadata["has_error_message"] is True
+    assert "error_message" not in metadata
     assert metadata["duration_ms"] >= 0
 
 

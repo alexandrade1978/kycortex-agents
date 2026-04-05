@@ -1041,14 +1041,16 @@ def test_fail_task_redacts_live_failure_state_events_and_terminal_context():
     assert task.output == task.last_error
     assert "[REDACTED]" in task.output_payload["raw_content"]
     assert "[REDACTED]" in task.last_provider_call["base_url"]
-    assert "[REDACTED]" in task.last_provider_call["error_message"]
+    assert task.last_provider_call["has_error_message"] is True
+    assert "error_message" not in task.last_provider_call
     assert "[REDACTED]" in task.history[-1]["error_message"]
     assert task_failed_event["details"]["error_message"] == task.last_error
     assert task_policy_event["details"]["message"] == task.last_error
     assert workflow_policy_event["details"]["message"] == task.last_error
     assert workflow_event["details"]["failure_message"] == task.last_error
     assert "[REDACTED]" in workflow_event["details"]["provider_call"]["base_url"]
-    assert "[REDACTED]" in workflow_event["details"]["provider_call"]["error_message"]
+    assert workflow_event["details"]["provider_call"]["has_error_message"] is True
+    assert "error_message" not in workflow_event["details"]["provider_call"]
 
 
 def test_resume_interrupted_tasks_resets_running_tasks():
@@ -1376,7 +1378,8 @@ def test_fail_task_syncs_redacted_repair_failure_back_to_origin():
     assert "[REDACTED]" in origin.last_error
     assert "[REDACTED]" in origin.output_payload["raw_content"]
     assert "[REDACTED]" in origin.last_provider_call["base_url"]
-    assert "[REDACTED]" in origin.last_provider_call["error_message"]
+    assert origin.last_provider_call["has_error_message"] is True
+    assert "error_message" not in origin.last_provider_call
     assert "[REDACTED]" in origin.history[-1]["error_message"]
     assert origin.history[-1]["event"] == "repair_failed"
 

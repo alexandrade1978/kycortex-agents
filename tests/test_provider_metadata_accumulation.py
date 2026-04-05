@@ -320,7 +320,8 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert failed_provider_call["success"] is False
     assert failed_provider_call["error_type"] == "ProviderTransientError"
     assert failed_provider_call["retryable"] is True
-    assert failed_provider_call["error_message"] == "OpenAI provider failed to call the model API"
+    assert failed_provider_call["has_error_message"] is True
+    assert "error_message" not in failed_provider_call
     assert arch_failure.details["has_provider_call"] is True
     assert "provider_call" not in arch_failure.details
     assert "provider_budget" not in arch_failure.details

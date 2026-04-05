@@ -1065,7 +1065,8 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
     assert "secret-pass" not in str(metadata)
     assert "sk-secret-123456" not in str(metadata)
     assert "[REDACTED]" in metadata["base_url"]
-    assert "[REDACTED]" in metadata["error_message"]
+    assert metadata["has_error_message"] is True
+    assert "error_message" not in metadata
     assert metadata["provider_call_budget_limited"] is True
     assert metadata["provider_call_budget_exhausted"] is False
     assert metadata["provider_call_budget_limited_providers"] == []
@@ -1111,7 +1112,8 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
     assert "secret-pass" not in str(metadata)
     assert "sk-ant-secret-987654" not in str(metadata)
     assert "[REDACTED]" in metadata["base_url"]
-    assert "[REDACTED]" in metadata["error_message"]
+    assert metadata["has_error_message"] is True
+    assert "error_message" not in metadata
     assert metadata["provider_call_budget_limited"] is True
     assert metadata["provider_call_budget_exhausted"] is False
     assert metadata["provider_call_budget_limited_providers"] == ["anthropic"]
@@ -8693,7 +8695,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "secret-pass" not in str(project.tasks[0].last_provider_call)
     assert "sk-secret-123456" not in str(project.tasks[0].last_provider_call)
     assert "[REDACTED]" in project.tasks[0].last_provider_call["base_url"]
-    assert "[REDACTED]" in project.tasks[0].last_provider_call["error_message"]
+    assert project.tasks[0].last_provider_call["has_error_message"] is True
+    assert "error_message" not in project.tasks[0].last_provider_call
     assert project.tasks[0].last_provider_call["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in project.tasks[0].last_provider_call["attempt_history"][0]
     assert project.tasks[0].last_provider_call["fallback_history"][0]["has_error_message"] is True
@@ -8704,7 +8707,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "secret-pass" not in str(payload["metadata"]["provider_call"])
     assert "sk-secret-123456" not in str(payload["metadata"]["provider_call"])
     assert "[REDACTED]" in payload["metadata"]["provider_call"]["base_url"]
-    assert "[REDACTED]" in payload["metadata"]["provider_call"]["error_message"]
+    assert payload["metadata"]["provider_call"]["has_error_message"] is True
+    assert "error_message" not in payload["metadata"]["provider_call"]
     assert payload["metadata"]["provider_call"]["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in payload["metadata"]["provider_call"]["attempt_history"][0]
     assert payload["metadata"]["provider_call"]["fallback_history"][0]["has_error_message"] is True

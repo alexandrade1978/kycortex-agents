@@ -35,9 +35,6 @@ _STANDALONE_SECRET_PATTERNS = (
 )
 _URL_USERINFO_PATTERN = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^/\s@]+)@")
 _PROMPT_CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
-_PROVIDER_CALL_BUDGET_MESSAGE_PATTERN = re.compile(
-    r"(?i)\bprovider call budget exhausted(?: for (?P<provider>[A-Za-z0-9_.-]+))? after \d+ call(?:s)?\b"
-)
 _LEGACY_PROVIDER_CALL_BUDGET_KEYS = (
     "provider_call_count",
     "provider_call_counts_by_provider",
@@ -90,7 +87,7 @@ def redact_sensitive_data(value: Any) -> Any:
 
 
 def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[str, Any]:
-    """Return provider-call metadata with secrets redacted and surfaced retry/budget details minimized."""
+    """Return provider-call metadata with secrets redacted and surfaced error/retry/budget details minimized."""
 
     sanitized = redact_sensitive_data(dict(provider_call))
     if not isinstance(sanitized, dict):
@@ -98,9 +95,7 @@ def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[st
     _sanitize_provider_call_attempt_history(sanitized)
     _sanitize_provider_call_budget_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
-    error_message = sanitized.get("error_message")
-    if isinstance(error_message, str):
-        sanitized["error_message"] = _sanitize_provider_call_budget_message(error_message)
+    _sanitize_provider_call_top_level_error_message(sanitized)
     return sanitized
 
 
@@ -127,6 +122,13 @@ def _minimize_nested_provider_error_message(provider_call_entry: dict[str, Any])
     if isinstance(error_message, str):
         provider_call_entry["has_error_message"] = bool(error_message)
         provider_call_entry.pop("error_message", None)
+
+
+def _sanitize_provider_call_top_level_error_message(provider_call: dict[str, Any]) -> None:
+    error_message = provider_call.get("error_message")
+    if isinstance(error_message, str):
+        provider_call["has_error_message"] = bool(error_message)
+        provider_call.pop("error_message", None)
 
 
 def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> None:
@@ -197,16 +199,6 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
         sanitized_history.append(sanitized_entry)
 
     provider_call["fallback_history"] = sanitized_history
-
-
-def _sanitize_provider_call_budget_message(message: str) -> str:
-    def _replacement(match: re.Match[str]) -> str:
-        provider_name = match.group("provider")
-        if provider_name:
-            return f"provider call budget exhausted for {provider_name}"
-        return "provider call budget exhausted"
-
-    return _PROVIDER_CALL_BUDGET_MESSAGE_PATTERN.sub(_replacement, message)
 
 
 def _limited_budget_providers(raw_limits: Any) -> list[str]:

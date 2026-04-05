@@ -285,6 +285,7 @@ def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> No
             continue
 
         sanitized_health_entry = dict(raw_health_entry)
+        _minimize_provider_health_error_message(sanitized_health_entry)
         _minimize_provider_health_error_type(sanitized_health_entry)
         _minimize_provider_health_age_fields(sanitized_health_entry)
 
@@ -298,6 +299,13 @@ def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> No
         sanitized_provider_health[provider_name] = sanitized_health_entry
 
     provider_call["provider_health"] = sanitized_provider_health
+
+
+def _minimize_provider_health_error_message(provider_health_entry: dict[str, Any]) -> None:
+    last_error_message = provider_health_entry.get("last_error_message")
+    if isinstance(last_error_message, str):
+        provider_health_entry["has_last_error_message"] = bool(last_error_message)
+    provider_health_entry.pop("last_error_message", None)
 
 
 def _minimize_provider_health_error_type(provider_health_entry: dict[str, Any]) -> None:

@@ -1169,7 +1169,7 @@ def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatc
     assert first_metadata is not None
     assert first_metadata["circuit_breaker_open"] is False
     assert first_metadata["circuit_breaker_failure_streak"] == 1
-    assert first_metadata["circuit_breaker_remaining_seconds"] == 0.0
+    assert "circuit_breaker_remaining_seconds" not in first_metadata
 
     with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable") as second_exc_info:
         agent.chat("system", "message")
@@ -1179,7 +1179,7 @@ def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatc
     assert second_metadata is not None
     assert second_metadata["circuit_breaker_open"] is True
     assert second_metadata["circuit_breaker_failure_streak"] == 2
-    assert second_metadata["circuit_breaker_remaining_seconds"] == 10.0
+    assert "circuit_breaker_remaining_seconds" not in second_metadata
     assert second_metadata["provider_health"]["openai"]["status"] == "open_circuit"
     assert second_metadata["provider_health"]["openai"]["last_outcome"] == "failure"
     assert second_metadata["provider_health"]["openai"]["last_failure_retryable"] is True
@@ -1231,7 +1231,7 @@ def test_chat_resets_circuit_breaker_after_successful_call(monkeypatch):
     assert metadata["success"] is True
     assert metadata["circuit_breaker_open"] is False
     assert metadata["circuit_breaker_failure_streak"] == 0
-    assert metadata["circuit_breaker_remaining_seconds"] == 0.0
+    assert "circuit_breaker_remaining_seconds" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
 
@@ -1309,7 +1309,7 @@ def test_chat_reopens_circuit_breaker_after_recovery_and_new_transient_streak(mo
     assert second_failure_metadata is not None
     assert second_failure_metadata["circuit_breaker_open"] is True
     assert second_failure_metadata["circuit_breaker_failure_streak"] == 2
-    assert second_failure_metadata["circuit_breaker_remaining_seconds"] == 10.0
+    assert "circuit_breaker_remaining_seconds" not in second_failure_metadata
 
     with pytest.raises(AgentExecutionError, match="Dummy: provider circuit breaker is open for 10 more seconds"):
         agent.chat("system", "message-3")
@@ -1345,7 +1345,7 @@ def test_chat_reopens_circuit_breaker_after_recovery_and_new_transient_streak(mo
     assert fourth_failure_metadata is not None
     assert fourth_failure_metadata["circuit_breaker_open"] is True
     assert fourth_failure_metadata["circuit_breaker_failure_streak"] == 2
-    assert fourth_failure_metadata["circuit_breaker_remaining_seconds"] == 10.0
+    assert "circuit_breaker_remaining_seconds" not in fourth_failure_metadata
 
     with pytest.raises(AgentExecutionError, match="Dummy: provider circuit breaker is open for 10 more seconds"):
         agent.chat("system", "message-7")

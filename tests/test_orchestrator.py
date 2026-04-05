@@ -8676,6 +8676,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                         "provider_cancellation_reason": "operator requested stop api_key=sk-secret-123456",
                         "circuit_breaker_threshold": 2,
                         "circuit_breaker_cooldown_seconds": 10.0,
+                        "circuit_breaker_remaining_seconds": 4.0,
                         "provider_timeout_seconds": 11.0,
                         "provider_timeout_seconds_by_provider": {
                             "openai": 11.0,
@@ -8743,6 +8744,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "provider_cancellation_reason" not in project.tasks[0].last_provider_call
     assert "circuit_breaker_threshold" not in project.tasks[0].last_provider_call
     assert "circuit_breaker_cooldown_seconds" not in project.tasks[0].last_provider_call
+    assert "circuit_breaker_remaining_seconds" not in project.tasks[0].last_provider_call
     assert "provider_timeout_seconds" not in project.tasks[0].last_provider_call
     assert project.tasks[0].last_provider_call["provider_timeout_provider_count"] == 2
     assert "provider_timeout_seconds_by_provider" not in project.tasks[0].last_provider_call
@@ -8794,6 +8796,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "provider_cancellation_reason" not in payload["metadata"]["provider_call"]
     assert "circuit_breaker_threshold" not in payload["metadata"]["provider_call"]
     assert "circuit_breaker_cooldown_seconds" not in payload["metadata"]["provider_call"]
+    assert "circuit_breaker_remaining_seconds" not in payload["metadata"]["provider_call"]
     assert "provider_timeout_seconds" not in payload["metadata"]["provider_call"]
     assert payload["metadata"]["provider_call"]["provider_timeout_provider_count"] == 2
     assert "provider_timeout_seconds_by_provider" not in payload["metadata"]["provider_call"]

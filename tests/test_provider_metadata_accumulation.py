@@ -437,7 +437,6 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
     assert provider_call["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_health_check",
             "has_error_type": True,
             "has_error_message": True,

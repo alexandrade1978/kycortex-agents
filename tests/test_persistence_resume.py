@@ -372,7 +372,6 @@ def test_completed_workflow_persists_fallback_provider_metadata_after_reload(tmp
     assert provider_call["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,

@@ -1133,11 +1133,11 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
     assert metadata["fallback_history"] == [
         {
             "provider": "anthropic",
-            "model": "claude-test",
             "status": "failed_call_budget_exhausted",
             "has_error_message": True,
         }
     ]
+    assert "model" not in metadata["fallback_history"][0]
     assert "provider_call_counts_by_provider" not in metadata
 
 
@@ -8834,6 +8834,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert payload["metadata"]["provider_call"]["fallback_history"][0]["has_error_message"] is True
     assert "error_message" not in payload["metadata"]["provider_call"]["fallback_history"][0]
     assert "fallback_count" not in payload["metadata"]["provider_call"]
+    assert "model" not in payload["metadata"]["provider_call"]["fallback_history"][0]
     assert (
         "remaining_cooldown_seconds"
         not in payload["metadata"]["provider_call"]["fallback_history"][0]

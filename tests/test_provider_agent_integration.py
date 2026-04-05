@@ -423,7 +423,6 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
@@ -486,7 +485,6 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_health_check",
             "has_error_type": True,
             "has_error_message": True,
@@ -552,7 +550,6 @@ def test_execute_falls_back_to_secondary_provider_after_primary_model_readiness_
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4.1",
             "status": "failed_health_check",
             "has_error_type": True,
             "has_error_message": True,
@@ -617,7 +614,6 @@ def test_execute_falls_back_to_secondary_provider_after_primary_provider_budget_
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "skipped_call_budget_exhausted",
         }
     ]

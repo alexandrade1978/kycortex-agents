@@ -1249,7 +1249,6 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "skipped_open_circuit",
         }
     ]
@@ -1391,7 +1390,6 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     assert first_metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
@@ -1408,7 +1406,6 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     assert second_metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "skipped_open_circuit",
         }
     ]
@@ -1435,7 +1432,6 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     assert fourth_metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
@@ -1483,7 +1479,6 @@ def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monk
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "skipped_call_budget_exhausted",
         }
     ]
@@ -1529,7 +1524,6 @@ def test_chat_falls_back_after_primary_provider_budget_is_exhausted_mid_retry(mo
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_call_budget_exhausted",
             "attempts_used": 1,
         }
@@ -1574,7 +1568,6 @@ def test_chat_falls_back_after_primary_provider_transient_failure(monkeypatch):
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
@@ -1608,7 +1601,6 @@ def test_chat_falls_back_after_transient_provider_health_check_failure(monkeypat
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "failed_health_check",
             "has_error_type": True,
             "has_error_message": True,
@@ -1699,7 +1691,6 @@ def test_cached_unhealthy_health_check_can_open_circuit_breaker(monkeypatch):
     assert third_metadata["fallback_history"] == [
         {
             "provider": "openai",
-            "model": "gpt-4o",
             "status": "skipped_open_circuit",
         }
     ]

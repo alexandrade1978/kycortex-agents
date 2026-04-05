@@ -268,6 +268,7 @@ def _sanitize_provider_call_active_target_metadata(provider_call: dict[str, Any]
 
 def _sanitize_provider_call_primary_target_metadata(provider_call: dict[str, Any]) -> None:
     provider_call.pop("primary_provider", None)
+    provider_call.pop("primary_model", None)
 
 
 def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> None:

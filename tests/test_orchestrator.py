@@ -1118,6 +1118,7 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
     assert "active_provider" not in metadata
     assert "active_model" not in metadata
     assert "primary_provider" not in metadata
+    assert "primary_model" not in metadata
     assert "secret-pass" not in str(metadata)
     assert "sk-ant-secret-987654" not in str(metadata)
     assert "[REDACTED]" in metadata["base_url"]
@@ -8807,6 +8808,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "active_provider" not in payload["metadata"]["provider_call"]
     assert "active_model" not in payload["metadata"]["provider_call"]
     assert "primary_provider" not in payload["metadata"]["provider_call"]
+    assert "primary_model" not in payload["metadata"]["provider_call"]
     assert "secret-pass" not in str(payload["metadata"]["provider_call"])
     assert "sk-secret-123456" not in str(payload["metadata"]["provider_call"])
     assert "[REDACTED]" in payload["metadata"]["provider_call"]["base_url"]

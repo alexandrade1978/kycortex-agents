@@ -271,6 +271,7 @@ def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> No
 
         sanitized_health_entry = dict(raw_health_entry)
         _minimize_provider_health_error_type(sanitized_health_entry)
+        _minimize_provider_health_age_fields(sanitized_health_entry)
 
         last_health_check = sanitized_health_entry.get("last_health_check")
         if isinstance(last_health_check, Mapping):
@@ -288,6 +289,12 @@ def _minimize_provider_health_error_type(provider_health_entry: dict[str, Any]) 
     if isinstance(last_error_type, str):
         provider_health_entry["has_last_error_type"] = bool(last_error_type)
     provider_health_entry.pop("last_error_type", None)
+
+
+def _minimize_provider_health_age_fields(provider_health_entry: dict[str, Any]) -> None:
+    provider_health_entry.pop("last_success_age_seconds", None)
+    provider_health_entry.pop("last_failure_age_seconds", None)
+    provider_health_entry.pop("last_health_check_age_seconds", None)
 
 
 def _minimize_nested_health_check_error_type(health_check_entry: dict[str, Any]) -> None:

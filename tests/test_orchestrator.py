@@ -8705,11 +8705,14 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                             "openai": {
                                 "model": "gpt-test",
                                 "status": "degraded",
+                                "last_success_age_seconds": 12.0,
+                                "last_failure_age_seconds": 1.25,
                                 "last_error_type": "AgentExecutionError",
                                 "last_health_check": {
                                     "status": "degraded",
                                     "error_type": "AgentExecutionError",
                                 },
+                                "last_health_check_age_seconds": 0.5,
                             }
                         },
                     }
@@ -8750,6 +8753,9 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "error_message" not in project.tasks[0].last_provider_call["fallback_history"][0]
     assert project.tasks[0].last_provider_call["provider_health"]["openai"]["has_last_error_type"] is True
     assert "last_error_type" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
+    assert "last_success_age_seconds" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
+    assert "last_failure_age_seconds" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
+    assert "last_health_check_age_seconds" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
     assert (
         project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]["has_error_type"]
         is True
@@ -8787,6 +8793,9 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "error_message" not in payload["metadata"]["provider_call"]["fallback_history"][0]
     assert payload["metadata"]["provider_call"]["provider_health"]["openai"]["has_last_error_type"] is True
     assert "last_error_type" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
+    assert "last_success_age_seconds" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
+    assert "last_failure_age_seconds" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
+    assert "last_health_check_age_seconds" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
     assert (
         payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]["has_error_type"]
         is True

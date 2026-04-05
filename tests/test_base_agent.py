@@ -99,7 +99,9 @@ def test_chat_returns_response_content():
     assert "has_provider_cancellation_reason" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
-    assert metadata["provider_health"]["openai"]["last_failure_age_seconds"] is None
+    assert "last_success_age_seconds" not in metadata["provider_health"]["openai"]
+    assert "last_failure_age_seconds" not in metadata["provider_health"]["openai"]
+    assert "last_health_check_age_seconds" not in metadata["provider_health"]["openai"]
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "ready"
     assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
 
@@ -583,6 +585,9 @@ def test_chat_redacts_sensitive_values_from_provider_health_metadata():
     assert "last_error_type" not in provider_health
     assert provider_health["has_last_error_message"] is True
     assert "last_error_message" not in provider_health
+    assert "last_success_age_seconds" not in provider_health
+    assert "last_failure_age_seconds" not in provider_health
+    assert "last_health_check_age_seconds" not in provider_health
     assert provider_health["last_health_check"]["has_error_type"] is True
     assert "error_type" not in provider_health["last_health_check"]
     assert provider_health["last_health_check"]["has_error_message"] is True

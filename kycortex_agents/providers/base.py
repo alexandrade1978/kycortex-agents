@@ -100,6 +100,7 @@ def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[st
     _sanitize_provider_call_timeout_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
     _sanitize_provider_call_health_metadata(sanitized)
+    _sanitize_provider_call_active_target_metadata(sanitized)
     _sanitize_provider_call_top_level_error_message(sanitized)
     _sanitize_provider_call_top_level_error_type(sanitized)
     return sanitized
@@ -257,6 +258,11 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
         sanitized_history.append(sanitized_entry)
 
     provider_call["fallback_history"] = sanitized_history
+
+
+def _sanitize_provider_call_active_target_metadata(provider_call: dict[str, Any]) -> None:
+    provider_call.pop("active_provider", None)
+    provider_call.pop("active_model", None)
 
 
 def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> None:

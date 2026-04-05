@@ -297,6 +297,7 @@ def _minimize_provider_health_age_fields(provider_health_entry: dict[str, Any]) 
     provider_health_entry.pop("last_success_age_seconds", None)
     provider_health_entry.pop("last_failure_age_seconds", None)
     provider_health_entry.pop("last_health_check_age_seconds", None)
+    provider_health_entry.pop("last_failure_retryable", None)
 
 
 def _minimize_nested_health_check_error_type(health_check_entry: dict[str, Any]) -> None:

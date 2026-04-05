@@ -1163,7 +1163,7 @@ def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatc
     assert "circuit_breaker_remaining_seconds" not in second_metadata
     assert second_metadata["provider_health"]["openai"]["status"] == "open_circuit"
     assert second_metadata["provider_health"]["openai"]["last_outcome"] == "failure"
-    assert second_metadata["provider_health"]["openai"]["last_failure_retryable"] is True
+    assert "last_failure_retryable" not in second_metadata["provider_health"]["openai"]
 
     with pytest.raises(AgentExecutionError, match="Dummy: provider circuit breaker is open for 10 more seconds"):
         agent.chat("system", "message")

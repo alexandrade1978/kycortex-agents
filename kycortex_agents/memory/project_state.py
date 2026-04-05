@@ -66,6 +66,14 @@ def _redact_provider_call(provider_call: Optional[Dict[str, Any]]) -> Optional[D
     return sanitize_provider_call_metadata(provider_call)
 
 
+def _provider_health_entry_has_retryable_failure(raw_health_entry: Dict[str, Any]) -> bool:
+    if raw_health_entry.get("last_failure_retryable") is True:
+        return True
+    last_outcome = raw_health_entry.get("last_outcome")
+    health_status = raw_health_entry.get("status")
+    return last_outcome == "failure" and health_status in {"degraded", "open_circuit"}
+
+
 def _normalized_redacted_reason(reason: Any, default: str) -> str:
     if isinstance(reason, str) and reason.strip():
         return _redact_text(reason.strip()) or default
@@ -1810,7 +1818,7 @@ class ProjectState:
                         )
                     if raw_health_entry.get("circuit_breaker_open") is True:
                         health_summary["circuit_open_count"] += 1
-                    if raw_health_entry.get("last_failure_retryable") is True:
+                    if _provider_health_entry_has_retryable_failure(raw_health_entry):
                         health_summary["retryable_failure_count"] += 1
                     last_health_check = raw_health_entry.get("last_health_check")
                     if (

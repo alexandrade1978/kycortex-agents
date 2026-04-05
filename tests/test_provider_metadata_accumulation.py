@@ -351,7 +351,6 @@ def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_
                         "model": "gpt-4o",
                         "status": "degraded",
                         "last_outcome": "failure",
-                        "last_failure_retryable": True,
                         "last_error_type": "ProviderTransientError",
                         "last_health_check": {
                             "status": "degraded",

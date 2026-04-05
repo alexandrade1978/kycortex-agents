@@ -295,6 +295,7 @@ def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> No
             _minimize_nested_health_check_error_type(sanitized_last_health_check)
             _minimize_nested_health_check_error_message(sanitized_last_health_check)
             _minimize_nested_health_check_timing_fields(sanitized_last_health_check)
+            sanitized_last_health_check.pop("model_ready", None)
             sanitized_health_entry["last_health_check"] = sanitized_last_health_check
 
         sanitized_provider_health[provider_name] = sanitized_health_entry

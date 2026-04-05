@@ -1616,7 +1616,7 @@ def test_chat_falls_back_after_transient_provider_health_check_failure(monkeypat
     assert fallback_provider.calls == [("system", "message")]
     assert metadata["provider_health"]["openai"]["status"] == "degraded"
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"
-    assert metadata["provider_health"]["openai"]["last_health_check"]["retryable"] is True
+    assert "retryable" not in metadata["provider_health"]["openai"]["last_health_check"]
 
 
 def test_chat_reuses_cached_unhealthy_health_check_during_cooldown(monkeypatch):

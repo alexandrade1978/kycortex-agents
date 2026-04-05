@@ -95,6 +95,7 @@ def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[st
     _sanitize_provider_call_attempt_history(sanitized)
     _sanitize_provider_call_budget_metadata(sanitized)
     _sanitize_provider_call_cancellation_metadata(sanitized)
+    _sanitize_provider_call_elapsed_budget_metadata(sanitized)
     _sanitize_provider_call_timeout_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
     _sanitize_provider_call_health_metadata(sanitized)
@@ -168,6 +169,22 @@ def _sanitize_provider_call_timeout_metadata(provider_call: dict[str, Any]) -> N
         if isinstance(provider_name, str) and provider_name
     )
     provider_call.pop("provider_timeout_seconds_by_provider", None)
+
+
+def _sanitize_provider_call_elapsed_budget_metadata(provider_call: dict[str, Any]) -> None:
+    max_elapsed_seconds = provider_call.get("provider_max_elapsed_seconds_per_call")
+    remaining_elapsed_seconds = provider_call.get("provider_remaining_elapsed_seconds")
+
+    provider_call["provider_elapsed_budget_limited"] = bool(
+        provider_call.get("provider_elapsed_budget_limited")
+    ) or _is_positive_number(max_elapsed_seconds)
+    provider_call["provider_elapsed_budget_exhausted"] = bool(
+        provider_call.get("provider_elapsed_budget_exhausted")
+    ) or _is_exhausted_budget(remaining_elapsed_seconds)
+
+    provider_call.pop("provider_elapsed_seconds", None)
+    provider_call.pop("provider_max_elapsed_seconds_per_call", None)
+    provider_call.pop("provider_remaining_elapsed_seconds", None)
 
 
 def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> None:

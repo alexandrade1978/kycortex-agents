@@ -89,8 +89,11 @@ def test_chat_returns_response_content():
     assert metadata["provider_timeout_seconds"] == 60.0
     assert metadata["provider_timeout_provider_count"] == 1
     assert "provider_timeout_seconds_by_provider" not in metadata
-    assert metadata["provider_max_elapsed_seconds_per_call"] == 0.0
-    assert metadata["provider_remaining_elapsed_seconds"] is None
+    assert metadata["provider_elapsed_budget_limited"] is False
+    assert metadata["provider_elapsed_budget_exhausted"] is False
+    assert "provider_elapsed_seconds" not in metadata
+    assert "provider_max_elapsed_seconds_per_call" not in metadata
+    assert "provider_remaining_elapsed_seconds" not in metadata
     assert metadata["provider_cancellation_requested"] is False
     assert metadata["provider_cancellation_reason"] is None
     assert "has_provider_cancellation_reason" not in metadata
@@ -881,9 +884,11 @@ def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attemp
     assert metadata["success"] is False
     assert metadata["retryable"] is False
     assert metadata["attempts_used"] == 1
-    assert metadata["provider_elapsed_seconds"] == 0.6
-    assert metadata["provider_max_elapsed_seconds_per_call"] == 0.5
-    assert metadata["provider_remaining_elapsed_seconds"] == 0.0
+    assert metadata["provider_elapsed_budget_limited"] is True
+    assert metadata["provider_elapsed_budget_exhausted"] is True
+    assert "provider_elapsed_seconds" not in metadata
+    assert "provider_max_elapsed_seconds_per_call" not in metadata
+    assert "provider_remaining_elapsed_seconds" not in metadata
     assert metadata["attempt_history"] == [
         {
             "attempt": 1,
@@ -922,8 +927,11 @@ def test_chat_does_not_sleep_past_elapsed_budget(monkeypatch):
     metadata = agent.get_last_provider_call_metadata()
     assert metadata is not None
     assert metadata["attempts_used"] == 1
-    assert metadata["provider_elapsed_seconds"] == 0.2
-    assert metadata["provider_remaining_elapsed_seconds"] == 0.3
+    assert metadata["provider_elapsed_budget_limited"] is True
+    assert metadata["provider_elapsed_budget_exhausted"] is False
+    assert "provider_elapsed_seconds" not in metadata
+    assert "provider_max_elapsed_seconds_per_call" not in metadata
+    assert "provider_remaining_elapsed_seconds" not in metadata
     assert sleep_calls == []
 
 
@@ -946,6 +954,11 @@ def test_chat_fails_before_first_attempt_when_elapsed_budget_is_already_exhauste
     assert metadata["attempt_history"] == []
     assert metadata["provider_call_budget_limited"] is False
     assert metadata["provider_call_budget_exhausted"] is False
+    assert metadata["provider_elapsed_budget_limited"] is True
+    assert metadata["provider_elapsed_budget_exhausted"] is True
+    assert "provider_elapsed_seconds" not in metadata
+    assert "provider_max_elapsed_seconds_per_call" not in metadata
+    assert "provider_remaining_elapsed_seconds" not in metadata
     assert provider.calls == []
 
 
@@ -2012,6 +2025,8 @@ def test_require_context_value_returns_non_empty_value_and_provider_metadata_acc
         "provider_call_budget_exhausted": False,
         "provider_call_budget_limited_providers": [],
         "provider_call_budget_exhausted_providers": [],
+        "provider_elapsed_budget_limited": False,
+        "provider_elapsed_budget_exhausted": False,
     }
 
 

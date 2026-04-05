@@ -636,7 +636,6 @@ def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
             "retryable": True,
             "has_error_type": True,
             "has_error_message": True,
-            "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
             "backoff_seconds": 0.0,
@@ -682,7 +681,6 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
             "retryable": True,
             "has_error_type": True,
             "has_error_message": True,
-            "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
             "backoff_seconds": 0.0,
@@ -693,7 +691,6 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
             "retryable": True,
             "has_error_type": True,
             "has_error_message": True,
-            "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
             "backoff_seconds": 0.0,
@@ -730,7 +727,7 @@ def test_chat_applies_retry_jitter_to_sleep(monkeypatch):
     assert round(sum(sleep_calls), 6) == 1.25
     assert max(sleep_calls) <= agent.config.provider_cancellation_check_interval_seconds
     assert metadata is not None
-    assert metadata["attempt_history"][0]["uncapped_backoff_seconds"] == 1.0
+    assert "uncapped_backoff_seconds" not in metadata["attempt_history"][0]
     assert metadata["attempt_history"][0]["base_backoff_seconds"] == 1.0
     assert metadata["attempt_history"][0]["jitter_seconds"] == 0.25
     assert metadata["attempt_history"][0]["backoff_seconds"] == 1.25
@@ -793,7 +790,6 @@ def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkey
             "retryable": True,
             "has_error_type": True,
             "has_error_message": True,
-            "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
             "backoff_seconds": 0.0,
@@ -864,7 +860,6 @@ def test_chat_provider_specific_budget_blocks_additional_retry_attempts_after_fi
             "retryable": True,
             "has_error_type": True,
             "has_error_message": True,
-            "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
             "backoff_seconds": 0.0,
@@ -907,7 +902,6 @@ def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attemp
             "retryable": True,
             "has_error_type": True,
             "has_error_message": True,
-            "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
             "jitter_seconds": 0.0,
             "backoff_seconds": 0.0,
@@ -1104,7 +1098,6 @@ def test_chat_cancels_during_retry_backoff(monkeypatch):
             "retryable": True,
             "has_error_type": True,
             "has_error_message": True,
-            "uncapped_backoff_seconds": 0.2,
             "base_backoff_seconds": 0.2,
             "jitter_seconds": 0.0,
             "backoff_seconds": 0.2,
@@ -1144,7 +1137,7 @@ def test_chat_caps_retry_backoff_before_jitter(monkeypatch):
     assert round(sum(sleep_calls), 6) == 1.75
     assert max(sleep_calls) <= agent.config.provider_cancellation_check_interval_seconds
     assert metadata is not None
-    assert metadata["attempt_history"][0]["uncapped_backoff_seconds"] == 5.0
+    assert "uncapped_backoff_seconds" not in metadata["attempt_history"][0]
     assert metadata["attempt_history"][0]["base_backoff_seconds"] == 1.5
     assert metadata["attempt_history"][0]["jitter_seconds"] == 0.25
     assert metadata["attempt_history"][0]["backoff_seconds"] == 1.75

@@ -250,6 +250,7 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
 
         sanitized_entry = dict(entry)
         sanitized_entry.pop("model", None)
+        sanitized_entry.pop("attempts_used", None)
         sanitized_entry.pop("provider_call_count", None)
         sanitized_entry.pop("provider_max_calls", None)
         sanitized_entry.pop("call_budget_exhausted", None)

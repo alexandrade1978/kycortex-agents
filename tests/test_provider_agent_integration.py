@@ -426,7 +426,6 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
-            "attempts_used": 1,
         }
     ]
     assert metadata["attempts_used"] == 2

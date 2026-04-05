@@ -1397,7 +1397,6 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
-            "attempts_used": 1,
         }
     ]
 
@@ -1443,7 +1442,6 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
-            "attempts_used": 1,
         }
     ]
     assert primary_provider.calls == [
@@ -1533,7 +1531,6 @@ def test_chat_falls_back_after_primary_provider_budget_is_exhausted_mid_retry(mo
         {
             "provider": "openai",
             "status": "failed_call_budget_exhausted",
-            "attempts_used": 1,
         }
     ]
     assert metadata["provider_call_budget_limited"] is True
@@ -1579,7 +1576,6 @@ def test_chat_falls_back_after_primary_provider_transient_failure(monkeypatch):
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
-            "attempts_used": 1,
         }
     ]
 

@@ -375,7 +375,6 @@ def test_completed_workflow_persists_fallback_provider_metadata_after_reload(tmp
             "status": "failed_transient",
             "has_error_type": True,
             "has_error_message": True,
-            "attempts_used": 1,
         }
     ]
     assert primary_provider.calls == [("system", "Design the architecture")]

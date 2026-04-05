@@ -327,10 +327,8 @@ def _minimize_nested_health_check_error_type(health_check_entry: dict[str, Any])
 
 
 def _minimize_nested_health_check_error_message(health_check_entry: dict[str, Any]) -> None:
-    error_message = health_check_entry.get("error_message")
-    if isinstance(error_message, str):
-        health_check_entry["has_error_message"] = bool(error_message)
     health_check_entry.pop("error_message", None)
+    health_check_entry.pop("has_error_message", None)
 
 
 def _minimize_nested_health_check_timing_fields(health_check_entry: dict[str, Any]) -> None:

@@ -496,7 +496,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
     assert "last_error_type" not in metadata["provider_health"]["openai"]
     assert "has_error_type" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "error_type" not in metadata["provider_health"]["openai"]["last_health_check"]
-    assert metadata["provider_health"]["openai"]["last_health_check"]["has_error_message"] is True
+    assert "has_error_message" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "error_message" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert metadata["provider_health"]["openai"]["status"] == "degraded"
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"

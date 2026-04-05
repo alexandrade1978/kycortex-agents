@@ -8806,8 +8806,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
         not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
     assert (
-        project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]["has_error_message"]
-        is True
+        "has_error_message"
+        not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
     assert (
         "error_message"
@@ -8882,8 +8882,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
         not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
     )
     assert (
-        payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]["has_error_message"]
-        is True
+        "has_error_message"
+        not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
     )
     assert (
         "error_message"

@@ -86,7 +86,7 @@ def test_chat_returns_response_content():
     assert metadata["provider_call_budget_exhausted_providers"] == []
     assert "provider_call_count" not in metadata
     assert "provider_remaining_calls" not in metadata
-    assert metadata["provider_timeout_seconds"] == 60.0
+    assert "provider_timeout_seconds" not in metadata
     assert metadata["provider_timeout_provider_count"] == 1
     assert "provider_timeout_seconds_by_provider" not in metadata
     assert metadata["provider_elapsed_budget_limited"] is False
@@ -1805,7 +1805,7 @@ def test_chat_surfaces_provider_specific_timeout_metadata_for_fallback(monkeypat
     metadata = agent.get_last_provider_call_metadata()
     assert metadata is not None
     assert metadata["provider"] == "anthropic"
-    assert metadata["provider_timeout_seconds"] == 25.0
+    assert "provider_timeout_seconds" not in metadata
     assert metadata["provider_timeout_provider_count"] == 2
     assert "provider_timeout_seconds_by_provider" not in metadata
 

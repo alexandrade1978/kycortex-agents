@@ -165,6 +165,7 @@ def _sanitize_provider_call_circuit_breaker_metadata(provider_call: dict[str, An
 
 
 def _sanitize_provider_call_timeout_metadata(provider_call: dict[str, Any]) -> None:
+    provider_call.pop("provider_timeout_seconds", None)
     timeout_by_provider = provider_call.get("provider_timeout_seconds_by_provider")
     if not isinstance(timeout_by_provider, Mapping):
         return

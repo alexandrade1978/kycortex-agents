@@ -307,7 +307,8 @@ def test_chat_captures_failed_provider_call_metadata():
     assert metadata["provider"] == "openai"
     assert metadata["model"] == "gpt-4o"
     assert metadata["success"] is False
-    assert metadata["error_type"] == "RuntimeError"
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["has_error_message"] is True
     assert "error_message" not in metadata
     assert metadata["duration_ms"] >= 0
@@ -650,7 +651,8 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
     assert metadata["retryable"] is True
     assert metadata["attempts_used"] == 2
     assert metadata["max_attempts"] == 2
-    assert metadata["error_type"] == "ProviderTransientError"
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["attempt_history"] == [
         {
             "attempt": 1,
@@ -1713,7 +1715,8 @@ def test_chat_fails_fast_when_last_provider_health_check_is_deterministically_un
     assert metadata["retryable"] is False
     assert metadata["attempts_used"] == 0
     assert metadata["attempt_history"] == []
-    assert metadata["error_type"] == "AgentExecutionError"
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["has_error_message"] is True
     assert "error_message" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "failing"
@@ -1736,7 +1739,8 @@ def test_chat_fails_fast_when_last_provider_health_check_is_transient():
     assert metadata["retryable"] is True
     assert metadata["attempts_used"] == 0
     assert metadata["attempt_history"] == []
-    assert metadata["error_type"] == "ProviderTransientError"
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["has_error_message"] is True
     assert "error_message" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "degraded"

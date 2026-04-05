@@ -1822,7 +1822,10 @@ class ProjectState:
 
             if provider_call.get("success") is False:
                 error_type = provider_call.get("error_type")
-                if isinstance(error_type, str) and error_type:
+                if (
+                    (isinstance(error_type, str) and error_type)
+                    or provider_call.get("has_error_type") is True
+                ):
                     final_error_count += 1
 
             fallback_history = provider_call.get("fallback_history")

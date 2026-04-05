@@ -96,6 +96,7 @@ def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[st
     _sanitize_provider_call_budget_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
     _sanitize_provider_call_top_level_error_message(sanitized)
+    _sanitize_provider_call_top_level_error_type(sanitized)
     return sanitized
 
 
@@ -129,6 +130,13 @@ def _sanitize_provider_call_top_level_error_message(provider_call: dict[str, Any
     if isinstance(error_message, str):
         provider_call["has_error_message"] = bool(error_message)
         provider_call.pop("error_message", None)
+
+
+def _sanitize_provider_call_top_level_error_type(provider_call: dict[str, Any]) -> None:
+    error_type = provider_call.get("error_type")
+    if isinstance(error_type, str):
+        provider_call["has_error_type"] = bool(error_type)
+        provider_call.pop("error_type", None)
 
 
 def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> None:

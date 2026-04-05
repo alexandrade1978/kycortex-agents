@@ -1051,6 +1051,7 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
                 "provider": "openai",
                 "model": "gpt-test",
                 "base_url": "https://alice:secret-pass@example.com/v1",
+                "error_type": "RuntimeError",
                 "error_message": "api_key=sk-secret-123456",
                 "provider_call_count": 2,
                 "provider_max_calls_per_agent": 3,
@@ -1065,6 +1066,8 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
     assert "secret-pass" not in str(metadata)
     assert "sk-secret-123456" not in str(metadata)
     assert "[REDACTED]" in metadata["base_url"]
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["has_error_message"] is True
     assert "error_message" not in metadata
     assert metadata["provider_call_budget_limited"] is True
@@ -1086,6 +1089,7 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
                 "provider": "anthropic",
                 "model": "claude-test",
                 "base_url": "https://bob:secret-pass@example.com/messages",
+                "error_type": "ProviderTransientError",
                 "error_message": "Authorization: Bearer sk-ant-secret-987654",
                 "provider_call_counts_by_provider": {"anthropic": 1},
                 "provider_max_calls_per_provider": {"anthropic": 1},
@@ -1112,6 +1116,8 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
     assert "secret-pass" not in str(metadata)
     assert "sk-ant-secret-987654" not in str(metadata)
     assert "[REDACTED]" in metadata["base_url"]
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["has_error_message"] is True
     assert "error_message" not in metadata
     assert metadata["provider_call_budget_limited"] is True
@@ -8659,6 +8665,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                         "provider": "openai",
                         "model": "gpt-test",
                         "base_url": "https://alice:secret-pass@example.com/v1",
+                        "error_type": "AgentExecutionError",
                         "error_message": "api_key=sk-secret-123456",
                         "attempt_history": [
                             {
@@ -8695,6 +8702,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "secret-pass" not in str(project.tasks[0].last_provider_call)
     assert "sk-secret-123456" not in str(project.tasks[0].last_provider_call)
     assert "[REDACTED]" in project.tasks[0].last_provider_call["base_url"]
+    assert project.tasks[0].last_provider_call["has_error_type"] is True
+    assert "error_type" not in project.tasks[0].last_provider_call
     assert project.tasks[0].last_provider_call["has_error_message"] is True
     assert "error_message" not in project.tasks[0].last_provider_call
     assert project.tasks[0].last_provider_call["attempt_history"][0]["has_error_message"] is True
@@ -8707,6 +8716,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "secret-pass" not in str(payload["metadata"]["provider_call"])
     assert "sk-secret-123456" not in str(payload["metadata"]["provider_call"])
     assert "[REDACTED]" in payload["metadata"]["provider_call"]["base_url"]
+    assert payload["metadata"]["provider_call"]["has_error_type"] is True
+    assert "error_type" not in payload["metadata"]["provider_call"]
     assert payload["metadata"]["provider_call"]["has_error_message"] is True
     assert "error_message" not in payload["metadata"]["provider_call"]
     assert payload["metadata"]["provider_call"]["attempt_history"][0]["has_error_message"] is True

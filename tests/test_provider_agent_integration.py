@@ -272,7 +272,8 @@ def test_execute_surfaces_provider_failures_with_failed_call_metadata(
     assert metadata["provider"] == provider_name
     assert metadata["model"] == config.llm_model
     assert metadata["success"] is False
-    assert metadata["error_type"] == "ProviderTransientError"
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["retryable"] is True
     assert metadata["attempts_used"] == expected_attempts_used
     assert metadata["max_attempts"] == 1
@@ -358,7 +359,8 @@ def test_execute_does_not_retry_deterministic_provider_request_failures():
     assert metadata is not None
     assert metadata["success"] is False
     assert metadata["retryable"] is False
-    assert metadata["error_type"] == "AgentExecutionError"
+    assert metadata["has_error_type"] is True
+    assert "error_type" not in metadata
     assert metadata["attempts_used"] == 1
     assert metadata["max_attempts"] == 3
     assert len(metadata["attempt_history"]) == 1

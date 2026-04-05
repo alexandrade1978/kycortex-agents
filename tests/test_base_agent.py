@@ -97,6 +97,8 @@ def test_chat_returns_response_content():
     assert metadata["provider_cancellation_requested"] is False
     assert metadata["provider_cancellation_reason"] is None
     assert "has_provider_cancellation_reason" not in metadata
+    assert "circuit_breaker_threshold" not in metadata
+    assert "circuit_breaker_cooldown_seconds" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
     assert "last_success_age_seconds" not in metadata["provider_health"]["openai"]

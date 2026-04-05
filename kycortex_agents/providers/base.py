@@ -95,6 +95,7 @@ def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[st
     _sanitize_provider_call_attempt_history(sanitized)
     _sanitize_provider_call_budget_metadata(sanitized)
     _sanitize_provider_call_cancellation_metadata(sanitized)
+    _sanitize_provider_call_circuit_breaker_metadata(sanitized)
     _sanitize_provider_call_elapsed_budget_metadata(sanitized)
     _sanitize_provider_call_timeout_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
@@ -156,6 +157,11 @@ def _sanitize_provider_call_cancellation_metadata(provider_call: dict[str, Any])
     if isinstance(cancellation_reason, str):
         provider_call["has_provider_cancellation_reason"] = bool(cancellation_reason)
         provider_call.pop("provider_cancellation_reason", None)
+
+
+def _sanitize_provider_call_circuit_breaker_metadata(provider_call: dict[str, Any]) -> None:
+    provider_call.pop("circuit_breaker_threshold", None)
+    provider_call.pop("circuit_breaker_cooldown_seconds", None)
 
 
 def _sanitize_provider_call_timeout_metadata(provider_call: dict[str, Any]) -> None:

@@ -419,7 +419,7 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
     assert metadata["model"] == "claude-3-5-sonnet"
     assert metadata["success"] is True
     assert metadata["fallback_used"] is True
-    assert metadata["fallback_count"] == 1
+    assert "fallback_count" not in metadata
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",

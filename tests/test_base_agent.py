@@ -1265,6 +1265,7 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
     assert metadata is not None
     assert metadata["provider"] == "anthropic"
     assert metadata["fallback_used"] is True
+    assert "fallback_count" not in metadata
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",

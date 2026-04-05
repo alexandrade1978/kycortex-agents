@@ -307,10 +307,8 @@ def _minimize_provider_health_error_message(provider_health_entry: dict[str, Any
 
 
 def _minimize_provider_health_error_type(provider_health_entry: dict[str, Any]) -> None:
-    last_error_type = provider_health_entry.get("last_error_type")
-    if isinstance(last_error_type, str):
-        provider_health_entry["has_last_error_type"] = bool(last_error_type)
     provider_health_entry.pop("last_error_type", None)
+    provider_health_entry.pop("has_last_error_type", None)
 
 
 def _minimize_provider_health_age_fields(provider_health_entry: dict[str, Any]) -> None:

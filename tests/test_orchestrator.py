@@ -8730,6 +8730,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                                 "last_error_message": "api_key=sk-secret-123456",
                                 "last_error_type": "AgentExecutionError",
                                 "last_health_check": {
+                                    "provider": "openai",
                                     "status": "degraded",
                                     "retryable": True,
                                     "model_ready": False,
@@ -8825,6 +8826,10 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
         not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
     assert (
+        "provider"
+        not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
+    )
+    assert (
         "model_ready"
         not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
@@ -8910,6 +8915,10 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     )
     assert (
         "latency_ms"
+        not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    )
+    assert (
+        "provider"
         not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
     )
     assert (

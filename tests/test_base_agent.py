@@ -108,6 +108,7 @@ def test_chat_returns_response_content():
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "ready"
     assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
     assert "latency_ms" not in metadata["provider_health"]["openai"]["last_health_check"]
+    assert "provider" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "cooldown_remaining_seconds" not in metadata["provider_health"]["openai"]["last_health_check"]
 
 

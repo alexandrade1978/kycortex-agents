@@ -8732,6 +8732,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                                 "last_health_check": {
                                     "status": "degraded",
                                     "error_type": "AgentExecutionError",
+                                    "error_message": "api_key=sk-secret-123456",
                                     "cooldown_remaining_seconds": 7.5,
                                 },
                                 "last_health_check_age_seconds": 0.5,
@@ -8805,6 +8806,14 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
         not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
     assert (
+        project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]["has_error_message"]
+        is True
+    )
+    assert (
+        "error_message"
+        not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
+    )
+    assert (
         "cooldown_remaining_seconds"
         not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
@@ -8870,6 +8879,14 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     )
     assert (
         "error_type"
+        not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    )
+    assert (
+        payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]["has_error_message"]
+        is True
+    )
+    assert (
+        "error_message"
         not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
     )
     assert (

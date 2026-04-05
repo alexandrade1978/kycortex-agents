@@ -293,6 +293,7 @@ def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> No
         if isinstance(last_health_check, Mapping):
             sanitized_last_health_check = dict(last_health_check)
             _minimize_nested_health_check_error_type(sanitized_last_health_check)
+            _minimize_nested_health_check_error_message(sanitized_last_health_check)
             _minimize_nested_health_check_timing_fields(sanitized_last_health_check)
             sanitized_health_entry["last_health_check"] = sanitized_last_health_check
 
@@ -323,6 +324,13 @@ def _minimize_provider_health_age_fields(provider_health_entry: dict[str, Any]) 
 def _minimize_nested_health_check_error_type(health_check_entry: dict[str, Any]) -> None:
     health_check_entry.pop("error_type", None)
     health_check_entry.pop("has_error_type", None)
+
+
+def _minimize_nested_health_check_error_message(health_check_entry: dict[str, Any]) -> None:
+    error_message = health_check_entry.get("error_message")
+    if isinstance(error_message, str):
+        health_check_entry["has_error_message"] = bool(error_message)
+    health_check_entry.pop("error_message", None)
 
 
 def _minimize_nested_health_check_timing_fields(health_check_entry: dict[str, Any]) -> None:

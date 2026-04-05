@@ -214,6 +214,8 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
     assert result.metadata["provider_call"]["success"] is True
     assert result.metadata["provider_call"]["duration_ms"] >= 0
     assert result.metadata["provider_call"]["usage"] == expected_usage
+    if provider_name == "ollama":
+        assert "base_url" not in result.metadata["provider_call"]["provider_health"]["ollama"]["last_health_check"]
     if expected_timing is None:
         assert "timing" not in result.metadata["provider_call"]
     else:

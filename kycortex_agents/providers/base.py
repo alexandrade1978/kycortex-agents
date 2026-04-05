@@ -302,10 +302,8 @@ def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> No
 
 
 def _minimize_provider_health_error_message(provider_health_entry: dict[str, Any]) -> None:
-    last_error_message = provider_health_entry.get("last_error_message")
-    if isinstance(last_error_message, str):
-        provider_health_entry["has_last_error_message"] = bool(last_error_message)
     provider_health_entry.pop("last_error_message", None)
+    provider_health_entry.pop("has_last_error_message", None)
 
 
 def _minimize_provider_health_error_type(provider_health_entry: dict[str, Any]) -> None:

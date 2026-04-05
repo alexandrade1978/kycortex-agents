@@ -490,7 +490,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
             "retryable": True,
         }
     ]
-    assert metadata["provider_health"]["openai"]["has_last_error_message"] is True
+    assert "has_last_error_message" not in metadata["provider_health"]["openai"]
     assert "last_error_message" not in metadata["provider_health"]["openai"]
     assert metadata["provider_health"]["openai"]["has_last_error_type"] is True
     assert "last_error_type" not in metadata["provider_health"]["openai"]

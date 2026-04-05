@@ -74,6 +74,12 @@ def _provider_health_entry_has_retryable_failure(raw_health_entry: Dict[str, Any
     return last_outcome == "failure" and health_status in {"degraded", "open_circuit"}
 
 
+def _provider_health_entry_has_open_circuit(raw_health_entry: Dict[str, Any]) -> bool:
+    if raw_health_entry.get("circuit_breaker_open") is True:
+        return True
+    return raw_health_entry.get("status") == "open_circuit"
+
+
 def _normalized_redacted_reason(reason: Any, default: str) -> str:
     if isinstance(reason, str) and reason.strip():
         return _redact_text(reason.strip()) or default
@@ -1816,7 +1822,7 @@ class ProjectState:
                         health_summary["last_outcome_counts"][last_outcome] = (
                             health_summary["last_outcome_counts"].get(last_outcome, 0) + 1
                         )
-                    if raw_health_entry.get("circuit_breaker_open") is True:
+                    if _provider_health_entry_has_open_circuit(raw_health_entry):
                         health_summary["circuit_open_count"] += 1
                     if _provider_health_entry_has_retryable_failure(raw_health_entry):
                         health_summary["retryable_failure_count"] += 1

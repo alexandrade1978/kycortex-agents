@@ -8715,6 +8715,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                             "openai": {
                                 "model": "gpt-test",
                                 "status": "degraded",
+                                "circuit_breaker_open": True,
                                 "transient_failure_streak": 3,
                                 "last_success_age_seconds": 12.0,
                                 "last_failure_age_seconds": 1.25,
@@ -8779,6 +8780,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     )
     assert project.tasks[0].last_provider_call["provider_health"]["openai"]["has_last_error_type"] is True
     assert "last_error_type" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
+    assert "circuit_breaker_open" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
     assert "last_failure_retryable" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
     assert "transient_failure_streak" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
     assert "last_success_age_seconds" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
@@ -8838,6 +8840,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     )
     assert payload["metadata"]["provider_call"]["provider_health"]["openai"]["has_last_error_type"] is True
     assert "last_error_type" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
+    assert "circuit_breaker_open" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
     assert "last_failure_retryable" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
     assert "transient_failure_streak" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
     assert "last_success_age_seconds" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]

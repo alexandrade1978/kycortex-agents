@@ -3380,9 +3380,8 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
                 "provider_health": {
                     "openai": {
                         "model": None,
-                        "status": None,
+                        "status": "open_circuit",
                         "last_outcome": None,
-                        "circuit_breaker_open": True,
                         "last_failure_retryable": True,
                         "last_error_type": "TimeoutError",
                         "last_health_check": {"active_check": True, "cooldown_cached": False},
@@ -3437,7 +3436,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 5}
     assert telemetry["provider_health_summary"]["openai"] == {
         "models": [],
-        "status_counts": {},
+        "status_counts": {"open_circuit": 1},
         "last_outcome_counts": {},
         "circuit_open_count": 1,
         "retryable_failure_count": 1,

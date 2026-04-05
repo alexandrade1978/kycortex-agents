@@ -1135,7 +1135,6 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
             "provider": "anthropic",
             "model": "claude-test",
             "status": "failed_call_budget_exhausted",
-            "call_budget_exhausted": True,
             "has_error_message": True,
         }
     ]

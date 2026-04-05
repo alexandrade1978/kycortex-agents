@@ -618,7 +618,6 @@ def test_execute_falls_back_to_secondary_provider_after_primary_provider_budget_
             "provider": "openai",
             "model": "gpt-4o",
             "status": "skipped_call_budget_exhausted",
-            "call_budget_exhausted": True,
         }
     ]
     assert metadata["provider_call_budget_limited"] is True

@@ -246,15 +246,9 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
             continue
 
         sanitized_entry = dict(entry)
-        if "provider_call_count" in sanitized_entry or "provider_max_calls" in sanitized_entry:
-            sanitized_entry["call_budget_exhausted"] = bool(
-                sanitized_entry.get("call_budget_exhausted")
-            ) or sanitized_entry.get("status") in {
-                "skipped_call_budget_exhausted",
-                "failed_call_budget_exhausted",
-            }
         sanitized_entry.pop("provider_call_count", None)
         sanitized_entry.pop("provider_max_calls", None)
+        sanitized_entry.pop("call_budget_exhausted", None)
         sanitized_entry.pop("remaining_cooldown_seconds", None)
 
         _minimize_nested_provider_error_type(sanitized_entry)

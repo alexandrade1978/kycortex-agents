@@ -1484,7 +1484,6 @@ def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monk
             "provider": "openai",
             "model": "gpt-4o",
             "status": "skipped_call_budget_exhausted",
-            "call_budget_exhausted": True,
         }
     ]
     assert metadata["provider_call_budget_limited"] is True
@@ -1531,7 +1530,6 @@ def test_chat_falls_back_after_primary_provider_budget_is_exhausted_mid_retry(mo
             "provider": "openai",
             "model": "gpt-4o",
             "status": "failed_call_budget_exhausted",
-            "call_budget_exhausted": True,
             "attempts_used": 1,
         }
     ]

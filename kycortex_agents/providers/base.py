@@ -118,6 +118,7 @@ def _sanitize_provider_call_attempt_history(provider_call: dict[str, Any]) -> No
 
         sanitized_entry = dict(entry)
         sanitized_entry.pop("uncapped_backoff_seconds", None)
+        sanitized_entry.pop("jitter_seconds", None)
         _minimize_nested_provider_error_type(sanitized_entry)
         _minimize_nested_provider_error_message(sanitized_entry)
         sanitized_history.append(sanitized_entry)

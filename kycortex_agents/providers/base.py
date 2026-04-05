@@ -284,6 +284,7 @@ def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> No
         if isinstance(last_health_check, Mapping):
             sanitized_last_health_check = dict(last_health_check)
             _minimize_nested_health_check_error_type(sanitized_last_health_check)
+            _minimize_nested_health_check_timing_fields(sanitized_last_health_check)
             sanitized_health_entry["last_health_check"] = sanitized_last_health_check
 
         sanitized_provider_health[provider_name] = sanitized_health_entry
@@ -309,6 +310,10 @@ def _minimize_nested_health_check_error_type(health_check_entry: dict[str, Any])
     if isinstance(error_type, str):
         health_check_entry["has_error_type"] = bool(error_type)
     health_check_entry.pop("error_type", None)
+
+
+def _minimize_nested_health_check_timing_fields(health_check_entry: dict[str, Any]) -> None:
+    health_check_entry.pop("cooldown_remaining_seconds", None)
 
 
 def _limited_budget_providers(raw_limits: Any) -> list[str]:

@@ -106,6 +106,7 @@ def test_chat_returns_response_content():
     assert "last_health_check_age_seconds" not in metadata["provider_health"]["openai"]
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "ready"
     assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
+    assert "cooldown_remaining_seconds" not in metadata["provider_health"]["openai"]["last_health_check"]
 
 
 def test_chat_supports_provider_without_health_check_method():
@@ -594,6 +595,7 @@ def test_chat_redacts_sensitive_values_from_provider_health_metadata():
     assert "error_type" not in provider_health["last_health_check"]
     assert provider_health["last_health_check"]["has_error_message"] is True
     assert "error_message" not in provider_health["last_health_check"]
+    assert "cooldown_remaining_seconds" not in provider_health["last_health_check"]
 
 
 def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
@@ -1671,7 +1673,7 @@ def test_chat_reuses_cached_unhealthy_health_check_during_cooldown(monkeypatch):
     assert fallback_provider.calls == [("system", "message one"), ("system", "message two")]
     assert metadata is not None
     assert metadata["provider_health"]["openai"]["last_health_check"]["cooldown_cached"] is True
-    assert metadata["provider_health"]["openai"]["last_health_check"]["cooldown_remaining_seconds"] > 0
+    assert "cooldown_remaining_seconds" not in metadata["provider_health"]["openai"]["last_health_check"]
 
 
 def test_cached_unhealthy_health_check_can_open_circuit_breaker(monkeypatch):

@@ -8714,6 +8714,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                                 "last_health_check": {
                                     "status": "degraded",
                                     "error_type": "AgentExecutionError",
+                                    "cooldown_remaining_seconds": 7.5,
                                 },
                                 "last_health_check_age_seconds": 0.5,
                             }
@@ -8770,6 +8771,10 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
         "error_type"
         not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
+    assert (
+        "cooldown_remaining_seconds"
+        not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
+    )
     payload = require_output_payload(project.tasks[0])
     assert payload["metadata"]["provider_call"]["provider"] == "openai"
     assert payload["metadata"]["provider_call"]["model"] == "gpt-test"
@@ -8811,6 +8816,10 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     )
     assert (
         "error_type"
+        not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    )
+    assert (
+        "cooldown_remaining_seconds"
         not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
     )
 

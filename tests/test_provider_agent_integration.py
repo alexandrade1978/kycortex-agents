@@ -561,6 +561,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_model_readiness_
     assert metadata["provider_health"]["openai"]["status"] == "failing"
     assert "retryable" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "model_ready" not in metadata["provider_health"]["openai"]["last_health_check"]
+    assert "timeout_seconds" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert metadata["provider_health"]["anthropic"]["status"] == "healthy"
 
 

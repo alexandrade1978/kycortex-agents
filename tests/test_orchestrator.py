@@ -8797,8 +8797,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "last_failure_age_seconds" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
     assert "last_health_check_age_seconds" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
     assert (
-        project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]["has_error_type"]
-        is True
+        "has_error_type"
+        not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
     )
     assert (
         "error_type"
@@ -8865,8 +8865,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "last_failure_age_seconds" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
     assert "last_health_check_age_seconds" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
     assert (
-        payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]["has_error_type"]
-        is True
+        "has_error_type"
+        not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
     )
     assert (
         "error_type"

@@ -321,10 +321,8 @@ def _minimize_provider_health_age_fields(provider_health_entry: dict[str, Any]) 
 
 
 def _minimize_nested_health_check_error_type(health_check_entry: dict[str, Any]) -> None:
-    error_type = health_check_entry.get("error_type")
-    if isinstance(error_type, str):
-        health_check_entry["has_error_type"] = bool(error_type)
     health_check_entry.pop("error_type", None)
+    health_check_entry.pop("has_error_type", None)
 
 
 def _minimize_nested_health_check_timing_fields(health_check_entry: dict[str, Any]) -> None:

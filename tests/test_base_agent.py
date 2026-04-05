@@ -1246,6 +1246,7 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
     assert metadata["provider"] == "anthropic"
     assert "active_provider" not in metadata
     assert "active_model" not in metadata
+    assert "primary_provider" not in metadata
     assert metadata["fallback_used"] is True
     assert "fallback_count" not in metadata
     assert metadata["fallback_history"] == [
@@ -1432,6 +1433,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     assert fourth_metadata["provider"] == "anthropic"
     assert "active_provider" not in fourth_metadata
     assert "active_model" not in fourth_metadata
+    assert "primary_provider" not in fourth_metadata
     assert fourth_metadata["fallback_used"] is True
     assert fourth_metadata["fallback_history"] == [
         {

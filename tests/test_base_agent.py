@@ -1268,7 +1268,6 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
             "provider": "openai",
             "model": "gpt-4o",
             "status": "skipped_open_circuit",
-            "remaining_cooldown_seconds": 10.0,
         }
     ]
     assert primary_provider.calls == []
@@ -1428,7 +1427,6 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
             "provider": "openai",
             "model": "gpt-4o",
             "status": "skipped_open_circuit",
-            "remaining_cooldown_seconds": 10.0,
         }
     ]
 
@@ -1722,7 +1720,6 @@ def test_cached_unhealthy_health_check_can_open_circuit_breaker(monkeypatch):
             "provider": "openai",
             "model": "gpt-4o",
             "status": "skipped_open_circuit",
-            "remaining_cooldown_seconds": 9.0,
         }
     ]
     assert primary_provider.calls == []

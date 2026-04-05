@@ -8698,6 +8698,17 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                                 "retryable": False,
                             }
                         ],
+                        "provider_health": {
+                            "openai": {
+                                "model": "gpt-test",
+                                "status": "degraded",
+                                "last_error_type": "AgentExecutionError",
+                                "last_health_check": {
+                                    "status": "degraded",
+                                    "error_type": "AgentExecutionError",
+                                },
+                            }
+                        },
                     }
                 },
             )
@@ -8727,6 +8738,16 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "error_message" not in project.tasks[0].last_provider_call["attempt_history"][0]
     assert project.tasks[0].last_provider_call["fallback_history"][0]["has_error_message"] is True
     assert "error_message" not in project.tasks[0].last_provider_call["fallback_history"][0]
+    assert project.tasks[0].last_provider_call["provider_health"]["openai"]["has_last_error_type"] is True
+    assert "last_error_type" not in project.tasks[0].last_provider_call["provider_health"]["openai"]
+    assert (
+        project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]["has_error_type"]
+        is True
+    )
+    assert (
+        "error_type"
+        not in project.tasks[0].last_provider_call["provider_health"]["openai"]["last_health_check"]
+    )
     payload = require_output_payload(project.tasks[0])
     assert payload["metadata"]["provider_call"]["provider"] == "openai"
     assert payload["metadata"]["provider_call"]["model"] == "gpt-test"
@@ -8747,6 +8768,16 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "error_message" not in payload["metadata"]["provider_call"]["attempt_history"][0]
     assert payload["metadata"]["provider_call"]["fallback_history"][0]["has_error_message"] is True
     assert "error_message" not in payload["metadata"]["provider_call"]["fallback_history"][0]
+    assert payload["metadata"]["provider_call"]["provider_health"]["openai"]["has_last_error_type"] is True
+    assert "last_error_type" not in payload["metadata"]["provider_call"]["provider_health"]["openai"]
+    assert (
+        payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]["has_error_type"]
+        is True
+    )
+    assert (
+        "error_type"
+        not in payload["metadata"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    )
 
 
 def test_run_task_writes_default_artifact_content_to_output_dir(tmp_path):

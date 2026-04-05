@@ -97,6 +97,7 @@ def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[st
     _sanitize_provider_call_cancellation_metadata(sanitized)
     _sanitize_provider_call_timeout_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
+    _sanitize_provider_call_health_metadata(sanitized)
     _sanitize_provider_call_top_level_error_message(sanitized)
     _sanitize_provider_call_top_level_error_type(sanitized)
     return sanitized
@@ -237,6 +238,45 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
         sanitized_history.append(sanitized_entry)
 
     provider_call["fallback_history"] = sanitized_history
+
+
+def _sanitize_provider_call_health_metadata(provider_call: dict[str, Any]) -> None:
+    raw_provider_health = provider_call.get("provider_health")
+    if not isinstance(raw_provider_health, Mapping):
+        return
+
+    sanitized_provider_health: dict[Any, Any] = {}
+    for provider_name, raw_health_entry in raw_provider_health.items():
+        if not isinstance(raw_health_entry, Mapping):
+            sanitized_provider_health[provider_name] = raw_health_entry
+            continue
+
+        sanitized_health_entry = dict(raw_health_entry)
+        _minimize_provider_health_error_type(sanitized_health_entry)
+
+        last_health_check = sanitized_health_entry.get("last_health_check")
+        if isinstance(last_health_check, Mapping):
+            sanitized_last_health_check = dict(last_health_check)
+            _minimize_nested_health_check_error_type(sanitized_last_health_check)
+            sanitized_health_entry["last_health_check"] = sanitized_last_health_check
+
+        sanitized_provider_health[provider_name] = sanitized_health_entry
+
+    provider_call["provider_health"] = sanitized_provider_health
+
+
+def _minimize_provider_health_error_type(provider_health_entry: dict[str, Any]) -> None:
+    last_error_type = provider_health_entry.get("last_error_type")
+    if isinstance(last_error_type, str):
+        provider_health_entry["has_last_error_type"] = bool(last_error_type)
+    provider_health_entry.pop("last_error_type", None)
+
+
+def _minimize_nested_health_check_error_type(health_check_entry: dict[str, Any]) -> None:
+    error_type = health_check_entry.get("error_type")
+    if isinstance(error_type, str):
+        health_check_entry["has_error_type"] = bool(error_type)
+    health_check_entry.pop("error_type", None)
 
 
 def _limited_budget_providers(raw_limits: Any) -> list[str]:

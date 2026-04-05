@@ -576,8 +576,12 @@ def test_chat_redacts_sensitive_values_from_provider_health_metadata():
 
     assert metadata is not None
     provider_health = metadata["provider_health"]["openai"]
+    assert provider_health["has_last_error_type"] is True
+    assert "last_error_type" not in provider_health
     assert provider_health["has_last_error_message"] is True
     assert "last_error_message" not in provider_health
+    assert provider_health["last_health_check"]["has_error_type"] is True
+    assert "error_type" not in provider_health["last_health_check"]
     assert provider_health["last_health_check"]["has_error_message"] is True
     assert "error_message" not in provider_health["last_health_check"]
 

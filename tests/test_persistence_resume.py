@@ -374,7 +374,7 @@ def test_completed_workflow_persists_fallback_provider_metadata_after_reload(tmp
             "provider": "openai",
             "model": "gpt-4o",
             "status": "failed_transient",
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "attempts_used": 1,
         }

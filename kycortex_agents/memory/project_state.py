@@ -1844,7 +1844,10 @@ class ProjectState:
                 if isinstance(fallback_status, str) and fallback_status:
                     fallback_statuses.add(fallback_status)
                 fallback_error_type = entry.get("error_type")
-                if isinstance(fallback_error_type, str) and fallback_error_type:
+                if (
+                    (isinstance(fallback_error_type, str) and fallback_error_type)
+                    or entry.get("has_error_type") is True
+                ):
                     fallback_error_count += 1
 
         normalized_provider_summary: Dict[str, WorkflowProviderSummary] = {}

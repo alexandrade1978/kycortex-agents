@@ -425,7 +425,7 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
             "provider": "openai",
             "model": "gpt-4o",
             "status": "failed_transient",
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "attempts_used": 1,
         }
@@ -487,7 +487,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
             "provider": "openai",
             "model": "gpt-4o",
             "status": "failed_health_check",
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "retryable": True,
         }
@@ -553,7 +553,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_model_readiness_
             "provider": "openai",
             "model": "gpt-4.1",
             "status": "failed_health_check",
-            "error_type": "AgentExecutionError",
+            "has_error_type": True,
             "has_error_message": True,
             "retryable": False,
         }

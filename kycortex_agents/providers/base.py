@@ -234,6 +234,7 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
         sanitized_entry.pop("provider_call_count", None)
         sanitized_entry.pop("provider_max_calls", None)
 
+        _minimize_nested_provider_error_type(sanitized_entry)
         _minimize_nested_provider_error_message(sanitized_entry)
         sanitized_history.append(sanitized_entry)
 

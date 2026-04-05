@@ -1248,7 +1248,7 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
     assert "active_model" not in metadata
     assert "primary_provider" not in metadata
     assert "primary_model" not in metadata
-    assert metadata["fallback_used"] is True
+    assert "fallback_used" not in metadata
     assert "fallback_count" not in metadata
     assert metadata["fallback_history"] == [
         {
@@ -1390,7 +1390,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     assert first_result == "FALLBACK RESULT"
     assert first_metadata is not None
     assert first_metadata["provider"] == "anthropic"
-    assert first_metadata["fallback_used"] is True
+    assert "fallback_used" not in first_metadata
     assert first_metadata["fallback_history"] == [
         {
             "provider": "openai",
@@ -1421,7 +1421,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     assert third_result == "PRIMARY RESULT"
     assert third_metadata is not None
     assert third_metadata["provider"] == "openai"
-    assert third_metadata["fallback_used"] is False
+    assert "fallback_used" not in third_metadata
     assert third_metadata["circuit_breaker_open"] is False
     assert "circuit_breaker_failure_streak" not in third_metadata
 
@@ -1436,7 +1436,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     assert "active_model" not in fourth_metadata
     assert "primary_provider" not in fourth_metadata
     assert "primary_model" not in fourth_metadata
-    assert fourth_metadata["fallback_used"] is True
+    assert "fallback_used" not in fourth_metadata
     assert fourth_metadata["fallback_history"] == [
         {
             "provider": "openai",
@@ -1483,7 +1483,7 @@ def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monk
     assert second_result == "FALLBACK RESULT"
     assert metadata is not None
     assert metadata["provider"] == "anthropic"
-    assert metadata["fallback_used"] is True
+    assert "fallback_used" not in metadata
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",

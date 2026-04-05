@@ -236,6 +236,7 @@ def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> No
 
 
 def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> None:
+    provider_call.pop("fallback_used", None)
     provider_call.pop("fallback_count", None)
     fallback_history = provider_call.get("fallback_history")
     if not isinstance(fallback_history, list):

@@ -418,7 +418,7 @@ def test_execute_falls_back_to_secondary_provider_after_transient_primary_failur
     assert metadata["provider"] == "anthropic"
     assert metadata["model"] == "claude-3-5-sonnet"
     assert metadata["success"] is True
-    assert metadata["fallback_used"] is True
+    assert "fallback_used" not in metadata
     assert "fallback_count" not in metadata
     assert metadata["fallback_history"] == [
         {
@@ -481,7 +481,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
     assert result.raw_content == "FALLBACK RESULT"
     assert metadata["provider"] == "anthropic"
     assert metadata["success"] is True
-    assert metadata["fallback_used"] is True
+    assert "fallback_used" not in metadata
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",
@@ -610,7 +610,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_provider_budget_
     assert first_result.raw_content == "PRIMARY RESULT"
     assert second_result.raw_content == "FALLBACK RESULT"
     assert metadata["provider"] == "anthropic"
-    assert metadata["fallback_used"] is True
+    assert "fallback_used" not in metadata
     assert metadata["fallback_history"] == [
         {
             "provider": "openai",

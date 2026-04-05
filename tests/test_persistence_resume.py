@@ -368,7 +368,7 @@ def test_completed_workflow_persists_fallback_provider_metadata_after_reload(tmp
     assert reloaded_arch.output == "FALLBACK ARCHITECTURE"
     assert provider_call["provider"] == "anthropic"
     assert provider_call["success"] is True
-    assert provider_call["fallback_used"] is True
+    assert "fallback_used" not in provider_call
     assert provider_call["fallback_history"] == [
         {
             "provider": "openai",

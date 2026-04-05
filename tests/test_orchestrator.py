@@ -8695,6 +8695,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                                 "error_type": "AgentExecutionError",
                                 "error_message": "api_key=sk-secret-123456",
                                 "uncapped_backoff_seconds": 0.0,
+                                "base_backoff_seconds": 0.0,
                                 "jitter_seconds": 0.0,
                                 "backoff_seconds": 0.0,
                             }
@@ -8765,6 +8766,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert project.tasks[0].last_provider_call["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in project.tasks[0].last_provider_call["attempt_history"][0]
     assert "uncapped_backoff_seconds" not in project.tasks[0].last_provider_call["attempt_history"][0]
+    assert "base_backoff_seconds" not in project.tasks[0].last_provider_call["attempt_history"][0]
     assert "jitter_seconds" not in project.tasks[0].last_provider_call["attempt_history"][0]
     assert project.tasks[0].last_provider_call["fallback_history"][0]["has_error_type"] is True
     assert "error_type" not in project.tasks[0].last_provider_call["fallback_history"][0]
@@ -8822,6 +8824,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert payload["metadata"]["provider_call"]["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in payload["metadata"]["provider_call"]["attempt_history"][0]
     assert "uncapped_backoff_seconds" not in payload["metadata"]["provider_call"]["attempt_history"][0]
+    assert "base_backoff_seconds" not in payload["metadata"]["provider_call"]["attempt_history"][0]
     assert "jitter_seconds" not in payload["metadata"]["provider_call"]["attempt_history"][0]
     assert payload["metadata"]["provider_call"]["fallback_history"][0]["has_error_type"] is True
     assert "error_type" not in payload["metadata"]["provider_call"]["fallback_history"][0]

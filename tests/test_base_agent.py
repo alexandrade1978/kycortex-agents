@@ -569,9 +569,10 @@ def test_chat_redacts_sensitive_values_from_provider_health_metadata():
 
     assert metadata is not None
     provider_health = metadata["provider_health"]["openai"]
-    assert "sk-ant-secret-987654" not in provider_health["last_error_message"]
-    assert "[REDACTED]" in provider_health["last_error_message"]
-    assert "sk-ant-secret-987654" not in provider_health["last_health_check"]["error_message"]
+    assert provider_health["has_last_error_message"] is True
+    assert "last_error_message" not in provider_health
+    assert provider_health["last_health_check"]["has_error_message"] is True
+    assert "error_message" not in provider_health["last_health_check"]
 
 
 def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):

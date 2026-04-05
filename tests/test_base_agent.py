@@ -87,7 +87,7 @@ def test_chat_returns_response_content():
     assert "provider_call_count" not in metadata
     assert "provider_remaining_calls" not in metadata
     assert "provider_timeout_seconds" not in metadata
-    assert metadata["provider_timeout_provider_count"] == 1
+    assert "provider_timeout_provider_count" not in metadata
     assert "provider_timeout_seconds_by_provider" not in metadata
     assert metadata["provider_elapsed_budget_limited"] is False
     assert metadata["provider_elapsed_budget_exhausted"] is False
@@ -1808,7 +1808,7 @@ def test_chat_surfaces_provider_specific_timeout_metadata_for_fallback(monkeypat
     assert metadata is not None
     assert metadata["provider"] == "anthropic"
     assert "provider_timeout_seconds" not in metadata
-    assert metadata["provider_timeout_provider_count"] == 2
+    assert "provider_timeout_provider_count" not in metadata
     assert "provider_timeout_seconds_by_provider" not in metadata
 
 

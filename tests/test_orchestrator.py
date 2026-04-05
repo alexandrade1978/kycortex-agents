@@ -1128,7 +1128,7 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
     assert metadata["provider_call_budget_exhausted_providers"] == ["anthropic"]
     assert metadata["has_provider_cancellation_reason"] is True
     assert "provider_cancellation_reason" not in metadata
-    assert metadata["provider_timeout_provider_count"] == 1
+    assert "provider_timeout_provider_count" not in metadata
     assert "provider_timeout_seconds_by_provider" not in metadata
     assert metadata["fallback_history"] == [
         {
@@ -8679,6 +8679,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
                         "circuit_breaker_cooldown_seconds": 10.0,
                         "circuit_breaker_remaining_seconds": 4.0,
                         "provider_timeout_seconds": 11.0,
+                        "provider_timeout_provider_count": 2,
                         "provider_timeout_seconds_by_provider": {
                             "openai": 11.0,
                             "anthropic": 22.0,
@@ -8750,7 +8751,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "circuit_breaker_remaining_seconds" not in project.tasks[0].last_provider_call
     assert "circuit_breaker_failure_streak" not in project.tasks[0].last_provider_call
     assert "provider_timeout_seconds" not in project.tasks[0].last_provider_call
-    assert project.tasks[0].last_provider_call["provider_timeout_provider_count"] == 2
+    assert "provider_timeout_provider_count" not in project.tasks[0].last_provider_call
     assert "provider_timeout_seconds_by_provider" not in project.tasks[0].last_provider_call
     assert project.tasks[0].last_provider_call["provider_elapsed_budget_limited"] is True
     assert project.tasks[0].last_provider_call["provider_elapsed_budget_exhausted"] is False
@@ -8805,7 +8806,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "circuit_breaker_remaining_seconds" not in payload["metadata"]["provider_call"]
     assert "circuit_breaker_failure_streak" not in payload["metadata"]["provider_call"]
     assert "provider_timeout_seconds" not in payload["metadata"]["provider_call"]
-    assert payload["metadata"]["provider_call"]["provider_timeout_provider_count"] == 2
+    assert "provider_timeout_provider_count" not in payload["metadata"]["provider_call"]
     assert "provider_timeout_seconds_by_provider" not in payload["metadata"]["provider_call"]
     assert payload["metadata"]["provider_call"]["provider_elapsed_budget_limited"] is True
     assert payload["metadata"]["provider_call"]["provider_elapsed_budget_exhausted"] is False

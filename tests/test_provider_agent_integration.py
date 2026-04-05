@@ -685,5 +685,5 @@ def test_execute_surfaces_provider_specific_timeout_metadata_and_runtime_overrid
     assert primary_calls[0]["timeout"] == 11.0
     assert fallback_calls[0]["timeout"] == 22.0
     assert "provider_timeout_seconds" not in metadata
-    assert metadata["provider_timeout_provider_count"] == 2
+    assert "provider_timeout_provider_count" not in metadata
     assert "provider_timeout_seconds_by_provider" not in metadata

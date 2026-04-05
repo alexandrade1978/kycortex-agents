@@ -319,7 +319,7 @@ def test_chat_captures_failed_provider_call_metadata():
             "attempt": 1,
             "success": False,
             "retryable": False,
-            "error_type": "RuntimeError",
+            "has_error_type": True,
             "has_error_message": True,
             "backoff_seconds": 0.0,
         }
@@ -340,6 +340,8 @@ def test_chat_redacts_sensitive_values_from_failed_provider_call_metadata():
     assert "error_message" not in metadata
     assert "sk-secret-123456" not in str(metadata)
     assert "sk-ant-secret-987654" not in str(metadata)
+    assert metadata["attempt_history"][0]["has_error_type"] is True
+    assert "error_type" not in metadata["attempt_history"][0]
     assert metadata["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in metadata["attempt_history"][0]
 
@@ -614,7 +616,7 @@ def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):
             "attempt": 1,
             "success": False,
             "retryable": True,
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
@@ -660,7 +662,7 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
             "attempt": 1,
             "success": False,
             "retryable": True,
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
@@ -671,7 +673,7 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
             "attempt": 2,
             "success": False,
             "retryable": True,
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
@@ -771,7 +773,7 @@ def test_chat_budget_blocks_additional_retry_attempts_after_first_failure(monkey
             "attempt": 1,
             "success": False,
             "retryable": True,
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
@@ -842,7 +844,7 @@ def test_chat_provider_specific_budget_blocks_additional_retry_attempts_after_fi
             "attempt": 1,
             "success": False,
             "retryable": True,
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
@@ -883,7 +885,7 @@ def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attemp
             "attempt": 1,
             "success": False,
             "retryable": True,
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "uncapped_backoff_seconds": 0.0,
             "base_backoff_seconds": 0.0,
@@ -1072,7 +1074,7 @@ def test_chat_cancels_during_retry_backoff(monkeypatch):
             "attempt": 1,
             "success": False,
             "retryable": True,
-            "error_type": "ProviderTransientError",
+            "has_error_type": True,
             "has_error_message": True,
             "uncapped_backoff_seconds": 0.2,
             "base_backoff_seconds": 0.2,

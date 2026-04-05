@@ -114,6 +114,7 @@ def _sanitize_provider_call_attempt_history(provider_call: dict[str, Any]) -> No
             continue
 
         sanitized_entry = dict(entry)
+        _minimize_nested_provider_error_type(sanitized_entry)
         _minimize_nested_provider_error_message(sanitized_entry)
         sanitized_history.append(sanitized_entry)
 
@@ -125,6 +126,13 @@ def _minimize_nested_provider_error_message(provider_call_entry: dict[str, Any])
     if isinstance(error_message, str):
         provider_call_entry["has_error_message"] = bool(error_message)
         provider_call_entry.pop("error_message", None)
+
+
+def _minimize_nested_provider_error_type(provider_call_entry: dict[str, Any]) -> None:
+    error_type = provider_call_entry.get("error_type")
+    if isinstance(error_type, str):
+        provider_call_entry["has_error_type"] = bool(error_type)
+        provider_call_entry.pop("error_type", None)
 
 
 def _sanitize_provider_call_top_level_error_message(provider_call: dict[str, Any]) -> None:

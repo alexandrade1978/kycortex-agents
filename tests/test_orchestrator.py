@@ -8721,6 +8721,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "provider_cancellation_reason" not in project.tasks[0].last_provider_call
     assert project.tasks[0].last_provider_call["provider_timeout_provider_count"] == 2
     assert "provider_timeout_seconds_by_provider" not in project.tasks[0].last_provider_call
+    assert project.tasks[0].last_provider_call["attempt_history"][0]["has_error_type"] is True
+    assert "error_type" not in project.tasks[0].last_provider_call["attempt_history"][0]
     assert project.tasks[0].last_provider_call["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in project.tasks[0].last_provider_call["attempt_history"][0]
     assert project.tasks[0].last_provider_call["fallback_history"][0]["has_error_message"] is True
@@ -8739,6 +8741,8 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "provider_cancellation_reason" not in payload["metadata"]["provider_call"]
     assert payload["metadata"]["provider_call"]["provider_timeout_provider_count"] == 2
     assert "provider_timeout_seconds_by_provider" not in payload["metadata"]["provider_call"]
+    assert payload["metadata"]["provider_call"]["attempt_history"][0]["has_error_type"] is True
+    assert "error_type" not in payload["metadata"]["provider_call"]["attempt_history"][0]
     assert payload["metadata"]["provider_call"]["attempt_history"][0]["has_error_message"] is True
     assert "error_message" not in payload["metadata"]["provider_call"]["attempt_history"][0]
     assert payload["metadata"]["provider_call"]["fallback_history"][0]["has_error_message"] is True

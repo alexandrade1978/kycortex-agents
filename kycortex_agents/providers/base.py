@@ -302,6 +302,7 @@ def _minimize_provider_health_error_type(provider_health_entry: dict[str, Any]) 
 
 
 def _minimize_provider_health_age_fields(provider_health_entry: dict[str, Any]) -> None:
+    provider_health_entry.pop("transient_failure_streak", None)
     provider_health_entry.pop("last_success_age_seconds", None)
     provider_health_entry.pop("last_failure_age_seconds", None)
     provider_health_entry.pop("last_health_check_age_seconds", None)

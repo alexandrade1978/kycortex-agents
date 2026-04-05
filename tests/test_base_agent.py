@@ -93,6 +93,7 @@ def test_chat_returns_response_content():
     assert metadata["provider_remaining_elapsed_seconds"] is None
     assert metadata["provider_cancellation_requested"] is False
     assert metadata["provider_cancellation_reason"] is None
+    assert "has_provider_cancellation_reason" not in metadata
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
     assert metadata["provider_health"]["openai"]["last_failure_age_seconds"] is None
@@ -955,7 +956,8 @@ def test_chat_fails_fast_when_provider_cancellation_is_requested_before_first_at
     assert metadata["success"] is False
     assert metadata["attempts_used"] == 0
     assert metadata["provider_cancellation_requested"] is True
-    assert metadata["provider_cancellation_reason"] == "operator requested stop"
+    assert metadata["has_provider_cancellation_reason"] is True
+    assert "provider_cancellation_reason" not in metadata
     assert provider.calls == []
 
 
@@ -1063,7 +1065,8 @@ def test_chat_cancels_during_retry_backoff(monkeypatch):
     assert metadata["success"] is False
     assert metadata["attempts_used"] == 1
     assert metadata["provider_cancellation_requested"] is True
-    assert metadata["provider_cancellation_reason"] == "operator requested stop"
+    assert metadata["has_provider_cancellation_reason"] is True
+    assert "provider_cancellation_reason" not in metadata
     assert metadata["attempt_history"] == [
         {
             "attempt": 1,

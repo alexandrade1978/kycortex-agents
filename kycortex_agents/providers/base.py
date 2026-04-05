@@ -94,6 +94,7 @@ def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[st
         return {}
     _sanitize_provider_call_attempt_history(sanitized)
     _sanitize_provider_call_budget_metadata(sanitized)
+    _sanitize_provider_call_timeout_metadata(sanitized)
     _sanitize_provider_call_fallback_history(sanitized)
     _sanitize_provider_call_top_level_error_message(sanitized)
     _sanitize_provider_call_top_level_error_type(sanitized)
@@ -137,6 +138,19 @@ def _sanitize_provider_call_top_level_error_type(provider_call: dict[str, Any]) 
     if isinstance(error_type, str):
         provider_call["has_error_type"] = bool(error_type)
         provider_call.pop("error_type", None)
+
+
+def _sanitize_provider_call_timeout_metadata(provider_call: dict[str, Any]) -> None:
+    timeout_by_provider = provider_call.get("provider_timeout_seconds_by_provider")
+    if not isinstance(timeout_by_provider, Mapping):
+        return
+
+    provider_call["provider_timeout_provider_count"] = sum(
+        1
+        for provider_name in timeout_by_provider
+        if isinstance(provider_name, str) and provider_name
+    )
+    provider_call.pop("provider_timeout_seconds_by_provider", None)
 
 
 def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> None:

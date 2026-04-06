@@ -329,8 +329,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "failed_output" not in review_result.failure.details["repair_context"]
     assert "validation_summary" not in review_result.failure.details["repair_context"]
     assert "existing_tests" not in review_result.failure.details["repair_context"]
-    assert review_result.failure.details["history"][1]["has_error_message"] is True
-    assert "error_message" not in review_result.failure.details["history"][1]
+    assert "history" not in review_result.failure.details
     assert review_result.resource_telemetry == {
         "has_provider_call": True,
         "task_duration_ms": 330000,

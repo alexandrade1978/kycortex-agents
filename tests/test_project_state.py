@@ -3579,11 +3579,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "attempts" not in result.details["history"][0]
     assert result.details["history"][0]["has_error_message"] is True
     assert "error_message" not in result.details["history"][0]
-    assert result.failure.details["history"][0]["event"] == "failed"
-    assert result.failure.details["history"][0]["has_attempts"] is True
-    assert "attempts" not in result.failure.details["history"][0]
-    assert result.failure.details["history"][0]["has_error_message"] is True
-    assert "error_message" not in result.failure.details["history"][0]
+    assert "history" not in result.failure.details
 
 
 def test_snapshot_preserves_failure_record_for_failed_task_without_output():

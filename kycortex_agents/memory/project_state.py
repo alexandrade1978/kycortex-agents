@@ -1354,7 +1354,6 @@ class ProjectState:
             if task_status == TaskStatus.FAILED:
                 failure_details: Dict[str, Any] = {
                     "repair_context": public_repair_context,
-                    "history": public_history,
                 }
                 failure = FailureRecord(
                     message=_redact_text(task.output or task.last_error or "Task failed without output") or "Task failed without output",

@@ -2165,21 +2165,19 @@ class ProjectState:
                 if isinstance(raw_removed_task_count, (int, float)) and not isinstance(raw_removed_task_count, bool)
                 else 0
             )
-        cleared_decision_count = details.get("cleared_decision_count")
-        cleared_artifact_count = details.get("cleared_artifact_count")
-        public_details: Dict[str, Any] = {
-            "reason": reason,
-            "cleared_decision_count": (
-                max(int(cleared_decision_count), 0)
-                if isinstance(cleared_decision_count, (int, float)) and not isinstance(cleared_decision_count, bool)
-                else 0
-            ),
-            "cleared_artifact_count": (
-                max(int(cleared_artifact_count), 0)
-                if isinstance(cleared_artifact_count, (int, float)) and not isinstance(cleared_artifact_count, bool)
-                else 0
-            ),
-        }
+        raw_cleared_decision_count = details.get("cleared_decision_count")
+        raw_cleared_artifact_count = details.get("cleared_artifact_count")
+        cleared_decision_count = (
+            max(int(raw_cleared_decision_count), 0)
+            if isinstance(raw_cleared_decision_count, (int, float)) and not isinstance(raw_cleared_decision_count, bool)
+            else 0
+        )
+        cleared_artifact_count = (
+            max(int(raw_cleared_artifact_count), 0)
+            if isinstance(raw_cleared_artifact_count, (int, float)) and not isinstance(raw_cleared_artifact_count, bool)
+            else 0
+        )
+        public_details: Dict[str, Any] = {"reason": reason}
         if replayed_task_count > 0:
             public_details["has_replayed_tasks"] = True
         if replayed_task_count > 1:
@@ -2188,6 +2186,14 @@ class ProjectState:
             public_details["has_removed_tasks"] = True
         if removed_task_count > 1:
             public_details["has_multiple_removed_tasks"] = True
+        if cleared_decision_count > 0:
+            public_details["has_cleared_decisions"] = True
+        if cleared_decision_count > 1:
+            public_details["has_multiple_cleared_decisions"] = True
+        if cleared_artifact_count > 0:
+            public_details["has_cleared_artifacts"] = True
+        if cleared_artifact_count > 1:
+            public_details["has_multiple_cleared_artifacts"] = True
         return public_details
 
     def _public_task_completed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:

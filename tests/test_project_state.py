@@ -1709,13 +1709,17 @@ def test_replay_workflow_resets_base_tasks_and_clears_run_metadata():
     assert "has_multiple_replayed_tasks" not in snapshot.execution_events[-1]["details"]
     assert "has_removed_tasks" not in snapshot.execution_events[-1]["details"]
     assert "has_multiple_removed_tasks" not in snapshot.execution_events[-1]["details"]
-    assert snapshot.execution_events[-1]["details"]["cleared_decision_count"] == 1
-    assert snapshot.execution_events[-1]["details"]["cleared_artifact_count"] == 1
+    assert snapshot.execution_events[-1]["details"]["has_cleared_decisions"] is True
+    assert "has_multiple_cleared_decisions" not in snapshot.execution_events[-1]["details"]
+    assert snapshot.execution_events[-1]["details"]["has_cleared_artifacts"] is True
+    assert "has_multiple_cleared_artifacts" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "replayed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert "removed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert "replayed_task_count" not in snapshot.execution_events[-1]["details"]
     assert "removed_task_count" not in snapshot.execution_events[-1]["details"]
+    assert "cleared_decision_count" not in snapshot.execution_events[-1]["details"]
+    assert "cleared_artifact_count" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_status == WorkflowStatus.INIT
 
 
@@ -1765,13 +1769,17 @@ def test_replay_workflow_removes_repair_lineage_tasks():
     assert "has_multiple_replayed_tasks" not in snapshot.execution_events[-1]["details"]
     assert snapshot.execution_events[-1]["details"]["has_removed_tasks"] is True
     assert snapshot.execution_events[-1]["details"]["has_multiple_removed_tasks"] is True
-    assert snapshot.execution_events[-1]["details"]["cleared_decision_count"] == 0
-    assert snapshot.execution_events[-1]["details"]["cleared_artifact_count"] == 0
+    assert "has_cleared_decisions" not in snapshot.execution_events[-1]["details"]
+    assert "has_multiple_cleared_decisions" not in snapshot.execution_events[-1]["details"]
+    assert "has_cleared_artifacts" not in snapshot.execution_events[-1]["details"]
+    assert "has_multiple_cleared_artifacts" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "replayed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert "removed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert "replayed_task_count" not in snapshot.execution_events[-1]["details"]
     assert "removed_task_count" not in snapshot.execution_events[-1]["details"]
+    assert "cleared_decision_count" not in snapshot.execution_events[-1]["details"]
+    assert "cleared_artifact_count" not in snapshot.execution_events[-1]["details"]
 
 
 def test_resume_workflow_clears_pause_state_and_records_resume_summary():
@@ -2683,13 +2691,17 @@ def test_snapshot_workflow_replayed_events_use_presence_flags_for_legacy_entries
     assert snapshot.execution_events[0]["details"]["has_multiple_replayed_tasks"] is True
     assert snapshot.execution_events[0]["details"]["has_removed_tasks"] is True
     assert "has_multiple_removed_tasks" not in snapshot.execution_events[0]["details"]
-    assert snapshot.execution_events[0]["details"]["cleared_decision_count"] == 2
-    assert snapshot.execution_events[0]["details"]["cleared_artifact_count"] == 3
+    assert snapshot.execution_events[0]["details"]["has_cleared_decisions"] is True
+    assert snapshot.execution_events[0]["details"]["has_multiple_cleared_decisions"] is True
+    assert snapshot.execution_events[0]["details"]["has_cleared_artifacts"] is True
+    assert snapshot.execution_events[0]["details"]["has_multiple_cleared_artifacts"] is True
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "replayed_task_ids" not in snapshot.execution_events[0]["details"]
     assert "removed_task_ids" not in snapshot.execution_events[0]["details"]
     assert "replayed_task_count" not in snapshot.execution_events[0]["details"]
     assert "removed_task_count" not in snapshot.execution_events[0]["details"]
+    assert "cleared_decision_count" not in snapshot.execution_events[0]["details"]
+    assert "cleared_artifact_count" not in snapshot.execution_events[0]["details"]
 
 
 def test_provider_attempt_and_retry_helpers_handle_scalar_fallbacks():

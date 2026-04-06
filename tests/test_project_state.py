@@ -3597,7 +3597,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["resume_summary"]["count"] == 1
     assert telemetry["resume_summary"]["reason_count"] == 0
     assert telemetry["resume_summary"]["unique_task_count"] == 0
-    assert telemetry["provider_summary"]["openai"]["task_count"] == 1
+    assert telemetry["provider_summary"]["openai"]["has_multiple_tasks"] is False
     assert telemetry["provider_summary"]["openai"]["has_successes"] is False
     assert telemetry["provider_summary"]["openai"]["has_failures"] is False
     assert telemetry["provider_summary"]["openai"]["has_attempts"] is True

@@ -206,7 +206,7 @@ class WorkflowRepairHistoryEntry(TypedDict):
 class WorkflowProviderSummary(TypedDict):
     """Per-provider aggregate telemetry rolled up across workflow execution."""
 
-    task_count: int
+    has_multiple_tasks: bool
     has_successes: bool
     has_failures: bool
     has_attempts: bool

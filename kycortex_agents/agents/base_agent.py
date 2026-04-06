@@ -772,10 +772,14 @@ class BaseAgent(ABC):
         return snapshot
 
     def _provider_cancellation_metadata(self) -> dict[str, Any]:
-        return {
+        metadata: dict[str, Any] = {
             "provider_cancellation_requested": self._provider_cancellation_requested,
-            "provider_cancellation_reason": self._provider_cancellation_reason,
         }
+        if isinstance(self._provider_cancellation_reason, str) and self._provider_cancellation_reason:
+            metadata["has_provider_cancellation_reason"] = True
+        else:
+            metadata["provider_cancellation_reason"] = None
+        return metadata
 
     def _provider_call_budget_metadata(self) -> dict[str, Any]:
         limited_providers = sorted(

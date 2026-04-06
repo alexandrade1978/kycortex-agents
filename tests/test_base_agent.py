@@ -1083,6 +1083,8 @@ def test_chat_fails_fast_when_provider_cancellation_is_requested_before_first_at
     assert "error_type" not in raw_metadata
     assert raw_metadata["has_error_message"] is True
     assert "error_message" not in raw_metadata
+    assert raw_metadata["has_provider_cancellation_reason"] is True
+    assert "provider_cancellation_reason" not in raw_metadata
     assert provider.calls == []
 
 
@@ -1202,6 +1204,9 @@ def test_chat_cancels_during_retry_backoff(monkeypatch):
             "backoff_seconds": 0.2,
         }
     ]
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert raw_metadata["has_provider_cancellation_reason"] is True
+    assert "provider_cancellation_reason" not in raw_metadata
     assert sleep_calls == [0.1]
     assert provider.calls == [("system", "message")]
 

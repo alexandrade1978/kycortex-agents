@@ -137,16 +137,12 @@ class BaseAgent(ABC):
                 }
                 raise AgentExecutionError(message)
             if self._is_provider_specific_call_budget_exhausted(provider_name):
-                provider_call_count = self._provider_call_counts.get(provider_name, 0)
-                provider_max_calls = self.config.provider_max_calls_per_provider.get(provider_name, 0)
                 if provider_index < len(provider_plan) - 1:
                     fallback_history.append(
                         {
                             "provider": provider_name,
                             "model": model_name,
                             "status": "skipped_call_budget_exhausted",
-                            "provider_call_count": provider_call_count,
-                            "provider_max_calls": provider_max_calls,
                         }
                     )
                     continue
@@ -266,16 +262,12 @@ class BaseAgent(ABC):
                     }
                     raise AgentExecutionError(message)
                 if self._is_provider_specific_call_budget_exhausted(provider_name):
-                    provider_call_count = self._provider_call_counts.get(provider_name, 0)
-                    provider_max_calls = self.config.provider_max_calls_per_provider.get(provider_name, 0)
                     if provider_index < len(provider_plan) - 1:
                         fallback_history.append(
                             {
                                 "provider": provider_name,
                                 "model": model_name,
                                 "status": "failed_call_budget_exhausted",
-                                "provider_call_count": provider_call_count,
-                                "provider_max_calls": provider_max_calls,
                                 "attempts_used": len(attempt_history),
                             }
                         )

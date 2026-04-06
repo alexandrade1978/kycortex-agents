@@ -1511,6 +1511,9 @@ def test_chat_falls_back_when_primary_provider_specific_budget_is_exhausted(monk
     assert metadata["provider_call_budget_exhausted"] is False
     assert metadata["provider_call_budget_limited_providers"] == ["openai"]
     assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "provider_call_count" not in raw_metadata["fallback_history"][0]
+    assert "provider_max_calls" not in raw_metadata["fallback_history"][0]
     assert primary_provider.calls == [("system", "message")]
     assert fallback_provider.calls == [("system", "second-message")]
 
@@ -1557,6 +1560,9 @@ def test_chat_falls_back_after_primary_provider_budget_is_exhausted_mid_retry(mo
     assert metadata["provider_call_budget_limited_providers"] == ["openai"]
     assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
     assert metadata["attempt_history"][0]["retryable"] is True
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "provider_call_count" not in raw_metadata["fallback_history"][0]
+    assert "provider_max_calls" not in raw_metadata["fallback_history"][0]
     assert primary_provider.calls == [("system", "message")]
     assert fallback_provider.calls == [("system", "message")]
 

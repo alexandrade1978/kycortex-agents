@@ -109,7 +109,7 @@ class ArtifactType(str, Enum):
 class MetricDistribution(TypedDict):
     """Normalized numeric distribution used by aggregate telemetry summaries."""
 
-    count: int
+    has_multiple_samples: bool
     total: MetricNumber
     min: MetricValue
     max: MetricValue
@@ -267,7 +267,7 @@ class WorkflowTelemetry(TypedDict):
 
 def _empty_metric_distribution() -> MetricDistribution:
     return {
-        "count": 0,
+        "has_multiple_samples": False,
         "total": 0,
         "min": None,
         "max": None,

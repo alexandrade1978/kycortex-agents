@@ -2677,7 +2677,7 @@ class ProjectState:
     def _metric_distribution(self, values: List[float]) -> MetricDistribution:
         if not values:
             return {
-                "count": 0,
+                "has_multiple_samples": False,
                 "total": 0,
                 "min": None,
                 "max": None,
@@ -2685,7 +2685,7 @@ class ProjectState:
             }
         total = sum(values)
         return {
-            "count": len(values),
+            "has_multiple_samples": len(values) > 1,
             "total": self._normalize_metric_number(total),
             "min": self._normalize_metric_number(min(values)),
             "max": self._normalize_metric_number(max(values)),

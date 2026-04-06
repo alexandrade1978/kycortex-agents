@@ -250,7 +250,7 @@ def test_public_type_module_defines_docstrings():
 
 def test_private_empty_telemetry_helpers_return_zeroed_payloads():
     assert types_module._empty_metric_distribution() == {
-        "count": 0,
+        "has_multiple_samples": False,
         "total": 0,
         "min": None,
         "max": None,
@@ -313,7 +313,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
         "has_attempts": False,
         "has_retry_attempts": False,
         "duration_ms": {
-            "count": 0,
+            "has_multiple_samples": False,
             "total": 0,
             "min": None,
             "max": None,

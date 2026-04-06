@@ -2113,11 +2113,12 @@ class ProjectState:
             )
             if unique_task_count > task_count:
                 unique_task_count = task_count
-        return {
-            "reason": reason,
-            "task_count": task_count,
-            "unique_task_count": unique_task_count,
-        }
+        public_details: Dict[str, Any] = {"reason": reason}
+        if task_count > 0:
+            public_details["has_resumed_tasks"] = True
+        if unique_task_count > 1:
+            public_details["has_multiple_unique_tasks"] = True
+        return public_details
 
     def _public_workflow_cancelled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         reason = details.get("reason") if isinstance(details.get("reason"), str) else None

@@ -1166,8 +1166,10 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
     assert project.execution_events[-1]["event"] == "workflow_resumed"
     assert project.execution_events[-1]["details"]["task_ids"] == ["review", "arch__repair_1"]
     assert snapshot.execution_events[-1]["details"]["reason"] == "failed_workflow"
-    assert snapshot.execution_events[-1]["details"]["task_count"] == 2
-    assert snapshot.execution_events[-1]["details"]["unique_task_count"] == 2
+    assert snapshot.execution_events[-1]["details"]["has_resumed_tasks"] is True
+    assert snapshot.execution_events[-1]["details"]["has_multiple_unique_tasks"] is True
+    assert "task_count" not in snapshot.execution_events[-1]["details"]
+    assert "unique_task_count" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "task_ids" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_telemetry["resume_summary"] == {
@@ -1471,8 +1473,9 @@ def test_resume_failed_tasks_records_workflow_resumed_for_additional_ids_without
     assert project.execution_events[-1]["event"] == "workflow_resumed"
     assert project.execution_events[-1]["details"]["task_ids"] == ["code__repair_1"]
     assert snapshot.execution_events[-1]["details"]["reason"] == "failed_workflow"
-    assert snapshot.execution_events[-1]["details"]["task_count"] == 1
-    assert snapshot.execution_events[-1]["details"]["unique_task_count"] == 1
+    assert snapshot.execution_events[-1]["details"]["has_resumed_tasks"] is True
+    assert "task_count" not in snapshot.execution_events[-1]["details"]
+    assert "unique_task_count" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "task_ids" not in snapshot.execution_events[-1]["details"]
 
@@ -1786,8 +1789,10 @@ def test_resume_workflow_clears_pause_state_and_records_resume_summary():
     assert project.execution_events[-1]["details"]["task_ids"] == []
     assert project.execution_events[-1]["details"]["provider_budget"] is None
     assert snapshot.execution_events[-1]["details"]["reason"] == "paused_workflow"
-    assert snapshot.execution_events[-1]["details"]["task_count"] == 0
-    assert snapshot.execution_events[-1]["details"]["unique_task_count"] == 0
+    assert "has_resumed_tasks" not in snapshot.execution_events[-1]["details"]
+    assert "has_multiple_unique_tasks" not in snapshot.execution_events[-1]["details"]
+    assert "task_count" not in snapshot.execution_events[-1]["details"]
+    assert "unique_task_count" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "task_ids" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_telemetry["resume_summary"] == {
@@ -2599,8 +2604,10 @@ def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
     snapshot = project.snapshot()
 
     assert snapshot.execution_events[0]["details"]["reason"] == "failed_workflow"
-    assert snapshot.execution_events[0]["details"]["task_count"] == 3
-    assert snapshot.execution_events[0]["details"]["unique_task_count"] == 2
+    assert snapshot.execution_events[0]["details"]["has_resumed_tasks"] is True
+    assert snapshot.execution_events[0]["details"]["has_multiple_unique_tasks"] is True
+    assert "task_count" not in snapshot.execution_events[0]["details"]
+    assert "unique_task_count" not in snapshot.execution_events[0]["details"]
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "task_ids" not in snapshot.execution_events[0]["details"]
     assert snapshot.workflow_telemetry["resume_summary"] == {

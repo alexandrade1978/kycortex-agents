@@ -1355,8 +1355,6 @@ class ProjectState:
                 failure_details: Dict[str, Any] = {
                     "attempts": task.attempts,
                     "retry_limit": task.retry_limit,
-                    "last_attempt_started_at": task.last_attempt_started_at,
-                    "last_resumed_at": task.last_resumed_at,
                     "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
                     "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     "repair_context": public_repair_context,

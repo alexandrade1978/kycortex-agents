@@ -3548,8 +3548,8 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "error_type" not in result.failure.details
     assert "error_category" not in result.failure.details
     assert "started_at" not in result.failure.details
-    assert result.failure.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
-    assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
+    assert "last_attempt_started_at" not in result.failure.details
+    assert "last_resumed_at" not in result.failure.details
     assert result.failure.details["has_task_duration"] is True
     assert result.failure.details["has_last_attempt_duration"] is True
     assert "task_duration_ms" not in result.failure.details
@@ -3565,6 +3565,8 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.details["last_error_present"] is True
     assert result.details["has_attempts"] is True
     assert result.details["has_retry_limit"] is True
+    assert result.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
+    assert result.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
     assert "last_error" not in result.details
     assert "attempts" not in result.details
     assert "retry_limit" not in result.details

@@ -815,16 +815,7 @@ class BaseAgent(ABC):
         provider_name: str,
         provider_plan: list[tuple[str, str]],
     ) -> dict[str, Any]:
-        return {
-            "provider_timeout_seconds": round(self.config.provider_timeout_seconds_for(provider_name), 6),
-            "provider_timeout_seconds_by_provider": {
-                planned_provider_name: round(
-                    self.config.provider_timeout_seconds_for(planned_provider_name),
-                    6,
-                )
-                for planned_provider_name, _ in provider_plan
-            },
-        }
+        return {}
 
     def _provider_elapsed_budget_metadata(
         self,

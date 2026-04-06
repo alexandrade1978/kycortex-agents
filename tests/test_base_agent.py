@@ -111,6 +111,9 @@ def test_chat_returns_response_content():
     assert "has_provider_cancellation_reason" not in metadata
     assert "circuit_breaker_threshold" not in metadata
     assert "circuit_breaker_cooldown_seconds" not in metadata
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "provider_timeout_seconds" not in raw_metadata
+    assert "provider_timeout_seconds_by_provider" not in raw_metadata
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
     assert metadata["provider_health"]["openai"]["last_outcome"] == "success"
     assert "transient_failure_streak" not in metadata["provider_health"]["openai"]
@@ -1887,6 +1890,9 @@ def test_chat_surfaces_provider_specific_timeout_metadata_for_fallback(monkeypat
     assert "provider_timeout_seconds" not in metadata
     assert "provider_timeout_provider_count" not in metadata
     assert "provider_timeout_seconds_by_provider" not in metadata
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "provider_timeout_seconds" not in raw_metadata
+    assert "provider_timeout_seconds_by_provider" not in raw_metadata
 
 
 def test_execute_raises_assertion_when_error_hook_does_not_raise():

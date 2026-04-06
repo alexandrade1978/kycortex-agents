@@ -225,7 +225,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
         "anthropic": {
             "models": ["claude-3-5-sonnet"],
             "status_presence": {"healthy": True},
-            "last_outcome_counts": {"success": 1},
+            "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
@@ -233,7 +233,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
         "ollama": {
             "models": ["llama3"],
             "status_presence": {"healthy": True},
-            "last_outcome_counts": {"success": 1},
+            "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
@@ -241,7 +241,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
         "openai": {
             "models": ["gpt-4o"],
             "status_presence": {"healthy": True},
-            "last_outcome_counts": {"success": 1},
+            "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
@@ -370,7 +370,7 @@ def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_
         "openai": {
             "models": ["gpt-4o"],
             "status_presence": {"degraded": True},
-            "last_outcome_counts": {"failure": 1},
+            "last_outcome_presence": {"failure": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 1,
             "active_health_check_count": 0,
@@ -460,7 +460,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
         "anthropic": {
             "models": ["claude-3-5-sonnet"],
             "status_presence": {"healthy": True},
-            "last_outcome_counts": {"success": 1},
+            "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
             "active_health_check_count": 1,
@@ -468,7 +468,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
         "openai": {
             "models": ["gpt-4o"],
             "status_presence": {"degraded": True},
-            "last_outcome_counts": {"failure": 1},
+            "last_outcome_presence": {"failure": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 1,
             "active_health_check_count": 1,

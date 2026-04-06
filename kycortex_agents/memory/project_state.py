@@ -1917,7 +1917,7 @@ class ProjectState:
             normalized_provider_health_summary[provider_name] = {
                 "models": sorted(raw_models) if isinstance(raw_models, set) else [],
                 "status_presence": self._ordered_presence(raw_health_summary.get("status_counts", {})),
-                "last_outcome_counts": dict(sorted(raw_health_summary.get("last_outcome_counts", {}).items())),
+                "last_outcome_presence": self._ordered_presence(raw_health_summary.get("last_outcome_counts", {})),
                 "circuit_open_count": int(raw_health_summary.get("circuit_open_count", 0)),
                 "retryable_failure_count": int(raw_health_summary.get("retryable_failure_count", 0)),
                 "active_health_check_count": int(raw_health_summary.get("active_health_check_count", 0)),

@@ -1196,6 +1196,31 @@ def test_record_workflow_progress_includes_task_status_and_preserves_explicit_pr
     assert "task_status" not in project.execution_events[-1]["details"]
 
 
+def test_snapshot_workflow_progress_minimizes_embedded_workflow_telemetry():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.RUNNING.value,
+        )
+    )
+
+    project.record_workflow_progress(task_id="code", task_status=TaskStatus.RUNNING.value)
+
+    snapshot = project.snapshot()
+    progress_event = snapshot.execution_events[-1]
+
+    assert progress_event["event"] == "workflow_progress"
+    assert progress_event["details"]["task_status"] == TaskStatus.RUNNING.value
+    assert progress_event["details"]["has_workflow_telemetry"] is True
+    assert "workflow_telemetry" not in progress_event["details"]
+    assert "provider_budget" not in progress_event["details"]
+
+
 def test_create_repair_task_records_lineage_and_requeue_audit():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

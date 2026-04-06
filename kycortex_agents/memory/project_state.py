@@ -1661,6 +1661,14 @@ class ProjectState:
             details.clear()
             details.update(cast(Dict[str, Any], public_repaired_details))
             return redacted_event
+        if event_name == "workflow_progress":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_progress_details = self._public_workflow_progress_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_progress_details))
+            return redacted_event
         if event_name == "workflow_repair_cycle_started":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
@@ -2251,6 +2259,15 @@ class ProjectState:
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)
+        return public_details
+
+    def _public_workflow_progress_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+
+        if isinstance(details.get("workflow_telemetry"), dict) or public_details.get("has_workflow_telemetry") is True:
+            public_details["has_workflow_telemetry"] = True
+        public_details.pop("workflow_telemetry", None)
+        public_details.pop("provider_budget", None)
         return public_details
 
     def _public_workflow_finished_details(self, details: Dict[str, Any]) -> Dict[str, Any]:

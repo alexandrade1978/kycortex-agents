@@ -249,8 +249,6 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "last_provider_call" not in arch_result.details
     assert arch_result.resource_telemetry == {
         "has_provider_call": True,
-        "provider": "openai",
-        "model": "gpt-4o",
         "task_duration_ms": 120000,
         "last_attempt_duration_ms": 120000,
         "provider_duration_ms": 120.5,
@@ -334,8 +332,6 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "error_message" not in review_result.failure.details["history"][1]
     assert review_result.resource_telemetry == {
         "has_provider_call": True,
-        "provider": "ollama",
-        "model": "llama3",
         "task_duration_ms": 330000,
         "last_attempt_duration_ms": 60000,
         "provider_duration_ms": 125,
@@ -347,8 +343,6 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert docs_result.failure is None
     assert docs_result.resource_telemetry == {
         "has_provider_call": False,
-        "provider": None,
-        "model": None,
         "task_duration_ms": None,
         "last_attempt_duration_ms": None,
         "provider_duration_ms": None,

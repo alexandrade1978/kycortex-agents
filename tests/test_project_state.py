@@ -3443,8 +3443,6 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.failure.details["last_attempt_duration_ms"] == 60000.0
     assert result.resource_telemetry == {
         "has_provider_call": False,
-        "provider": None,
-        "model": None,
         "task_duration_ms": 360000,
         "last_attempt_duration_ms": 60000,
         "provider_duration_ms": None,
@@ -3496,7 +3494,8 @@ def test_snapshot_preserves_failure_record_for_failed_task_without_output():
     assert result.failure.category == "unknown"
     assert "provider_call" not in result.failure.details
     assert result.resource_telemetry["has_provider_call"] is True
-    assert result.resource_telemetry["provider"] == "openai"
+    assert "provider" not in result.resource_telemetry
+    assert "model" not in result.resource_telemetry
 
 
 def test_snapshot_preserves_failure_category_and_terminal_outcome_fields():

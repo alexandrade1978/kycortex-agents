@@ -2655,13 +2655,9 @@ class ProjectState:
         usage = provider_call.get("usage")
         if isinstance(usage, dict):
             self._accumulate_numeric_metrics(usage_metrics, usage)
-        provider = provider_call.get("provider") if isinstance(provider_call.get("provider"), str) else None
-        model = provider_call.get("model") if isinstance(provider_call.get("model"), str) else None
         provider_duration_ms = self._provider_call_duration_ms(provider_call) if provider_call else None
         return {
             "has_provider_call": bool(provider_call),
-            "provider": provider,
-            "model": model,
             "task_duration_ms": self._normalize_metric_number(task_duration_ms) if task_duration_ms is not None else None,
             "last_attempt_duration_ms": self._normalize_metric_number(last_attempt_duration_ms) if last_attempt_duration_ms is not None else None,
             "provider_duration_ms": self._normalize_metric_number(provider_duration_ms) if provider_duration_ms is not None else None,

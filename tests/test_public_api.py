@@ -258,8 +258,6 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
     }
     assert types_module.empty_task_resource_telemetry() == {
         "has_provider_call": False,
-        "provider": None,
-        "model": None,
         "task_duration_ms": None,
         "last_attempt_duration_ms": None,
         "provider_duration_ms": None,

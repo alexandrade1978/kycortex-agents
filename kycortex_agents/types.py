@@ -120,8 +120,6 @@ class TaskResourceTelemetry(TypedDict):
     """Per-task normalized timing and provider-usage summary exposed through task results."""
 
     has_provider_call: bool
-    provider: Optional[str]
-    model: Optional[str]
     task_duration_ms: MetricValue
     last_attempt_duration_ms: MetricValue
     provider_duration_ms: MetricValue
@@ -280,8 +278,6 @@ def _empty_metric_distribution() -> MetricDistribution:
 def empty_task_resource_telemetry() -> TaskResourceTelemetry:
     return {
         "has_provider_call": False,
-        "provider": None,
-        "model": None,
         "task_duration_ms": None,
         "last_attempt_duration_ms": None,
         "provider_duration_ms": None,

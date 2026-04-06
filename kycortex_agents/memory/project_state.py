@@ -2071,7 +2071,7 @@ class ProjectState:
             "history_count": len([entry for entry in self.repair_history if isinstance(entry, dict)]),
             "reason_count": len(reasons),
             "last_reason_present": last_reason_present,
-            "failure_category_count": len(failure_categories),
+            "has_multiple_failure_categories": len(failure_categories) > 1,
             "failed_task_count": len(failed_task_ids),
         }
 

@@ -764,7 +764,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "history_count": 1,
         "reason_count": 0,
         "last_reason_present": False,
-        "failure_category_count": 0,
+        "has_multiple_failure_categories": False,
         "failed_task_count": 1,
     }
     assert summary["task_summaries"][0]["has_repair_origin"] is False

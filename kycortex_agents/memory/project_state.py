@@ -2021,7 +2021,7 @@ class ProjectState:
             "required_task_count": self._acceptance_task_count(normalized_evaluation, "required_task_ids", "required_task_count"),
             "completed_task_count": self._acceptance_task_count(normalized_evaluation, "completed_task_ids", "completed_task_count"),
             "failed_task_count": self._acceptance_task_count(normalized_evaluation, "failed_task_ids", "failed_task_count"),
-            "skipped_task_count": self._acceptance_task_count(normalized_evaluation, "skipped_task_ids", "skipped_task_count"),
+            "has_skipped_tasks": self._acceptance_task_count(normalized_evaluation, "skipped_task_ids", "skipped_task_count") > 0,
             "pending_task_count": self._acceptance_task_count(normalized_evaluation, "pending_task_ids", "pending_task_count"),
         }
 

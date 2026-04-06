@@ -2688,7 +2688,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "required_task_count": 1,
         "completed_task_count": 2,
         "failed_task_count": 0,
-        "skipped_task_count": 0,
+        "has_skipped_tasks": False,
         "pending_task_count": 0,
     }
     assert event["details"]["workflow_telemetry"]["acceptance_summary"] == {
@@ -2701,7 +2701,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "required_task_count": 1,
         "completed_task_count": 2,
         "failed_task_count": 0,
-        "skipped_task_count": 0,
+        "has_skipped_tasks": False,
         "pending_task_count": 0,
     }
     assert snapshot.workflow_telemetry["acceptance_summary"] == event["details"]["workflow_telemetry"]["acceptance_summary"]
@@ -2754,7 +2754,7 @@ def test_mark_workflow_finished_records_policy_enforcement_for_security_failures
         "required_task_count": 0,
         "completed_task_count": 0,
         "failed_task_count": 1,
-        "skipped_task_count": 0,
+        "has_skipped_tasks": False,
         "pending_task_count": 0,
     }
     assert workflow_event["details"]["failure_task_id"] == "tests"
@@ -3819,7 +3819,7 @@ def test_snapshot_includes_workflow_execution_metadata():
         "required_task_count": 1,
         "completed_task_count": 1,
         "failed_task_count": 0,
-        "skipped_task_count": 0,
+        "has_skipped_tasks": False,
         "pending_task_count": 0,
     }
     assert snapshot.execution_events[0]["event"] == "workflow_started"

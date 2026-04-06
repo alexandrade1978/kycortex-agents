@@ -34,6 +34,17 @@ def _harden_state_file_permissions(path: str) -> None:
         ) from exc
 
 
+def _harden_state_directory_permissions(path: str) -> None:
+    if os.name != "posix":
+        return
+    try:
+        os.chmod(path, 0o700)
+    except OSError as exc:
+        raise StatePersistenceError(
+            f"Failed to lock down project state directory permissions for {_public_state_path_label(path)}"
+        ) from exc
+
+
 class BaseStateStore(ABC):
     """Abstract persistence backend for saving and loading project state payloads."""
 
@@ -57,6 +68,7 @@ class JsonStateStore(BaseStateStore):
         state_dir = os.path.dirname(path)
         if state_dir:
             os.makedirs(state_dir, exist_ok=True)
+            _harden_state_directory_permissions(state_dir)
 
         fd, temp_path = tempfile.mkstemp(prefix="project_state_", suffix=".json", dir=state_dir or None)
         try:
@@ -96,6 +108,7 @@ class SqliteStateStore(BaseStateStore):
         state_dir = os.path.dirname(path)
         if state_dir:
             os.makedirs(state_dir, exist_ok=True)
+            _harden_state_directory_permissions(state_dir)
 
         payload = json.dumps(data, default=str)
         try:

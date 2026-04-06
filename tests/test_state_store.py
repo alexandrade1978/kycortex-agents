@@ -74,6 +74,17 @@ def test_json_state_store_save_uses_private_file_permissions(tmp_path):
     assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
+def test_json_state_store_save_uses_private_directory_permissions(tmp_path):
+    state_dir = tmp_path / "state"
+    state_path = state_dir / "project_state.json"
+    store = JsonStateStore()
+
+    store.save(str(state_path), {"project_name": "Demo"})
+
+    assert stat.S_IMODE(state_dir.stat().st_mode) == 0o700
+
+
 def test_json_state_store_save_and_load_round_trip_with_relative_path_and_no_parent_dir(tmp_path, monkeypatch):
     store = JsonStateStore()
     payload = {"project_name": "Demo", "tasks": [{"id": "arch"}]}
@@ -188,6 +199,17 @@ def test_sqlite_state_store_save_uses_private_file_permissions(tmp_path):
     store.save(str(state_path), {"project_name": "Demo"})
 
     assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
+def test_sqlite_state_store_save_uses_private_directory_permissions(tmp_path):
+    state_dir = tmp_path / "state"
+    state_path = state_dir / "project_state.sqlite"
+    store = SqliteStateStore()
+
+    store.save(str(state_path), {"project_name": "Demo"})
+
+    assert stat.S_IMODE(state_dir.stat().st_mode) == 0o700
 
 
 def test_sqlite_state_store_save_and_load_round_trip_with_relative_path_and_no_parent_dir(tmp_path, monkeypatch):

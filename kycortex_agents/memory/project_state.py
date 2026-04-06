@@ -2181,6 +2181,7 @@ class ProjectState:
     def _public_task_completed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
         public_details = self._apply_task_attempt_presence_flag(details, public_details)
+        public_details = self._apply_task_duration_presence_flags(details, public_details)
 
         if self._presence_flag(details, "assigned_to", "has_assigned_to"):
             public_details["has_assigned_to"] = True
@@ -2204,6 +2205,25 @@ class ProjectState:
         ):
             public_details["has_attempts"] = True
         public_details.pop("attempts", None)
+        return public_details
+
+    def _apply_task_duration_presence_flags(
+        self,
+        details: Dict[str, Any],
+        public_details: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        for field_name, flag_name in (
+            ("last_attempt_duration_ms", "has_last_attempt_duration"),
+            ("task_duration_ms", "has_task_duration"),
+        ):
+            raw_duration = details.get(field_name)
+            public_details.pop(flag_name, None)
+            if (
+                (isinstance(raw_duration, (int, float)) and not isinstance(raw_duration, bool))
+                or details.get(flag_name) is True
+            ):
+                public_details[flag_name] = True
+            public_details.pop(field_name, None)
         return public_details
 
     def _public_task_history_entry(self, entry: Any) -> Dict[str, Any]:
@@ -2238,6 +2258,7 @@ class ProjectState:
     def _public_task_failed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
         public_details = self._apply_task_attempt_presence_flag(details, public_details)
+        public_details = self._apply_task_duration_presence_flags(details, public_details)
 
         raw_error_message = details.get("error_message")
         if (isinstance(raw_error_message, str) and bool(raw_error_message)) or public_details.get("has_error_message") is True:
@@ -2257,6 +2278,7 @@ class ProjectState:
     def _public_task_retry_scheduled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
         public_details = self._apply_task_attempt_presence_flag(details, public_details)
+        public_details = self._apply_task_duration_presence_flags(details, public_details)
 
         raw_error_type = details.get("error_type")
         if (isinstance(raw_error_type, str) and bool(raw_error_type)) or public_details.get("has_error_type") is True:

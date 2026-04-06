@@ -2358,6 +2358,10 @@ class ProjectState:
     def _public_workflow_progress_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
 
+        if self._presence_flag(details, "task_status", "has_task_status"):
+            public_details["has_task_status"] = True
+        public_details.pop("task_status", None)
+
         if isinstance(details.get("workflow_telemetry"), dict) or public_details.get("has_workflow_telemetry") is True:
             public_details["has_workflow_telemetry"] = True
         public_details.pop("workflow_telemetry", None)

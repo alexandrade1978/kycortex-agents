@@ -1219,8 +1219,9 @@ def test_snapshot_workflow_progress_minimizes_embedded_workflow_telemetry():
     progress_event = snapshot.execution_events[-1]
 
     assert progress_event["event"] == "workflow_progress"
-    assert progress_event["details"]["task_status"] == TaskStatus.RUNNING.value
+    assert progress_event["details"]["has_task_status"] is True
     assert progress_event["details"]["has_workflow_telemetry"] is True
+    assert "task_status" not in progress_event["details"]
     assert "workflow_telemetry" not in progress_event["details"]
     assert "provider_budget" not in progress_event["details"]
 

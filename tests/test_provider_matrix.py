@@ -1,7 +1,9 @@
 import argparse
 import importlib.util
 import json
+import os
 import pytest
+import stat
 import sys
 from pathlib import Path
 from urllib.error import URLError
@@ -1014,6 +1016,17 @@ def test_write_summary_json_redacts_sensitive_strings_before_persisting(tmp_path
     assert persisted["task_summaries"][0]["last_error"] == "Authorization: Bearer [REDACTED]"
     assert "sk-secret-123456" not in summary_path.read_text(encoding="utf-8")
     assert "sk-ant-secret-987654" not in summary_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
+def test_write_summary_json_uses_private_file_permissions(tmp_path):
+    from kycortex_agents.provider_matrix import write_summary_json
+
+    summary_path = tmp_path / "reports" / "provider_matrix_summary.json"
+
+    write_summary_json({"provider": "openai", "available": True}, str(summary_path))
+
+    assert stat.S_IMODE(summary_path.stat().st_mode) == 0o600
 
 
 def test_provider_matrix_summary_limits_public_task_metadata(tmp_path):

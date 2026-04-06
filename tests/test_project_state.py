@@ -1246,13 +1246,58 @@ def test_complete_task_syncs_repair_result_back_to_origin():
     assert repair_task is not None
 
     project.start_task(repair_task.id)
-    project.complete_task(repair_task.id, "def repaired() -> int:\n    return 1")
+    project.complete_task(
+        repair_task.id,
+        "def repaired() -> int:\n    return 1",
+        provider_call={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "success": True,
+            "base_url": "https://alice:secret-pass@example.com/v1",
+            "provider_health": {
+                "openai": {
+                    "status": "healthy",
+                    "last_outcome": "success",
+                    "last_health_check": {
+                        "status": "ready",
+                        "provider": "openai",
+                        "model": "gpt-4o",
+                        "backend_reachable": True,
+                        "base_url": "https://alice:secret-pass@example.com/v1",
+                        "checked_at": 123.0,
+                        "timeout_seconds": 4.5,
+                        "active_check": True,
+                        "cooldown_cached": False,
+                    },
+                }
+            },
+        },
+    )
 
     origin = require_task(project, "code")
+    repaired_task = require_task(project, repair_task.id)
+    repaired_provider_call = cast(dict[str, Any], repaired_task.last_provider_call)
+    origin_provider_call = cast(dict[str, Any], origin.last_provider_call)
     assert origin.status == TaskStatus.DONE.value
     assert origin.output == "def repaired() -> int:\n    return 1"
     assert origin.attempts == 2
     assert origin.history[-1]["event"] == "repaired"
+    assert "secret-pass" not in str(repaired_provider_call)
+    assert "secret-pass" not in str(origin_provider_call)
+    assert "[REDACTED]" in repaired_provider_call["base_url"]
+    assert "[REDACTED]" in origin_provider_call["base_url"]
+    assert "provider" not in repaired_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "provider" not in origin_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "model" not in repaired_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "model" not in origin_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "backend_reachable" not in repaired_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "backend_reachable" not in origin_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "base_url" not in repaired_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "base_url" not in origin_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "checked_at" not in repaired_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "checked_at" not in origin_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "timeout_seconds" not in repaired_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "timeout_seconds" not in origin_provider_call["provider_health"]["openai"]["last_health_check"]
     internal_repaired_event = next(event for event in project.execution_events if event["event"] == "task_repaired")
     assert internal_repaired_event["details"]["assigned_to"] == "code_engineer"
 
@@ -2793,13 +2838,48 @@ def test_snapshot_minimizes_public_task_completed_provider_call_details():
             "provider": "openai",
             "model": "gpt-4o",
             "success": True,
-            "base_url": "https://example.com/v1",
+            "base_url": "https://alice:secret-pass@example.com/v1",
+            "provider_health": {
+                "openai": {
+                    "status": "healthy",
+                    "last_outcome": "success",
+                    "last_health_check": {
+                        "status": "ready",
+                        "provider": "openai",
+                        "model": "gpt-4o",
+                        "backend_reachable": True,
+                        "base_url": "https://alice:secret-pass@example.com/v1",
+                        "checked_at": 123.0,
+                        "timeout_seconds": 4.5,
+                        "active_check": True,
+                        "cooldown_cached": False,
+                    },
+                }
+            },
         },
     )
 
+    task = require_task(project, "arch")
+    task_provider_call = cast(dict[str, Any], task.last_provider_call)
     internal_completed_event = next(event for event in project.execution_events if event["event"] == "task_completed")
     assert internal_completed_event["details"]["assigned_to"] == "architect"
     assert internal_completed_event["details"]["provider_call"]["provider"] == "openai"
+    assert "secret-pass" not in str(task_provider_call)
+    assert "secret-pass" not in str(internal_completed_event["details"]["provider_call"])
+    assert "[REDACTED]" in task_provider_call["base_url"]
+    assert "[REDACTED]" in internal_completed_event["details"]["provider_call"]["base_url"]
+    assert "provider" not in task_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "provider" not in internal_completed_event["details"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    assert "model" not in task_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "model" not in internal_completed_event["details"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    assert "backend_reachable" not in task_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "backend_reachable" not in internal_completed_event["details"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    assert "base_url" not in task_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "base_url" not in internal_completed_event["details"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    assert "checked_at" not in task_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "checked_at" not in internal_completed_event["details"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
+    assert "timeout_seconds" not in task_provider_call["provider_health"]["openai"]["last_health_check"]
+    assert "timeout_seconds" not in internal_completed_event["details"]["provider_call"]["provider_health"]["openai"]["last_health_check"]
 
     snapshot = project.snapshot()
     completed_event = next(event for event in snapshot.execution_events if event["event"] == "task_completed")

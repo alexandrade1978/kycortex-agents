@@ -305,6 +305,7 @@ class ProjectState:
     def complete_task(self, task_id: str, output: str | AgentOutput, provider_call: Optional[Dict[str, Any]] = None):
         """Mark a task complete and persist its raw or structured output payload."""
 
+        redacted_provider_call = _redact_provider_call(provider_call)
         for t in self.tasks:
             if t.id == task_id:
                 t.status = TaskStatus.DONE.value
@@ -319,7 +320,7 @@ class ProjectState:
                 t.last_error_category = None
                 if t.repair_origin_task_id is None:
                     t.repair_context = {}
-                t.last_provider_call = provider_call
+                t.last_provider_call = redacted_provider_call
                 t.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
                 self._record_execution_event(
@@ -330,12 +331,12 @@ class ProjectState:
                     details={
                         "attempts": t.attempts,
                         "assigned_to": t.assigned_to,
-                        "provider_call": provider_call,
+                        "provider_call": redacted_provider_call,
                         "last_attempt_duration_ms": self._duration_ms(t.last_attempt_started_at, t.completed_at),
                         "task_duration_ms": self._duration_ms(t.started_at, t.completed_at),
                     },
                 )
-                self._sync_repair_origin_completion(t, provider_call)
+                self._sync_repair_origin_completion(t, redacted_provider_call)
                 self._touch(t.completed_at)
 
     def is_workflow_paused(self) -> bool:
@@ -793,6 +794,7 @@ class ProjectState:
         origin = self.get_task(task.repair_origin_task_id)
         if origin is None:
             return
+        redacted_provider_call = _redact_provider_call(provider_call)
         origin.status = TaskStatus.DONE.value
         origin.output = task.output
         origin.output_payload = task.output_payload
@@ -800,7 +802,7 @@ class ProjectState:
         origin.last_error_type = None
         origin.last_error_category = None
         origin.repair_context = {}
-        origin.last_provider_call = provider_call
+        origin.last_provider_call = redacted_provider_call
         origin.completed_at = task.completed_at
         origin.last_resumed_at = task.completed_at
         self._record_task_event(

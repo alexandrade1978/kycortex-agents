@@ -231,7 +231,7 @@ class WorkflowFallbackSummary(TypedDict):
 
     has_multiple_tasks: bool
     has_entries: bool
-    provider_count: int
+    has_multiple_providers: bool
     status_count: int
 
 
@@ -328,7 +328,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "fallback_summary": {
             "has_multiple_tasks": False,
             "has_entries": False,
-            "provider_count": 0,
+            "has_multiple_providers": False,
             "status_count": 0,
         },
         "error_summary": {

@@ -1943,7 +1943,7 @@ class ProjectState:
             "fallback_summary": {
                 "has_multiple_tasks": fallback_task_count > 1,
                 "has_entries": fallback_entry_count > 0,
-                "provider_count": len(fallback_providers),
+                "has_multiple_providers": len(fallback_providers) > 1,
                 "status_count": len(fallback_statuses),
             },
             "error_summary": {

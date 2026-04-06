@@ -3621,7 +3621,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["fallback_summary"] == {
         "has_multiple_tasks": False,
         "has_entries": True,
-        "provider_count": 1,
+        "has_multiple_providers": False,
         "status_count": 1,
     }
     assert telemetry["error_summary"] == {

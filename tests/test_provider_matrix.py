@@ -304,6 +304,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "- arch: status=done, summary=Architecture snapshot ready, provider=present, model=present" in captured
     assert "observed_provider_count=2" in captured
     assert "final_provider_count=1" in captured
+    assert "attempts_present=present" in captured
+    assert "retry_attempts_present=none" in captured
     assert "completion_percent=100.0" in captured
     assert "- entry_1: model_count=1; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
     assert "artifact_names=architecture" in captured
@@ -313,6 +315,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "openai" not in rendered
     assert "anthropic" not in rendered
     assert "snapshot-openai-demo" not in rendered
+    assert "attempt_count=2" not in rendered
+    assert "retry_attempt_count=0" not in rendered
     assert "TimeoutError" not in rendered
     assert "last_error_types" not in rendered
     assert "circuit_open_count" not in rendered

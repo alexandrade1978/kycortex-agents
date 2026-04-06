@@ -153,7 +153,7 @@ def build_full_workflow_config(
         workflow_failure_policy=workflow_failure_policy,
         workflow_resume_policy=workflow_resume_policy,
         workflow_max_repair_cycles=workflow_max_repair_cycles,
-        project_name=f"full-provider-workflow-{provider}",
+        project_name="full-provider-workflow",
         output_dir=output_dir,
     )
     config.validate_runtime()
@@ -164,7 +164,7 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
     """Build the canonical empirical full workflow used for provider comparison."""
 
     project = ProjectState(
-        project_name=f"ComplianceIntake{provider.title()}",
+        project_name="ComplianceIntake",
         goal=(
             "Build a substantial single-module Python service for a compliance intake team. "
             "The module must use only the standard library and implement typed domain models, "

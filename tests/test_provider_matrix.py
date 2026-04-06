@@ -782,6 +782,7 @@ def test_build_full_workflow_config_uses_larger_completion_budget_for_full_gener
     config = build_full_workflow_config("openai", "gpt-4o-mini", str(tmp_path / "output"))
 
     assert config.max_tokens == 3200
+    assert config.project_name == "full-provider-workflow"
 
 
 def test_build_full_workflow_config_accepts_completion_budget_override(monkeypatch, tmp_path):
@@ -826,6 +827,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert arch_task is not None
     assert code_task is not None
     assert tests_task is not None
+    assert project.project_name == "ComplianceIntake"
     assert "Prefer one cohesive public service surface plus domain models over separate helper-only collaborators or interface sections" in arch_task.description
     assert "Do not describe standalone RiskScorer, AuditLogger, BatchProcessor, Manager, or Processor types" in arch_task.description
     assert "Public contract anchor:" in arch_task.description

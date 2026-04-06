@@ -118,6 +118,13 @@ def test_chat_returns_response_content():
     assert "last_failure_age_seconds" not in metadata["provider_health"]["openai"]
     assert "last_health_check_age_seconds" not in metadata["provider_health"]["openai"]
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "ready"
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "fallback_used" not in raw_metadata
+    assert "fallback_count" not in raw_metadata
+    assert "primary_provider" not in raw_metadata
+    assert "primary_model" not in raw_metadata
+    assert "active_provider" not in raw_metadata
+    assert "active_model" not in raw_metadata
     assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
     assert "backend_reachable" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "base_url" not in metadata["provider_health"]["openai"]["last_health_check"]
@@ -1276,6 +1283,12 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
         }
     ]
     raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "fallback_used" not in raw_metadata
+    assert "fallback_count" not in raw_metadata
+    assert "primary_provider" not in raw_metadata
+    assert "primary_model" not in raw_metadata
+    assert "active_provider" not in raw_metadata
+    assert "active_model" not in raw_metadata
     assert "model" not in raw_metadata["fallback_history"][0]
     assert primary_provider.calls == []
     assert fallback_provider.calls == [("system", "message")]

@@ -557,13 +557,7 @@ class BaseAgent(ABC):
         fallback_history: list[dict[str, Any]],
     ) -> dict[str, Any]:
         return {
-            "fallback_used": provider_name != self.config.llm_provider,
             "fallback_history": list(fallback_history),
-            "fallback_count": len(fallback_history),
-            "primary_provider": self.config.llm_provider,
-            "primary_model": self.config.llm_model,
-            "active_provider": provider_name,
-            "active_model": model_name,
         }
 
     def _provider_health_metadata(

@@ -3612,8 +3612,8 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
         "retryable_failure_count": 1,
         "active_health_check_count": 1,
     }
-    assert telemetry["final_provider_count"] == 1
-    assert telemetry["observed_provider_count"] == 2
+    assert telemetry["has_multiple_final_providers"] is False
+    assert telemetry["has_multiple_observed_providers"] is True
     assert telemetry["has_attempts"] is True
     assert telemetry["has_retry_attempts"] is False
     assert telemetry["duration_ms"]["count"] == 2

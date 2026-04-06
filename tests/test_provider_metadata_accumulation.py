@@ -205,7 +205,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert "provider_budget" not in snapshot.task_results["arch"].details
     assert snapshot.workflow_telemetry["has_tasks_with_provider_calls"] is True
     assert snapshot.workflow_telemetry["has_tasks_without_provider_calls"] is False
-    assert snapshot.workflow_telemetry["final_provider_count"] == 3
+    assert snapshot.workflow_telemetry["has_multiple_final_providers"] is True
     assert snapshot.workflow_telemetry["acceptance_summary"]["accepted"] is True
     assert snapshot.workflow_telemetry["acceptance_summary"]["policy"] == snapshot.acceptance_policy
     assert snapshot.workflow_telemetry["acceptance_summary"]["terminal_outcome"] == snapshot.terminal_outcome
@@ -448,8 +448,8 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
     assert "provider" not in snapshot.task_results["arch"].resource_telemetry
     assert "model" not in snapshot.task_results["arch"].resource_telemetry
     assert "last_provider_call" not in snapshot.task_results["arch"].details
-    assert snapshot.workflow_telemetry["observed_provider_count"] == 2
-    assert snapshot.workflow_telemetry["final_provider_count"] == 1
+    assert snapshot.workflow_telemetry["has_multiple_observed_providers"] is True
+    assert snapshot.workflow_telemetry["has_multiple_final_providers"] is False
     assert snapshot.workflow_telemetry["fallback_summary"] == {
         "has_multiple_tasks": False,
         "has_entries": True,

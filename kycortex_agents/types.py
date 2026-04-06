@@ -253,8 +253,8 @@ class WorkflowTelemetry(TypedDict):
     acceptance_summary: WorkflowAcceptanceSummary
     resume_summary: WorkflowResumeSummary
     repair_summary: WorkflowRepairSummary
-    final_provider_count: int
-    observed_provider_count: int
+    has_multiple_final_providers: bool
+    has_multiple_observed_providers: bool
     provider_summary: Dict[str, WorkflowProviderSummary]
     provider_health_summary: Dict[str, WorkflowProviderHealthSummary]
     has_attempts: bool
@@ -317,8 +317,8 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "failure_category_count": 0,
             "failed_task_count": 0,
         },
-        "final_provider_count": 0,
-        "observed_provider_count": 0,
+        "has_multiple_final_providers": False,
+        "has_multiple_observed_providers": False,
         "provider_summary": {},
         "provider_health_summary": {},
         "has_attempts": False,

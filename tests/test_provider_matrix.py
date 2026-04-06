@@ -260,8 +260,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                 "task_count": 2,
                 "has_tasks_with_provider_calls": True,
                 "has_tasks_without_provider_calls": True,
-                "observed_provider_count": 2,
-                "final_provider_count": 1,
+                "has_multiple_observed_providers": True,
+                "has_multiple_final_providers": False,
                 "has_attempts": True,
                 "has_retry_attempts": False,
                 "progress_summary": {
@@ -313,8 +313,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
 
     assert "task_count=2" in captured
     assert "- arch: status=done, summary=Architecture snapshot ready, provider=present, model=present" in captured
-    assert "observed_provider_count=2" in captured
-    assert "final_provider_count=1" in captured
+    assert "multiple_observed_providers=present" in captured
+    assert "multiple_final_providers=none" in captured
     assert "attempts_present=present" in captured
     assert "retry_attempts_present=none" in captured
     assert "completion_percent=100.0" in captured

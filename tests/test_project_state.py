@@ -2130,6 +2130,8 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert "provider_call" not in result.details["repair_context"]
     assert "validation_summary" not in result.details["repair_context"]
     assert "existing_tests" not in result.details["repair_context"]
+    assert result.details["has_repair_attempt"] is True
+    assert "repair_attempt" not in result.details
     assert result.details["has_repair_origin"] is True
     assert "repair_origin_task_id" not in result.details
     assert result.failure is not None
@@ -2167,6 +2169,8 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert "provider_call" not in result.failure.details["repair_context"]
     assert "validation_summary" not in result.failure.details["repair_context"]
     assert "existing_tests" not in result.failure.details["repair_context"]
+    assert result.failure.details["has_repair_attempt"] is True
+    assert "repair_attempt" not in result.failure.details
     assert result.failure.details["has_repair_origin"] is True
     assert "repair_origin_task_id" not in result.failure.details
 

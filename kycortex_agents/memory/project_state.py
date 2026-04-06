@@ -1369,6 +1369,7 @@ class ProjectState:
                 }
                 failure_details = self._apply_task_attempt_presence_flag(failure_details, failure_details)
                 failure_details = self._apply_task_retry_limit_presence_flag(failure_details, failure_details)
+                failure_details = self._apply_repair_attempt_presence_flag(failure_details, failure_details)
                 if self._identifier_present(task.repair_origin_task_id):
                     failure_details["has_repair_origin"] = True
                 failure = FailureRecord(
@@ -1400,6 +1401,7 @@ class ProjectState:
             }
             public_details = self._apply_task_attempt_presence_flag(public_details, public_details)
             public_details = self._apply_task_retry_limit_presence_flag(public_details, public_details)
+            public_details = self._apply_repair_attempt_presence_flag(public_details, public_details)
             if self._identifier_present(task.repair_origin_task_id):
                 public_details["has_repair_origin"] = True
             results[task.id] = TaskResult(

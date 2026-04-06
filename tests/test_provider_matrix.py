@@ -709,6 +709,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     )
 
     assert summary["terminal_outcome"] == "completed"
+    assert "model" not in summary
     assert summary["task_status_counts"] == {"done": 2}
     assert "failure_category" not in summary
     assert "acceptance_criteria_met" not in summary
@@ -1009,6 +1010,7 @@ def test_provider_matrix_summary_redacts_public_error_and_project_name_fields(tm
     )
 
     assert summary["project_name"] == "Demo api_key=[REDACTED]"
+    assert "model" not in summary
     assert summary["state_file"] == "project_state.json"
     assert summary["output_dir"] == "output"
     task_summary = summary["task_summaries"][0]

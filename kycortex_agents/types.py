@@ -161,11 +161,11 @@ def empty_workflow_acceptance_summary() -> WorkflowAcceptanceSummary:
 class WorkflowProgressSummary(TypedDict):
     """Workflow execution-progress summary embedded in aggregate telemetry."""
 
-    pending_task_count: int
-    running_task_count: int
-    runnable_task_count: int
-    blocked_task_count: int
-    terminal_task_count: int
+    has_pending_tasks: bool
+    has_running_tasks: bool
+    has_runnable_tasks: bool
+    has_blocked_tasks: bool
+    has_terminal_tasks: bool
     all_tasks_terminal: bool
 
 
@@ -290,11 +290,11 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "has_multiple_tasks": False,
         "task_status_counts": {},
         "progress_summary": {
-            "pending_task_count": 0,
-            "running_task_count": 0,
-            "runnable_task_count": 0,
-            "blocked_task_count": 0,
-            "terminal_task_count": 0,
+            "has_pending_tasks": False,
+            "has_running_tasks": False,
+            "has_runnable_tasks": False,
+            "has_blocked_tasks": False,
+            "has_terminal_tasks": False,
             "all_tasks_terminal": False,
         },
         "has_tasks_with_provider_calls": False,

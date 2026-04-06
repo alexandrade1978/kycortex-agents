@@ -265,11 +265,11 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                 "has_attempts": True,
                 "has_retry_attempts": False,
                 "progress_summary": {
-                    "pending_task_count": 0,
-                    "running_task_count": 0,
-                    "runnable_task_count": 0,
-                    "blocked_task_count": 0,
-                    "terminal_task_count": 2,
+                    "has_pending_tasks": False,
+                    "has_running_tasks": False,
+                    "has_runnable_tasks": False,
+                    "has_blocked_tasks": False,
+                    "has_terminal_tasks": True,
                     "all_tasks_terminal": True,
                 },
                 "provider_health_summary": {
@@ -317,6 +317,11 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "multiple_final_providers=none" in captured
     assert "attempts_present=present" in captured
     assert "retry_attempts_present=none" in captured
+    assert "pending_tasks_present=none" in captured
+    assert "running_tasks_present=none" in captured
+    assert "runnable_tasks_present=none" in captured
+    assert "blocked_tasks_present=none" in captured
+    assert "terminal_tasks_present=present" in captured
     assert "all_tasks_terminal=present" in captured
     assert "- entry_1: model_count=1; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
     assert "artifact_names=architecture" in captured

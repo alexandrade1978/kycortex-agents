@@ -9368,11 +9368,11 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
     assert progress_record.task_status == TaskStatus.DONE.value
     assert progress_record.workflow_telemetry["task_status_counts"]["done"] == 1
     assert progress_record.workflow_telemetry["progress_summary"] == {
-        "pending_task_count": 0,
-        "running_task_count": 0,
-        "runnable_task_count": 0,
-        "blocked_task_count": 0,
-        "terminal_task_count": 1,
+        "has_pending_tasks": False,
+        "has_running_tasks": False,
+        "has_runnable_tasks": False,
+        "has_blocked_tasks": False,
+        "has_terminal_tasks": True,
         "all_tasks_terminal": True,
     }
     assert finished_record.project_name == "Demo"
@@ -9556,21 +9556,21 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
         "skipped": 0,
     }
     assert progress_events[0]["details"]["workflow_telemetry"]["progress_summary"] == {
-        "pending_task_count": 1,
-        "running_task_count": 0,
-        "runnable_task_count": 1,
-        "blocked_task_count": 0,
-        "terminal_task_count": 1,
+        "has_pending_tasks": True,
+        "has_running_tasks": False,
+        "has_runnable_tasks": True,
+        "has_blocked_tasks": False,
+        "has_terminal_tasks": True,
         "all_tasks_terminal": False,
     }
     assert progress_events[1]["task_id"] == "code"
     assert progress_events[1]["details"]["workflow_telemetry"]["task_status_counts"]["done"] == 2
     assert progress_events[1]["details"]["workflow_telemetry"]["progress_summary"] == {
-        "pending_task_count": 0,
-        "running_task_count": 0,
-        "runnable_task_count": 0,
-        "blocked_task_count": 0,
-        "terminal_task_count": 2,
+        "has_pending_tasks": False,
+        "has_running_tasks": False,
+        "has_runnable_tasks": False,
+        "has_blocked_tasks": False,
+        "has_terminal_tasks": True,
         "all_tasks_terminal": True,
     }
     assert project.execution_events[-1]["event"] == "workflow_finished"

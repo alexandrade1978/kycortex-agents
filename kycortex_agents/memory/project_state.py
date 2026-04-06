@@ -1968,11 +1968,11 @@ class ProjectState:
             blocked_task_count = pending_task_count
         all_tasks_terminal = total_task_count > 0 and terminal_task_count == total_task_count
         return {
-            "pending_task_count": pending_task_count,
-            "running_task_count": running_task_count,
-            "runnable_task_count": runnable_task_count,
-            "blocked_task_count": blocked_task_count,
-            "terminal_task_count": terminal_task_count,
+            "has_pending_tasks": pending_task_count > 0,
+            "has_running_tasks": running_task_count > 0,
+            "has_runnable_tasks": runnable_task_count > 0,
+            "has_blocked_tasks": blocked_task_count > 0,
+            "has_terminal_tasks": terminal_task_count > 0,
             "all_tasks_terminal": all_tasks_terminal,
         }
 

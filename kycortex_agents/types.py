@@ -229,7 +229,7 @@ class WorkflowProviderHealthSummary(TypedDict):
 class WorkflowFallbackSummary(TypedDict):
     """Workflow-level fallback routing summary embedded in aggregate telemetry."""
 
-    task_count: int
+    has_multiple_tasks: bool
     has_entries: bool
     provider_count: int
     status_count: int
@@ -326,7 +326,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "duration_ms": _empty_metric_distribution(),
         "usage": {},
         "fallback_summary": {
-            "task_count": 0,
+            "has_multiple_tasks": False,
             "has_entries": False,
             "provider_count": 0,
             "status_count": 0,

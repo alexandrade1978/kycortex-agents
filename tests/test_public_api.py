@@ -321,7 +321,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
         },
         "usage": {},
         "fallback_summary": {
-            "task_count": 0,
+            "has_multiple_tasks": False,
             "has_entries": False,
             "provider_count": 0,
             "status_count": 0,

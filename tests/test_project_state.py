@@ -3619,7 +3619,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["duration_ms"]["count"] == 2
     assert telemetry["usage"] == {"completion_tokens": 2, "prompt_tokens": 5}
     assert telemetry["fallback_summary"] == {
-        "task_count": 1,
+        "has_multiple_tasks": False,
         "has_entries": True,
         "provider_count": 1,
         "status_count": 1,

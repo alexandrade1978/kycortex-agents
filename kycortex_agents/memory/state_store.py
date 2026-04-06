@@ -23,6 +23,17 @@ def _public_state_path_label(path: str) -> str:
     return normalized.rsplit("/", 1)[-1]
 
 
+def _harden_state_file_permissions(path: str) -> None:
+    if os.name != "posix":
+        return
+    try:
+        os.chmod(path, 0o600)
+    except OSError as exc:
+        raise StatePersistenceError(
+            f"Failed to lock down project state permissions for {_public_state_path_label(path)}"
+        ) from exc
+
+
 class BaseStateStore(ABC):
     """Abstract persistence backend for saving and loading project state payloads."""
 
@@ -52,6 +63,9 @@ class JsonStateStore(BaseStateStore):
             with os.fdopen(fd, "w") as file_handle:
                 json.dump(data, file_handle, indent=2, default=str)
             os.replace(temp_path, path)
+            _harden_state_file_permissions(path)
+        except StatePersistenceError:
+            raise
         except OSError as exc:
             try:
                 os.remove(temp_path)
@@ -106,6 +120,9 @@ class SqliteStateStore(BaseStateStore):
                         """,
                         (payload, datetime.now(timezone.utc).isoformat()),
                     )
+            _harden_state_file_permissions(path)
+        except StatePersistenceError:
+            raise
         except sqlite3.Error as exc:
             raise StatePersistenceError(
                 f"Failed to save project state to {_public_state_path_label(path)}"

@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import stat
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -61,6 +62,16 @@ def test_json_state_store_save_and_load_round_trip_without_parent_directory(tmp_
     store.save(str(state_path), payload)
 
     assert store.load(str(state_path)) == payload
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
+def test_json_state_store_save_uses_private_file_permissions(tmp_path):
+    state_path = tmp_path / "state" / "project_state.json"
+    store = JsonStateStore()
+
+    store.save(str(state_path), {"project_name": "Demo"})
+
+    assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
 
 
 def test_json_state_store_save_and_load_round_trip_with_relative_path_and_no_parent_dir(tmp_path, monkeypatch):
@@ -167,6 +178,16 @@ def test_sqlite_state_store_save_and_load_round_trip_without_parent_directory(tm
     store.save(str(state_path), payload)
 
     assert store.load(str(state_path)) == payload
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
+def test_sqlite_state_store_save_uses_private_file_permissions(tmp_path):
+    state_path = tmp_path / "state" / "project_state.sqlite"
+    store = SqliteStateStore()
+
+    store.save(str(state_path), {"project_name": "Demo"})
+
+    assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
 
 
 def test_sqlite_state_store_save_and_load_round_trip_with_relative_path_and_no_parent_dir(tmp_path, monkeypatch):

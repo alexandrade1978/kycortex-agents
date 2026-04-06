@@ -624,6 +624,12 @@ def test_chat_redacts_sensitive_values_from_provider_health_metadata():
     assert "has_error_message" not in provider_health["last_health_check"]
     assert "error_message" not in provider_health["last_health_check"]
     assert "cooldown_remaining_seconds" not in provider_health["last_health_check"]
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    raw_provider_health = raw_metadata["provider_health"]["openai"]
+    assert "last_error_type" not in raw_provider_health
+    assert "has_last_error_message" not in raw_provider_health
+    assert "error_type" not in raw_provider_health["last_health_check"]
+    assert "has_error_message" not in raw_provider_health["last_health_check"]
 
 
 def test_chat_retries_transient_provider_error_and_succeeds(monkeypatch):

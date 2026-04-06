@@ -595,11 +595,10 @@ class BaseAgent(ABC):
                 })
             )
             if isinstance(public_last_health_check, dict):
-                health_check_error_message = public_last_health_check.get("error_message")
-                if isinstance(health_check_error_message, str):
-                    public_last_health_check["has_error_message"] = bool(health_check_error_message)
-                    public_last_health_check.pop("error_message", None)
-            last_error_message = self._provider_last_error_messages.get(provider_name)
+                public_last_health_check.pop("error_type", None)
+                public_last_health_check.pop("has_error_type", None)
+                public_last_health_check.pop("error_message", None)
+                public_last_health_check.pop("has_error_message", None)
             provider_health[provider_name] = {
                 "model": model_name,
                 "status": status,
@@ -612,7 +611,6 @@ class BaseAgent(ABC):
                 "last_failure_age_seconds": None
                 if last_failure_at is None
                 else round(max(current_time - last_failure_at, 0.0), 6),
-                "last_error_type": self._provider_last_error_types.get(provider_name),
                 "last_failure_retryable": self._provider_last_retryable_failures.get(provider_name),
                 "last_health_check": public_last_health_check,
                 "last_health_check_age_seconds": (
@@ -621,8 +619,6 @@ class BaseAgent(ABC):
                     else round(max(current_time - float(last_health_check["checked_at"]), 0.0), 6)
                 ),
             }
-            if isinstance(last_error_message, str):
-                provider_health[provider_name]["has_last_error_message"] = bool(last_error_message)
         return {"provider_health": provider_health}
 
     def _probe_provider_health(

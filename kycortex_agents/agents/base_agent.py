@@ -110,7 +110,6 @@ class BaseAgent(ABC):
                         {
                             "provider": provider_name,
                             "status": "skipped_open_circuit",
-                            "remaining_cooldown_seconds": remaining_seconds,
                         }
                     )
                     continue

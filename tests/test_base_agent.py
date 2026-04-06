@@ -1400,6 +1400,7 @@ def test_chat_falls_back_when_primary_provider_circuit_is_open(monkeypatch):
     assert "active_provider" not in raw_metadata
     assert "active_model" not in raw_metadata
     assert "model" not in raw_metadata["fallback_history"][0]
+    assert "remaining_cooldown_seconds" not in raw_metadata["fallback_history"][0]
     assert primary_provider.calls == []
     assert fallback_provider.calls == [("system", "message")]
 
@@ -1561,6 +1562,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     ]
     second_raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
     assert "model" not in second_raw_metadata["fallback_history"][0]
+    assert "remaining_cooldown_seconds" not in second_raw_metadata["fallback_history"][0]
 
     current_time["value"] = 111.0
     third_result = agent.chat("system", "message three")

@@ -709,9 +709,11 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     )
 
     assert summary["terminal_outcome"] == "completed"
-    assert summary["repair_cycle_count"] == 1
     assert summary["repair_task_count"] == 1
     assert summary["task_status_counts"] == {"done": 2}
+    assert "repair_cycle_count" not in summary
+    assert "repair_max_cycles" not in summary
+    assert "repair_budget_remaining" not in summary
     assert summary["repair_history"] == [
         {
             "cycle": 1,

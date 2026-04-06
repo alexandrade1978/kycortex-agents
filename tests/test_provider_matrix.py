@@ -765,7 +765,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "has_multiple_reasons": False,
         "last_reason_present": False,
         "has_multiple_failure_categories": False,
-        "failed_task_count": 1,
+        "has_failed_tasks": True,
     }
     assert summary["task_summaries"][0]["has_repair_origin"] is False
     assert summary["task_summaries"][1]["has_repair_origin"] is True

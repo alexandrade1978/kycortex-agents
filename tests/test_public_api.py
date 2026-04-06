@@ -304,7 +304,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "has_multiple_reasons": False,
             "last_reason_present": False,
             "has_multiple_failure_categories": False,
-            "failed_task_count": 0,
+            "has_failed_tasks": False,
         },
         "has_multiple_final_providers": False,
         "has_multiple_observed_providers": False,

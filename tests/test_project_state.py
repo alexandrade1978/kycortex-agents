@@ -2444,7 +2444,7 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
         "has_multiple_reasons": False,
         "last_reason_present": True,
         "has_multiple_failure_categories": False,
-        "failed_task_count": 1,
+        "has_failed_tasks": True,
     }
 
 
@@ -2470,7 +2470,7 @@ def test_repair_summary_aggregates_repair_reasons_across_cycles():
         "has_multiple_reasons": True,
         "last_reason_present": True,
         "has_multiple_failure_categories": True,
-        "failed_task_count": 2,
+        "has_failed_tasks": True,
     }
 
 
@@ -2498,7 +2498,7 @@ def test_repair_summary_ignores_malformed_entries_and_non_list_failed_task_ids()
         "has_multiple_reasons": False,
         "last_reason_present": True,
         "has_multiple_failure_categories": False,
-        "failed_task_count": 2,
+        "has_failed_tasks": True,
     }
 
 

@@ -2074,7 +2074,7 @@ class ProjectState:
             "has_multiple_reasons": len(reasons) > 1,
             "last_reason_present": last_reason_present,
             "has_multiple_failure_categories": len(failure_categories) > 1,
-            "failed_task_count": len(failed_task_ids),
+            "has_failed_tasks": bool(failed_task_ids),
         }
 
     def _public_repair_history_entry(self, entry: Dict[str, Any]) -> WorkflowRepairHistoryEntry:

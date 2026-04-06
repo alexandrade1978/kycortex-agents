@@ -1353,20 +1353,9 @@ class ProjectState:
             last_error_present = bool(task.last_error or task.last_error_type or task.last_error_category)
             if task_status == TaskStatus.FAILED:
                 failure_details: Dict[str, Any] = {
-                    "attempts": task.attempts,
-                    "retry_limit": task.retry_limit,
-                    "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),
-                    "last_attempt_duration_ms": self._duration_ms(task.last_attempt_started_at, task.completed_at),
                     "repair_context": public_repair_context,
-                    "repair_attempt": task.repair_attempt,
                     "history": public_history,
                 }
-                failure_details = self._apply_task_attempt_presence_flag(failure_details, failure_details)
-                failure_details = self._apply_task_retry_limit_presence_flag(failure_details, failure_details)
-                failure_details = self._apply_repair_attempt_presence_flag(failure_details, failure_details)
-                failure_details = self._apply_task_duration_presence_flags(failure_details, failure_details)
-                if self._identifier_present(task.repair_origin_task_id):
-                    failure_details["has_repair_origin"] = True
                 failure = FailureRecord(
                     message=_redact_text(task.output or task.last_error or "Task failed without output") or "Task failed without output",
                     error_type=task.last_error_type or "runtime_error",

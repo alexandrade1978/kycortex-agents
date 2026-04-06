@@ -2169,9 +2169,9 @@ def test_snapshot_minimizes_public_task_repair_lineage_details():
     assert "provider_call" not in result.failure.details["repair_context"]
     assert "validation_summary" not in result.failure.details["repair_context"]
     assert "existing_tests" not in result.failure.details["repair_context"]
-    assert result.failure.details["has_repair_attempt"] is True
+    assert "has_repair_attempt" not in result.failure.details
     assert "repair_attempt" not in result.failure.details
-    assert result.failure.details["has_repair_origin"] is True
+    assert "has_repair_origin" not in result.failure.details
     assert "repair_origin_task_id" not in result.failure.details
 
 
@@ -3540,8 +3540,8 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.started_at == "2026-03-22T10:00:00+00:00"
     assert result.failure is not None
     assert result.failure.error_type == "RuntimeError"
-    assert result.failure.details["has_attempts"] is True
-    assert result.failure.details["has_retry_limit"] is True
+    assert "has_attempts" not in result.failure.details
+    assert "has_retry_limit" not in result.failure.details
     assert "attempts" not in result.failure.details
     assert "retry_limit" not in result.failure.details
     assert "has_provider_call" not in result.failure.details
@@ -3550,8 +3550,8 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "started_at" not in result.failure.details
     assert "last_attempt_started_at" not in result.failure.details
     assert "last_resumed_at" not in result.failure.details
-    assert result.failure.details["has_task_duration"] is True
-    assert result.failure.details["has_last_attempt_duration"] is True
+    assert "has_task_duration" not in result.failure.details
+    assert "has_last_attempt_duration" not in result.failure.details
     assert "task_duration_ms" not in result.failure.details
     assert "last_attempt_duration_ms" not in result.failure.details
     assert result.resource_telemetry == {

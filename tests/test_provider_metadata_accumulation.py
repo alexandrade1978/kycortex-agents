@@ -473,7 +473,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "active_health_check_count": 1,
         },
     }
-    assert snapshot.workflow_telemetry["error_summary"]["fallback_error_count"] == 1
+    assert snapshot.workflow_telemetry["error_summary"]["has_fallback_errors"] is True
     assert any(
         event["task_id"] == "arch"
         and event["details"].get("provider_call", {}).get("fallback_history")

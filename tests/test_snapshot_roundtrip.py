@@ -456,8 +456,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             "status_count": 0,
         },
         "error_summary": {
-            "final_error_count": 1,
-            "fallback_error_count": 0,
+            "has_final_errors": True,
+            "has_fallback_errors": False,
         },
     }
 

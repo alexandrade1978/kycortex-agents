@@ -327,8 +327,8 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "status_count": 0,
         },
         "error_summary": {
-            "final_error_count": 0,
-            "fallback_error_count": 0,
+            "has_final_errors": False,
+            "has_fallback_errors": False,
         },
     }
 

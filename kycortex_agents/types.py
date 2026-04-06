@@ -238,8 +238,8 @@ class WorkflowFallbackSummary(TypedDict):
 class WorkflowErrorSummary(TypedDict):
     """Workflow-level final and fallback error tallies."""
 
-    final_error_count: int
-    fallback_error_count: int
+    has_final_errors: bool
+    has_fallback_errors: bool
 
 
 class WorkflowTelemetry(TypedDict):
@@ -332,8 +332,8 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "status_count": 0,
         },
         "error_summary": {
-            "final_error_count": 0,
-            "fallback_error_count": 0,
+            "has_final_errors": False,
+            "has_fallback_errors": False,
         },
     }
 

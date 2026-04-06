@@ -1947,8 +1947,8 @@ class ProjectState:
                 "status_count": len(fallback_statuses),
             },
             "error_summary": {
-                "final_error_count": final_error_count,
-                "fallback_error_count": fallback_error_count,
+                "has_final_errors": final_error_count > 0,
+                "has_fallback_errors": fallback_error_count > 0,
             },
         }
 

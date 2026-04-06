@@ -967,10 +967,10 @@ def test_provider_matrix_summary_redacts_public_error_and_project_name_fields(tm
     assert summary["state_file"] == "project_state.json"
     assert summary["output_dir"] == "output"
     task_summary = summary["task_summaries"][0]
-    assert task_summary["last_error"] == "Authorization: Bearer [REDACTED]"
     assert task_summary["last_error_present"] is True
     assert task_summary["last_error_category"] == "task_execution"
     assert task_summary["has_provider_call"] is False
+    assert "last_error" not in task_summary
     assert "last_error_type" not in task_summary
     assert "provider_budget" not in task_summary
     assert "sk-secret-123456" not in json.dumps(summary)

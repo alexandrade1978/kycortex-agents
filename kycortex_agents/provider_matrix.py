@@ -402,7 +402,6 @@ def summarize_workflow_run(
                 "status": task.status,
                 "has_assigned_to": bool(task.assigned_to),
                 "attempts": task.attempts,
-                "last_error": task.last_error,
                 "last_error_present": bool(
                     task.last_error or task.last_error_type or task.last_error_category
                 ),

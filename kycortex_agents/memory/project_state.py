@@ -2041,7 +2041,7 @@ class ProjectState:
             resumed_task_ids.extend(self._string_list(details.get("task_ids")))
         unique_task_count = len(set(resumed_task_ids))
         return {
-            "count": len(resumed_events),
+            "has_multiple_resume_events": len(resumed_events) > 1,
             "has_multiple_reasons": len(reasons) > 1,
             "has_multiple_resumed_tasks": len(resumed_task_ids) > 1,
             "unique_task_count": unique_task_count,

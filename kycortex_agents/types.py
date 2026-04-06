@@ -172,7 +172,7 @@ class WorkflowProgressSummary(TypedDict):
 class WorkflowResumeSummary(TypedDict):
     """Workflow resume activity summary embedded in aggregate telemetry."""
 
-    count: int
+    has_multiple_resume_events: bool
     has_multiple_reasons: bool
     has_multiple_resumed_tasks: bool
     unique_task_count: int
@@ -301,7 +301,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "has_tasks_without_provider_calls": False,
         "acceptance_summary": empty_workflow_acceptance_summary(),
         "resume_summary": {
-            "count": 0,
+            "has_multiple_resume_events": False,
             "has_multiple_reasons": False,
             "has_multiple_resumed_tasks": False,
             "unique_task_count": 0,

@@ -1615,6 +1615,14 @@ class ProjectState:
             details.clear()
             details.update(cast(Dict[str, Any], public_requeued_details))
             return redacted_event
+        if event_name == "task_started":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_started_details = self._public_task_started_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_started_details))
+            return redacted_event
         if event_name == "task_retry_scheduled":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
@@ -2505,6 +2513,15 @@ class ProjectState:
         }
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):
             public_details["has_repair_task"] = True
+        return public_details
+
+    def _public_task_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+
+        if self._presence_flag(details, "assigned_to", "has_assigned_to"):
+            public_details["has_assigned_to"] = True
+        public_details.pop("assigned_to", None)
+        public_details.pop("provider_budget", None)
         return public_details
 
     def _public_task_repair_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:

@@ -2953,6 +2953,62 @@ def test_snapshot_task_completed_events_use_presence_flags_for_legacy_provider_c
     assert "provider_call" not in completed_event["details"]
 
 
+def test_snapshot_minimizes_public_task_started_assigned_to_details():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+        )
+    )
+
+    project.start_task("arch")
+
+    internal_started_event = next(event for event in project.execution_events if event["event"] == "task_started")
+    assert internal_started_event["details"]["assigned_to"] == "architect"
+    assert internal_started_event["details"]["provider_budget"] is None
+
+    snapshot = project.snapshot()
+    started_event = next(event for event in snapshot.execution_events if event["event"] == "task_started")
+
+    assert started_event["details"]["has_assigned_to"] is True
+    assert started_event["details"]["attempts"] == 1
+    assert "assigned_to" not in started_event["details"]
+    assert "provider_budget" not in started_event["details"]
+
+
+def test_snapshot_task_started_events_use_presence_flags_for_legacy_assigned_to_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_started",
+                "timestamp": "2026-03-22T10:05:00+00:00",
+                "task_id": "arch",
+                "status": "running",
+                "details": {
+                    "attempts": 1,
+                    "assigned_to": "architect",
+                    "provider_budget": None,
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:05:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    started_event = snapshot.execution_events[0]
+
+    assert started_event["event"] == "task_started"
+    assert started_event["details"]["has_assigned_to"] is True
+    assert started_event["details"]["attempts"] == 1
+    assert "assigned_to" not in started_event["details"]
+    assert "provider_budget" not in started_event["details"]
+
+
 def test_snapshot_minimizes_public_task_completed_assigned_to_details():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

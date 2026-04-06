@@ -415,7 +415,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             "cycle_count": 0,
             "max_cycles": 0,
             "budget_remaining": 0,
-            "history_count": 0,
+            "has_multiple_history_entries": False,
             "has_multiple_reasons": False,
             "last_reason_present": False,
             "has_multiple_failure_categories": False,

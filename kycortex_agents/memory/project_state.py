@@ -2053,9 +2053,11 @@ class ProjectState:
         last_reason_present = False
         failure_categories: set[str] = set()
         failed_task_ids: set[str] = set()
+        valid_entry_count = 0
         for entry in self.repair_history:
             if not isinstance(entry, dict):
                 continue
+            valid_entry_count += 1
             reason = entry.get("reason")
             if isinstance(reason, str) and reason:
                 reasons.add(reason)
@@ -2068,7 +2070,7 @@ class ProjectState:
             "cycle_count": self.repair_cycle_count,
             "max_cycles": self.repair_max_cycles,
             "budget_remaining": max(self.repair_max_cycles - self.repair_cycle_count, 0),
-            "history_count": len([entry for entry in self.repair_history if isinstance(entry, dict)]),
+            "has_multiple_history_entries": valid_entry_count > 1,
             "has_multiple_reasons": len(reasons) > 1,
             "last_reason_present": last_reason_present,
             "has_multiple_failure_categories": len(failure_categories) > 1,

@@ -761,7 +761,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "cycle_count": 1,
         "max_cycles": 1,
         "budget_remaining": 0,
-        "history_count": 1,
+        "has_multiple_history_entries": False,
         "has_multiple_reasons": False,
         "last_reason_present": False,
         "has_multiple_failure_categories": False,

@@ -277,7 +277,6 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                         "models": ["snapshot-openai-demo"],
                         "status_presence": {"healthy": True},
                         "last_outcome_presence": {"success": True},
-                        "circuit_open_count": 2,
                         "has_retryable_failures": True,
                         "has_active_checks": True,
                     }

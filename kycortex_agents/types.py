@@ -221,7 +221,6 @@ class WorkflowProviderHealthSummary(TypedDict):
     models: List[str]
     status_presence: Dict[str, bool]
     last_outcome_presence: Dict[str, bool]
-    circuit_open_count: int
     has_retryable_failures: bool
     has_active_checks: bool
 

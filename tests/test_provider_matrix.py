@@ -639,6 +639,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     project.repair_max_cycles = 1
     project.repair_history = [{"cycle": 1, "failed_task_ids": ["tests"]}]
     project.workflow_last_resumed_at = "2026-03-28T12:00:00+00:00"
+    project.workflow_finished_at = "2026-03-28T12:05:00+00:00"
     project.execution_events.append(
         {
             "event": "workflow_resumed",
@@ -713,6 +714,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "last_resumed_at": "2026-03-28T12:00:00+00:00",
     }
     assert "workflow_last_resumed_at" not in summary
+    assert "workflow_finished_at" not in summary
     assert summary["workflow_telemetry"]["repair_summary"] == {
         "cycle_count": 1,
         "max_cycles": 1,

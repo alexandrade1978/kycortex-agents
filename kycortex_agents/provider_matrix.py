@@ -426,7 +426,6 @@ def summarize_workflow_run(
         "repair_max_cycles": project.repair_max_cycles,
         "repair_budget_remaining": max(project.repair_max_cycles - project.repair_cycle_count, 0),
         "repair_history": list(snapshot.repair_history),
-        "workflow_finished_at": project.workflow_finished_at,
         "workflow_telemetry": snapshot.workflow_telemetry,
         "state_file": _public_path_label(project.state_file),
         "output_dir": _public_path_label(output_dir),

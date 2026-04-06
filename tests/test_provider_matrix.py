@@ -301,12 +301,18 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     rendered = "\n".join(captured)
 
     assert "task_count=2" in captured
+    assert "- arch: status=done, summary=Architecture snapshot ready, provider=present, model=present" in captured
+    assert "observed_provider_count=2" in captured
+    assert "final_provider_count=1" in captured
     assert "completion_percent=100.0" in captured
-    assert "- openai: models=snapshot-openai-demo; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
+    assert "- entry_1: model_count=1; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
     assert "artifact_names=architecture" in captured
     assert "decision_topics=architecture_snapshot" in captured
     assert "event_count=2" in captured
     assert "last_event=workflow_finished" in captured
+    assert "openai" not in rendered
+    assert "anthropic" not in rendered
+    assert "snapshot-openai-demo" not in rendered
     assert "TimeoutError" not in rendered
     assert "last_error_types" not in rendered
     assert "circuit_open_count" not in rendered

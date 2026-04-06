@@ -149,16 +149,20 @@ def _format_counts(values: dict[str, int]) -> str:
     return ", ".join(f"{name}:{values[name]}" for name in sorted(values))
 
 
+def _presence_label(value: Any) -> str:
+    return "present" if value else "none"
+
+
 def _print_provider_health_summary(provider_health_summary: Mapping[str, Mapping[str, Any]]) -> None:
     if not provider_health_summary:
         print("- none")
         return
 
-    for provider_name in sorted(provider_health_summary):
+    for index, provider_name in enumerate(sorted(provider_health_summary), start=1):
         health = provider_health_summary[provider_name]
         models = [str(model) for model in health.get("models", []) if model]
         print(
-            f"- {provider_name}: models={_format_csv(models)}; "
+            f"- entry_{index}: model_count={len(models)}; "
             f"statuses={_format_counts(health.get('status_counts', {}))}; "
             f"outcomes={_format_counts(health.get('last_outcome_counts', {}))}; "
             f"active_checks={health.get('active_health_check_count', 0)}"
@@ -197,16 +201,16 @@ def main() -> None:
         print(
             f"- {task_id}: status={task_result.status.value}, "
             f"summary={task_result.output.summary if task_result.output else None}, "
-            f"provider={resource_telemetry['provider']}, "
-            f"model={resource_telemetry['model']}"
+            f"provider={_presence_label(resource_telemetry.get('provider'))}, "
+            f"model={_presence_label(resource_telemetry.get('model'))}"
         )
 
     print("\nWorkflow telemetry:")
     print(f"task_count={workflow_telemetry['task_count']}")
     print(f"tasks_with_provider_calls={workflow_telemetry['tasks_with_provider_calls']}")
     print(f"tasks_without_provider_calls={workflow_telemetry['tasks_without_provider_calls']}")
-    print(f"observed_providers={_format_csv(workflow_telemetry['observed_providers'])}")
-    print(f"final_providers={_format_csv(workflow_telemetry['final_providers'])}")
+    print(f"observed_provider_count={len(workflow_telemetry['observed_providers'])}")
+    print(f"final_provider_count={len(workflow_telemetry['final_providers'])}")
     print(f"attempt_count={workflow_telemetry['attempt_count']}")
     print(f"retry_attempt_count={workflow_telemetry['retry_attempt_count']}")
     print("\nWorkflow progress summary:")

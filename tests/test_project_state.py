@@ -1174,7 +1174,7 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
         "has_multiple_resume_events": False,
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": True,
-        "unique_task_count": 2,
+        "has_multiple_unique_tasks": True,
         "last_resumed_at": project.workflow_last_resumed_at,
     }
 
@@ -1792,7 +1792,7 @@ def test_resume_workflow_clears_pause_state_and_records_resume_summary():
         "has_multiple_resume_events": False,
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": False,
-        "unique_task_count": 0,
+        "has_multiple_unique_tasks": False,
         "last_resumed_at": project.workflow_last_resumed_at,
     }
 
@@ -2583,7 +2583,7 @@ def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
         "has_multiple_resume_events": False,
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": True,
-        "unique_task_count": 2,
+        "has_multiple_unique_tasks": True,
         "last_resumed_at": None,
     }
 
@@ -3596,7 +3596,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
 
     assert telemetry["resume_summary"]["has_multiple_resume_events"] is False
     assert telemetry["resume_summary"]["has_multiple_reasons"] is False
-    assert telemetry["resume_summary"]["unique_task_count"] == 0
+    assert telemetry["resume_summary"]["has_multiple_unique_tasks"] is False
     assert telemetry["provider_summary"]["openai"]["has_multiple_tasks"] is False
     assert telemetry["provider_summary"]["openai"]["has_successes"] is False
     assert telemetry["provider_summary"]["openai"]["has_failures"] is False

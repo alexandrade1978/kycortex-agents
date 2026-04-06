@@ -2044,7 +2044,7 @@ class ProjectState:
             "has_multiple_resume_events": len(resumed_events) > 1,
             "has_multiple_reasons": len(reasons) > 1,
             "has_multiple_resumed_tasks": len(resumed_task_ids) > 1,
-            "unique_task_count": unique_task_count,
+            "has_multiple_unique_tasks": unique_task_count > 1,
             "last_resumed_at": self.workflow_last_resumed_at,
         }
 

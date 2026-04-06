@@ -1358,7 +1358,6 @@ class ProjectState:
                     "retry_limit": task.retry_limit,
                     "error_category": task.last_error_category,
                     "has_provider_call": has_provider_call,
-                    "started_at": task.started_at,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,
                     "task_duration_ms": self._duration_ms(task.started_at, task.completed_at),

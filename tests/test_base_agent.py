@@ -112,6 +112,16 @@ def test_chat_returns_response_content():
     assert "circuit_breaker_threshold" not in metadata
     assert "circuit_breaker_cooldown_seconds" not in metadata
     raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert raw_metadata["provider_call_budget_limited"] is False
+    assert raw_metadata["provider_call_budget_exhausted"] is False
+    assert raw_metadata["provider_call_budget_limited_providers"] == []
+    assert raw_metadata["provider_call_budget_exhausted_providers"] == []
+    assert "provider_call_count" not in raw_metadata
+    assert "provider_call_counts_by_provider" not in raw_metadata
+    assert "provider_max_calls_per_agent" not in raw_metadata
+    assert "provider_max_calls_per_provider" not in raw_metadata
+    assert "provider_remaining_calls" not in raw_metadata
+    assert "provider_remaining_calls_by_provider" not in raw_metadata
     assert "provider_timeout_seconds" not in raw_metadata
     assert "provider_timeout_seconds_by_provider" not in raw_metadata
     assert metadata["provider_health"]["openai"]["status"] == "healthy"
@@ -817,6 +827,17 @@ def test_chat_fails_fast_when_provider_call_budget_is_exhausted():
     assert metadata["provider_call_budget_exhausted_providers"] == []
     assert "provider_call_count" not in metadata
     assert metadata["attempt_history"] == []
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert raw_metadata["provider_call_budget_limited"] is True
+    assert raw_metadata["provider_call_budget_exhausted"] is True
+    assert raw_metadata["provider_call_budget_limited_providers"] == []
+    assert raw_metadata["provider_call_budget_exhausted_providers"] == []
+    assert "provider_call_count" not in raw_metadata
+    assert "provider_call_counts_by_provider" not in raw_metadata
+    assert "provider_max_calls_per_agent" not in raw_metadata
+    assert "provider_max_calls_per_provider" not in raw_metadata
+    assert "provider_remaining_calls" not in raw_metadata
+    assert "provider_remaining_calls_by_provider" not in raw_metadata
     assert provider.calls == [("system", "message")]
 
 
@@ -882,6 +903,17 @@ def test_chat_fails_fast_when_provider_specific_call_budget_is_exhausted():
     assert metadata["provider_call_budget_exhausted_providers"] == ["openai"]
     assert "provider_call_counts_by_provider" not in metadata
     assert metadata["attempt_history"] == []
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert raw_metadata["provider_call_budget_limited"] is True
+    assert raw_metadata["provider_call_budget_exhausted"] is False
+    assert raw_metadata["provider_call_budget_limited_providers"] == ["openai"]
+    assert raw_metadata["provider_call_budget_exhausted_providers"] == ["openai"]
+    assert "provider_call_count" not in raw_metadata
+    assert "provider_call_counts_by_provider" not in raw_metadata
+    assert "provider_max_calls_per_agent" not in raw_metadata
+    assert "provider_max_calls_per_provider" not in raw_metadata
+    assert "provider_remaining_calls" not in raw_metadata
+    assert "provider_remaining_calls_by_provider" not in raw_metadata
     assert provider.calls == [("system", "message")]
 
 

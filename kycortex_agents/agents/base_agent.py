@@ -778,23 +778,26 @@ class BaseAgent(ABC):
         }
 
     def _provider_call_budget_metadata(self) -> dict[str, Any]:
-        remaining_calls: Optional[int] = None
-        if self.config.provider_max_calls_per_agent > 0:
-            remaining_calls = max(
-                self.config.provider_max_calls_per_agent - self._provider_call_count,
-                0,
-            )
-        remaining_calls_by_provider = {
-            provider_name: max(max_calls - self._provider_call_counts.get(provider_name, 0), 0)
+        limited_providers = sorted(
+            provider_name
             for provider_name, max_calls in self.config.provider_max_calls_per_provider.items()
-        }
+            if max_calls > 0
+        )
+        exhausted_providers = [
+            provider_name
+            for provider_name in limited_providers
+            if self._provider_call_counts.get(provider_name, 0)
+            >= self.config.provider_max_calls_per_provider.get(provider_name, 0)
+        ]
+        budget_limited = self.config.provider_max_calls_per_agent > 0 or bool(limited_providers)
         return {
-            "provider_call_count": self._provider_call_count,
-            "provider_call_counts_by_provider": dict(self._provider_call_counts),
-            "provider_max_calls_per_agent": self.config.provider_max_calls_per_agent,
-            "provider_max_calls_per_provider": dict(self.config.provider_max_calls_per_provider),
-            "provider_remaining_calls": remaining_calls,
-            "provider_remaining_calls_by_provider": remaining_calls_by_provider,
+            "provider_call_budget_limited": budget_limited,
+            "provider_call_budget_exhausted": bool(
+                self.config.provider_max_calls_per_agent > 0
+                and self._provider_call_count >= self.config.provider_max_calls_per_agent
+            ),
+            "provider_call_budget_limited_providers": limited_providers,
+            "provider_call_budget_exhausted_providers": exhausted_providers,
         }
 
     def _provider_timeout_metadata(

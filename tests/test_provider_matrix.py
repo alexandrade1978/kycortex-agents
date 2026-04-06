@@ -258,8 +258,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
             "task_results": {"arch": task_result},
             "workflow_telemetry": {
                 "task_count": 2,
-                "tasks_with_provider_calls": 1,
-                "tasks_without_provider_calls": 1,
+                "has_tasks_with_provider_calls": True,
+                "has_tasks_without_provider_calls": True,
                 "observed_provider_count": 2,
                 "final_provider_count": 1,
                 "has_attempts": True,

@@ -390,8 +390,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             "terminal_task_count": 3,
             "completion_percent": 75,
         },
-        "tasks_with_provider_calls": 2,
-        "tasks_without_provider_calls": 2,
+        "has_tasks_with_provider_calls": True,
+        "has_tasks_without_provider_calls": True,
         "acceptance_summary": {
             "policy": None,
             "accepted": False,

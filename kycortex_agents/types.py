@@ -248,8 +248,8 @@ class WorkflowTelemetry(TypedDict):
     task_count: int
     task_status_counts: Dict[str, int]
     progress_summary: WorkflowProgressSummary
-    tasks_with_provider_calls: int
-    tasks_without_provider_calls: int
+    has_tasks_with_provider_calls: bool
+    has_tasks_without_provider_calls: bool
     acceptance_summary: WorkflowAcceptanceSummary
     resume_summary: WorkflowResumeSummary
     repair_summary: WorkflowRepairSummary
@@ -297,8 +297,8 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "terminal_task_count": 0,
             "completion_percent": 0,
         },
-        "tasks_with_provider_calls": 0,
-        "tasks_without_provider_calls": 0,
+        "has_tasks_with_provider_calls": False,
+        "has_tasks_without_provider_calls": False,
         "acceptance_summary": empty_workflow_acceptance_summary(),
         "resume_summary": {
             "count": 0,

@@ -207,8 +207,8 @@ def main() -> None:
 
     print("\nWorkflow telemetry:")
     print(f"task_count={workflow_telemetry['task_count']}")
-    print(f"tasks_with_provider_calls={workflow_telemetry['tasks_with_provider_calls']}")
-    print(f"tasks_without_provider_calls={workflow_telemetry['tasks_without_provider_calls']}")
+    print(f"tasks_with_provider_calls_present={_presence_label(workflow_telemetry['has_tasks_with_provider_calls'])}")
+    print(f"tasks_without_provider_calls_present={_presence_label(workflow_telemetry['has_tasks_without_provider_calls'])}")
     print(f"observed_provider_count={workflow_telemetry['observed_provider_count']}")
     print(f"final_provider_count={workflow_telemetry['final_provider_count']}")
     print(f"attempts_present={_presence_label(workflow_telemetry['has_attempts'])}")

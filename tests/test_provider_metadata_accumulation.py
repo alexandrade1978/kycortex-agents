@@ -203,7 +203,8 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert "last_provider_call" not in snapshot.task_results["code"].details
     assert "last_provider_call" not in snapshot.task_results["review"].details
     assert "provider_budget" not in snapshot.task_results["arch"].details
-    assert snapshot.workflow_telemetry["tasks_with_provider_calls"] == 3
+    assert snapshot.workflow_telemetry["has_tasks_with_provider_calls"] is True
+    assert snapshot.workflow_telemetry["has_tasks_without_provider_calls"] is False
     assert snapshot.workflow_telemetry["final_provider_count"] == 3
     assert snapshot.workflow_telemetry["acceptance_summary"]["accepted"] is True
     assert snapshot.workflow_telemetry["acceptance_summary"]["policy"] == snapshot.acceptance_policy

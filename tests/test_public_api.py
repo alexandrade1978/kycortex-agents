@@ -274,8 +274,8 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "terminal_task_count": 0,
             "completion_percent": 0,
         },
-        "tasks_with_provider_calls": 0,
-        "tasks_without_provider_calls": 0,
+        "has_tasks_with_provider_calls": False,
+        "has_tasks_without_provider_calls": False,
         "acceptance_summary": {
             "policy": None,
             "accepted": False,

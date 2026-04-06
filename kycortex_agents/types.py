@@ -166,7 +166,7 @@ class WorkflowProgressSummary(TypedDict):
     runnable_task_count: int
     blocked_task_count: int
     terminal_task_count: int
-    completion_percent: MetricValue
+    all_tasks_terminal: bool
 
 
 class WorkflowResumeSummary(TypedDict):
@@ -295,7 +295,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "runnable_task_count": 0,
             "blocked_task_count": 0,
             "terminal_task_count": 0,
-            "completion_percent": 0,
+            "all_tasks_terminal": False,
         },
         "has_tasks_with_provider_calls": False,
         "has_tasks_without_provider_calls": False,

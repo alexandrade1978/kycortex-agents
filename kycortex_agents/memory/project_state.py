@@ -1966,18 +1966,14 @@ class ProjectState:
         except WorkflowDefinitionError:
             runnable_task_count = 0
             blocked_task_count = pending_task_count
-        completion_percent = (
-            self._normalize_metric_number((terminal_task_count / total_task_count) * 100.0)
-            if total_task_count > 0
-            else 0
-        )
+        all_tasks_terminal = total_task_count > 0 and terminal_task_count == total_task_count
         return {
             "pending_task_count": pending_task_count,
             "running_task_count": running_task_count,
             "runnable_task_count": runnable_task_count,
             "blocked_task_count": blocked_task_count,
             "terminal_task_count": terminal_task_count,
-            "completion_percent": completion_percent,
+            "all_tasks_terminal": all_tasks_terminal,
         }
 
     def _acceptance_summary(self) -> WorkflowAcceptanceSummary:

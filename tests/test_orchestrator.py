@@ -9373,7 +9373,7 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
         "runnable_task_count": 0,
         "blocked_task_count": 0,
         "terminal_task_count": 1,
-        "completion_percent": 100,
+        "all_tasks_terminal": True,
     }
     assert finished_record.project_name == "Demo"
     assert finished_record.terminal_outcome == WorkflowOutcome.COMPLETED.value
@@ -9561,7 +9561,7 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
         "runnable_task_count": 1,
         "blocked_task_count": 0,
         "terminal_task_count": 1,
-        "completion_percent": 50,
+        "all_tasks_terminal": False,
     }
     assert progress_events[1]["task_id"] == "code"
     assert progress_events[1]["details"]["workflow_telemetry"]["task_status_counts"]["done"] == 2
@@ -9571,7 +9571,7 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
         "runnable_task_count": 0,
         "blocked_task_count": 0,
         "terminal_task_count": 2,
-        "completion_percent": 100,
+        "all_tasks_terminal": True,
     }
     assert project.execution_events[-1]["event"] == "workflow_finished"
     assert project.execution_events[-1]["details"]["workflow_duration_ms"] is not None

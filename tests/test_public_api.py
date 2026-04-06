@@ -272,7 +272,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "runnable_task_count": 0,
             "blocked_task_count": 0,
             "terminal_task_count": 0,
-            "completion_percent": 0,
+            "all_tasks_terminal": False,
         },
         "has_tasks_with_provider_calls": False,
         "has_tasks_without_provider_calls": False,

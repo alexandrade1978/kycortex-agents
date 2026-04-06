@@ -219,7 +219,7 @@ def main() -> None:
     print(f"runnable_tasks={progress_summary['runnable_task_count']}")
     print(f"blocked_tasks={progress_summary['blocked_task_count']}")
     print(f"terminal_tasks={progress_summary['terminal_task_count']}")
-    print(f"completion_percent={progress_summary['completion_percent']}")
+    print(f"all_tasks_terminal={_presence_label(progress_summary['all_tasks_terminal'])}")
     print("\nWorkflow provider health summary:")
     _print_provider_health_summary(provider_health_summary)
 

@@ -270,7 +270,7 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                     "runnable_task_count": 0,
                     "blocked_task_count": 0,
                     "terminal_task_count": 2,
-                    "completion_percent": 100.0,
+                    "all_tasks_terminal": True,
                 },
                 "provider_health_summary": {
                     "openai": {
@@ -317,7 +317,7 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "multiple_final_providers=none" in captured
     assert "attempts_present=present" in captured
     assert "retry_attempts_present=none" in captured
-    assert "completion_percent=100.0" in captured
+    assert "all_tasks_terminal=present" in captured
     assert "- entry_1: model_count=1; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
     assert "artifact_names=architecture" in captured
     assert "decision_topics=architecture_snapshot" in captured

@@ -803,6 +803,10 @@ def test_chat_applies_retry_jitter_to_sleep(monkeypatch):
     assert "base_backoff_seconds" not in metadata["attempt_history"][0]
     assert "jitter_seconds" not in metadata["attempt_history"][0]
     assert metadata["attempt_history"][0]["backoff_seconds"] == 1.25
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "uncapped_backoff_seconds" not in raw_metadata["attempt_history"][0]
+    assert "base_backoff_seconds" not in raw_metadata["attempt_history"][0]
+    assert "jitter_seconds" not in raw_metadata["attempt_history"][0]
 
 
 def test_chat_fails_fast_when_provider_call_budget_is_exhausted():
@@ -1245,6 +1249,10 @@ def test_chat_caps_retry_backoff_before_jitter(monkeypatch):
     assert "base_backoff_seconds" not in metadata["attempt_history"][0]
     assert "jitter_seconds" not in metadata["attempt_history"][0]
     assert metadata["attempt_history"][0]["backoff_seconds"] == 1.75
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "uncapped_backoff_seconds" not in raw_metadata["attempt_history"][0]
+    assert "base_backoff_seconds" not in raw_metadata["attempt_history"][0]
+    assert "jitter_seconds" not in raw_metadata["attempt_history"][0]
 
 
 def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatch):

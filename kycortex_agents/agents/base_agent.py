@@ -359,9 +359,6 @@ class BaseAgent(ABC):
                                 error_type=type(exc).__name__,
                                 error_message=str(exc),
                             ),
-                            "uncapped_backoff_seconds": round(uncapped_backoff_seconds, 6),
-                            "base_backoff_seconds": round(base_backoff_seconds, 6),
-                            "jitter_seconds": round(jitter_seconds, 6),
                             "backoff_seconds": round(total_backoff_seconds, 6),
                         }
                     )

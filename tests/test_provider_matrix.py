@@ -710,6 +710,9 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
 
     assert summary["terminal_outcome"] == "completed"
     assert summary["task_status_counts"] == {"done": 2}
+    assert "failure_category" not in summary
+    assert "acceptance_criteria_met" not in summary
+    assert "acceptance_policy" not in summary
     assert "repair_cycle_count" not in summary
     assert "repair_max_cycles" not in summary
     assert "repair_budget_remaining" not in summary
@@ -972,6 +975,7 @@ def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
     )
 
     assert "failed_task_count" not in summary
+    assert "failure_category" not in summary
 
 
 def test_provider_matrix_summary_redacts_public_error_and_project_name_fields(tmp_path):

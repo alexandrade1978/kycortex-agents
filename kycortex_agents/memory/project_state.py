@@ -1356,7 +1356,6 @@ class ProjectState:
                 failure_details: Dict[str, Any] = {
                     "attempts": task.attempts,
                     "retry_limit": task.retry_limit,
-                    "error_category": task.last_error_category,
                     "has_provider_call": has_provider_call,
                     "last_attempt_started_at": task.last_attempt_started_at,
                     "last_resumed_at": task.last_resumed_at,

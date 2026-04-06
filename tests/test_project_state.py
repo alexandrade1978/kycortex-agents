@@ -3546,6 +3546,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "retry_limit" not in result.failure.details
     assert result.failure.details["has_provider_call"] is False
     assert "error_type" not in result.failure.details
+    assert "error_category" not in result.failure.details
     assert "started_at" not in result.failure.details
     assert result.failure.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
     assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"

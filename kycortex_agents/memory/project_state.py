@@ -2018,7 +2018,7 @@ class ProjectState:
             "terminal_outcome": outcome,
             "failure_category": category,
             "has_evaluated_tasks": self._acceptance_task_count(normalized_evaluation, "evaluated_task_ids", "evaluated_task_count") > 0,
-            "required_task_count": self._acceptance_task_count(normalized_evaluation, "required_task_ids", "required_task_count"),
+            "has_required_tasks": self._acceptance_task_count(normalized_evaluation, "required_task_ids", "required_task_count") > 0,
             "has_completed_tasks": self._acceptance_task_count(normalized_evaluation, "completed_task_ids", "completed_task_count") > 0,
             "has_failed_tasks": self._acceptance_task_count(normalized_evaluation, "failed_task_ids", "failed_task_count") > 0,
             "has_skipped_tasks": self._acceptance_task_count(normalized_evaluation, "skipped_task_ids", "skipped_task_count") > 0,

@@ -1224,6 +1224,11 @@ def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatc
     assert first_metadata["circuit_breaker_open"] is False
     assert "circuit_breaker_failure_streak" not in first_metadata
     assert "circuit_breaker_remaining_seconds" not in first_metadata
+    first_raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "circuit_breaker_failure_streak" not in first_raw_metadata
+    assert "circuit_breaker_threshold" not in first_raw_metadata
+    assert "circuit_breaker_cooldown_seconds" not in first_raw_metadata
+    assert "circuit_breaker_remaining_seconds" not in first_raw_metadata
 
     with pytest.raises(ProviderTransientError, match="Dummy: provider temporarily unavailable") as second_exc_info:
         agent.chat("system", "message")
@@ -1248,6 +1253,11 @@ def test_chat_opens_circuit_breaker_after_repeated_transient_failures(monkeypatc
     assert open_metadata["attempts_used"] == 0
     assert open_metadata["attempt_history"] == []
     assert open_metadata["circuit_breaker_open"] is True
+    open_raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "circuit_breaker_failure_streak" not in open_raw_metadata
+    assert "circuit_breaker_threshold" not in open_raw_metadata
+    assert "circuit_breaker_cooldown_seconds" not in open_raw_metadata
+    assert "circuit_breaker_remaining_seconds" not in open_raw_metadata
     assert "circuit_breaker_failure_streak" not in open_metadata
     assert provider.calls == [("system", "message"), ("system", "message")]
 

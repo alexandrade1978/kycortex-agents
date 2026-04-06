@@ -558,21 +558,8 @@ class BaseAgent(ABC):
         self._provider_circuit_open_untils[provider_name] = 0.0
 
     def _provider_circuit_metadata(self, provider_name: str, current_time: float) -> dict[str, Any]:
-        remaining_seconds = 0.0
-        if self._is_provider_circuit_open(provider_name, current_time):
-            remaining_seconds = max(
-                self._provider_circuit_open_untils.get(provider_name, 0.0) - current_time,
-                0.0,
-            )
         return {
             "circuit_breaker_open": self._is_provider_circuit_open(provider_name, current_time),
-            "circuit_breaker_failure_streak": self._provider_transient_failure_streaks.get(provider_name, 0),
-            "circuit_breaker_threshold": self.config.provider_circuit_breaker_threshold,
-            "circuit_breaker_cooldown_seconds": round(
-                self.config.provider_circuit_breaker_cooldown_seconds,
-                6,
-            ),
-            "circuit_breaker_remaining_seconds": round(remaining_seconds, 6),
         }
 
     def _provider_fallback_metadata(

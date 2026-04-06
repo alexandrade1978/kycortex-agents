@@ -2237,7 +2237,9 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert "repair_origin_task_id" not in created_event["details"]
     assert "repair_attempt" not in created_event["details"]
 
+    assert requeued_event["details"]["has_reason"] is True
     assert requeued_event["details"]["has_repair_task"] is True
+    assert "reason" not in requeued_event["details"]
     assert "repair_task_id" not in requeued_event["details"]
 
     assert started_event["details"]["has_assigned_to"] is True

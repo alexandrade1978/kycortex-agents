@@ -2586,9 +2586,9 @@ class ProjectState:
         return public_details
 
     def _public_task_requeued_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        public_details: Dict[str, Any] = {
-            "reason": details.get("reason") if isinstance(details.get("reason"), str) else None,
-        }
+        public_details: Dict[str, Any] = {}
+        if self._presence_flag(details, "reason", "has_reason"):
+            public_details["has_reason"] = True
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):
             public_details["has_repair_task"] = True
         return public_details

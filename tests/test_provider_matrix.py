@@ -746,7 +746,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "completed_task_count": 1,
         "failed_task_count": 0,
         "has_skipped_tasks": False,
-        "pending_task_count": 0,
+        "has_pending_tasks": False,
     }
     assert summary["workflow_telemetry"]["resume_summary"] == {
         "has_multiple_resume_events": False,

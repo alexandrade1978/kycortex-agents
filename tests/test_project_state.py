@@ -2689,7 +2689,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "completed_task_count": 2,
         "failed_task_count": 0,
         "has_skipped_tasks": False,
-        "pending_task_count": 0,
+        "has_pending_tasks": False,
     }
     assert event["details"]["workflow_telemetry"]["acceptance_summary"] == {
         "policy": "required_tasks",
@@ -2702,7 +2702,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "completed_task_count": 2,
         "failed_task_count": 0,
         "has_skipped_tasks": False,
-        "pending_task_count": 0,
+        "has_pending_tasks": False,
     }
     assert snapshot.workflow_telemetry["acceptance_summary"] == event["details"]["workflow_telemetry"]["acceptance_summary"]
 
@@ -2755,7 +2755,7 @@ def test_mark_workflow_finished_records_policy_enforcement_for_security_failures
         "completed_task_count": 0,
         "failed_task_count": 1,
         "has_skipped_tasks": False,
-        "pending_task_count": 0,
+        "has_pending_tasks": False,
     }
     assert workflow_event["details"]["failure_task_id"] == "tests"
     assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
@@ -3820,7 +3820,7 @@ def test_snapshot_includes_workflow_execution_metadata():
         "completed_task_count": 1,
         "failed_task_count": 0,
         "has_skipped_tasks": False,
-        "pending_task_count": 0,
+        "has_pending_tasks": False,
     }
     assert snapshot.execution_events[0]["event"] == "workflow_started"
     assert snapshot.execution_events[1]["details"]["workflow_duration_ms"] == 360000.0

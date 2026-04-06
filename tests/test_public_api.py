@@ -287,7 +287,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "completed_task_count": 0,
             "failed_task_count": 0,
             "has_skipped_tasks": False,
-            "pending_task_count": 0,
+            "has_pending_tasks": False,
         },
         "resume_summary": {
             "has_multiple_resume_events": False,

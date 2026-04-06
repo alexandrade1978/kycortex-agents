@@ -209,8 +209,8 @@ class WorkflowProviderSummary(TypedDict):
     task_count: int
     success_count: int
     failure_count: int
-    attempt_count: int
-    retry_attempt_count: int
+    has_attempts: bool
+    has_retry_attempts: bool
     duration_ms: MetricDistribution
     usage: NumericMetricMap
 

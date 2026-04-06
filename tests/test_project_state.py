@@ -3600,6 +3600,8 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["provider_summary"]["openai"]["task_count"] == 1
     assert telemetry["provider_summary"]["openai"]["success_count"] == 0
     assert telemetry["provider_summary"]["openai"]["failure_count"] == 0
+    assert telemetry["provider_summary"]["openai"]["has_attempts"] is True
+    assert telemetry["provider_summary"]["openai"]["has_retry_attempts"] is False
     assert telemetry["provider_summary"]["openai"]["duration_ms"]["count"] == 1
     assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 5}
     assert telemetry["provider_health_summary"]["openai"] == {

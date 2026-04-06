@@ -2308,6 +2308,10 @@ class ProjectState:
             public_details["has_error_type"] = True
         public_details.pop("error_type", None)
 
+        if self._presence_flag(details, "error_category", "has_error_category"):
+            public_details["has_error_category"] = True
+        public_details.pop("error_category", None)
+
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)
@@ -2323,6 +2327,10 @@ class ProjectState:
         if (isinstance(raw_error_type, str) and bool(raw_error_type)) or public_details.get("has_error_type") is True:
             public_details["has_error_type"] = True
         public_details.pop("error_type", None)
+
+        if self._presence_flag(details, "error_category", "has_error_category"):
+            public_details["has_error_category"] = True
+        public_details.pop("error_category", None)
 
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True

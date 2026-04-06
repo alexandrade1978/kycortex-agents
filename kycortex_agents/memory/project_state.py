@@ -1925,7 +1925,7 @@ class ProjectState:
 
         return {
             "has_multiple_tasks": len(self.tasks) > 1,
-            "task_status_counts": self._ordered_task_status_counts(task_status_counts),
+            "task_status_presence": self._ordered_task_status_presence(task_status_counts),
             "progress_summary": self._progress_summary(task_status_counts),
             "has_tasks_with_provider_calls": tasks_with_provider_calls > 0,
             "has_tasks_without_provider_calls": max(len(self.tasks) - tasks_with_provider_calls, 0) > 0,
@@ -2696,13 +2696,15 @@ class ProjectState:
             return int(rounded)
         return rounded
 
-    def _ordered_task_status_counts(self, counts: Dict[str, int]) -> Dict[str, int]:
-        ordered_counts = {status.value: counts.get(status.value, 0) for status in TaskStatus}
+    def _ordered_task_status_presence(self, counts: Dict[str, int]) -> Dict[str, bool]:
+        ordered_presence = {
+            status.value: True for status in TaskStatus if counts.get(status.value, 0) > 0
+        }
         for status, count in sorted(counts.items()):
-            if status in ordered_counts:
+            if status in ordered_presence or count <= 0:
                 continue
-            ordered_counts[status] = count
-        return ordered_counts
+            ordered_presence[status] = True
+        return ordered_presence
 
     def _duration_ms(self, start: Optional[str], end: Optional[str]) -> Optional[float]:
         if not start or not end:

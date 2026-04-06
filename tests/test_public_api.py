@@ -265,7 +265,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
     }
     assert types_module.empty_workflow_telemetry() == {
         "has_multiple_tasks": False,
-        "task_status_counts": {},
+        "task_status_presence": {},
         "progress_summary": {
             "has_pending_tasks": False,
             "has_running_tasks": False,

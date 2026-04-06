@@ -246,7 +246,7 @@ class WorkflowTelemetry(TypedDict):
     """Aggregate workflow observability payload exposed through public snapshots."""
 
     has_multiple_tasks: bool
-    task_status_counts: Dict[str, int]
+    task_status_presence: Dict[str, bool]
     progress_summary: WorkflowProgressSummary
     has_tasks_with_provider_calls: bool
     has_tasks_without_provider_calls: bool
@@ -288,7 +288,7 @@ def empty_task_resource_telemetry() -> TaskResourceTelemetry:
 def empty_workflow_telemetry() -> WorkflowTelemetry:
     return {
         "has_multiple_tasks": False,
-        "task_status_counts": {},
+        "task_status_presence": {},
         "progress_summary": {
             "has_pending_tasks": False,
             "has_running_tasks": False,

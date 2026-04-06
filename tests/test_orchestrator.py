@@ -9366,7 +9366,7 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
     assert progress_record.phase == "execution"
     assert progress_record.task_id == "arch"
     assert progress_record.task_status == TaskStatus.DONE.value
-    assert progress_record.workflow_telemetry["task_status_counts"]["done"] == 1
+    assert progress_record.workflow_telemetry["task_status_presence"] == {"done": True}
     assert progress_record.workflow_telemetry["progress_summary"] == {
         "has_pending_tasks": False,
         "has_running_tasks": False,
@@ -9548,12 +9548,9 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
     assert progress_events[0]["task_id"] == "arch"
     assert progress_events[0]["status"] == "execution"
     assert progress_events[0]["details"]["task_status"] == TaskStatus.DONE.value
-    assert progress_events[0]["details"]["workflow_telemetry"]["task_status_counts"] == {
-        "pending": 1,
-        "running": 0,
-        "done": 1,
-        "failed": 0,
-        "skipped": 0,
+    assert progress_events[0]["details"]["workflow_telemetry"]["task_status_presence"] == {
+        "pending": True,
+        "done": True,
     }
     assert progress_events[0]["details"]["workflow_telemetry"]["progress_summary"] == {
         "has_pending_tasks": True,
@@ -9564,7 +9561,7 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
         "all_tasks_terminal": False,
     }
     assert progress_events[1]["task_id"] == "code"
-    assert progress_events[1]["details"]["workflow_telemetry"]["task_status_counts"]["done"] == 2
+    assert progress_events[1]["details"]["workflow_telemetry"]["task_status_presence"] == {"done": True}
     assert progress_events[1]["details"]["workflow_telemetry"]["progress_summary"] == {
         "has_pending_tasks": False,
         "has_running_tasks": False,

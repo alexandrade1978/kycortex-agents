@@ -1565,9 +1565,11 @@ def test_cancel_workflow_marks_terminal_state_and_skips_pending_tasks():
     assert project.execution_events[-1]["details"]["cancelled_task_ids"] == ["docs"]
     assert snapshot.execution_events[-1]["details"]["reason"] == "manual_operator_cancel"
     assert snapshot.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.CANCELLED.value
-    assert snapshot.execution_events[-1]["details"]["cancelled_task_count"] == 1
+    assert snapshot.execution_events[-1]["details"]["has_cancelled_tasks"] is True
+    assert "has_multiple_cancelled_tasks" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "cancelled_task_ids" not in snapshot.execution_events[-1]["details"]
+    assert "cancelled_task_count" not in snapshot.execution_events[-1]["details"]
 
 
 def test_cancel_workflow_redacts_sensitive_operator_reason():
@@ -1598,9 +1600,11 @@ def test_cancel_workflow_redacts_sensitive_operator_reason():
     assert "[REDACTED]" in workflow_cancelled_event["details"]["reason"]
     assert snapshot.execution_events[-1]["details"]["reason"] == workflow_cancelled_event["details"]["reason"]
     assert snapshot.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.CANCELLED.value
-    assert snapshot.execution_events[-1]["details"]["cancelled_task_count"] == 1
+    assert snapshot.execution_events[-1]["details"]["has_cancelled_tasks"] is True
+    assert "has_multiple_cancelled_tasks" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "cancelled_task_ids" not in snapshot.execution_events[-1]["details"]
+    assert "cancelled_task_count" not in snapshot.execution_events[-1]["details"]
 
 
 def test_pause_workflow_rejects_cancelled_workflow():
@@ -1701,13 +1705,17 @@ def test_replay_workflow_resets_base_tasks_and_clears_run_metadata():
     assert project.execution_events[-1]["event"] == "workflow_replayed"
     assert project.execution_events[-1]["details"]["reason"] == "manual_replay"
     assert snapshot.execution_events[-1]["details"]["reason"] == "manual_replay"
-    assert snapshot.execution_events[-1]["details"]["replayed_task_count"] == 1
-    assert snapshot.execution_events[-1]["details"]["removed_task_count"] == 0
+    assert snapshot.execution_events[-1]["details"]["has_replayed_tasks"] is True
+    assert "has_multiple_replayed_tasks" not in snapshot.execution_events[-1]["details"]
+    assert "has_removed_tasks" not in snapshot.execution_events[-1]["details"]
+    assert "has_multiple_removed_tasks" not in snapshot.execution_events[-1]["details"]
     assert snapshot.execution_events[-1]["details"]["cleared_decision_count"] == 1
     assert snapshot.execution_events[-1]["details"]["cleared_artifact_count"] == 1
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "replayed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert "removed_task_ids" not in snapshot.execution_events[-1]["details"]
+    assert "replayed_task_count" not in snapshot.execution_events[-1]["details"]
+    assert "removed_task_count" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_status == WorkflowStatus.INIT
 
 
@@ -1753,13 +1761,17 @@ def test_replay_workflow_removes_repair_lineage_tasks():
     assert [task.id for task in project.tasks] == ["code"]
     assert project.execution_events[-1]["details"]["removed_task_ids"] == ["code__repair_1", "code__repair_1__budget_plan"]
     assert snapshot.execution_events[-1]["details"]["reason"] == "manual_replay"
-    assert snapshot.execution_events[-1]["details"]["replayed_task_count"] == 1
-    assert snapshot.execution_events[-1]["details"]["removed_task_count"] == 2
+    assert snapshot.execution_events[-1]["details"]["has_replayed_tasks"] is True
+    assert "has_multiple_replayed_tasks" not in snapshot.execution_events[-1]["details"]
+    assert snapshot.execution_events[-1]["details"]["has_removed_tasks"] is True
+    assert snapshot.execution_events[-1]["details"]["has_multiple_removed_tasks"] is True
     assert snapshot.execution_events[-1]["details"]["cleared_decision_count"] == 0
     assert snapshot.execution_events[-1]["details"]["cleared_artifact_count"] == 0
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "replayed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert "removed_task_ids" not in snapshot.execution_events[-1]["details"]
+    assert "replayed_task_count" not in snapshot.execution_events[-1]["details"]
+    assert "removed_task_count" not in snapshot.execution_events[-1]["details"]
 
 
 def test_resume_workflow_clears_pause_state_and_records_resume_summary():
@@ -2619,7 +2631,7 @@ def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
     }
 
 
-def test_snapshot_workflow_cancelled_events_use_task_counts_for_legacy_entries():
+def test_snapshot_workflow_cancelled_events_use_presence_flags_for_legacy_entries():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.execution_events = [
         {
@@ -2639,12 +2651,14 @@ def test_snapshot_workflow_cancelled_events_use_task_counts_for_legacy_entries()
 
     assert snapshot.execution_events[0]["details"]["reason"] == "manual_operator_cancel"
     assert snapshot.execution_events[0]["details"]["terminal_outcome"] == WorkflowOutcome.CANCELLED.value
-    assert snapshot.execution_events[0]["details"]["cancelled_task_count"] == 2
+    assert snapshot.execution_events[0]["details"]["has_cancelled_tasks"] is True
+    assert snapshot.execution_events[0]["details"]["has_multiple_cancelled_tasks"] is True
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "cancelled_task_ids" not in snapshot.execution_events[0]["details"]
+    assert "cancelled_task_count" not in snapshot.execution_events[0]["details"]
 
 
-def test_snapshot_workflow_replayed_events_use_task_counts_for_legacy_entries():
+def test_snapshot_workflow_replayed_events_use_presence_flags_for_legacy_entries():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.execution_events = [
         {
@@ -2665,13 +2679,17 @@ def test_snapshot_workflow_replayed_events_use_task_counts_for_legacy_entries():
     snapshot = project.snapshot()
 
     assert snapshot.execution_events[0]["details"]["reason"] == "manual_replay"
-    assert snapshot.execution_events[0]["details"]["replayed_task_count"] == 2
-    assert snapshot.execution_events[0]["details"]["removed_task_count"] == 1
+    assert snapshot.execution_events[0]["details"]["has_replayed_tasks"] is True
+    assert snapshot.execution_events[0]["details"]["has_multiple_replayed_tasks"] is True
+    assert snapshot.execution_events[0]["details"]["has_removed_tasks"] is True
+    assert "has_multiple_removed_tasks" not in snapshot.execution_events[0]["details"]
     assert snapshot.execution_events[0]["details"]["cleared_decision_count"] == 2
     assert snapshot.execution_events[0]["details"]["cleared_artifact_count"] == 3
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "replayed_task_ids" not in snapshot.execution_events[0]["details"]
     assert "removed_task_ids" not in snapshot.execution_events[0]["details"]
+    assert "replayed_task_count" not in snapshot.execution_events[0]["details"]
+    assert "removed_task_count" not in snapshot.execution_events[0]["details"]
 
 
 def test_provider_attempt_and_retry_helpers_handle_scalar_fallbacks():

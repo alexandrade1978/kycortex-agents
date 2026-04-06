@@ -2133,11 +2133,15 @@ class ProjectState:
                 if isinstance(raw_cancelled_task_count, (int, float)) and not isinstance(raw_cancelled_task_count, bool)
                 else 0
             )
-        return {
+        public_details: Dict[str, Any] = {
             "reason": reason,
             "terminal_outcome": terminal_outcome,
-            "cancelled_task_count": cancelled_task_count,
         }
+        if cancelled_task_count > 0:
+            public_details["has_cancelled_tasks"] = True
+        if cancelled_task_count > 1:
+            public_details["has_multiple_cancelled_tasks"] = True
+        return public_details
 
     def _public_workflow_replayed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         reason = details.get("reason") if isinstance(details.get("reason"), str) else None
@@ -2163,10 +2167,8 @@ class ProjectState:
             )
         cleared_decision_count = details.get("cleared_decision_count")
         cleared_artifact_count = details.get("cleared_artifact_count")
-        return {
+        public_details: Dict[str, Any] = {
             "reason": reason,
-            "replayed_task_count": replayed_task_count,
-            "removed_task_count": removed_task_count,
             "cleared_decision_count": (
                 max(int(cleared_decision_count), 0)
                 if isinstance(cleared_decision_count, (int, float)) and not isinstance(cleared_decision_count, bool)
@@ -2178,6 +2180,15 @@ class ProjectState:
                 else 0
             ),
         }
+        if replayed_task_count > 0:
+            public_details["has_replayed_tasks"] = True
+        if replayed_task_count > 1:
+            public_details["has_multiple_replayed_tasks"] = True
+        if removed_task_count > 0:
+            public_details["has_removed_tasks"] = True
+        if removed_task_count > 1:
+            public_details["has_multiple_removed_tasks"] = True
+        return public_details
 
     def _public_task_completed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))

@@ -109,7 +109,6 @@ class BaseAgent(ABC):
                     fallback_history.append(
                         {
                             "provider": provider_name,
-                            "model": model_name,
                             "status": "skipped_open_circuit",
                             "remaining_cooldown_seconds": remaining_seconds,
                         }
@@ -141,7 +140,6 @@ class BaseAgent(ABC):
                     fallback_history.append(
                         {
                             "provider": provider_name,
-                            "model": model_name,
                             "status": "skipped_call_budget_exhausted",
                         }
                     )
@@ -175,7 +173,6 @@ class BaseAgent(ABC):
                     fallback_history.append(
                         {
                             "provider": provider_name,
-                            "model": model_name,
                             "status": "failed_health_check",
                             "error_type": type(exc).__name__,
                             "error_message": str(exc),
@@ -266,7 +263,6 @@ class BaseAgent(ABC):
                         fallback_history.append(
                             {
                                 "provider": provider_name,
-                                "model": model_name,
                                 "status": "failed_call_budget_exhausted",
                                 "attempts_used": len(attempt_history),
                             }
@@ -389,7 +385,6 @@ class BaseAgent(ABC):
                             fallback_history.append(
                                 {
                                     "provider": provider_name,
-                                    "model": model_name,
                                     "status": "failed_transient",
                                     "error_type": type(exc).__name__,
                                     "error_message": str(exc),

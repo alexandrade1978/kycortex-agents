@@ -278,7 +278,7 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                         "status_presence": {"healthy": True},
                         "last_outcome_presence": {"success": True},
                         "circuit_open_count": 2,
-                        "retryable_failure_count": 3,
+                        "has_retryable_failures": True,
                         "has_active_checks": True,
                     }
                 },

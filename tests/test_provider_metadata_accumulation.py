@@ -227,7 +227,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
-            "retryable_failure_count": 0,
+            "has_retryable_failures": False,
             "has_active_checks": True,
         },
         "ollama": {
@@ -235,7 +235,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
-            "retryable_failure_count": 0,
+            "has_retryable_failures": False,
             "has_active_checks": True,
         },
         "openai": {
@@ -243,7 +243,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
-            "retryable_failure_count": 0,
+            "has_retryable_failures": False,
             "has_active_checks": True,
         },
     }
@@ -372,7 +372,7 @@ def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_
             "status_presence": {"degraded": True},
             "last_outcome_presence": {"failure": True},
             "circuit_open_count": 0,
-            "retryable_failure_count": 1,
+            "has_retryable_failures": True,
             "has_active_checks": False,
         }
     }
@@ -462,7 +462,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
-            "retryable_failure_count": 0,
+            "has_retryable_failures": False,
             "has_active_checks": True,
         },
         "openai": {
@@ -470,7 +470,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "status_presence": {"degraded": True},
             "last_outcome_presence": {"failure": True},
             "circuit_open_count": 0,
-            "retryable_failure_count": 1,
+            "has_retryable_failures": True,
             "has_active_checks": True,
         },
     }

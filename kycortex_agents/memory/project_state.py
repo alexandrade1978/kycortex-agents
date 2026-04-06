@@ -1916,7 +1916,7 @@ class ProjectState:
             raw_models = raw_health_summary.get("models")
             normalized_provider_health_summary[provider_name] = {
                 "models": sorted(raw_models) if isinstance(raw_models, set) else [],
-                "status_counts": dict(sorted(raw_health_summary.get("status_counts", {}).items())),
+                "status_presence": self._ordered_presence(raw_health_summary.get("status_counts", {})),
                 "last_outcome_counts": dict(sorted(raw_health_summary.get("last_outcome_counts", {}).items())),
                 "circuit_open_count": int(raw_health_summary.get("circuit_open_count", 0)),
                 "retryable_failure_count": int(raw_health_summary.get("retryable_failure_count", 0)),
@@ -2706,6 +2706,18 @@ class ProjectState:
             if status in ordered_presence or count <= 0:
                 continue
             ordered_presence[status] = True
+        return ordered_presence
+
+    def _ordered_presence(self, counts: Any) -> Dict[str, bool]:
+        if not isinstance(counts, dict):
+            return {}
+        ordered_presence: Dict[str, bool] = {}
+        for name, count in sorted(counts.items()):
+            if not isinstance(name, str) or not name:
+                continue
+            if not isinstance(count, (int, float)) or isinstance(count, bool) or count <= 0:
+                continue
+            ordered_presence[name] = True
         return ordered_presence
 
     def _duration_ms(self, start: Optional[str], end: Optional[str]) -> Optional[float]:

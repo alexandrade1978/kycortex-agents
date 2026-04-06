@@ -149,6 +149,11 @@ def _format_counts(values: dict[str, int]) -> str:
     return ", ".join(f"{name}:{values[name]}" for name in sorted(values))
 
 
+def _format_presence(values: dict[str, bool]) -> str:
+    present_values = [name for name in sorted(values) if values[name]]
+    return ", ".join(present_values) if present_values else "none"
+
+
 def _presence_label(value: Any) -> str:
     return "present" if value else "none"
 
@@ -163,7 +168,7 @@ def _print_provider_health_summary(provider_health_summary: Mapping[str, Mapping
         models = [str(model) for model in health.get("models", []) if model]
         print(
             f"- entry_{index}: model_count={len(models)}; "
-            f"statuses={_format_counts(health.get('status_counts', {}))}; "
+            f"statuses={_format_presence(health.get('status_presence', {}))}; "
             f"outcomes={_format_counts(health.get('last_outcome_counts', {}))}; "
             f"active_checks={health.get('active_health_check_count', 0)}"
         )

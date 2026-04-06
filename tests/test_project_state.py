@@ -3606,7 +3606,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 5}
     assert telemetry["provider_health_summary"]["openai"] == {
         "models": [],
-        "status_counts": {"open_circuit": 1},
+        "status_presence": {"open_circuit": True},
         "last_outcome_counts": {},
         "circuit_open_count": 1,
         "retryable_failure_count": 1,

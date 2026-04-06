@@ -275,7 +275,7 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                 "provider_health_summary": {
                     "openai": {
                         "models": ["snapshot-openai-demo"],
-                        "status_counts": {"healthy": 1},
+                        "status_presence": {"healthy": True},
                         "last_outcome_counts": {"success": 1},
                         "circuit_open_count": 2,
                         "retryable_failure_count": 3,
@@ -323,7 +323,7 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     assert "blocked_tasks_present=none" in captured
     assert "terminal_tasks_present=present" in captured
     assert "all_tasks_terminal=present" in captured
-    assert "- entry_1: model_count=1; statuses=healthy:1; outcomes=success:1; active_checks=1" in captured
+    assert "- entry_1: model_count=1; statuses=healthy; outcomes=success:1; active_checks=1" in captured
     assert "artifact_names=architecture" in captured
     assert "decision_topics=architecture_snapshot" in captured
     assert "event_count=2" in captured

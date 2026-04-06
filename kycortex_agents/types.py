@@ -136,7 +136,7 @@ class WorkflowAcceptanceSummary(TypedDict):
     failure_category: Optional[str]
     has_evaluated_tasks: bool
     required_task_count: int
-    completed_task_count: int
+    has_completed_tasks: bool
     has_failed_tasks: bool
     has_skipped_tasks: bool
     has_pending_tasks: bool
@@ -151,7 +151,7 @@ def empty_workflow_acceptance_summary() -> WorkflowAcceptanceSummary:
         "failure_category": None,
         "has_evaluated_tasks": False,
         "required_task_count": 0,
-        "completed_task_count": 0,
+        "has_completed_tasks": False,
         "has_failed_tasks": False,
         "has_skipped_tasks": False,
         "has_pending_tasks": False,

@@ -407,7 +407,6 @@ def summarize_workflow_run(
 
     return redact_sensitive_data(
         {
-        "provider": provider,
         "project_name": snapshot.project_name,
         "phase": project.phase,
         "terminal_outcome": project.terminal_outcome,

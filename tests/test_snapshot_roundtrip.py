@@ -451,7 +451,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
         "usage": {"completion_tokens": 5, "prompt_tokens": 10, "total_tokens": 15},
         "fallback_summary": {
             "task_count": 0,
-            "entry_count": 0,
+            "has_entries": False,
             "provider_count": 0,
             "status_count": 0,
         },

@@ -1942,7 +1942,7 @@ class ProjectState:
             "usage": self._sorted_numeric_metrics(usage_totals),
             "fallback_summary": {
                 "task_count": fallback_task_count,
-                "entry_count": fallback_entry_count,
+                "has_entries": fallback_entry_count > 0,
                 "provider_count": len(fallback_providers),
                 "status_count": len(fallback_statuses),
             },

@@ -451,7 +451,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
     assert snapshot.workflow_telemetry["final_provider_count"] == 1
     assert snapshot.workflow_telemetry["fallback_summary"] == {
         "task_count": 1,
-        "entry_count": 1,
+        "has_entries": True,
         "provider_count": 1,
         "status_count": 1,
     }

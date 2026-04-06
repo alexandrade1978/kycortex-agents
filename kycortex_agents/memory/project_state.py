@@ -2245,6 +2245,25 @@ class ProjectState:
         public_details.pop("retry_limit", None)
         return public_details
 
+    def _apply_repair_attempt_presence_flag(
+        self,
+        details: Dict[str, Any],
+        public_details: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        raw_repair_attempt = details.get("repair_attempt")
+        public_details.pop("has_repair_attempt", None)
+        if (
+            (
+                isinstance(raw_repair_attempt, (int, float))
+                and not isinstance(raw_repair_attempt, bool)
+                and bool(int(raw_repair_attempt))
+            )
+            or details.get("has_repair_attempt") is True
+        ):
+            public_details["has_repair_attempt"] = True
+        public_details.pop("repair_attempt", None)
+        return public_details
+
     def _public_task_history_entry(self, entry: Any) -> Dict[str, Any]:
         if not isinstance(entry, dict):
             return {}
@@ -2537,14 +2556,8 @@ class ProjectState:
         return public_context
 
     def _public_task_budget_decomposition_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        raw_repair_attempt = details.get("repair_attempt")
-        public_details: Dict[str, Any] = {
-            "repair_attempt": (
-                max(int(raw_repair_attempt), 0)
-                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
-                else 0
-            ),
-        }
+        public_details: Dict[str, Any] = {}
+        public_details = self._apply_repair_attempt_presence_flag(details, public_details)
         if self._presence_flag(details, "assigned_to", "has_assigned_to"):
             public_details["has_assigned_to"] = True
         if self._presence_flag(details, "decomposition_target_task_id", "has_decomposition_target_task"):
@@ -2552,14 +2565,8 @@ class ProjectState:
         return public_details
 
     def _public_task_repair_created_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        raw_repair_attempt = details.get("repair_attempt")
-        public_details: Dict[str, Any] = {
-            "repair_attempt": (
-                max(int(raw_repair_attempt), 0)
-                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
-                else 0
-            ),
-        }
+        public_details: Dict[str, Any] = {}
+        public_details = self._apply_repair_attempt_presence_flag(details, public_details)
         if self._presence_flag(details, "assigned_to", "has_assigned_to"):
             public_details["has_assigned_to"] = True
         if self._presence_flag(details, "repair_origin_task_id", "has_repair_origin"):
@@ -2585,14 +2592,8 @@ class ProjectState:
         return public_details
 
     def _public_task_repair_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        raw_repair_attempt = details.get("repair_attempt")
-        public_details: Dict[str, Any] = {
-            "repair_attempt": (
-                max(int(raw_repair_attempt), 0)
-                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
-                else 0
-            ),
-        }
+        public_details: Dict[str, Any] = {}
+        public_details = self._apply_repair_attempt_presence_flag(details, public_details)
         if self._presence_flag(details, "assigned_to", "has_assigned_to"):
             public_details["has_assigned_to"] = True
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):
@@ -2605,15 +2606,10 @@ class ProjectState:
         *,
         minimize_error_type: bool,
     ) -> Dict[str, Any]:
-        raw_repair_attempt = details.get("repair_attempt")
         public_details: Dict[str, Any] = {
-            "repair_attempt": (
-                max(int(raw_repair_attempt), 0)
-                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
-                else 0
-            ),
             "error_category": details.get("error_category") if isinstance(details.get("error_category"), str) else None,
         }
+        public_details = self._apply_repair_attempt_presence_flag(details, public_details)
         if minimize_error_type:
             if self._presence_flag(details, "error_type", "has_error_type"):
                 public_details["has_error_type"] = True
@@ -2624,14 +2620,8 @@ class ProjectState:
         return public_details
 
     def _public_task_repaired_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        raw_repair_attempt = details.get("repair_attempt")
-        public_details: Dict[str, Any] = {
-            "repair_attempt": (
-                max(int(raw_repair_attempt), 0)
-                if isinstance(raw_repair_attempt, (int, float)) and not isinstance(raw_repair_attempt, bool)
-                else 0
-            ),
-        }
+        public_details: Dict[str, Any] = {}
+        public_details = self._apply_repair_attempt_presence_flag(details, public_details)
         if self._presence_flag(details, "assigned_to", "has_assigned_to"):
             public_details["has_assigned_to"] = True
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):

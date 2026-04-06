@@ -1333,9 +1333,10 @@ def test_complete_task_syncs_repair_result_back_to_origin():
     snapshot = project.snapshot()
     repaired_event = next(event for event in snapshot.execution_events if event["event"] == "task_repaired")
 
-    assert repaired_event["details"]["repair_attempt"] == 1
+    assert repaired_event["details"]["has_repair_attempt"] is True
     assert repaired_event["details"]["has_assigned_to"] is True
     assert repaired_event["details"]["has_repair_task"] is True
+    assert "repair_attempt" not in repaired_event["details"]
     assert "assigned_to" not in repaired_event["details"]
     assert "repair_task_id" not in repaired_event["details"]
 
@@ -2223,26 +2224,34 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
 
     assert decomposition_event["details"]["has_assigned_to"] is True
     assert decomposition_event["details"]["has_decomposition_target_task"] is True
+    assert decomposition_event["details"]["has_repair_attempt"] is True
     assert "assigned_to" not in decomposition_event["details"]
     assert "decomposition_target_task_id" not in decomposition_event["details"]
+    assert "repair_attempt" not in decomposition_event["details"]
 
     assert created_event["details"]["has_assigned_to"] is True
     assert created_event["details"]["has_repair_origin"] is True
+    assert created_event["details"]["has_repair_attempt"] is True
     assert "assigned_to" not in created_event["details"]
     assert "repair_origin_task_id" not in created_event["details"]
+    assert "repair_attempt" not in created_event["details"]
 
     assert requeued_event["details"]["has_repair_task"] is True
     assert "repair_task_id" not in requeued_event["details"]
 
     assert started_event["details"]["has_assigned_to"] is True
     assert started_event["details"]["has_repair_task"] is True
+    assert started_event["details"]["has_repair_attempt"] is True
     assert "assigned_to" not in started_event["details"]
     assert "repair_task_id" not in started_event["details"]
+    assert "repair_attempt" not in started_event["details"]
 
     assert failed_event["details"]["has_repair_task"] is True
+    assert failed_event["details"]["has_repair_attempt"] is True
     assert failed_event["details"]["has_error_type"] is True
     assert "error_type" not in failed_event["details"]
     assert "repair_task_id" not in failed_event["details"]
+    assert "repair_attempt" not in failed_event["details"]
 
 
 def test_snapshot_task_repair_created_events_use_presence_flags_for_legacy_assigned_to_details():
@@ -2269,9 +2278,10 @@ def test_snapshot_task_repair_created_events_use_presence_flags_for_legacy_assig
     created_event = snapshot.execution_events[0]
 
     assert created_event["event"] == "task_repair_created"
-    assert created_event["details"]["repair_attempt"] == 1
+    assert created_event["details"]["has_repair_attempt"] is True
     assert created_event["details"]["has_assigned_to"] is True
     assert created_event["details"]["has_repair_origin"] is True
+    assert "repair_attempt" not in created_event["details"]
     assert "assigned_to" not in created_event["details"]
     assert "repair_origin_task_id" not in created_event["details"]
 
@@ -2300,9 +2310,10 @@ def test_snapshot_task_repair_started_events_use_presence_flags_for_legacy_assig
     started_event = snapshot.execution_events[0]
 
     assert started_event["event"] == "task_repair_started"
-    assert started_event["details"]["repair_attempt"] == 1
+    assert started_event["details"]["has_repair_attempt"] is True
     assert started_event["details"]["has_assigned_to"] is True
     assert started_event["details"]["has_repair_task"] is True
+    assert "repair_attempt" not in started_event["details"]
     assert "assigned_to" not in started_event["details"]
     assert "repair_task_id" not in started_event["details"]
 
@@ -2331,9 +2342,10 @@ def test_snapshot_task_budget_decomposition_events_use_presence_flags_for_legacy
     decomposition_event = snapshot.execution_events[0]
 
     assert decomposition_event["event"] == "task_budget_decomposition_created"
-    assert decomposition_event["details"]["repair_attempt"] == 1
+    assert decomposition_event["details"]["has_repair_attempt"] is True
     assert decomposition_event["details"]["has_assigned_to"] is True
     assert decomposition_event["details"]["has_decomposition_target_task"] is True
+    assert "repair_attempt" not in decomposition_event["details"]
     assert "assigned_to" not in decomposition_event["details"]
     assert "decomposition_target_task_id" not in decomposition_event["details"]
 
@@ -2362,9 +2374,10 @@ def test_snapshot_task_repaired_events_use_presence_flags_for_legacy_assigned_to
     repaired_event = snapshot.execution_events[0]
 
     assert repaired_event["event"] == "task_repaired"
-    assert repaired_event["details"]["repair_attempt"] == 1
+    assert repaired_event["details"]["has_repair_attempt"] is True
     assert repaired_event["details"]["has_assigned_to"] is True
     assert repaired_event["details"]["has_repair_task"] is True
+    assert "repair_attempt" not in repaired_event["details"]
     assert "assigned_to" not in repaired_event["details"]
     assert "repair_task_id" not in repaired_event["details"]
 
@@ -2395,7 +2408,9 @@ def test_snapshot_task_repair_failed_events_use_presence_flags_for_legacy_error_
 
     assert failed_event["event"] == "task_repair_failed"
     assert failed_event["details"]["has_repair_task"] is True
+    assert failed_event["details"]["has_repair_attempt"] is True
     assert failed_event["details"]["has_error_type"] is True
+    assert "repair_attempt" not in failed_event["details"]
     assert "repair_task_id" not in failed_event["details"]
     assert "error_type" not in failed_event["details"]
 

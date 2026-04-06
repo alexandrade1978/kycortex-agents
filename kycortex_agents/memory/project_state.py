@@ -2067,7 +2067,7 @@ class ProjectState:
                 failure_categories.add(failure_category)
             failed_task_ids.update(self._string_list(entry.get("failed_task_ids")))
         return {
-            "cycle_count": self.repair_cycle_count,
+            "has_repair_cycles": self.repair_cycle_count > 0,
             "max_cycles": self.repair_max_cycles,
             "budget_remaining": max(self.repair_max_cycles - self.repair_cycle_count, 0),
             "has_multiple_history_entries": valid_entry_count > 1,

@@ -758,7 +758,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     assert "workflow_last_resumed_at" not in summary
     assert "workflow_finished_at" not in summary
     assert summary["workflow_telemetry"]["repair_summary"] == {
-        "cycle_count": 1,
+        "has_repair_cycles": True,
         "max_cycles": 1,
         "budget_remaining": 0,
         "has_multiple_history_entries": False,

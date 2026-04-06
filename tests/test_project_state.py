@@ -2437,7 +2437,7 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "failed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_telemetry["repair_summary"] == {
-        "cycle_count": 1,
+        "has_repair_cycles": True,
         "max_cycles": 2,
         "budget_remaining": 1,
         "has_multiple_history_entries": False,
@@ -2463,7 +2463,7 @@ def test_repair_summary_aggregates_repair_reasons_across_cycles():
     )
 
     assert project.snapshot().workflow_telemetry["repair_summary"] == {
-        "cycle_count": 2,
+        "has_repair_cycles": True,
         "max_cycles": 3,
         "budget_remaining": 1,
         "has_multiple_history_entries": True,
@@ -2491,7 +2491,7 @@ def test_repair_summary_ignores_malformed_entries_and_non_list_failed_task_ids()
     )
 
     assert project._repair_summary() == {
-        "cycle_count": 2,
+        "has_repair_cycles": True,
         "max_cycles": 5,
         "budget_remaining": 3,
         "has_multiple_history_entries": True,

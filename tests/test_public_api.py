@@ -297,7 +297,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "last_resumed_at": None,
         },
         "repair_summary": {
-            "cycle_count": 0,
+            "has_repair_cycles": False,
             "max_cycles": 0,
             "budget_remaining": 0,
             "has_multiple_history_entries": False,

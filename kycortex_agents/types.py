@@ -182,7 +182,7 @@ class WorkflowResumeSummary(TypedDict):
 class WorkflowRepairSummary(TypedDict):
     """Workflow repair-cycle usage summary embedded in aggregate telemetry."""
 
-    cycle_count: int
+    has_repair_cycles: bool
     max_cycles: int
     budget_remaining: int
     has_multiple_history_entries: bool
@@ -308,7 +308,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "last_resumed_at": None,
         },
         "repair_summary": {
-            "cycle_count": 0,
+            "has_repair_cycles": False,
             "max_cycles": 0,
             "budget_remaining": 0,
             "has_multiple_history_entries": False,

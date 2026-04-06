@@ -162,7 +162,7 @@ def run_provider(
     except Exception as exc:  # pragma: no cover - exercised in real provider runs when available
         result["status"] = "execution_error"
         result["error_type"] = type(exc).__name__
-        result["error_message"] = str(exc)
+        result["has_error_message"] = bool(str(exc))
     else:
         result["status"] = "completed"
 

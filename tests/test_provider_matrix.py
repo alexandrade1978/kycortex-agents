@@ -1727,6 +1727,46 @@ def test_provider_matrix_example_passes_completion_budget_override(tmp_path, mon
     assert result["summary"]["repair_cycle_count"] == 0
 
 
+def test_provider_matrix_example_limits_public_execution_error_message(tmp_path, monkeypatch):
+    module = _load_example_module(
+        "example_provider_matrix_validation_execution_error_test",
+        "examples/example_provider_matrix_validation.py",
+    )
+
+    monkeypatch.setattr(
+        module,
+        "get_provider_availability",
+        lambda provider: {"provider": provider, "available": True, "reason": None},
+    )
+    monkeypatch.setattr(module, "resolve_model", lambda provider, model_override=None: "gpt-4o-mini")
+    monkeypatch.setattr(module, "build_full_workflow_config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(module, "build_full_workflow_project", lambda output_dir, provider: object())
+
+    def fake_execute_empirical_validation_workflow(config, project):
+        raise RuntimeError("api_key=sk-secret-123456")
+
+    monkeypatch.setattr(module, "execute_empirical_validation_workflow", fake_execute_empirical_validation_workflow)
+    monkeypatch.setattr(
+        module,
+        "summarize_workflow_run",
+        lambda project, provider, model, output_dir: {"phase": "failed", "terminal_outcome": "failed", "repair_cycle_count": 0},
+    )
+
+    result = module.run_provider(
+        "openai",
+        output_root=str(tmp_path / "matrix"),
+        failure_policy="continue",
+        resume_policy="resume_failed",
+        max_repair_cycles=1,
+    )
+
+    assert result["provider"] == "openai"
+    assert result["status"] == "execution_error"
+    assert result["error_type"] == "RuntimeError"
+    assert result["has_error_message"] is True
+    assert "error_message" not in result
+
+
 def test_execute_empirical_validation_workflow_consumes_bounded_repair_cycle(monkeypatch, tmp_path):
     import kycortex_agents.provider_matrix as provider_matrix
 

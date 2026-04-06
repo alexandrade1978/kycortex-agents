@@ -712,6 +712,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "unique_task_count": 1,
         "last_resumed_at": "2026-03-28T12:00:00+00:00",
     }
+    assert "workflow_last_resumed_at" not in summary
     assert summary["workflow_telemetry"]["repair_summary"] == {
         "cycle_count": 1,
         "max_cycles": 1,

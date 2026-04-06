@@ -553,10 +553,9 @@ class BaseAgent(ABC):
         self._provider_transient_failure_streaks[provider_name] = 0
         self._provider_circuit_open_untils[provider_name] = 0.0
 
-    def _provider_circuit_metadata(self, provider_name: str, current_time: float) -> dict[str, Any]:
-        return {
-            "circuit_breaker_open": self._is_provider_circuit_open(provider_name, current_time),
-        }
+    def _provider_circuit_metadata(self, _provider_name: str, _current_time: float) -> dict[str, Any]:
+        # Provider health status already preserves circuit state without duplicating it top-level.
+        return {}
 
     def _provider_fallback_metadata(
         self,

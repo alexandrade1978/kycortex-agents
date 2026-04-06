@@ -8813,6 +8813,7 @@ def test_run_task_sanitizes_custom_provider_call_metadata_in_output_payload(tmp_
     assert "circuit_breaker_cooldown_seconds" not in project.tasks[0].last_provider_call
     assert "circuit_breaker_remaining_seconds" not in project.tasks[0].last_provider_call
     assert "circuit_breaker_failure_streak" not in project.tasks[0].last_provider_call
+    assert "circuit_breaker_open" not in project.tasks[0].last_provider_call
     assert "provider_timeout_seconds" not in project.tasks[0].last_provider_call
     assert "provider_timeout_provider_count" not in project.tasks[0].last_provider_call
     assert "provider_timeout_seconds_by_provider" not in project.tasks[0].last_provider_call

@@ -165,6 +165,7 @@ def _sanitize_provider_call_cancellation_metadata(provider_call: dict[str, Any])
 
 
 def _sanitize_provider_call_circuit_breaker_metadata(provider_call: dict[str, Any]) -> None:
+    provider_call.pop("circuit_breaker_open", None)
     provider_call.pop("circuit_breaker_failure_streak", None)
     provider_call.pop("circuit_breaker_threshold", None)
     provider_call.pop("circuit_breaker_cooldown_seconds", None)

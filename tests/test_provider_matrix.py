@@ -433,8 +433,10 @@ def test_failure_recovery_example_limits_public_task_history_events(capsys, monk
     rendered = "\n".join(captured)
 
     assert "Workflow resumed: present" in captured
-    assert "- arch: status=failed, attempts=2, history_event_count=2" in captured
+    assert "- arch attempts: present" in captured
+    assert "- arch: status=failed, attempts=present, history_event_count=2" in captured
     assert "2026-04-03T04:10:00+00:00" not in rendered
+    assert "attempts=2" not in rendered
     assert "task_started" not in rendered
     assert "task_failed" not in rendered
 

@@ -76,7 +76,8 @@ def main() -> None:
 
     print("\nPersisted failed state:")
     print(f"- arch status: {failed_arch.status}")
-    print(f"- arch attempts: {failed_arch.attempts}")
+    persisted_attempts_state = "present" if failed_arch.attempts else "none"
+    print(f"- arch attempts: {persisted_attempts_state}")
     persisted_error_state = "present" if failed_arch.last_error_type else "none"
     print(f"- persisted error: {persisted_error_state}")
 
@@ -96,8 +97,9 @@ def main() -> None:
     print("\nTask histories:")
     for task in failed.tasks:
         history_events = [entry["event"] for entry in task.history]
+        attempts_state = "present" if task.attempts else "none"
         print(
-            f"- {task.id}: status={task.status}, attempts={task.attempts}, "
+            f"- {task.id}: status={task.status}, attempts={attempts_state}, "
             f"history_event_count={len(history_events)}"
         )
 

@@ -120,8 +120,10 @@ class BaseAgent(ABC):
                     "model": model_name,
                     "success": False,
                     "duration_ms": round((current_time - started_at) * 1000, 3),
-                    "error_type": "AgentExecutionError",
-                    "error_message": message.removeprefix(f"{self.name}: "),
+                    **self._provider_error_presence_metadata(
+                        error_type="AgentExecutionError",
+                        error_message=message.removeprefix(f"{self.name}: "),
+                    ),
                     "retryable": False,
                     "attempts_used": len(attempt_history),
                     "max_attempts": max_attempts,
@@ -150,8 +152,10 @@ class BaseAgent(ABC):
                     "model": model_name,
                     "success": False,
                     "duration_ms": round((current_time - started_at) * 1000, 3),
-                    "error_type": "AgentExecutionError",
-                    "error_message": message.removeprefix(f"{self.name}: "),
+                    **self._provider_error_presence_metadata(
+                        error_type="AgentExecutionError",
+                        error_message=message.removeprefix(f"{self.name}: "),
+                    ),
                     "retryable": False,
                     "attempts_used": len(attempt_history),
                     "max_attempts": max_attempts,
@@ -185,8 +189,10 @@ class BaseAgent(ABC):
                     "model": model_name,
                     "success": False,
                     "duration_ms": round((current_time - started_at) * 1000, 3),
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
+                    **self._provider_error_presence_metadata(
+                        error_type=type(exc).__name__,
+                        error_message=str(exc),
+                    ),
                     "retryable": isinstance(exc, ProviderTransientError),
                     "attempts_used": len(attempt_history),
                     "max_attempts": max_attempts,
@@ -221,8 +227,10 @@ class BaseAgent(ABC):
                         "model": model_name,
                         "success": False,
                         "duration_ms": round((current_time - started_at) * 1000, 3),
-                        "error_type": "AgentExecutionError",
-                        "error_message": message.removeprefix(f"{self.name}: "),
+                        **self._provider_error_presence_metadata(
+                            error_type="AgentExecutionError",
+                            error_message=message.removeprefix(f"{self.name}: "),
+                        ),
                         "retryable": False,
                         "attempts_used": len(attempt_history),
                         "max_attempts": max_attempts,
@@ -243,8 +251,10 @@ class BaseAgent(ABC):
                         "model": model_name,
                         "success": False,
                         "duration_ms": round((current_time - started_at) * 1000, 3),
-                        "error_type": "AgentExecutionError",
-                        "error_message": message.removeprefix(f"{self.name}: "),
+                        **self._provider_error_presence_metadata(
+                            error_type="AgentExecutionError",
+                            error_message=message.removeprefix(f"{self.name}: "),
+                        ),
                         "retryable": False,
                         "attempts_used": len(attempt_history),
                         "max_attempts": max_attempts,
@@ -273,8 +283,10 @@ class BaseAgent(ABC):
                         "model": model_name,
                         "success": False,
                         "duration_ms": round((current_time - started_at) * 1000, 3),
-                        "error_type": "AgentExecutionError",
-                        "error_message": message.removeprefix(f"{self.name}: "),
+                        **self._provider_error_presence_metadata(
+                            error_type="AgentExecutionError",
+                            error_message=message.removeprefix(f"{self.name}: "),
+                        ),
                         "retryable": False,
                         "attempts_used": len(attempt_history),
                         "max_attempts": max_attempts,
@@ -308,7 +320,6 @@ class BaseAgent(ABC):
                         "model": model_name,
                         "success": True,
                         "duration_ms": round((completed_at - started_at) * 1000, 3),
-                        "error_type": None,
                         "attempts_used": len(attempt_history),
                         "max_attempts": max_attempts,
                         "attempt_history": list(attempt_history),
@@ -356,8 +367,10 @@ class BaseAgent(ABC):
                         "model": model_name,
                         "success": False,
                         "duration_ms": round((current_time - started_at) * 1000, 3),
-                        "error_type": type(exc).__name__,
-                        "error_message": str(exc),
+                        **self._provider_error_presence_metadata(
+                            error_type=type(exc).__name__,
+                            error_message=str(exc),
+                        ),
                         "retryable": True,
                         "attempts_used": len(attempt_history),
                         "max_attempts": max_attempts,
@@ -405,8 +418,10 @@ class BaseAgent(ABC):
                             "model": model_name,
                             "success": False,
                             "duration_ms": round((current_time - started_at) * 1000, 3),
-                            "error_type": "AgentExecutionError",
-                            "error_message": message.removeprefix(f"{self.name}: "),
+                            **self._provider_error_presence_metadata(
+                                error_type="AgentExecutionError",
+                                error_message=message.removeprefix(f"{self.name}: "),
+                            ),
                             "retryable": False,
                             "attempts_used": len(attempt_history),
                             "max_attempts": max_attempts,
@@ -455,8 +470,10 @@ class BaseAgent(ABC):
                         "model": model_name,
                         "success": False,
                         "duration_ms": round((current_time - started_at) * 1000, 3),
-                        "error_type": type(exc).__name__,
-                        "error_message": str(exc),
+                        **self._provider_error_presence_metadata(
+                            error_type=type(exc).__name__,
+                            error_message=str(exc),
+                        ),
                         "retryable": False,
                         "attempts_used": len(attempt_history),
                         "max_attempts": max_attempts,
@@ -559,6 +576,19 @@ class BaseAgent(ABC):
         return {
             "fallback_history": list(fallback_history),
         }
+
+    def _provider_error_presence_metadata(
+        self,
+        *,
+        error_type: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        if isinstance(error_type, str):
+            metadata["has_error_type"] = bool(error_type)
+        if isinstance(error_message, str):
+            metadata["has_error_message"] = bool(error_message)
+        return metadata
 
     def _provider_health_metadata(
         self,
@@ -858,8 +888,10 @@ class BaseAgent(ABC):
             "model": model_name,
             "success": False,
             "duration_ms": round((current_time - started_at) * 1000, 3),
-            "error_type": "AgentExecutionError",
-            "error_message": message.removeprefix(f"{self.name}: "),
+            **self._provider_error_presence_metadata(
+                error_type="AgentExecutionError",
+                error_message=message.removeprefix(f"{self.name}: "),
+            ),
             "retryable": False,
             "attempts_used": len(attempt_history),
             "max_attempts": max_attempts,

@@ -125,6 +125,10 @@ def test_chat_returns_response_content():
     assert "primary_model" not in raw_metadata
     assert "active_provider" not in raw_metadata
     assert "active_model" not in raw_metadata
+    assert "error_type" not in raw_metadata
+    assert "has_error_type" not in raw_metadata
+    assert "error_message" not in raw_metadata
+    assert "has_error_message" not in raw_metadata
     assert metadata["provider_health"]["openai"]["last_health_check"]["active_check"] is False
     assert "backend_reachable" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "base_url" not in metadata["provider_health"]["openai"]["last_health_check"]
@@ -359,6 +363,11 @@ def test_chat_captures_failed_provider_call_metadata():
             "backoff_seconds": 0.0,
         }
     ]
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert raw_metadata["has_error_type"] is True
+    assert "error_type" not in raw_metadata
+    assert raw_metadata["has_error_message"] is True
+    assert "error_message" not in raw_metadata
 
 
 def test_chat_redacts_sensitive_values_from_failed_provider_call_metadata():
@@ -1017,6 +1026,11 @@ def test_chat_fails_fast_when_provider_cancellation_is_requested_before_first_at
     assert metadata["provider_cancellation_requested"] is True
     assert metadata["has_provider_cancellation_reason"] is True
     assert "provider_cancellation_reason" not in metadata
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert raw_metadata["has_error_type"] is True
+    assert "error_type" not in raw_metadata
+    assert raw_metadata["has_error_message"] is True
+    assert "error_message" not in raw_metadata
     assert provider.calls == []
 
 

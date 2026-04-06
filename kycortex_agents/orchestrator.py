@@ -117,6 +117,17 @@ _MOCK_ASSERTION_METHODS = {
     "assert_has_calls",
     "assert_not_called",
 }
+
+
+def _harden_private_file_permissions(path: Path) -> None:
+    if os.name != "posix":
+        return
+    try:
+        path.chmod(0o600)
+    except OSError as exc:
+        raise AgentExecutionError(
+            f"Artifact persistence failed: could not harden file permissions for {path.name}"
+        ) from exc
 _RESERVED_FIXTURE_NAMES = {"request"}
 
 
@@ -1797,6 +1808,7 @@ class Orchestrator:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             self._validate_artifact_output_path(target_path)
             target_path.write_text(persisted_content, encoding="utf-8")
+            _harden_private_file_permissions(target_path)
             artifact.content = persisted_content
             artifact.path = self._artifact_record_path(target_path)
 

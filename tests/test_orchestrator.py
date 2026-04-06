@@ -1,6 +1,7 @@
 import ast
 import os
 import pathlib
+import stat
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -1184,6 +1185,26 @@ def test_persist_artifacts_redacts_sensitive_content_before_disk_write(tmp_path)
     assert "sk-ant-secret-987654" not in persisted_content
     assert persisted_content == "api_key=[REDACTED]\nAuthorization: Bearer [REDACTED]"
     assert artifacts[0].content == persisted_content
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
+def test_persist_artifacts_use_private_file_permissions(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    artifacts = [
+        ArtifactRecord(
+            name="report",
+            artifact_type=ArtifactType.DOCUMENT,
+            content="hello",
+            path="artifacts/report.txt",
+        )
+    ]
+
+    orchestrator._persist_artifacts(artifacts)
+
+    persisted_path = tmp_path / "output" / "artifacts" / "report.txt"
+
+    assert stat.S_IMODE(persisted_path.stat().st_mode) == 0o600
 
 
 def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):

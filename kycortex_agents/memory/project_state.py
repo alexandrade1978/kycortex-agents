@@ -2180,6 +2180,7 @@ class ProjectState:
 
     def _public_task_completed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+        public_details = self._apply_task_attempt_presence_flag(details, public_details)
 
         if self._presence_flag(details, "assigned_to", "has_assigned_to"):
             public_details["has_assigned_to"] = True
@@ -2188,6 +2189,21 @@ class ProjectState:
         if isinstance(details.get("provider_call"), dict) or public_details.get("has_provider_call") is True:
             public_details["has_provider_call"] = True
         public_details.pop("provider_call", None)
+        return public_details
+
+    def _apply_task_attempt_presence_flag(
+        self,
+        details: Dict[str, Any],
+        public_details: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        raw_attempts = details.get("attempts")
+        public_details.pop("has_attempts", None)
+        if (
+            (isinstance(raw_attempts, (int, float)) and not isinstance(raw_attempts, bool) and bool(int(raw_attempts)))
+            or details.get("has_attempts") is True
+        ):
+            public_details["has_attempts"] = True
+        public_details.pop("attempts", None)
         return public_details
 
     def _public_task_history_entry(self, entry: Any) -> Dict[str, Any]:
@@ -2200,12 +2216,7 @@ class ProjectState:
             "status": entry.get("status"),
         }
 
-        raw_attempts = entry.get("attempts")
-        if (
-            (isinstance(raw_attempts, (int, float)) and not isinstance(raw_attempts, bool) and bool(int(raw_attempts)))
-            or entry.get("has_attempts") is True
-        ):
-            public_entry["has_attempts"] = True
+        public_entry = self._apply_task_attempt_presence_flag(entry, public_entry)
 
         raw_error_message = entry.get("error_message")
         if (isinstance(raw_error_message, str) and bool(raw_error_message)) or entry.get("has_error_message") is True:
@@ -2226,6 +2237,7 @@ class ProjectState:
 
     def _public_task_failed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+        public_details = self._apply_task_attempt_presence_flag(details, public_details)
 
         raw_error_message = details.get("error_message")
         if (isinstance(raw_error_message, str) and bool(raw_error_message)) or public_details.get("has_error_message") is True:
@@ -2244,6 +2256,7 @@ class ProjectState:
 
     def _public_task_retry_scheduled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+        public_details = self._apply_task_attempt_presence_flag(details, public_details)
 
         raw_error_type = details.get("error_type")
         if (isinstance(raw_error_type, str) and bool(raw_error_type)) or public_details.get("has_error_type") is True:
@@ -2521,6 +2534,7 @@ class ProjectState:
 
     def _public_task_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
+        public_details = self._apply_task_attempt_presence_flag(details, public_details)
 
         if self._presence_flag(details, "assigned_to", "has_assigned_to"):
             public_details["has_assigned_to"] = True

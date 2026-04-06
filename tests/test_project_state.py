@@ -2949,10 +2949,12 @@ def test_snapshot_task_completed_events_use_presence_flags_for_legacy_provider_c
     completed_event = snapshot.execution_events[0]
 
     assert completed_event["event"] == "task_completed"
+    assert completed_event["details"]["has_attempts"] is True
     assert completed_event["details"]["has_assigned_to"] is True
     assert completed_event["details"]["has_provider_call"] is True
     assert completed_event["details"]["last_attempt_duration_ms"] == 1234.0
     assert completed_event["details"]["task_duration_ms"] == 2345.0
+    assert "attempts" not in completed_event["details"]
     assert "assigned_to" not in completed_event["details"]
     assert "provider_call" not in completed_event["details"]
 
@@ -2978,7 +2980,8 @@ def test_snapshot_minimizes_public_task_started_assigned_to_details():
     started_event = next(event for event in snapshot.execution_events if event["event"] == "task_started")
 
     assert started_event["details"]["has_assigned_to"] is True
-    assert started_event["details"]["attempts"] == 1
+    assert started_event["details"]["has_attempts"] is True
+    assert "attempts" not in started_event["details"]
     assert "assigned_to" not in started_event["details"]
     assert "provider_budget" not in started_event["details"]
 
@@ -3008,7 +3011,8 @@ def test_snapshot_task_started_events_use_presence_flags_for_legacy_assigned_to_
 
     assert started_event["event"] == "task_started"
     assert started_event["details"]["has_assigned_to"] is True
-    assert started_event["details"]["attempts"] == 1
+    assert started_event["details"]["has_attempts"] is True
+    assert "attempts" not in started_event["details"]
     assert "assigned_to" not in started_event["details"]
     assert "provider_budget" not in started_event["details"]
 
@@ -3062,9 +3066,11 @@ def test_snapshot_task_completed_events_use_presence_flags_for_legacy_assigned_t
     completed_event = snapshot.execution_events[0]
 
     assert completed_event["event"] == "task_completed"
+    assert completed_event["details"]["has_attempts"] is True
     assert completed_event["details"]["has_assigned_to"] is True
     assert completed_event["details"]["last_attempt_duration_ms"] == 1234.0
     assert completed_event["details"]["task_duration_ms"] == 2345.0
+    assert "attempts" not in completed_event["details"]
     assert "assigned_to" not in completed_event["details"]
 
 
@@ -3100,9 +3106,11 @@ def test_snapshot_minimizes_public_task_failed_provider_call_details():
     snapshot = project.snapshot()
     task_failed_event = next(event for event in snapshot.execution_events if event["event"] == "task_failed")
 
+    assert task_failed_event["details"]["has_attempts"] is True
     assert task_failed_event["details"]["has_error_message"] is True
     assert task_failed_event["details"]["has_error_type"] is True
     assert task_failed_event["details"]["has_provider_call"] is True
+    assert "attempts" not in task_failed_event["details"]
     assert "error_message" not in task_failed_event["details"]
     assert "error_type" not in task_failed_event["details"]
     assert "provider_call" not in task_failed_event["details"]
@@ -3138,9 +3146,11 @@ def test_snapshot_task_failed_events_use_presence_flags_for_legacy_provider_call
     task_failed_event = snapshot.execution_events[0]
 
     assert task_failed_event["event"] == "task_failed"
+    assert task_failed_event["details"]["has_attempts"] is True
     assert task_failed_event["details"]["has_error_message"] is True
     assert task_failed_event["details"]["has_error_type"] is True
     assert task_failed_event["details"]["has_provider_call"] is True
+    assert "attempts" not in task_failed_event["details"]
     assert "error_message" not in task_failed_event["details"]
     assert "error_type" not in task_failed_event["details"]
     assert "provider_call" not in task_failed_event["details"]
@@ -3177,8 +3187,10 @@ def test_snapshot_minimizes_public_task_retry_scheduled_provider_call_details():
     snapshot = project.snapshot()
     retry_event = next(event for event in snapshot.execution_events if event["event"] == "task_retry_scheduled")
 
+    assert retry_event["details"]["has_attempts"] is True
     assert retry_event["details"]["has_error_type"] is True
     assert retry_event["details"]["has_provider_call"] is True
+    assert "attempts" not in retry_event["details"]
     assert "error_type" not in retry_event["details"]
     assert "provider_call" not in retry_event["details"]
 
@@ -3213,8 +3225,10 @@ def test_snapshot_task_retry_scheduled_events_use_presence_flags_for_legacy_prov
     retry_event = snapshot.execution_events[0]
 
     assert retry_event["event"] == "task_retry_scheduled"
+    assert retry_event["details"]["has_attempts"] is True
     assert retry_event["details"]["has_error_type"] is True
     assert retry_event["details"]["has_provider_call"] is True
+    assert "attempts" not in retry_event["details"]
     assert "error_type" not in retry_event["details"]
     assert "provider_call" not in retry_event["details"]
 

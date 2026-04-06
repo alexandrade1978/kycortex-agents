@@ -1207,6 +1207,26 @@ def test_persist_artifacts_use_private_file_permissions(tmp_path):
     assert stat.S_IMODE(persisted_path.stat().st_mode) == 0o600
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
+def test_persist_artifacts_use_private_directory_permissions(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    artifacts = [
+        ArtifactRecord(
+            name="report",
+            artifact_type=ArtifactType.DOCUMENT,
+            content="hello",
+            path="artifacts/report.txt",
+        )
+    ]
+
+    orchestrator._persist_artifacts(artifacts)
+
+    persisted_dir = tmp_path / "output" / "artifacts"
+
+    assert stat.S_IMODE(persisted_dir.stat().st_mode) == 0o700
+
+
 def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

@@ -128,6 +128,17 @@ def _harden_private_file_permissions(path: Path) -> None:
         raise AgentExecutionError(
             f"Artifact persistence failed: could not harden file permissions for {path.name}"
         ) from exc
+
+
+def _harden_private_directory_permissions(path: Path) -> None:
+    if os.name != "posix":
+        return
+    try:
+        path.chmod(0o700)
+    except OSError as exc:
+        raise AgentExecutionError(
+            f"Artifact persistence failed: could not harden directory permissions for {path.name}"
+        ) from exc
 _RESERVED_FIXTURE_NAMES = {"request"}
 
 
@@ -1806,6 +1817,7 @@ class Orchestrator:
             target_path = self._resolve_artifact_output_path(artifact)
             self._validate_artifact_output_path(target_path)
             target_path.parent.mkdir(parents=True, exist_ok=True)
+            _harden_private_directory_permissions(target_path.parent)
             self._validate_artifact_output_path(target_path)
             target_path.write_text(persisted_content, encoding="utf-8")
             _harden_private_file_permissions(target_path)

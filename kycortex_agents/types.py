@@ -174,7 +174,7 @@ class WorkflowResumeSummary(TypedDict):
 
     count: int
     has_multiple_reasons: bool
-    task_count: int
+    has_multiple_resumed_tasks: bool
     unique_task_count: int
     last_resumed_at: Optional[str]
 
@@ -303,7 +303,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "resume_summary": {
             "count": 0,
             "has_multiple_reasons": False,
-            "task_count": 0,
+            "has_multiple_resumed_tasks": False,
             "unique_task_count": 0,
             "last_resumed_at": None,
         },

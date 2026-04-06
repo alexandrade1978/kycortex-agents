@@ -2043,7 +2043,7 @@ class ProjectState:
         return {
             "count": len(resumed_events),
             "has_multiple_reasons": len(reasons) > 1,
-            "task_count": len(resumed_task_ids),
+            "has_multiple_resumed_tasks": len(resumed_task_ids) > 1,
             "unique_task_count": unique_task_count,
             "last_resumed_at": self.workflow_last_resumed_at,
         }

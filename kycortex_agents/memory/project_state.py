@@ -2089,7 +2089,7 @@ class ProjectState:
             "reason": reason,
             "failure_category": failure_category,
             "has_failed_tasks": self._repair_history_failed_task_count(entry) > 0,
-            "budget_remaining": max(int(budget_remaining), 0) if isinstance(budget_remaining, (int, float)) and not isinstance(budget_remaining, bool) else 0,
+            "has_budget_remaining": max(int(budget_remaining), 0) > 0 if isinstance(budget_remaining, (int, float)) and not isinstance(budget_remaining, bool) else False,
         }
 
     def _public_workflow_resumed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:

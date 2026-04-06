@@ -200,7 +200,7 @@ class WorkflowRepairHistoryEntry(TypedDict):
     reason: Optional[str]
     failure_category: Optional[str]
     has_failed_tasks: bool
-    budget_remaining: int
+    has_budget_remaining: bool
 
 
 class WorkflowProviderSummary(TypedDict):

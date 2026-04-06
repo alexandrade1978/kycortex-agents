@@ -732,7 +732,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
             "reason": None,
             "failure_category": None,
             "has_failed_tasks": True,
-            "budget_remaining": 0,
+            "has_budget_remaining": False,
         }
     ]
     assert summary["workflow_telemetry"]["acceptance_summary"] == {

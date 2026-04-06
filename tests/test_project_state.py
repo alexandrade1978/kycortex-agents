@@ -2424,7 +2424,7 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
             "reason": "resume_failed_tasks",
             "failure_category": "test_validation",
             "has_failed_tasks": True,
-            "budget_remaining": 1,
+            "has_budget_remaining": True,
         }
     ]
     assert project.execution_events[-1]["event"] == "workflow_repair_cycle_started"
@@ -2433,7 +2433,7 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
     assert snapshot.execution_events[-1]["details"]["reason"] == "resume_failed_tasks"
     assert snapshot.execution_events[-1]["details"]["failure_category"] == "test_validation"
     assert snapshot.execution_events[-1]["details"]["has_failed_tasks"] is True
-    assert snapshot.execution_events[-1]["details"]["budget_remaining"] == 1
+    assert snapshot.execution_events[-1]["details"]["has_budget_remaining"] is True
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "failed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert snapshot.workflow_telemetry["repair_summary"] == {
@@ -2544,7 +2544,7 @@ def test_snapshot_repair_history_uses_failed_task_presence_for_legacy_entries():
             "reason": "resume_failed_tasks",
             "failure_category": "test_validation",
             "has_failed_tasks": True,
-            "budget_remaining": 1,
+            "has_budget_remaining": True,
         }
     ]
     assert snapshot.execution_events[0]["details"]["cycle"] == 1
@@ -2552,7 +2552,7 @@ def test_snapshot_repair_history_uses_failed_task_presence_for_legacy_entries():
     assert snapshot.execution_events[0]["details"]["reason"] == "resume_failed_tasks"
     assert snapshot.execution_events[0]["details"]["failure_category"] == "test_validation"
     assert snapshot.execution_events[0]["details"]["has_failed_tasks"] is True
-    assert snapshot.execution_events[0]["details"]["budget_remaining"] == 1
+    assert snapshot.execution_events[0]["details"]["has_budget_remaining"] is True
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "failed_task_ids" not in snapshot.execution_events[0]["details"]
 

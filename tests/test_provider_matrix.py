@@ -257,7 +257,7 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
             "workflow_status": "completed",
             "task_results": {"arch": task_result},
             "workflow_telemetry": {
-                "task_count": 2,
+                "has_multiple_tasks": True,
                 "has_tasks_with_provider_calls": True,
                 "has_tasks_without_provider_calls": True,
                 "has_multiple_observed_providers": True,
@@ -311,7 +311,7 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
     captured = capsys.readouterr().out.splitlines()
     rendered = "\n".join(captured)
 
-    assert "task_count=2" in captured
+    assert "multiple_tasks=present" in captured
     assert "- arch: status=done, summary=Architecture snapshot ready, provider=present, model=present" in captured
     assert "multiple_observed_providers=present" in captured
     assert "multiple_final_providers=none" in captured

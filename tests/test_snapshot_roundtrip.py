@@ -374,7 +374,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "provider_call" not in snapshot.execution_events[1]["details"]
     assert "error_type" not in snapshot.execution_events[1]["details"]
     assert snapshot.workflow_telemetry == {
-        "task_count": 4,
+        "has_multiple_tasks": True,
         "task_status_counts": {
             "pending": 1,
             "running": 0,

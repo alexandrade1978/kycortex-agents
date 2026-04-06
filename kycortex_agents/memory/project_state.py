@@ -1924,7 +1924,7 @@ class ProjectState:
             }
 
         return {
-            "task_count": len(self.tasks),
+            "has_multiple_tasks": len(self.tasks) > 1,
             "task_status_counts": self._ordered_task_status_counts(task_status_counts),
             "progress_summary": self._progress_summary(task_status_counts),
             "has_tasks_with_provider_calls": tasks_with_provider_calls > 0,

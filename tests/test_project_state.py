@@ -3610,7 +3610,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
         "last_outcome_presence": {},
         "circuit_open_count": 1,
         "retryable_failure_count": 1,
-        "active_health_check_count": 1,
+        "has_active_checks": True,
     }
     assert telemetry["has_multiple_final_providers"] is False
     assert telemetry["has_multiple_observed_providers"] is True

@@ -170,7 +170,7 @@ def _print_provider_health_summary(provider_health_summary: Mapping[str, Mapping
             f"- entry_{index}: model_count={len(models)}; "
             f"statuses={_format_presence(health.get('status_presence', {}))}; "
             f"outcomes={_format_presence(health.get('last_outcome_presence', {}))}; "
-            f"active_checks={health.get('active_health_check_count', 0)}"
+            f"active_checks={_presence_label(health.get('has_active_checks'))}"
         )
 
 

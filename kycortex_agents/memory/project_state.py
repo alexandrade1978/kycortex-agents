@@ -1920,7 +1920,7 @@ class ProjectState:
                 "last_outcome_presence": self._ordered_presence(raw_health_summary.get("last_outcome_counts", {})),
                 "circuit_open_count": int(raw_health_summary.get("circuit_open_count", 0)),
                 "retryable_failure_count": int(raw_health_summary.get("retryable_failure_count", 0)),
-                "active_health_check_count": int(raw_health_summary.get("active_health_check_count", 0)),
+                "has_active_checks": int(raw_health_summary.get("active_health_check_count", 0)) > 0,
             }
 
         return {

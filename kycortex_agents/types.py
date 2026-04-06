@@ -223,7 +223,7 @@ class WorkflowProviderHealthSummary(TypedDict):
     last_outcome_presence: Dict[str, bool]
     circuit_open_count: int
     retryable_failure_count: int
-    active_health_check_count: int
+    has_active_checks: bool
 
 
 class WorkflowFallbackSummary(TypedDict):

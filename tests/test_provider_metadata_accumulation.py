@@ -228,7 +228,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
-            "active_health_check_count": 1,
+            "has_active_checks": True,
         },
         "ollama": {
             "models": ["llama3"],
@@ -236,7 +236,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
-            "active_health_check_count": 1,
+            "has_active_checks": True,
         },
         "openai": {
             "models": ["gpt-4o"],
@@ -244,7 +244,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
-            "active_health_check_count": 1,
+            "has_active_checks": True,
         },
     }
     assert snapshot.workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
@@ -373,7 +373,7 @@ def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_
             "last_outcome_presence": {"failure": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 1,
-            "active_health_check_count": 0,
+            "has_active_checks": False,
         }
     }
 
@@ -463,7 +463,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "last_outcome_presence": {"success": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 0,
-            "active_health_check_count": 1,
+            "has_active_checks": True,
         },
         "openai": {
             "models": ["gpt-4o"],
@@ -471,7 +471,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "last_outcome_presence": {"failure": True},
             "circuit_open_count": 0,
             "retryable_failure_count": 1,
-            "active_health_check_count": 1,
+            "has_active_checks": True,
         },
     }
     assert snapshot.workflow_telemetry["error_summary"]["has_fallback_errors"] is True

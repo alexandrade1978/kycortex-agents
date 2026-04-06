@@ -264,7 +264,6 @@ class BaseAgent(ABC):
                             {
                                 "provider": provider_name,
                                 "status": "failed_call_budget_exhausted",
-                                "attempts_used": len(attempt_history),
                             }
                         )
                         break
@@ -388,7 +387,6 @@ class BaseAgent(ABC):
                                     "status": "failed_transient",
                                     "error_type": type(exc).__name__,
                                     "error_message": str(exc),
-                                    "attempts_used": attempt,
                                 }
                             )
                             break

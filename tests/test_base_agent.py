@@ -1422,6 +1422,7 @@ def test_chat_returns_to_primary_after_cooldown_and_can_fallback_again(monkeypat
     ]
     first_raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
     assert "model" not in first_raw_metadata["fallback_history"][0]
+    assert "attempts_used" not in first_raw_metadata["fallback_history"][0]
 
     second_result = agent.chat("system", "message two")
 
@@ -1571,6 +1572,7 @@ def test_chat_falls_back_after_primary_provider_budget_is_exhausted_mid_retry(mo
     assert "model" not in raw_metadata["fallback_history"][0]
     assert "provider_call_count" not in raw_metadata["fallback_history"][0]
     assert "provider_max_calls" not in raw_metadata["fallback_history"][0]
+    assert "attempts_used" not in raw_metadata["fallback_history"][0]
     assert primary_provider.calls == [("system", "message")]
     assert fallback_provider.calls == [("system", "message")]
 

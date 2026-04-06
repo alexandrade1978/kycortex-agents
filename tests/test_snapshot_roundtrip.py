@@ -427,8 +427,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
         "provider_summary": {
             "ollama": {
                 "task_count": 1,
-                "success_count": 0,
-                "failure_count": 1,
+                "has_successes": False,
+                "has_failures": True,
                 "has_attempts": False,
                 "has_retry_attempts": False,
                 "duration_ms": {"count": 1, "total": 125, "min": 125, "max": 125, "avg": 125},
@@ -436,8 +436,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             },
             "openai": {
                 "task_count": 1,
-                "success_count": 1,
-                "failure_count": 0,
+                "has_successes": True,
+                "has_failures": False,
                 "has_attempts": False,
                 "has_retry_attempts": False,
                 "duration_ms": {"count": 1, "total": 120.5, "min": 120.5, "max": 120.5, "avg": 120.5},

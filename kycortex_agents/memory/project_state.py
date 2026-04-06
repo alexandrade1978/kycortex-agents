@@ -1902,8 +1902,8 @@ class ProjectState:
                     usage_metrics[metric_name] = float(metric_value)
             normalized_provider_summary[provider_name] = {
                 "task_count": int(raw_summary.get("task_count", 0)),
-                "success_count": int(raw_summary.get("success_count", 0)),
-                "failure_count": int(raw_summary.get("failure_count", 0)),
+                "has_successes": int(raw_summary.get("success_count", 0)) > 0,
+                "has_failures": int(raw_summary.get("failure_count", 0)) > 0,
                 "has_attempts": int(raw_summary.get("attempt_count", 0)) > 0,
                 "has_retry_attempts": int(raw_summary.get("retry_attempt_count", 0)) > 0,
                 "duration_ms": self._metric_distribution(duration_series),

@@ -207,8 +207,8 @@ class WorkflowProviderSummary(TypedDict):
     """Per-provider aggregate telemetry rolled up across workflow execution."""
 
     task_count: int
-    success_count: int
-    failure_count: int
+    has_successes: bool
+    has_failures: bool
     has_attempts: bool
     has_retry_attempts: bool
     duration_ms: MetricDistribution

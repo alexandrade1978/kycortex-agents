@@ -1675,7 +1675,7 @@ class ProjectState:
             details = redacted_event.get("details")
             if not isinstance(details, dict):
                 return redacted_event
-            public_repair_details = self._public_repair_history_entry(details)
+            public_repair_details = self._public_workflow_repair_cycle_started_details(details)
             details.clear()
             details.update(cast(Dict[str, Any], public_repair_details))
             return redacted_event
@@ -2081,6 +2081,11 @@ class ProjectState:
             "has_failed_tasks": self._repair_history_failed_task_count(entry) > 0,
             "has_budget_remaining": max(int(budget_remaining), 0) > 0 if isinstance(budget_remaining, (int, float)) and not isinstance(budget_remaining, bool) else False,
         }
+
+    def _public_workflow_repair_cycle_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details = dict(self._public_repair_history_entry(details))
+        public_details.pop("started_at", None)
+        return public_details
 
     def _public_workflow_resumed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         reason = details.get("reason") if isinstance(details.get("reason"), str) else None

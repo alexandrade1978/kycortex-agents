@@ -199,7 +199,7 @@ class WorkflowRepairHistoryEntry(TypedDict):
     started_at: Optional[str]
     reason: Optional[str]
     failure_category: Optional[str]
-    failed_task_count: int
+    has_failed_tasks: bool
     budget_remaining: int
 
 

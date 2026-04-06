@@ -2088,7 +2088,7 @@ class ProjectState:
             "started_at": started_at,
             "reason": reason,
             "failure_category": failure_category,
-            "failed_task_count": self._repair_history_failed_task_count(entry),
+            "has_failed_tasks": self._repair_history_failed_task_count(entry) > 0,
             "budget_remaining": max(int(budget_remaining), 0) if isinstance(budget_remaining, (int, float)) and not isinstance(budget_remaining, bool) else 0,
         }
 

@@ -2200,8 +2200,14 @@ class ProjectState:
             "event": entry.get("event"),
             "timestamp": entry.get("timestamp"),
             "status": entry.get("status"),
-            "attempts": entry.get("attempts"),
         }
+
+        raw_attempts = entry.get("attempts")
+        if (
+            (isinstance(raw_attempts, (int, float)) and not isinstance(raw_attempts, bool) and bool(int(raw_attempts)))
+            or entry.get("has_attempts") is True
+        ):
+            public_entry["has_attempts"] = True
 
         raw_error_message = entry.get("error_message")
         if (isinstance(raw_error_message, str) and bool(raw_error_message)) or entry.get("has_error_message") is True:

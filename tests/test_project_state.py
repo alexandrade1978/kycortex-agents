@@ -626,6 +626,8 @@ def test_complete_task_persists_structured_agent_output_payload():
     assert result.output.decisions[0].decision == "Use FastAPI"
     assert result.output.metadata["agent_name"] == "Architect"
     assert result.details["history"][-1]["event"] == "completed"
+    assert "attempts" not in result.details["history"][-1]
+    assert "has_attempts" not in result.details["history"][-1]
     assert "error_message" not in result.details["history"][-1]
     assert "has_error_message" not in result.details["history"][-1]
 
@@ -971,6 +973,8 @@ def test_snapshot_hides_failed_output_after_task_is_requeued_for_retry():
     assert result.details["last_error_present"] is True
     assert "last_error" not in result.details
     assert result.details["history"][-1]["event"] == "retry_scheduled"
+    assert result.details["history"][-1]["has_attempts"] is True
+    assert "attempts" not in result.details["history"][-1]
     assert "error_message" not in result.details["history"][-1]
     assert "has_error_message" not in result.details["history"][-1]
 
@@ -3452,9 +3456,13 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.details["task_duration_ms"] == 360000.0
     assert result.details["last_attempt_duration_ms"] == 60000.0
     assert result.details["history"][0]["event"] == "failed"
+    assert result.details["history"][0]["has_attempts"] is True
+    assert "attempts" not in result.details["history"][0]
     assert result.details["history"][0]["has_error_message"] is True
     assert "error_message" not in result.details["history"][0]
     assert result.failure.details["history"][0]["event"] == "failed"
+    assert result.failure.details["history"][0]["has_attempts"] is True
+    assert "attempts" not in result.failure.details["history"][0]
     assert result.failure.details["history"][0]["has_error_message"] is True
     assert "error_message" not in result.failure.details["history"][0]
 

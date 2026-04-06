@@ -722,6 +722,10 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "failure_category_count": 0,
         "failed_task_count": 1,
     }
+    assert summary["task_summaries"][0]["has_repair_origin"] is False
+    assert summary["task_summaries"][1]["has_repair_origin"] is True
+    assert "repair_origin_task_id" not in summary["task_summaries"][0]
+    assert "repair_origin_task_id" not in summary["task_summaries"][1]
 
 
 def test_build_full_workflow_config_uses_larger_completion_budget_for_full_generation(monkeypatch, tmp_path):

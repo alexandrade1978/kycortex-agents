@@ -214,6 +214,10 @@ def test_execute_integrates_provider_metadata(provider_name, provider, expected_
     assert result.metadata["provider_call"]["success"] is True
     assert result.metadata["provider_call"]["duration_ms"] >= 0
     assert result.metadata["provider_call"]["usage"] == expected_usage
+    assert (
+        "backend_reachable"
+        not in result.metadata["provider_call"]["provider_health"][provider_name]["last_health_check"]
+    )
     if provider_name == "ollama":
         assert "base_url" not in result.metadata["provider_call"]["provider_health"]["ollama"]["last_health_check"]
     if expected_timing is None:
@@ -502,6 +506,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_health_check_fai
     assert "error_message" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert metadata["provider_health"]["openai"]["status"] == "degraded"
     assert metadata["provider_health"]["openai"]["last_health_check"]["status"] == "degraded"
+    assert "backend_reachable" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "checked_at" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "model" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "latency_ms" not in metadata["provider_health"]["openai"]["last_health_check"]
@@ -562,6 +567,7 @@ def test_execute_falls_back_to_secondary_provider_after_primary_model_readiness_
         }
     ]
     assert metadata["provider_health"]["openai"]["status"] == "failing"
+    assert "backend_reachable" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "checked_at" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "retryable" not in metadata["provider_health"]["openai"]["last_health_check"]
     assert "model_ready" not in metadata["provider_health"]["openai"]["last_health_check"]

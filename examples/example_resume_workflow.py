@@ -60,11 +60,12 @@ def main() -> None:
 
     orchestrator = Orchestrator(config, registry=registry)
     orchestrator.execute_workflow(reloaded)
+    resumed_state = "present" if reloaded.workflow_last_resumed_at else "none"
 
     print("Reloaded workflow summary:")
     print(reloaded.summary())
     print(f"State file: {_public_path_label(state_path)}")
-    print(f"Workflow resumed at: {reloaded.workflow_last_resumed_at}")
+    print(f"Workflow resumed: {resumed_state}")
 
 
 if __name__ == "__main__":

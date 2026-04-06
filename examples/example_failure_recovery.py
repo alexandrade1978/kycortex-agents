@@ -88,10 +88,11 @@ def main() -> None:
     )
     resume_orchestrator = Orchestrator(config, registry=resume_registry)
     resume_orchestrator.execute_workflow(failed)
+    resumed_state = "present" if failed.workflow_last_resumed_at else "none"
 
     print("\nResumed workflow summary:")
     print(failed.summary())
-    print(f"Workflow resumed at: {failed.workflow_last_resumed_at}")
+    print(f"Workflow resumed: {resumed_state}")
     print("\nTask histories:")
     for task in failed.tasks:
         history_events = [entry["event"] for entry in task.history]

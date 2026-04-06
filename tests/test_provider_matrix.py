@@ -212,8 +212,11 @@ def test_resume_workflow_example_limits_public_state_file_path(tmp_path, capsys,
     module.main()
 
     captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
 
     assert "State file: project_state.sqlite" in captured
+    assert "Workflow resumed: present" in captured
+    assert "2026-04-03T03:30:00+00:00" not in rendered
     assert all("customer-secret-root" not in line for line in captured)
 
 
@@ -419,7 +422,9 @@ def test_failure_recovery_example_limits_public_task_history_events(capsys, monk
     captured = capsys.readouterr().out.splitlines()
     rendered = "\n".join(captured)
 
+    assert "Workflow resumed: present" in captured
     assert "- arch: status=failed, attempts=2, history_event_count=2" in captured
+    assert "2026-04-03T04:10:00+00:00" not in rendered
     assert "task_started" not in rendered
     assert "task_failed" not in rendered
 

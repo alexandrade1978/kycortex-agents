@@ -47,6 +47,12 @@ def _harden_private_file_permissions(path: Path) -> None:
     path.chmod(0o600)
 
 
+def _harden_private_directory_permissions(path: Path) -> None:
+    if os.name != "posix":
+        return
+    path.chmod(0o700)
+
+
 def _ollama_base_url(base_url_override: str | None, *, environ: Mapping[str, str] | None = None) -> str:
     base_url = resolve_provider_base_url("ollama", base_url_override, environ=environ)
     if not isinstance(base_url, str) or not base_url.strip():
@@ -479,5 +485,6 @@ def write_summary_json(summary: dict[str, Any], path: str) -> None:
 
     summary_path = Path(path)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
+    _harden_private_directory_permissions(summary_path.parent)
     summary_path.write_text(json.dumps(redact_sensitive_data(summary), indent=2, sort_keys=True), encoding="utf-8")
     _harden_private_file_permissions(summary_path)

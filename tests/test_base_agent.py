@@ -626,6 +626,12 @@ def test_chat_redacts_sensitive_values_from_provider_health_metadata():
     assert "cooldown_remaining_seconds" not in provider_health["last_health_check"]
     raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
     raw_provider_health = raw_metadata["provider_health"]["openai"]
+    assert "circuit_breaker_open" not in raw_provider_health
+    assert "transient_failure_streak" not in raw_provider_health
+    assert "last_success_age_seconds" not in raw_provider_health
+    assert "last_failure_age_seconds" not in raw_provider_health
+    assert "last_failure_retryable" not in raw_provider_health
+    assert "last_health_check_age_seconds" not in raw_provider_health
     assert "last_error_type" not in raw_provider_health
     assert "has_last_error_message" not in raw_provider_health
     assert "error_type" not in raw_provider_health["last_health_check"]

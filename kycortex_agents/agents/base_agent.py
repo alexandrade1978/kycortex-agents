@@ -583,8 +583,6 @@ class BaseAgent(ABC):
                 )
             elif last_health_check is not None:
                 status = str(last_health_check.get("status", status))
-            last_success_at = self._provider_last_success_at.get(provider_name)
-            last_failure_at = self._provider_last_failure_at.get(provider_name)
             public_last_health_check = (
                 None
                 if last_health_check is None
@@ -602,22 +600,8 @@ class BaseAgent(ABC):
             provider_health[provider_name] = {
                 "model": model_name,
                 "status": status,
-                "circuit_breaker_open": circuit_open,
-                "transient_failure_streak": self._provider_transient_failure_streaks.get(provider_name, 0),
                 "last_outcome": last_outcome,
-                "last_success_age_seconds": None
-                if last_success_at is None
-                else round(max(current_time - last_success_at, 0.0), 6),
-                "last_failure_age_seconds": None
-                if last_failure_at is None
-                else round(max(current_time - last_failure_at, 0.0), 6),
-                "last_failure_retryable": self._provider_last_retryable_failures.get(provider_name),
                 "last_health_check": public_last_health_check,
-                "last_health_check_age_seconds": (
-                    None
-                    if last_health_check is None or "checked_at" not in last_health_check
-                    else round(max(current_time - float(last_health_check["checked_at"]), 0.0), 6)
-                ),
             }
         return {"provider_health": provider_health}
 

@@ -2687,7 +2687,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "evaluated_task_count": 2,
         "required_task_count": 1,
         "completed_task_count": 2,
-        "failed_task_count": 0,
+        "has_failed_tasks": False,
         "has_skipped_tasks": False,
         "has_pending_tasks": False,
     }
@@ -2700,7 +2700,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "evaluated_task_count": 2,
         "required_task_count": 1,
         "completed_task_count": 2,
-        "failed_task_count": 0,
+        "has_failed_tasks": False,
         "has_skipped_tasks": False,
         "has_pending_tasks": False,
     }
@@ -2753,7 +2753,7 @@ def test_mark_workflow_finished_records_policy_enforcement_for_security_failures
         "evaluated_task_count": 0,
         "required_task_count": 0,
         "completed_task_count": 0,
-        "failed_task_count": 1,
+        "has_failed_tasks": True,
         "has_skipped_tasks": False,
         "has_pending_tasks": False,
     }
@@ -3818,7 +3818,7 @@ def test_snapshot_includes_workflow_execution_metadata():
         "evaluated_task_count": 0,
         "required_task_count": 1,
         "completed_task_count": 1,
-        "failed_task_count": 0,
+        "has_failed_tasks": False,
         "has_skipped_tasks": False,
         "has_pending_tasks": False,
     }

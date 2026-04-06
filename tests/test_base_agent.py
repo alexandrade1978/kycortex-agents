@@ -634,6 +634,15 @@ def test_chat_redacts_sensitive_values_from_provider_health_metadata():
     assert "last_health_check_age_seconds" not in raw_provider_health
     assert "last_error_type" not in raw_provider_health
     assert "has_last_error_message" not in raw_provider_health
+    assert "backend_reachable" not in raw_provider_health["last_health_check"]
+    assert "base_url" not in raw_provider_health["last_health_check"]
+    assert "timeout_seconds" not in raw_provider_health["last_health_check"]
+    assert "model" not in raw_provider_health["last_health_check"]
+    assert "model_ready" not in raw_provider_health["last_health_check"]
+    assert "retryable" not in raw_provider_health["last_health_check"]
+    assert "latency_ms" not in raw_provider_health["last_health_check"]
+    assert "provider" not in raw_provider_health["last_health_check"]
+    assert "cooldown_remaining_seconds" not in raw_provider_health["last_health_check"]
     assert "error_type" not in raw_provider_health["last_health_check"]
     assert "has_error_message" not in raw_provider_health["last_health_check"]
 

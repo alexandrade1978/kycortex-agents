@@ -1852,7 +1852,9 @@ def test_fail_task_syncs_repair_retry_without_finalizing_origin_output():
     assert origin.history[-1]["event"] == "repair_retry_scheduled"
     assert internal_retry_event["details"]["error_type"] == "RuntimeError"
     assert retry_event["details"]["has_repair_task"] is True
+    assert retry_event["details"]["has_error_category"] is True
     assert retry_event["details"]["has_error_type"] is True
+    assert "error_category" not in retry_event["details"]
     assert "repair_task_id" not in retry_event["details"]
     assert "error_type" not in retry_event["details"]
 
@@ -1883,7 +1885,9 @@ def test_snapshot_task_repair_retry_scheduled_events_use_presence_flags_for_lega
 
     assert retry_event["event"] == "task_repair_retry_scheduled"
     assert retry_event["details"]["has_repair_task"] is True
+    assert retry_event["details"]["has_error_category"] is True
     assert retry_event["details"]["has_error_type"] is True
+    assert "error_category" not in retry_event["details"]
     assert "repair_task_id" not in retry_event["details"]
     assert "error_type" not in retry_event["details"]
 
@@ -2412,7 +2416,9 @@ def test_snapshot_task_repair_failed_events_use_presence_flags_for_legacy_error_
     assert failed_event["event"] == "task_repair_failed"
     assert failed_event["details"]["has_repair_task"] is True
     assert failed_event["details"]["has_repair_attempt"] is True
+    assert failed_event["details"]["has_error_category"] is True
     assert failed_event["details"]["has_error_type"] is True
+    assert "error_category" not in failed_event["details"]
     assert "repair_attempt" not in failed_event["details"]
     assert "repair_task_id" not in failed_event["details"]
     assert "error_type" not in failed_event["details"]

@@ -2618,15 +2618,15 @@ class ProjectState:
         *,
         minimize_error_type: bool,
     ) -> Dict[str, Any]:
-        public_details: Dict[str, Any] = {
-            "error_category": details.get("error_category") if isinstance(details.get("error_category"), str) else None,
-        }
+        public_details: Dict[str, Any] = {}
         public_details = self._apply_repair_attempt_presence_flag(details, public_details)
         if minimize_error_type:
             if self._presence_flag(details, "error_type", "has_error_type"):
                 public_details["has_error_type"] = True
         else:
             public_details["error_type"] = details.get("error_type") if isinstance(details.get("error_type"), str) else None
+        if self._presence_flag(details, "error_category", "has_error_category"):
+            public_details["has_error_category"] = True
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):
             public_details["has_repair_task"] = True
         return public_details

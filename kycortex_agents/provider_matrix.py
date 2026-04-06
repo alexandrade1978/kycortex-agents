@@ -387,15 +387,9 @@ def summarize_workflow_run(
     snapshot = project.snapshot()
     task_status_counts: dict[str, int] = {}
     task_summaries = []
-    repair_task_count = 0
-    failed_task_count = 0
 
     for task in project.tasks:
         task_status_counts[task.status] = task_status_counts.get(task.status, 0) + 1
-        if task.repair_origin_task_id:
-            repair_task_count += 1
-        if task.status == "failed" and not task.repair_origin_task_id:
-            failed_task_count += 1
         task_summaries.append(
             {
                 "id": task.id,
@@ -426,8 +420,6 @@ def summarize_workflow_run(
         "state_file": _public_path_label(project.state_file),
         "output_dir": _public_path_label(output_dir),
         "task_status_counts": task_status_counts,
-        "failed_task_count": failed_task_count,
-        "repair_task_count": repair_task_count,
         "task_summaries": task_summaries,
         }
     )

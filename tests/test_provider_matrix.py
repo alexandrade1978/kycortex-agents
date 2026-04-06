@@ -762,6 +762,8 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     assert summary["task_summaries"][1]["has_attempts"] is True
     assert "attempts" not in summary["task_summaries"][0]
     assert "attempts" not in summary["task_summaries"][1]
+    assert "repair_attempt" not in summary["task_summaries"][0]
+    assert "repair_attempt" not in summary["task_summaries"][1]
     assert "repair_origin_task_id" not in summary["task_summaries"][0]
     assert "repair_origin_task_id" not in summary["task_summaries"][1]
 

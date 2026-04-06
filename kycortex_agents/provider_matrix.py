@@ -408,7 +408,6 @@ def summarize_workflow_run(
                 "last_error_category": task.last_error_category,
                 "has_provider_call": isinstance(task.last_provider_call, Mapping),
                 "has_repair_origin": bool(task.repair_origin_task_id),
-                "repair_attempt": task.repair_attempt,
             }
         )
 

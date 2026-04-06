@@ -2226,6 +2226,25 @@ class ProjectState:
             public_details.pop(field_name, None)
         return public_details
 
+    def _apply_task_retry_limit_presence_flag(
+        self,
+        details: Dict[str, Any],
+        public_details: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        raw_retry_limit = details.get("retry_limit")
+        public_details.pop("has_retry_limit", None)
+        if (
+            (
+                isinstance(raw_retry_limit, (int, float))
+                and not isinstance(raw_retry_limit, bool)
+                and bool(int(raw_retry_limit))
+            )
+            or details.get("has_retry_limit") is True
+        ):
+            public_details["has_retry_limit"] = True
+        public_details.pop("retry_limit", None)
+        return public_details
+
     def _public_task_history_entry(self, entry: Any) -> Dict[str, Any]:
         if not isinstance(entry, dict):
             return {}
@@ -2279,6 +2298,7 @@ class ProjectState:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
         public_details = self._apply_task_attempt_presence_flag(details, public_details)
         public_details = self._apply_task_duration_presence_flags(details, public_details)
+        public_details = self._apply_task_retry_limit_presence_flag(details, public_details)
 
         raw_error_type = details.get("error_type")
         if (isinstance(raw_error_type, str) and bool(raw_error_type)) or public_details.get("has_error_type") is True:

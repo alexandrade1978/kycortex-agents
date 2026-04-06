@@ -3199,10 +3199,12 @@ def test_snapshot_minimizes_public_task_retry_scheduled_provider_call_details():
 
     assert retry_event["details"]["has_attempts"] is True
     assert retry_event["details"]["has_last_attempt_duration"] is True
+    assert retry_event["details"]["has_retry_limit"] is True
     assert retry_event["details"]["has_error_type"] is True
     assert retry_event["details"]["has_provider_call"] is True
     assert "attempts" not in retry_event["details"]
     assert "last_attempt_duration_ms" not in retry_event["details"]
+    assert "retry_limit" not in retry_event["details"]
     assert "error_type" not in retry_event["details"]
     assert "provider_call" not in retry_event["details"]
 
@@ -3238,9 +3240,11 @@ def test_snapshot_task_retry_scheduled_events_use_presence_flags_for_legacy_prov
 
     assert retry_event["event"] == "task_retry_scheduled"
     assert retry_event["details"]["has_attempts"] is True
+    assert retry_event["details"]["has_retry_limit"] is True
     assert retry_event["details"]["has_error_type"] is True
     assert retry_event["details"]["has_provider_call"] is True
     assert "attempts" not in retry_event["details"]
+    assert "retry_limit" not in retry_event["details"]
     assert "error_type" not in retry_event["details"]
     assert "provider_call" not in retry_event["details"]
 

@@ -3622,7 +3622,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
         "has_multiple_tasks": False,
         "has_entries": True,
         "has_multiple_providers": False,
-        "status_count": 1,
+        "has_multiple_statuses": False,
     }
     assert telemetry["error_summary"] == {
         "has_final_errors": True,

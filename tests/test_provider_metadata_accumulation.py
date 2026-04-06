@@ -453,7 +453,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
         "has_multiple_tasks": False,
         "has_entries": True,
         "has_multiple_providers": False,
-        "status_count": 1,
+        "has_multiple_statuses": False,
     }
     assert snapshot.workflow_telemetry["provider_health_summary"] == {
         "anthropic": {

@@ -453,7 +453,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             "has_multiple_tasks": False,
             "has_entries": False,
             "has_multiple_providers": False,
-            "status_count": 0,
+            "has_multiple_statuses": False,
         },
         "error_summary": {
             "has_final_errors": True,

@@ -2464,8 +2464,8 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
     assert entry["failed_task_ids"] == ["tests"]
     assert entry["budget_remaining"] == 1
     assert snapshot.repair_cycle_count == 1
-    assert snapshot.repair_max_cycles == 2
-    assert snapshot.repair_budget_remaining == 1
+    assert not hasattr(snapshot, "repair_max_cycles")
+    assert not hasattr(snapshot, "repair_budget_remaining")
     assert snapshot.repair_history == [
         {
             "cycle": 1,

@@ -443,8 +443,6 @@ class ProjectSnapshot:
     finished_at: Optional[str] = None
     last_resumed_at: Optional[str] = None
     repair_cycle_count: int = 0
-    repair_max_cycles: int = 0
-    repair_budget_remaining: int = 0
     repair_history: List[WorkflowRepairHistoryEntry] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
     workflow_telemetry: WorkflowTelemetry = field(default_factory=empty_workflow_telemetry)

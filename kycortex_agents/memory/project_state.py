@@ -1438,8 +1438,6 @@ class ProjectState:
             finished_at=self.workflow_finished_at,
             last_resumed_at=self.workflow_last_resumed_at,
             repair_cycle_count=self.repair_cycle_count,
-            repair_max_cycles=self.repair_max_cycles,
-            repair_budget_remaining=max(self.repair_max_cycles - self.repair_cycle_count, 0),
             repair_history=[self._public_repair_history_entry(entry) for entry in self.repair_history if isinstance(entry, dict)],
             task_results=self.task_results(),
             workflow_telemetry=workflow_telemetry,

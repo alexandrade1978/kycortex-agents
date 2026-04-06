@@ -178,8 +178,10 @@ class BaseAgent(ABC):
                         {
                             "provider": provider_name,
                             "status": "failed_health_check",
-                            "error_type": type(exc).__name__,
-                            "error_message": str(exc),
+                            **self._provider_error_presence_metadata(
+                                error_type=type(exc).__name__,
+                                error_message=str(exc),
+                            ),
                             "retryable": isinstance(exc, ProviderTransientError),
                         }
                     )
@@ -353,8 +355,10 @@ class BaseAgent(ABC):
                             "attempt": len(attempt_history) + 1,
                             "success": False,
                             "retryable": True,
-                            "error_type": type(exc).__name__,
-                            "error_message": str(exc),
+                            **self._provider_error_presence_metadata(
+                                error_type=type(exc).__name__,
+                                error_message=str(exc),
+                            ),
                             "uncapped_backoff_seconds": round(uncapped_backoff_seconds, 6),
                             "base_backoff_seconds": round(base_backoff_seconds, 6),
                             "jitter_seconds": round(jitter_seconds, 6),
@@ -398,8 +402,10 @@ class BaseAgent(ABC):
                                 {
                                     "provider": provider_name,
                                     "status": "failed_transient",
-                                    "error_type": type(exc).__name__,
-                                    "error_message": str(exc),
+                                    **self._provider_error_presence_metadata(
+                                        error_type=type(exc).__name__,
+                                        error_message=str(exc),
+                                    ),
                                 }
                             )
                             break
@@ -460,8 +466,10 @@ class BaseAgent(ABC):
                             "attempt": len(attempt_history) + 1,
                             "success": False,
                             "retryable": False,
-                            "error_type": type(exc).__name__,
-                            "error_message": str(exc),
+                            **self._provider_error_presence_metadata(
+                                error_type=type(exc).__name__,
+                                error_message=str(exc),
+                            ),
                             "backoff_seconds": 0.0,
                         }
                     )

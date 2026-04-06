@@ -368,6 +368,10 @@ def test_chat_captures_failed_provider_call_metadata():
     assert "error_type" not in raw_metadata
     assert raw_metadata["has_error_message"] is True
     assert "error_message" not in raw_metadata
+    assert raw_metadata["attempt_history"][0]["has_error_type"] is True
+    assert "error_type" not in raw_metadata["attempt_history"][0]
+    assert raw_metadata["attempt_history"][0]["has_error_message"] is True
+    assert "error_message" not in raw_metadata["attempt_history"][0]
 
 
 def test_chat_redacts_sensitive_values_from_failed_provider_call_metadata():
@@ -746,6 +750,11 @@ def test_chat_exhausts_transient_provider_retries(monkeypatch):
             "backoff_seconds": 0.0,
         },
     ]
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert raw_metadata["attempt_history"][0]["has_error_type"] is True
+    assert "error_type" not in raw_metadata["attempt_history"][0]
+    assert raw_metadata["attempt_history"][0]["has_error_message"] is True
+    assert "error_message" not in raw_metadata["attempt_history"][0]
 
 
 def test_chat_applies_retry_jitter_to_sleep(monkeypatch):
@@ -1663,6 +1672,10 @@ def test_chat_falls_back_after_primary_provider_transient_failure(monkeypatch):
     ]
     raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
     assert "model" not in raw_metadata["fallback_history"][0]
+    assert raw_metadata["fallback_history"][0]["has_error_type"] is True
+    assert "error_type" not in raw_metadata["fallback_history"][0]
+    assert raw_metadata["fallback_history"][0]["has_error_message"] is True
+    assert "error_message" not in raw_metadata["fallback_history"][0]
 
 
 def test_chat_falls_back_after_transient_provider_health_check_failure(monkeypatch):
@@ -1698,6 +1711,10 @@ def test_chat_falls_back_after_transient_provider_health_check_failure(monkeypat
     ]
     raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
     assert "model" not in raw_metadata["fallback_history"][0]
+    assert raw_metadata["fallback_history"][0]["has_error_type"] is True
+    assert "error_type" not in raw_metadata["fallback_history"][0]
+    assert raw_metadata["fallback_history"][0]["has_error_message"] is True
+    assert "error_message" not in raw_metadata["fallback_history"][0]
     assert primary_provider.calls == []
     assert primary_provider.health_calls == 1
     assert fallback_provider.calls == [("system", "message")]

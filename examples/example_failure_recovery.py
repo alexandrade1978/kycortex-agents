@@ -98,9 +98,10 @@ def main() -> None:
     for task in failed.tasks:
         history_events = [entry["event"] for entry in task.history]
         attempts_state = "present" if task.attempts else "none"
+        history_events_state = "present" if history_events else "none"
         print(
             f"- {task.id}: status={task.status}, attempts={attempts_state}, "
-            f"history_event_count={len(history_events)}"
+            f"history_events_present={history_events_state}"
         )
 
 

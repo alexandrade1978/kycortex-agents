@@ -64,8 +64,10 @@ def test_retry_timing_distinguishes_total_duration_from_last_attempt(monkeypatch
     retry_event = next(event for event in project.execution_events if event["event"] == "task_retry_scheduled")
     workflow_event = next(event for event in project.execution_events if event["event"] == "workflow_finished")
 
-    assert result.details["task_duration_ms"] == 140000.0
-    assert result.details["last_attempt_duration_ms"] == 90000.0
+    assert result.details["has_task_duration"] is True
+    assert result.details["has_last_attempt_duration"] is True
+    assert "task_duration_ms" not in result.details
+    assert "last_attempt_duration_ms" not in result.details
     assert result.resource_telemetry["task_duration_ms"] == 140000
     assert result.resource_telemetry["last_attempt_duration_ms"] == 90000
     assert retry_event["details"]["last_attempt_duration_ms"] == 30000.0
@@ -123,8 +125,10 @@ def test_resume_preserves_initial_workflow_and_task_start_times(monkeypatch):
     assert project.workflow_started_at == "2026-03-22T10:00:00+00:00"
     assert project.workflow_last_resumed_at == "2026-03-22T10:06:00+00:00"
     assert result.started_at == "2026-03-22T10:00:10+00:00"
-    assert result.details["task_duration_ms"] == 470000.0
-    assert result.details["last_attempt_duration_ms"] == 60000.0
+    assert result.details["has_task_duration"] is True
+    assert result.details["has_last_attempt_duration"] is True
+    assert "task_duration_ms" not in result.details
+    assert "last_attempt_duration_ms" not in result.details
     assert result.resource_telemetry["task_duration_ms"] == 470000
     assert result.resource_telemetry["last_attempt_duration_ms"] == 60000
     assert workflow_event["details"]["workflow_duration_ms"] == 540000.0
@@ -159,8 +163,10 @@ def test_snapshot_preserves_submillisecond_duration_precision():
 
     result = project.snapshot().task_results["arch"]
 
-    assert result.details["task_duration_ms"] == 0.4
-    assert result.details["last_attempt_duration_ms"] == 0.4
+    assert result.details["has_task_duration"] is True
+    assert result.details["has_last_attempt_duration"] is True
+    assert "task_duration_ms" not in result.details
+    assert "last_attempt_duration_ms" not in result.details
     assert result.resource_telemetry["task_duration_ms"] == 0.4
     assert result.resource_telemetry["last_attempt_duration_ms"] == 0.4
     assert project.snapshot().execution_events[0]["details"]["workflow_duration_ms"] == 0.4

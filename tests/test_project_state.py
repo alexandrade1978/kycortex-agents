@@ -3548,8 +3548,10 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "error_type" not in result.failure.details
     assert result.failure.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
     assert result.failure.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
-    assert result.failure.details["task_duration_ms"] == 360000.0
-    assert result.failure.details["last_attempt_duration_ms"] == 60000.0
+    assert result.failure.details["has_task_duration"] is True
+    assert result.failure.details["has_last_attempt_duration"] is True
+    assert "task_duration_ms" not in result.failure.details
+    assert "last_attempt_duration_ms" not in result.failure.details
     assert result.resource_telemetry == {
         "has_provider_call": False,
         "task_duration_ms": 360000,
@@ -3564,8 +3566,10 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "last_error" not in result.details
     assert "attempts" not in result.details
     assert "retry_limit" not in result.details
-    assert result.details["task_duration_ms"] == 360000.0
-    assert result.details["last_attempt_duration_ms"] == 60000.0
+    assert result.details["has_task_duration"] is True
+    assert result.details["has_last_attempt_duration"] is True
+    assert "task_duration_ms" not in result.details
+    assert "last_attempt_duration_ms" not in result.details
     assert result.details["history"][0]["event"] == "failed"
     assert result.details["history"][0]["has_attempts"] is True
     assert "attempts" not in result.details["history"][0]
@@ -4450,8 +4454,10 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert "error_message" not in result.details["history"][0]
     assert result.details["last_attempt_started_at"] is None
     assert result.details["last_resumed_at"] is None
-    assert result.details["task_duration_ms"] is None
-    assert result.details["last_attempt_duration_ms"] is None
+    assert "has_task_duration" not in result.details
+    assert "has_last_attempt_duration" not in result.details
+    assert "task_duration_ms" not in result.details
+    assert "last_attempt_duration_ms" not in result.details
 
 
 def test_skip_task_redacts_sensitive_operator_reason():

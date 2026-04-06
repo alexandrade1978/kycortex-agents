@@ -12,6 +12,10 @@ from kycortex_agents.provider_matrix import (
 )
 
 
+def _presence_label(value: object) -> str:
+    return "present" if value else "none"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a full multi-agent workflow against one provider.")
     parser.add_argument("provider", choices=sorted(DEFAULT_PROVIDER_MODELS))
@@ -97,7 +101,7 @@ def main() -> None:
     print(f"model={model}")
     print(f"phase={project.phase}")
     print(f"terminal_outcome={project.terminal_outcome}")
-    print(f"repair_cycle_count={project.repair_cycle_count}")
+    print(f"repair_cycles_present={_presence_label(project.repair_cycle_count)}")
     print(f"output_dir={_public_path_label(output_dir)}")
     for task in project.tasks:
         print(f"task.{task.id}.status={task.status}")

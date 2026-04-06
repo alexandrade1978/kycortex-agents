@@ -151,6 +151,10 @@ def _format_output_presence(output: str | None) -> str:
     return "present" if output else "none"
 
 
+def _presence_label(value: object) -> str:
+    return "present" if value else "none"
+
+
 def _code_artifact_path(task: Task, output_dir: str) -> Path | None:
     for relative_path in _artifact_paths(task):
         if relative_path.endswith(".py"):
@@ -202,7 +206,7 @@ def main() -> None:
     print(f"model={config.llm_model}")
     print(f"phase={project.phase}")
     print(f"terminal_outcome={project.terminal_outcome}")
-    print(f"repair_cycle_count={project.repair_cycle_count}")
+    print(f"repair_cycles_present={_presence_label(project.repair_cycle_count)}")
     print(f"output_dir={_public_path_label(output_dir)}")
     print()
 

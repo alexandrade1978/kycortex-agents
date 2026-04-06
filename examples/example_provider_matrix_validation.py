@@ -30,6 +30,10 @@ def _public_ollama_base_url_label(base_url: str | None) -> str | None:
     return f"{host_label}:{parsed.port}"
 
 
+def _presence_label(value: object) -> str:
+    return "present" if value else "none"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run empirical full-workflow validation across supported providers.",
@@ -218,7 +222,7 @@ def main() -> None:
             summary = result["summary"]
             print(f"phase={summary['phase']}")
             print(f"terminal_outcome={summary['terminal_outcome']}")
-            print(f"repair_cycle_count={summary['repair_cycle_count']}")
+            print(f"repair_cycles_present={_presence_label(summary['repair_cycle_count'])}")
 
 
 if __name__ == "__main__":

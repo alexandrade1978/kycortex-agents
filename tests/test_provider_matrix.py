@@ -1396,9 +1396,59 @@ def test_provider_matrix_example_skips_unavailable_provider(tmp_path, monkeypatc
     assert result == {
         "provider": "openai",
         "available": False,
-        "availability_reason": "missing credentials",
+        "has_availability_reason": True,
         "status": "skipped",
     }
+
+
+def test_provider_matrix_example_limits_public_availability_reason(tmp_path, monkeypatch, capsys):
+    module = _load_example_module(
+        "example_provider_matrix_validation_public_availability_reason_test",
+        "examples/example_provider_matrix_validation.py",
+    )
+
+    summary_path = tmp_path / "provider_matrix_summary.json"
+
+    class FakeParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                providers=["openai"],
+                output_root=str(tmp_path / "matrix"),
+                failure_policy="continue",
+                resume_policy="resume_failed",
+                max_repair_cycles=1,
+                summary_json=str(summary_path),
+                ollama_base_url=None,
+                ollama_num_ctx=16384,
+                max_tokens=3200,
+            )
+
+    monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
+    monkeypatch.setattr(module, "resolve_requested_providers", lambda providers: providers)
+    monkeypatch.setattr(
+        module,
+        "run_provider",
+        lambda provider, **kwargs: {
+            "provider": provider,
+            "available": False,
+            "has_availability_reason": True,
+            "status": "skipped",
+        },
+    )
+
+    module.main()
+
+    persisted_text = summary_path.read_text(encoding="utf-8")
+    captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
+
+    assert "provider=present" in captured
+    assert "available=False" in captured
+    assert "status=skipped" in captured
+    assert "availability_reason_present=present" in captured
+    assert '"has_availability_reason": true' in persisted_text
+    assert '"availability_reason"' not in persisted_text
+    assert "missing credentials" not in rendered
 
 
 def test_provider_matrix_parser_defaults_to_all_supported_providers():

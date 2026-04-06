@@ -126,7 +126,7 @@ def run_provider(
     result = {
         "provider": provider,
         "available": availability["available"],
-        "availability_reason": availability["reason"],
+        "has_availability_reason": bool(availability["reason"]),
     }
     if not availability["available"]:
         result["status"] = "skipped"
@@ -216,8 +216,8 @@ def main() -> None:
         print(f"provider={_presence_label(result['provider'])}")
         print(f"available={result['available']}")
         print(f"status={result['status']}")
-        if result.get("availability_reason"):
-            print(f"reason={result['availability_reason']}")
+        if result.get("has_availability_reason"):
+            print("availability_reason_present=present")
         if result.get("summary"):
             summary = result["summary"]
             print(f"phase={summary['phase']}")

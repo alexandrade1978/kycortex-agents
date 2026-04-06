@@ -2017,7 +2017,7 @@ class ProjectState:
             "reason": normalized_evaluation.get("reason") if isinstance(normalized_evaluation.get("reason"), str) else None,
             "terminal_outcome": outcome,
             "failure_category": category,
-            "evaluated_task_count": self._acceptance_task_count(normalized_evaluation, "evaluated_task_ids", "evaluated_task_count"),
+            "has_evaluated_tasks": self._acceptance_task_count(normalized_evaluation, "evaluated_task_ids", "evaluated_task_count") > 0,
             "required_task_count": self._acceptance_task_count(normalized_evaluation, "required_task_ids", "required_task_count"),
             "completed_task_count": self._acceptance_task_count(normalized_evaluation, "completed_task_ids", "completed_task_count"),
             "has_failed_tasks": self._acceptance_task_count(normalized_evaluation, "failed_task_ids", "failed_task_count") > 0,

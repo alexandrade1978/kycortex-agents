@@ -741,7 +741,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "reason": "all_required_tasks_done",
         "terminal_outcome": "completed",
         "failure_category": None,
-        "evaluated_task_count": 1,
+        "has_evaluated_tasks": True,
         "required_task_count": 1,
         "completed_task_count": 1,
         "has_failed_tasks": False,

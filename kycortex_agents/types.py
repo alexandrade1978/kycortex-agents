@@ -134,7 +134,7 @@ class WorkflowAcceptanceSummary(TypedDict):
     reason: Optional[str]
     terminal_outcome: Optional[str]
     failure_category: Optional[str]
-    evaluated_task_count: int
+    has_evaluated_tasks: bool
     required_task_count: int
     completed_task_count: int
     has_failed_tasks: bool
@@ -149,7 +149,7 @@ def empty_workflow_acceptance_summary() -> WorkflowAcceptanceSummary:
         "reason": None,
         "terminal_outcome": None,
         "failure_category": None,
-        "evaluated_task_count": 0,
+        "has_evaluated_tasks": False,
         "required_task_count": 0,
         "completed_task_count": 0,
         "has_failed_tasks": False,

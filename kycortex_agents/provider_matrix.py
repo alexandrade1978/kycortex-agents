@@ -400,7 +400,7 @@ def summarize_workflow_run(
             {
                 "id": task.id,
                 "status": task.status,
-                "assigned_to": task.assigned_to,
+                "has_assigned_to": bool(task.assigned_to),
                 "attempts": task.attempts,
                 "last_error": task.last_error,
                 "last_error_present": bool(

@@ -1079,8 +1079,10 @@ def test_provider_matrix_summary_limits_public_task_metadata(tmp_path):
 
     task_summary = summary["task_summaries"][0]
 
+    assert task_summary["has_assigned_to"] is True
     assert task_summary["has_provider_call"] is True
     assert task_summary["last_error_present"] is False
+    assert "assigned_to" not in task_summary
     assert "provider_budget" not in task_summary
     assert "last_error_type" not in task_summary
 

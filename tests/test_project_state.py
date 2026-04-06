@@ -3544,7 +3544,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.failure.details["has_retry_limit"] is True
     assert "attempts" not in result.failure.details
     assert "retry_limit" not in result.failure.details
-    assert result.failure.details["has_provider_call"] is False
+    assert "has_provider_call" not in result.failure.details
     assert "error_type" not in result.failure.details
     assert "error_category" not in result.failure.details
     assert "started_at" not in result.failure.details

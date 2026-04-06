@@ -321,7 +321,7 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert failed_provider_call["retryable"] is True
     assert failed_provider_call["has_error_message"] is True
     assert "error_message" not in failed_provider_call
-    assert arch_failure.details["has_provider_call"] is True
+    assert "has_provider_call" not in arch_failure.details
     assert "provider_call" not in arch_failure.details
     assert "provider_budget" not in arch_failure.details
     assert snapshot.task_results["arch"].resource_telemetry["has_provider_call"] is True

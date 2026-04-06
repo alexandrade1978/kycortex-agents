@@ -1350,7 +1350,6 @@ class ProjectState:
             resource_telemetry = self._task_resource_telemetry(task)
             public_repair_context = self._public_task_results_repair_context(task.repair_context)
             public_history = self._public_task_history(task.history)
-            has_provider_call = isinstance(task.last_provider_call, dict)
             last_error_present = bool(task.last_error or task.last_error_type or task.last_error_category)
             if task_status == TaskStatus.FAILED:
                 failure_details: Dict[str, Any] = {
@@ -1388,7 +1387,6 @@ class ProjectState:
                 "required_for_acceptance": task.required_for_acceptance,
                 "last_error_present": last_error_present,
                 "last_error_category": task.last_error_category,
-                "has_provider_call": has_provider_call,
                 "repair_context": public_repair_context,
                 "repair_attempt": task.repair_attempt,
                 "last_attempt_started_at": task.last_attempt_started_at,

@@ -3561,7 +3561,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
         "provider_duration_ms": None,
         "usage": {},
     }
-    assert result.details["has_provider_call"] is False
+    assert "has_provider_call" not in result.details
     assert result.details["last_error_present"] is True
     assert result.details["has_attempts"] is True
     assert result.details["has_retry_limit"] is True
@@ -4446,7 +4446,8 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.started_at is None
     assert result.output is not None
     assert result.output.summary == "Skipped because dependency 'arch' failed"
-    assert result.details["has_provider_call"] is False
+    assert result.resource_telemetry["has_provider_call"] is False
+    assert "has_provider_call" not in result.details
     assert result.details["last_error_present"] is True
     assert "last_error" not in result.details
     assert "last_provider_call" not in result.details

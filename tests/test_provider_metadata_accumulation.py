@@ -197,7 +197,7 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
         "total_tokens": 15,
     }
     assert snapshot.task_results["review"].resource_telemetry["provider_duration_ms"] == review_provider_call["duration_ms"]
-    assert snapshot.task_results["arch"].details["has_provider_call"] is True
+    assert "has_provider_call" not in snapshot.task_results["arch"].details
     assert snapshot.task_results["arch"].details["last_error_present"] is False
     assert "last_provider_call" not in snapshot.task_results["arch"].details
     assert "last_provider_call" not in snapshot.task_results["code"].details

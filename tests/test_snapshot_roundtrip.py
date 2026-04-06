@@ -422,8 +422,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             "failure_category_count": 0,
             "failed_task_count": 0,
         },
-        "final_providers": ["ollama", "openai"],
-        "observed_providers": ["ollama", "openai"],
+        "final_provider_count": 2,
+        "observed_provider_count": 2,
         "provider_summary": {
             "ollama": {
                 "task_count": 1,

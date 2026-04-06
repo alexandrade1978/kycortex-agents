@@ -260,8 +260,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                 "task_count": 2,
                 "tasks_with_provider_calls": 1,
                 "tasks_without_provider_calls": 1,
-                "observed_providers": ["openai", "anthropic"],
-                "final_providers": ["openai"],
+                "observed_provider_count": 2,
+                "final_provider_count": 1,
                 "attempt_count": 2,
                 "retry_attempt_count": 0,
                 "progress_summary": {

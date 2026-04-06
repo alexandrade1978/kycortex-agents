@@ -406,7 +406,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
         },
         "resume_summary": {
             "count": 0,
-            "reason_count": 0,
+            "has_multiple_reasons": False,
             "task_count": 0,
             "unique_task_count": 0,
             "last_resumed_at": "2026-03-22T10:07:00+00:00",

@@ -2042,7 +2042,7 @@ class ProjectState:
         unique_task_count = len(set(resumed_task_ids))
         return {
             "count": len(resumed_events),
-            "reason_count": len(reasons),
+            "has_multiple_reasons": len(reasons) > 1,
             "task_count": len(resumed_task_ids),
             "unique_task_count": unique_task_count,
             "last_resumed_at": self.workflow_last_resumed_at,

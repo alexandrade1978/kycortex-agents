@@ -2069,7 +2069,7 @@ class ProjectState:
             "max_cycles": self.repair_max_cycles,
             "budget_remaining": max(self.repair_max_cycles - self.repair_cycle_count, 0),
             "history_count": len([entry for entry in self.repair_history if isinstance(entry, dict)]),
-            "reason_count": len(reasons),
+            "has_multiple_reasons": len(reasons) > 1,
             "last_reason_present": last_reason_present,
             "has_multiple_failure_categories": len(failure_categories) > 1,
             "failed_task_count": len(failed_task_ids),

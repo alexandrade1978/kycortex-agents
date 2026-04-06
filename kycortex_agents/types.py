@@ -186,7 +186,7 @@ class WorkflowRepairSummary(TypedDict):
     max_cycles: int
     budget_remaining: int
     history_count: int
-    reason_count: int
+    has_multiple_reasons: bool
     last_reason_present: bool
     has_multiple_failure_categories: bool
     failed_task_count: int
@@ -312,7 +312,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "max_cycles": 0,
             "budget_remaining": 0,
             "history_count": 0,
-            "reason_count": 0,
+            "has_multiple_reasons": False,
             "last_reason_present": False,
             "has_multiple_failure_categories": False,
             "failed_task_count": 0,

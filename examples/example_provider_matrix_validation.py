@@ -213,7 +213,7 @@ def main() -> None:
 
     print(f"summary_json={_public_path_label(summary_path)}")
     for result in results:
-        print(f"provider={result['provider']}")
+        print(f"provider={_presence_label(result['provider'])}")
         print(f"available={result['available']}")
         print(f"status={result['status']}")
         if result.get("availability_reason"):

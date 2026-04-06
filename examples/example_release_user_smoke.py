@@ -132,6 +132,10 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
     return project
 
 
+def _presence_label(value: object) -> str:
+    return "present" if value else "none"
+
+
 def _artifact_paths(task: Task) -> list[str]:
     payload = task.output_payload if isinstance(task.output_payload, dict) else {}
     artifacts = payload.get("artifacts")
@@ -149,10 +153,6 @@ def _artifact_paths(task: Task) -> list[str]:
 
 def _format_output_presence(output: str | None) -> str:
     return "present" if output else "none"
-
-
-def _presence_label(value: object) -> str:
-    return "present" if value else "none"
 
 
 def _code_artifact_path(task: Task, output_dir: str) -> Path | None:
@@ -202,8 +202,8 @@ def main() -> None:
 
     Orchestrator(config).execute_workflow(project)
 
-    print(f"provider={args.provider}")
-    print(f"model={config.llm_model}")
+    print(f"provider={_presence_label(args.provider)}")
+    print(f"model={_presence_label(config.llm_model)}")
     print(f"phase={project.phase}")
     print(f"terminal_outcome={project.terminal_outcome}")
     print(f"repair_cycles_present={_presence_label(project.repair_cycle_count)}")

@@ -94,9 +94,14 @@ def test_full_provider_workflow_example_limits_public_output_dir(capsys, monkeyp
     module.main()
 
     captured = capsys.readouterr().out.splitlines()
+    rendered = "\n".join(captured)
 
+    assert "provider=present" in captured
+    assert "model=present" in captured
     assert "repair_cycles_present=none" in captured
-    assert "repair_cycle_count=0" not in "\n".join(captured)
+    assert "repair_cycle_count=0" not in rendered
+    assert "provider=ollama" not in rendered
+    assert "model=qwen2.5-coder:7b" not in rendered
     assert "output_dir=full-provider-run" in captured
     assert all("customer-secret-root" not in line for line in captured)
 
@@ -150,8 +155,12 @@ def test_provider_smoke_example_limits_public_output_dir(capsys, monkeypatch):
     captured = capsys.readouterr().out.splitlines()
     rendered = "\n".join(captured)
 
+    assert "provider=present" in captured
+    assert "model=present" in captured
     assert "output_dir=provider-smoke" in captured
     assert "output_present=present" in captured
+    assert "provider=ollama" not in rendered
+    assert "model=qwen2.5-coder:7b" not in rendered
     assert "preview=" not in rendered
     assert "A short architecture preview." not in rendered
     assert "sk-secret-123456" not in rendered
@@ -1559,8 +1568,10 @@ def test_provider_matrix_example_limits_public_report_paths_and_base_url(tmp_pat
 
     assert persisted["output_root"] == "provider-runs"
     assert persisted["ollama_base_url"] == "localhost:11435"
+    assert "provider=present" in captured
     assert "repair_cycles_present=none" in captured
     assert "repair_cycle_count=0" not in "\n".join(captured)
+    assert "provider=ollama" not in "\n".join(captured)
     assert "customer-secret-root" not in persisted_text
     assert "operator" not in persisted_text
     assert "secret" not in persisted_text
@@ -1636,9 +1647,13 @@ def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkey
     captured = capsys.readouterr().out.splitlines()
     rendered = "\n".join(captured)
 
+    assert "provider=present" in captured
+    assert "model=present" in captured
     assert "output_dir=release-user-smoke" in captured
     assert "repair_cycles_present=none" in captured
     assert "repair_cycle_count=0" not in rendered
+    assert "provider=ollama" not in rendered
+    assert "model=qwen2.5-coder:7b" not in rendered
     assert "budget_planner.py" in captured
     assert "validated_artifact=budget_planner.py" in captured
     assert "output_present=present" in captured

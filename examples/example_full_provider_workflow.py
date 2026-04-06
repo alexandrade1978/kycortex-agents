@@ -97,8 +97,8 @@ def main() -> None:
     if args.summary_json:
         write_summary_json(summary, args.summary_json)
 
-    print(f"provider={provider}")
-    print(f"model={model}")
+    print(f"provider={_presence_label(provider)}")
+    print(f"model={_presence_label(model)}")
     print(f"phase={project.phase}")
     print(f"terminal_outcome={project.terminal_outcome}")
     print(f"repair_cycles_present={_presence_label(project.repair_cycle_count)}")

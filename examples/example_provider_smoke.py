@@ -71,6 +71,10 @@ def _format_output_presence(output: str | None) -> str:
     return "present" if output else "none"
 
 
+def _presence_label(value: object) -> str:
+    return "present" if value else "none"
+
+
 def main() -> None:
     args = build_parser().parse_args()
     provider = args.provider
@@ -83,8 +87,8 @@ def main() -> None:
     Orchestrator(config).execute_workflow(project)
 
     task = project.tasks[0]
-    print(f"provider={provider}")
-    print(f"model={model}")
+    print(f"provider={_presence_label(provider)}")
+    print(f"model={_presence_label(model)}")
     print(f"phase={project.phase}")
     print(f"output_dir={_public_path_label(output_dir)}")
     print(f"task_status={task.status}")

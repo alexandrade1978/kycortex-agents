@@ -262,8 +262,8 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
                 "tasks_without_provider_calls": 1,
                 "observed_provider_count": 2,
                 "final_provider_count": 1,
-                "attempt_count": 2,
-                "retry_attempt_count": 0,
+                "has_attempts": True,
+                "has_retry_attempts": False,
                 "progress_summary": {
                     "pending_task_count": 0,
                     "running_task_count": 0,

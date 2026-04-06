@@ -1936,8 +1936,8 @@ class ProjectState:
             "observed_provider_count": len(observed_providers),
             "provider_summary": normalized_provider_summary,
             "provider_health_summary": normalized_provider_health_summary,
-            "attempt_count": attempt_count,
-            "retry_attempt_count": retry_attempt_count,
+            "has_attempts": attempt_count > 0,
+            "has_retry_attempts": retry_attempt_count > 0,
             "duration_ms": self._metric_distribution(duration_values),
             "usage": self._sorted_numeric_metrics(usage_totals),
             "fallback_summary": {

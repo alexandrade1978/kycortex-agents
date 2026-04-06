@@ -257,8 +257,8 @@ class WorkflowTelemetry(TypedDict):
     observed_provider_count: int
     provider_summary: Dict[str, WorkflowProviderSummary]
     provider_health_summary: Dict[str, WorkflowProviderHealthSummary]
-    attempt_count: int
-    retry_attempt_count: int
+    has_attempts: bool
+    has_retry_attempts: bool
     duration_ms: MetricDistribution
     usage: NumericMetricMap
     fallback_summary: WorkflowFallbackSummary
@@ -321,8 +321,8 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
         "observed_provider_count": 0,
         "provider_summary": {},
         "provider_health_summary": {},
-        "attempt_count": 0,
-        "retry_attempt_count": 0,
+        "has_attempts": False,
+        "has_retry_attempts": False,
         "duration_ms": _empty_metric_distribution(),
         "usage": {},
         "fallback_summary": {

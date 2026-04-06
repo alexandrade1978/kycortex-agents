@@ -310,8 +310,8 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
         "observed_provider_count": 0,
         "provider_summary": {},
         "provider_health_summary": {},
-        "attempt_count": 0,
-        "retry_attempt_count": 0,
+        "has_attempts": False,
+        "has_retry_attempts": False,
         "duration_ms": {
             "count": 0,
             "total": 0,

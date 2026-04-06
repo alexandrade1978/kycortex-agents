@@ -953,6 +953,10 @@ def test_chat_stops_retrying_when_elapsed_budget_is_exhausted_before_next_attemp
     assert "provider_elapsed_seconds" not in metadata
     assert "provider_max_elapsed_seconds_per_call" not in metadata
     assert "provider_remaining_elapsed_seconds" not in metadata
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "provider_elapsed_seconds" not in raw_metadata
+    assert "provider_max_elapsed_seconds_per_call" not in raw_metadata
+    assert "provider_remaining_elapsed_seconds" not in raw_metadata
     assert metadata["attempt_history"] == [
         {
             "attempt": 1,
@@ -993,6 +997,10 @@ def test_chat_does_not_sleep_past_elapsed_budget(monkeypatch):
     assert "provider_elapsed_seconds" not in metadata
     assert "provider_max_elapsed_seconds_per_call" not in metadata
     assert "provider_remaining_elapsed_seconds" not in metadata
+    raw_metadata = cast(dict[str, Any], agent._last_provider_call_metadata)
+    assert "provider_elapsed_seconds" not in raw_metadata
+    assert "provider_max_elapsed_seconds_per_call" not in raw_metadata
+    assert "provider_remaining_elapsed_seconds" not in raw_metadata
     assert sleep_calls == []
 
 

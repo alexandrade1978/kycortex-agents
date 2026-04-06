@@ -809,20 +809,12 @@ class BaseAgent(ABC):
         started_at: float,
         current_time: float,
     ) -> dict[str, Any]:
-        elapsed_seconds = max(current_time - started_at, 0.0)
+        remaining_seconds = self._provider_elapsed_budget_remaining_seconds(started_at, current_time)
+        budget_limited = self.config.provider_max_elapsed_seconds_per_call > 0
         return {
-            "provider_elapsed_seconds": round(elapsed_seconds, 6),
-            "provider_max_elapsed_seconds_per_call": round(
-                self.config.provider_max_elapsed_seconds_per_call,
-                6,
-            ),
-            "provider_remaining_elapsed_seconds": (
-                None
-                if self.config.provider_max_elapsed_seconds_per_call <= 0
-                else round(
-                    self._provider_elapsed_budget_remaining_seconds(started_at, current_time) or 0.0,
-                    6,
-                )
+            "provider_elapsed_budget_limited": budget_limited,
+            "provider_elapsed_budget_exhausted": bool(
+                budget_limited and remaining_seconds is not None and remaining_seconds <= 0
             ),
         }
 

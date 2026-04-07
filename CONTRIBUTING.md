@@ -49,6 +49,14 @@ python scripts/package_check.py
 make package-check
 ```
 
+- Generate and verify the staged release artifact manifest after a local build dry run:
+
+```bash
+python -m build
+python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json
+python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify
+```
+
 - Trigger the repository release workflow after local validation:
 
 ```bash
@@ -118,6 +126,7 @@ make test
 - `.editorconfig`: shared line-ending, indentation, and trailing-whitespace defaults for Python, Markdown, TOML, YAML, and Makefile edits.
 - `.pre-commit-config.yaml`: repository-local pre-commit and pre-push automation for linting, type checking, and focused public-surface regressions.
 - `scripts/package_check.py`: local built-artifact validator that builds both wheel and source distributions, installs them into temporary virtual environments, and smoke-tests the public package imports.
+- `scripts/release_artifact_manifest.py`: repository-owned generator and verifier for `release-artifact-manifest.json`, the staged checksum manifest attached to tagged releases after distribution build.
 - `scripts/release_metadata_check.py`: local release-metadata validator that checks package version alignment, release-state metadata, and release-facing documentation cues before a tag is created.
 - `scripts/release_check.py`: local release validator that runs the repository lint, type-check, focused regression, package-validation, coverage-gate, and full-suite commands in the same order used for release readiness.
 - `.github/workflows/release.yml`: tagged-release automation that reruns validation, builds wheel and source distributions, uploads them as workflow artifacts, and publishes them on GitHub releases for `v*` tags.

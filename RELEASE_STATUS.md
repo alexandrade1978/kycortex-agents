@@ -13,6 +13,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 - Local release validation is available through `python scripts/release_check.py` and `make release-check`.
 - Built package artifacts are validated through `scripts/package_check.py`.
+- Staged artifact-promotion evidence is generated and verified through `python scripts/release_artifact_manifest.py` in the tagged release workflow.
 - Release metadata alignment is validated through `python scripts/release_metadata_check.py` and `make release-metadata-check`.
 - Repository coverage is enforced through the `pytest-cov` gate configured in `pyproject.toml`.
 - Tagged release automation is defined in `.github/workflows/release.yml`.
@@ -32,7 +33,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 - `v1.0.13a1` is the current alpha release tag associated with this repository-owned release state.
 - The immediately preceding published state `v1.0.12` is now the previous maintenance baseline.
-- Expected attached assets remain `kycortex_agents-1.0.13a1-py3-none-any.whl` and `kycortex_agents-1.0.13a1.tar.gz`.
+- The next tagged release workflow is expected to attach `kycortex_agents-1.0.13a1-py3-none-any.whl`, `kycortex_agents-1.0.13a1.tar.gz`, and `release-artifact-manifest.json`.
 
 ## Current Release Validation Snapshot
 
@@ -51,6 +52,8 @@ The repository's public licensing guidance continues to document the AGPL open-s
 
 The current alpha branch now documents and validates explicit Ollama runtime overrides, the dedicated local Ollama empirical baseline, stronger QA/test repair constraints, code-repair routing that consumes the failing pytest suite as concrete repair evidence, deterministic clean-environment CI validation for the provider-matrix budget regression surface, and a user-style live release smoke path.
 
+The current alpha branch now also stages release artifact-promotion evidence through `release-artifact-manifest.json`, generated and verified in the tagged release workflow before publication.
+
 Use the following repository-owned references when validating follow-up maintenance releases:
 
 - `COMMERCIAL_LICENSE.md`
@@ -66,4 +69,4 @@ For future tagged releases:
 1. update the package version for the intended release
 2. rerun `python scripts/release_check.py`
 3. create and push the matching `v<version>` tag
-4. verify the tagged GitHub release workflow and attached artifacts
+4. verify the tagged GitHub release workflow, attached artifacts, and `release-artifact-manifest.json`

@@ -1,5 +1,6 @@
 from pathlib import Path
 import importlib
+import json
 import os
 import re
 import subprocess
@@ -217,6 +218,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
         "scripts/package_check.py",
+        "scripts/release_artifact_manifest.py",
         "scripts/release_metadata_check.py",
         "scripts/release_check.py",
         "kycortex_agents/agents/registry.py",
@@ -260,6 +262,8 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in contributing
     assert "python scripts/package_check.py" in contributing
     assert "make package-check" in contributing
+    assert "python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json" in contributing
+    assert "python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify" in contributing
     assert "python scripts/release_metadata_check.py" in contributing
     assert "make release-metadata-check" in contributing
     assert "git tag v<version>" in contributing
@@ -363,6 +367,9 @@ def test_github_actions_release_workflow_covers_tagged_release_automation():
     assert "Run repository-owned release gate" in release_workflow
     assert "python scripts/release_check.py" in release_workflow
     assert "python -m build" in release_workflow
+    assert "python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json" in release_workflow
+    assert "python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify" in release_workflow
+    assert "release-artifact-manifest.json" in release_workflow
     assert "actions/upload-artifact@v4" in release_workflow
     assert "actions/download-artifact@v4" in release_workflow
     assert "softprops/action-gh-release@v2" in release_workflow
@@ -464,7 +471,9 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert ".github/workflows/release.yml" in docs_readme
     assert "repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification" in docs_readme
     assert "scripts/package_check.py" in docs_readme
+    assert "scripts/release_artifact_manifest.py" in docs_readme
     assert "validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata" in docs_readme
+    assert "staged release artifact manifest attached to tagged releases" in docs_readme
     assert "manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts" in docs_readme
     assert "release notes" in docs_readme
     assert "migrating from earlier prototype revisions" in docs_readme
@@ -496,6 +505,7 @@ def test_changelog_documents_current_release_scope():
     assert "make release-check" in changelog
     assert "RELEASE.md" in changelog
     assert "RELEASE_STATUS.md" in changelog
+    assert "release-artifact-manifest.json" in changelog
     assert "scripts/release_metadata_check.py" in changelog
     assert "make release-metadata-check" in changelog
     assert "GitHub release automation" in changelog
@@ -529,6 +539,73 @@ def test_release_check_script_runs_repository_release_readiness_sequence():
     assert '"Release readiness validation completed successfully."' in script
 
 
+def test_release_artifact_manifest_script_generates_and_verifies_manifest(tmp_path):
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "release_artifact_manifest.py"
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+
+    wheel = dist_dir / "kycortex_agents-1.0.13a1-py3-none-any.whl"
+    sdist = dist_dir / "kycortex_agents-1.0.13a1.tar.gz"
+    wheel.write_bytes(b"wheel-bytes")
+    sdist.write_bytes(b"sdist-bytes")
+
+    manifest_path = dist_dir / "release-artifact-manifest.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--dist-dir",
+            str(dist_dir),
+            "--output",
+            str(manifest_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["manifest_version"] == 1
+    assert manifest["artifact_count"] == 2
+    assert {artifact["name"] for artifact in manifest["artifacts"]} == {wheel.name, sdist.name}
+    assert all(len(artifact["sha256"]) == 64 for artifact in manifest["artifacts"])
+
+    verify = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--dist-dir",
+            str(dist_dir),
+            "--manifest",
+            str(manifest_path),
+            "--verify",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert verify.returncode == 0
+    assert "Verified release artifact manifest" in verify.stdout
+
+    wheel.write_bytes(b"tampered-wheel-bytes")
+    verify = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--dist-dir",
+            str(dist_dir),
+            "--manifest",
+            str(manifest_path),
+            "--verify",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert verify.returncode == 1
+    assert "does not match the current distribution artifacts" in verify.stderr
+
+
 def test_release_metadata_check_script_validates_version_and_release_docs_alignment():
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "release_metadata_check.py"
     script = script_path.read_text(encoding="utf-8")
@@ -560,6 +637,8 @@ def test_release_guide_documents_repository_release_gate_procedure():
     assert "python scripts/release_check.py" in release_guide
     assert "make release-check" in release_guide
     assert "scripts/package_check.py" in release_guide
+    assert "scripts/release_artifact_manifest.py" in release_guide
+    assert "release-artifact-manifest.json" in release_guide
     assert "scripts/release_metadata_check.py" in release_guide
     assert "coverage gate" in release_guide
     assert "## Tagging A Release" in release_guide
@@ -584,6 +663,8 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "python scripts/release_check.py" in release_status
     assert "make release-check" in release_status
     assert "scripts/package_check.py" in release_status
+    assert "scripts/release_artifact_manifest.py" in release_status
+    assert "release-artifact-manifest.json" in release_status
     assert "python scripts/release_metadata_check.py" in release_status
     assert "make release-metadata-check" in release_status
     assert ".github/workflows/release.yml" in release_status

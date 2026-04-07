@@ -45,13 +45,15 @@ The release workflow at `.github/workflows/release.yml` will:
 
 1. Re-run repository validation.
 2. Build the wheel and source distribution.
-3. Upload the distribution artifacts.
-4. Publish the GitHub release for the pushed tag, marking alpha, beta, and release-candidate tags as GitHub pre-releases.
+3. Generate `release-artifact-manifest.json` with `scripts/release_artifact_manifest.py` for the built artifacts and verify it before promotion.
+4. Upload the distribution artifacts and manifest.
+5. Publish the GitHub release for the pushed tag, marking alpha, beta, and release-candidate tags as GitHub pre-releases.
 
 ## Post-Tag Verification
 
 - Confirm the GitHub Actions release workflow completed successfully.
-- Confirm the GitHub release includes both wheel and source-distribution artifacts.
+- Confirm the GitHub release includes the wheel, the source distribution, and `release-artifact-manifest.json`.
+- Confirm the attached `release-artifact-manifest.json` matches the promoted artifacts.
 - Confirm generated release notes align with `CHANGELOG.md` and the intended version scope.
 - Confirm no release-blocking defects were discovered during the tagged workflow run.
 
@@ -61,6 +63,7 @@ Do not tag a release until all of the following are true:
 
 - local release validation passes through `scripts/release_check.py`
 - package artifacts install successfully from both wheel and sdist builds
+- the tagged release workflow generates and verifies `release-artifact-manifest.json` before publish
 - the coverage gate is passing
 - plan and release-checklist mirrors are current
 - changelog and migration notes are ready for the version being tagged

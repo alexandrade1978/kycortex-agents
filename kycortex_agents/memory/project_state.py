@@ -2075,7 +2075,7 @@ class ProjectState:
             "has_multiple_reasons": len(reasons) > 1,
             "has_multiple_resumed_tasks": len(resumed_task_ids) > 1,
             "has_multiple_unique_tasks": unique_task_count > 1,
-            "last_resumed_at": self.workflow_last_resumed_at,
+            "has_last_resumed_at": isinstance(self.workflow_last_resumed_at, str) and bool(self.workflow_last_resumed_at),
         }
 
     def _internal_resume_summary(self) -> InternalWorkflowResumeSummary:

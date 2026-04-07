@@ -305,7 +305,7 @@ class WorkflowResumeSummary(TypedDict):
     has_multiple_reasons: bool
     has_multiple_resumed_tasks: bool
     has_multiple_unique_tasks: bool
-    last_resumed_at: Optional[str]
+    has_last_resumed_at: bool
 
 
 class WorkflowRepairSummary(TypedDict):
@@ -430,7 +430,7 @@ def empty_workflow_telemetry() -> WorkflowTelemetry:
             "has_multiple_reasons": False,
             "has_multiple_resumed_tasks": False,
             "has_multiple_unique_tasks": False,
-            "last_resumed_at": None,
+            "has_last_resumed_at": False,
         },
         "repair_summary": {
             "has_repair_cycles": False,

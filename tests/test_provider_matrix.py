@@ -756,7 +756,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": False,
         "has_multiple_unique_tasks": False,
-        "last_resumed_at": "2026-03-28T12:00:00+00:00",
+        "has_last_resumed_at": True,
     }
     assert "workflow_last_resumed_at" not in summary
     assert "workflow_finished_at" not in summary

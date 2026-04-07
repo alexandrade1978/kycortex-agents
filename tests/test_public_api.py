@@ -301,7 +301,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
             "has_multiple_reasons": False,
             "has_multiple_resumed_tasks": False,
             "has_multiple_unique_tasks": False,
-            "last_resumed_at": None,
+            "has_last_resumed_at": False,
         },
         "repair_summary": {
             "has_repair_cycles": False,

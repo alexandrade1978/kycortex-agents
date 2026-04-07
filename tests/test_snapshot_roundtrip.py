@@ -398,7 +398,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
             "has_multiple_reasons": False,
             "has_multiple_resumed_tasks": False,
             "has_multiple_unique_tasks": False,
-            "last_resumed_at": "2026-03-22T10:07:00+00:00",
+            "has_last_resumed_at": True,
         },
         "repair_summary": {
             "has_repair_cycles": False,

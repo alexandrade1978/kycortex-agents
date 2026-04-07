@@ -1184,7 +1184,7 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": True,
         "has_multiple_unique_tasks": True,
-        "last_resumed_at": project.workflow_last_resumed_at,
+        "has_last_resumed_at": True,
     }
 
 
@@ -1846,7 +1846,7 @@ def test_resume_workflow_clears_pause_state_and_records_resume_summary():
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": False,
         "has_multiple_unique_tasks": False,
-        "last_resumed_at": project.workflow_last_resumed_at,
+        "has_last_resumed_at": True,
     }
 
 
@@ -2731,7 +2731,7 @@ def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": True,
         "has_multiple_unique_tasks": True,
-        "last_resumed_at": None,
+        "has_last_resumed_at": False,
     }
 
 

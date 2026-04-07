@@ -50,7 +50,7 @@ The release workflow at `.github/workflows/release.yml` will:
 5. Generate `release-promotion-summary.json` with `scripts/release_promotion_summary.py`, binding the verified manifest to the pushed tag, commit, and promoted artifact set.
 6. Upload the distribution artifacts, manifest, and promotion summary.
 7. Publish the GitHub release for the pushed tag, marking alpha, beta, and release-candidate tags as GitHub pre-releases.
-8. Verify the published GitHub release with `scripts/release_published_assets_check.py`, confirming the attached asset set matches the staged `dist/` contents.
+8. Verify the published GitHub release with `scripts/release_published_assets_check.py`, confirming the attached asset set matches the staged `dist/` contents and that the downloaded published artifacts match the attached manifest checksums.
 
 ## Post-Tag Verification
 
@@ -59,7 +59,7 @@ The release workflow at `.github/workflows/release.yml` will:
 - Confirm the tagged workflow smoke-validated the exact staged wheel and source distribution before publication.
 - Confirm the attached `release-artifact-manifest.json` matches the promoted artifacts.
 - Confirm `release-promotion-summary.json` records the pushed tag, the promoted package version, and the verified manifest checksum for the attached artifacts.
-- Confirm `scripts/release_published_assets_check.py` passed in the tagged workflow, proving the GitHub release attached asset set matches the staged `dist/` directory.
+- Confirm `scripts/release_published_assets_check.py` passed in the tagged workflow, proving the GitHub release attached asset set matches the staged `dist/` directory and that the downloaded wheel and source distribution match the attached manifest checksums.
 - Confirm generated release notes align with `CHANGELOG.md` and the intended version scope.
 - Confirm no release-blocking defects were discovered during the tagged workflow run.
 
@@ -72,7 +72,7 @@ Do not tag a release until all of the following are true:
 - the tagged release workflow smoke-validates the exact staged wheel and source distribution before promotion
 - the tagged release workflow generates and verifies `release-artifact-manifest.json` before publish
 - the tagged release workflow writes `release-promotion-summary.json` after manifest verification and before publish
-- the tagged release workflow verifies the published GitHub release asset set through `scripts/release_published_assets_check.py`
+- the tagged release workflow verifies the published GitHub release asset set and downloaded artifact checksums through `scripts/release_published_assets_check.py`
 - the coverage gate is passing
 - plan and release-checklist mirrors are current
 - changelog and migration notes are ready for the version being tagged

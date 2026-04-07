@@ -59,7 +59,7 @@ python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/rele
 python scripts/release_promotion_summary.py --dist-dir dist --manifest dist/release-artifact-manifest.json --tag v<version> --output dist/release-promotion-summary.json
 ```
 
-- Verify the published GitHub release asset set after a tagged release run:
+- Verify the published GitHub release asset set and downloaded checksums after a tagged release run:
 
 ```bash
 GITHUB_TOKEN=<token> python scripts/release_published_assets_check.py --repository <owner>/<repo> --tag v<version> --dist-dir dist
@@ -136,7 +136,7 @@ make test
 - `scripts/package_check.py`: local built-artifact validator that either builds wheel and source distributions or validates an existing `dist/` directory, then installs those artifacts into temporary virtual environments and smoke-tests the public package imports.
 - `scripts/release_artifact_manifest.py`: repository-owned generator and verifier for `release-artifact-manifest.json`, the staged checksum manifest attached to tagged releases after distribution build.
 - `scripts/release_promotion_summary.py`: repository-owned provenance writer for `release-promotion-summary.json`, tying the verified manifest, tag, commit, and promoted artifacts together before publication.
-- `scripts/release_published_assets_check.py`: repository-owned post-publish verifier that checks the GitHub release attached to a tag exposes the exact asset set and sizes staged in `dist/`.
+- `scripts/release_published_assets_check.py`: repository-owned post-publish verifier that downloads the published GitHub release assets for a tag, checks the attached asset set and sizes against `dist/`, and proves the downloaded checksums match the staged files plus the attached manifest.
 - `scripts/release_metadata_check.py`: local release-metadata validator that checks package version alignment, release-state metadata, and release-facing documentation cues before a tag is created.
 - `scripts/release_check.py`: local release validator that runs the repository lint, type-check, focused regression, package-validation, coverage-gate, and full-suite commands in the same order used for release readiness.
 - `.github/workflows/release.yml`: tagged-release automation that reruns validation, builds wheel and source distributions, smoke-tests the staged release artifacts, verifies the staged manifest, writes the promotion summary, publishes them on GitHub releases for `v*` tags, and then verifies the published asset set through the GitHub API.

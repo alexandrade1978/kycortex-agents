@@ -101,7 +101,7 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}
 
-      - name: Verify published GitHub release assets
+      - name: Verify published GitHub release assets and checksums
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/release_published_assets_check.py --repository ${{ github.repository }} --tag ${{ github.ref_name }} --dist-dir dist --api-base-url ${{ github.api_url }}

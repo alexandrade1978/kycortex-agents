@@ -727,20 +727,28 @@ def test_release_promotion_summary_script_generates_provenance_packet(tmp_path):
 
 
 @contextlib.contextmanager
-def _release_api_server(release_payload: dict[str, object], expected_path: str):
+def _release_api_server(responses: dict[str, bytes]):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            if self.path != expected_path:
+            if self.path in responses:
+                payload = responses[self.path]
+                self.send_response(200)
+                content_type = (
+                    "application/json" if self.path.startswith("/repos/") else "application/octet-stream"
+                )
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+
+            if self.path.startswith("/repos/"):
                 self.send_response(404)
                 self.end_headers()
                 return
 
-            payload = json.dumps(release_payload).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
+            self.send_response(404)
             self.end_headers()
-            self.wfile.write(payload)
 
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -819,16 +827,29 @@ def test_release_published_assets_check_script_verifies_github_release_assets(tm
                 "name": asset.name,
                 "size": asset.stat().st_size,
                 "state": "uploaded",
-                "browser_download_url": f"https://example.invalid/{asset.name}",
+                "browser_download_url": f"http://127.0.0.1/placeholder/{asset.name}",
             }
             for asset in expected_assets
         ],
     }
 
-    with _release_api_server(
-        release_payload,
-        f"/repos/example/kycortex-agents/releases/tags/v{kycortex_agents.__version__}",
-    ) as api_base_url:
+    release_api_path = f"/repos/example/kycortex-agents/releases/tags/v{kycortex_agents.__version__}"
+    success_responses: dict[str, bytes] = {}
+    with _release_api_server(success_responses) as api_base_url:
+        success_payload = {
+            **release_payload,
+            "assets": [
+                {
+                    **asset,
+                    "browser_download_url": f"{api_base_url}/downloads/{asset['name']}",
+                }
+                for asset in release_payload["assets"]
+            ],
+        }
+        success_responses[release_api_path] = json.dumps(success_payload).encode("utf-8")
+        for asset in expected_assets:
+            success_responses[f"/downloads/{asset.name}"] = asset.read_bytes()
+
         verify = subprocess.run(
             [
                 sys.executable,
@@ -853,22 +874,25 @@ def test_release_published_assets_check_script_verifies_github_release_assets(tm
         )
 
     assert verify.returncode == 0
-    assert "Verified published GitHub release assets" in verify.stdout
+    assert "Verified published GitHub release assets and checksums" in verify.stdout
     assert "release-artifact-manifest.json" in verify.stdout
     assert "release-promotion-summary.json" in verify.stdout
 
-    missing_summary_payload = {
-        **release_payload,
-        "assets": [
-            asset
-            for asset in release_payload["assets"]
-            if asset["name"] != "release-promotion-summary.json"
-        ],
-    }
-    with _release_api_server(
-        missing_summary_payload,
-        f"/repos/example/kycortex-agents/releases/tags/v{kycortex_agents.__version__}",
-    ) as api_base_url:
+    missing_summary_responses: dict[str, bytes] = {}
+    with _release_api_server(missing_summary_responses) as api_base_url:
+        missing_summary_payload = {
+            **release_payload,
+            "assets": [
+                {
+                    **asset,
+                    "browser_download_url": f"{api_base_url}/downloads/{asset['name']}",
+                }
+                for asset in release_payload["assets"]
+                if asset["name"] != "release-promotion-summary.json"
+            ],
+        }
+        missing_summary_responses[release_api_path] = json.dumps(missing_summary_payload).encode("utf-8")
+
         verify = subprocess.run(
             [
                 sys.executable,
@@ -894,6 +918,51 @@ def test_release_published_assets_check_script_verifies_github_release_assets(tm
 
     assert verify.returncode == 1
     assert "missing assets: release-promotion-summary.json" in verify.stderr
+
+    tampered_responses: dict[str, bytes] = {}
+    with _release_api_server(tampered_responses) as api_base_url:
+        tampered_payload = {
+            **release_payload,
+            "assets": [
+                {
+                    **asset,
+                    "browser_download_url": f"{api_base_url}/downloads/{asset['name']}",
+                }
+                for asset in release_payload["assets"]
+            ],
+        }
+        tampered_responses[release_api_path] = json.dumps(tampered_payload).encode("utf-8")
+        for asset in expected_assets:
+            asset_bytes = asset.read_bytes()
+            if asset.name.endswith(".whl"):
+                asset_bytes = b"wheel-bytez"
+            tampered_responses[f"/downloads/{asset.name}"] = asset_bytes
+
+        verify = subprocess.run(
+            [
+                sys.executable,
+                str(published_assets_script_path),
+                "--repository",
+                "example/kycortex-agents",
+                "--tag",
+                f"v{kycortex_agents.__version__}",
+                "--dist-dir",
+                str(dist_dir),
+                "--api-base-url",
+                api_base_url,
+                "--max-attempts",
+                "1",
+                "--retry-delay-seconds",
+                "0",
+            ],
+            env=_coverage_isolated_env({"GITHUB_TOKEN": "test-token"}),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    assert verify.returncode == 1
+    assert "does not match the staged file checksum" in verify.stderr
 
 
 def test_package_check_script_validates_existing_dist_dir(tmp_path):

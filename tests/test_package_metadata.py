@@ -360,11 +360,8 @@ def test_github_actions_release_workflow_covers_tagged_release_automation():
     assert "actions/checkout@v5" in release_workflow
     assert "actions/setup-python@v6" in release_workflow
     assert 'python -m pip install -e ".[test]"' in release_workflow
-    assert "python -m ruff check ." in release_workflow
-    assert "python -m mypy" in release_workflow
-    assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py tests/test_package_metadata.py -q" in release_workflow
-    assert "python scripts/package_check.py" in release_workflow
-    assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in release_workflow
+    assert "Run repository-owned release gate" in release_workflow
+    assert "python scripts/release_check.py" in release_workflow
     assert "python -m build" in release_workflow
     assert "actions/upload-artifact@v4" in release_workflow
     assert "actions/download-artifact@v4" in release_workflow

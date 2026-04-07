@@ -55,7 +55,7 @@ def test_pyproject_contains_expected_package_metadata():
     assert "Typing :: Typed" in project["classifiers"]
     assert "License :: OSI Approved :: GNU Affero General Public License v3" not in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]
-    assert "openai>=1.0.0,<2.0.0" in project["dependencies"]
+    assert "openai>=1.0.0,<3.0.0" in project["dependencies"]
     assert data["project"]["urls"]["Homepage"] == "https://github.com/alexandrade1978/kycortex-agents"
     assert data["project"]["urls"]["Documentation"].endswith("/docs/README.md")
 
@@ -178,7 +178,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "Author-email: Alexandre Andrade <alex@kycortex.com>" in metadata
     assert "Project-URL: Documentation, https://github.com/alexandrade1978/kycortex-agents/blob/main/docs/README.md" in metadata
     assert "Requires-Dist: anthropic<1.0.0,>=0.34.0" in metadata
-    assert "Requires-Dist: openai<2.0.0,>=1.0.0" in metadata
+    assert "Requires-Dist: openai<3.0.0,>=1.0.0" in metadata
     assert "Requires-Dist: pytest>=7.0.0; extra == \"test\"" in metadata
     assert "Requires-Dist: build<2.0,>=1.2; extra == \"test\"" in metadata
     assert "Requires-Dist: pytest-cov<7,>=5; extra == \"test\"" in metadata
@@ -195,7 +195,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "pytest-cov<7,>=5" in requirements
     assert '[test:python_version < "3.11"]' in requirements
     assert "tomli<3.0,>=2.0.1" in requirements
-    assert "openai<2.0.0,>=1.0.0" in requirements
+    assert "openai<3.0.0,>=1.0.0" in requirements
     assert "mypy<2.0,>=1.10" in requirements
     assert "pre-commit<5.0,>=3.7" in requirements
     assert "ruff<1.0,>=0.6" in requirements

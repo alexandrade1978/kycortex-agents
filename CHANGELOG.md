@@ -21,6 +21,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - Public snapshots no longer duplicate top-level `repair_cycle_count`, relying on the retained public `repair_history` contract for repair-lineage visibility instead.
 - Public `workflow_finished` snapshot events now expose `has_workflow_duration` instead of the exact public `workflow_duration_ms` value while preserving the internal exact event duration and the rest of the minimized public event contract.
 - Public `workflow_telemetry.provider_health_summary` now exposes `has_models` instead of exact provider model-name lists while preserving the exact internal provider-health telemetry.
+- Public `workflow_telemetry` aggregate `usage` maps now expose presence-by-key instead of exact numeric values while preserving exact task-level provider usage and the internal exact workflow telemetry.
 - Public `workflow_finished` snapshot events no longer duplicate top-level `acceptance_policy`, `terminal_outcome`, `failure_category`, or `acceptance_criteria_met`, relying on the canonical nested public `acceptance_evaluation` summary instead.
 - Public snapshots no longer duplicate top-level `acceptance_criteria_met`, and `AgentView` now derives that prompt-facing boolean from the canonical public `acceptance_evaluation.accepted` field instead.
 - Public snapshots no longer duplicate top-level `acceptance_policy`, `terminal_outcome`, or `failure_category` fields, and `AgentView` now derives those prompt-facing values from the canonical public `acceptance_evaluation` summary.

@@ -1922,7 +1922,7 @@ class ProjectState:
                 "has_attempts": int(raw_summary.get("attempt_count", 0)) > 0,
                 "has_retry_attempts": int(raw_summary.get("retry_attempt_count", 0)) > 0,
                 "duration_ms": self._metric_distribution(duration_series),
-                "usage": self._sorted_numeric_metrics(usage_metrics),
+                "usage": self._metric_key_presence(usage_metrics),
             }
 
         normalized_provider_health_summary: Dict[str, WorkflowProviderHealthSummary] = {}
@@ -1953,7 +1953,7 @@ class ProjectState:
             "has_attempts": attempt_count > 0,
             "has_retry_attempts": retry_attempt_count > 0,
             "duration_ms": self._metric_distribution(duration_values),
-            "usage": self._sorted_numeric_metrics(usage_totals),
+            "usage": self._metric_key_presence(usage_totals),
             "fallback_summary": {
                 "has_multiple_tasks": fallback_task_count > 1,
                 "has_entries": fallback_entry_count > 0,
@@ -3141,6 +3141,18 @@ class ProjectState:
             key: self._normalize_metric_number(value)
             for key, value in sorted(metrics.items())
         }
+
+    def _metric_key_presence(self, metrics: Any) -> Dict[str, bool]:
+        if not isinstance(metrics, dict):
+            return {}
+        ordered_presence: Dict[str, bool] = {}
+        for key, value in sorted(metrics.items()):
+            if not isinstance(key, str) or not key:
+                continue
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                continue
+            ordered_presence[key] = True
+        return ordered_presence
 
     def _sorted_count_map(self, counts: Dict[str, int]) -> Dict[str, int]:
         ordered_counts: Dict[str, int] = {}

@@ -3870,7 +3870,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["provider_summary"]["openai"]["has_retry_attempts"] is False
     assert telemetry["provider_summary"]["openai"]["duration_ms"]["has_samples"] is True
     assert telemetry["provider_summary"]["openai"]["duration_ms"]["has_multiple_samples"] is False
-    assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 5}
+    assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": True}
     assert telemetry["provider_health_summary"]["openai"] == {
         "has_models": False,
         "status_presence": {"open_circuit": True},
@@ -3884,7 +3884,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["has_retry_attempts"] is False
     assert telemetry["duration_ms"]["has_samples"] is True
     assert telemetry["duration_ms"]["has_multiple_samples"] is True
-    assert telemetry["usage"] == {"completion_tokens": 2, "prompt_tokens": 5}
+    assert telemetry["usage"] == {"completion_tokens": True, "prompt_tokens": True}
     assert telemetry["fallback_summary"] == {
         "has_multiple_tasks": False,
         "has_entries": True,
@@ -4142,7 +4142,7 @@ def test_internal_runtime_telemetry_exposes_exact_metrics_without_changing_publi
         "has_attempts": True,
         "has_retry_attempts": True,
         "duration_ms": {"has_samples": True, "has_multiple_samples": False},
-        "usage": {"completion_tokens": 2, "prompt_tokens": 5},
+        "usage": {"completion_tokens": True, "prompt_tokens": True},
     }
 
 
@@ -4177,8 +4177,8 @@ def test_workflow_telemetry_summary_filters_invalid_provider_usage_metrics(monke
 
     telemetry = project._workflow_telemetry_summary()
 
-    assert telemetry["usage"] == {"total_tokens": 9}
-    assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 3}
+    assert telemetry["usage"] == {"total_tokens": True}
+    assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": True}
 
 
 def test_workflow_telemetry_summary_handles_non_dict_provider_usage_bucket(monkeypatch):
@@ -4218,7 +4218,7 @@ def test_workflow_telemetry_summary_handles_non_dict_provider_usage_bucket(monke
 
     telemetry = project._workflow_telemetry_summary()
 
-    assert telemetry["usage"] == {"total_tokens": 1}
+    assert telemetry["usage"] == {"total_tokens": True}
     assert telemetry["provider_summary"]["openai"]["usage"] == {}
 
 

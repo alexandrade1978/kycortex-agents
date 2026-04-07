@@ -341,7 +341,7 @@ class WorkflowProviderSummary(TypedDict):
     has_attempts: bool
     has_retry_attempts: bool
     duration_ms: MetricDistribution
-    usage: NumericMetricMap
+    usage: Dict[str, bool]
 
 
 class WorkflowProviderHealthSummary(TypedDict):
@@ -388,7 +388,7 @@ class WorkflowTelemetry(TypedDict):
     has_attempts: bool
     has_retry_attempts: bool
     duration_ms: MetricDistribution
-    usage: NumericMetricMap
+    usage: Dict[str, bool]
     fallback_summary: WorkflowFallbackSummary
     error_summary: WorkflowErrorSummary
 

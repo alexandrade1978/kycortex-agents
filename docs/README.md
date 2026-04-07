@@ -77,7 +77,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [RELEASE_STATUS.md](../RELEASE_STATUS.md) when checking the repository's current release-readiness state before deciding whether to update the version and tag a release.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for the repository `.pre-commit-config.yaml` workflow when installing local hooks or running pre-commit and pre-push automation before publishing changes.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/ci.yml](../.github/workflows/ci.yml) when you need the repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification.
-- Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/package_check.py](../scripts/package_check.py) when validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata.
+- Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/package_check.py](../scripts/package_check.py) when validating built wheel and source-distribution artifacts, including an already-built staged `dist/` directory, before publishing releases or changing packaging metadata.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_artifact_manifest.py](../scripts/release_artifact_manifest.py) when generating or verifying the staged release artifact manifest attached to tagged releases.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_promotion_summary.py](../scripts/release_promotion_summary.py) when generating the promotion provenance packet that binds the verified manifest to the release tag and promoted artifacts.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/release.yml](../.github/workflows/release.yml) when preparing manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts.
@@ -99,6 +99,6 @@ The released baseline remains `1.0.13a1`.
 
 The current local architecture state reflects the completed runtime/public boundary split: prompt-facing context uses `AgentView`, `snapshot()` remains the public normalized read model, `ProjectState.internal_runtime_telemetry()` provides the dedicated internal operator-facing telemetry read path, and the public snapshot, public execution events, and provider-matrix summaries no longer expose the old exact telemetry mirrors.
 
-The maintained release track still includes coverage-gate enforcement, release-metadata validation, staged artifact-manifest verification, promotion-summary provenance, and the tagged GitHub release workflow used to publish repository-safe package artifacts.
+The maintained release track still includes coverage-gate enforcement, release-metadata validation, staged artifact smoke validation, staged artifact-manifest verification, promotion-summary provenance, and the tagged GitHub release workflow used to publish repository-safe package artifacts.
 
 Use `snapshot()` for public inspection and `ProjectState.internal_runtime_telemetry()` for exact operator or UI observability.

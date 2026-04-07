@@ -52,6 +52,9 @@ jobs:
       - name: Build wheel and source distribution
         run: python -m build
 
+      - name: Validate staged distribution artifacts
+        run: python scripts/package_check.py --dist-dir dist
+
       - name: Generate release artifact manifest
         run: python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json
 

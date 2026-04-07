@@ -14,6 +14,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 ### Changed
 
 - Tagged and manual GitHub release automation now runs the repository-owned `scripts/release_check.py` gate before building distribution artifacts, keeping workflow promotion aligned with the documented release metadata, coverage, packaging, and full-suite policy.
+- Tagged GitHub release automation now smoke-validates the exact staged wheel and source distribution before generating release promotion metadata or publishing artifacts.
 - Tagged GitHub release automation now generates and verifies `release-artifact-manifest.json` before publication, attaching the verified manifest alongside the promoted wheel and source distribution.
 - Tagged GitHub release automation now writes `release-promotion-summary.json`, binding the verified manifest, pushed tag, commit SHA, and promoted artifact set into a repository-owned provenance packet before publication.
 - Repository docs now describe prompt-facing context as filtered `AgentView` data instead of raw `ProjectSnapshot` serialization.

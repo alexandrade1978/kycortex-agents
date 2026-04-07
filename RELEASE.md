@@ -45,15 +45,17 @@ The release workflow at `.github/workflows/release.yml` will:
 
 1. Re-run repository validation.
 2. Build the wheel and source distribution.
-3. Generate `release-artifact-manifest.json` with `scripts/release_artifact_manifest.py` for the built artifacts and verify it before promotion.
-4. Generate `release-promotion-summary.json` with `scripts/release_promotion_summary.py`, binding the verified manifest to the pushed tag, commit, and promoted artifact set.
-5. Upload the distribution artifacts, manifest, and promotion summary.
-6. Publish the GitHub release for the pushed tag, marking alpha, beta, and release-candidate tags as GitHub pre-releases.
+3. Smoke-validate the exact staged wheel and source distribution with `scripts/package_check.py --dist-dir dist` before any promotion metadata is written.
+4. Generate `release-artifact-manifest.json` with `scripts/release_artifact_manifest.py` for the built artifacts and verify it before promotion.
+5. Generate `release-promotion-summary.json` with `scripts/release_promotion_summary.py`, binding the verified manifest to the pushed tag, commit, and promoted artifact set.
+6. Upload the distribution artifacts, manifest, and promotion summary.
+7. Publish the GitHub release for the pushed tag, marking alpha, beta, and release-candidate tags as GitHub pre-releases.
 
 ## Post-Tag Verification
 
 - Confirm the GitHub Actions release workflow completed successfully.
 - Confirm the GitHub release includes the wheel, the source distribution, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
+- Confirm the tagged workflow smoke-validated the exact staged wheel and source distribution before publication.
 - Confirm the attached `release-artifact-manifest.json` matches the promoted artifacts.
 - Confirm `release-promotion-summary.json` records the pushed tag, the promoted package version, and the verified manifest checksum for the attached artifacts.
 - Confirm generated release notes align with `CHANGELOG.md` and the intended version scope.
@@ -65,6 +67,7 @@ Do not tag a release until all of the following are true:
 
 - local release validation passes through `scripts/release_check.py`
 - package artifacts install successfully from both wheel and sdist builds
+- the tagged release workflow smoke-validates the exact staged wheel and source distribution before promotion
 - the tagged release workflow generates and verifies `release-artifact-manifest.json` before publish
 - the tagged release workflow writes `release-promotion-summary.json` after manifest verification and before publish
 - the coverage gate is passing

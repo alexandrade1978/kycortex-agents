@@ -269,6 +269,7 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python -m pre_commit run --all-files --hook-stage pre-push" in contributing
     assert "python scripts/package_check.py" in contributing
     assert "make package-check" in contributing
+    assert "python scripts/package_check.py --dist-dir dist" in contributing
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json" in contributing
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify" in contributing
     assert "python scripts/release_promotion_summary.py --dist-dir dist --manifest dist/release-artifact-manifest.json --tag v<version> --output dist/release-promotion-summary.json" in contributing
@@ -376,6 +377,7 @@ def test_github_actions_release_workflow_covers_tagged_release_automation():
     assert "Run repository-owned release gate" in release_workflow
     assert "python scripts/release_check.py" in release_workflow
     assert "python -m build" in release_workflow
+    assert "python scripts/package_check.py --dist-dir dist" in release_workflow
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json" in release_workflow
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify" in release_workflow
     assert "python scripts/release_promotion_summary.py --dist-dir dist --manifest dist/release-artifact-manifest.json --tag ${{ github.ref_name }} --commit-sha ${{ github.sha }} --output dist/release-promotion-summary.json" in release_workflow
@@ -484,7 +486,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "scripts/package_check.py" in docs_readme
     assert "scripts/release_artifact_manifest.py" in docs_readme
     assert "scripts/release_promotion_summary.py" in docs_readme
-    assert "validating built wheel and source-distribution artifacts before publishing releases or changing packaging metadata" in docs_readme
+    assert "validating built wheel and source-distribution artifacts, including an already-built staged `dist/` directory, before publishing releases or changing packaging metadata" in docs_readme
     assert "staged release artifact manifest attached to tagged releases" in docs_readme
     assert "promotion provenance packet that binds the verified manifest to the release tag and promoted artifacts" in docs_readme
     assert "manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts" in docs_readme
@@ -713,6 +715,47 @@ def test_release_promotion_summary_script_generates_provenance_packet(tmp_path):
     assert "does not match the manifest entry" in create_summary.stderr
 
 
+def test_package_check_script_validates_existing_dist_dir(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    script_path = project_root / "scripts" / "package_check.py"
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--sdist",
+            "--wheel",
+            "--outdir",
+            str(dist_dir),
+        ],
+        cwd=project_root,
+        env=_coverage_isolated_env(),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    validate_existing = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--dist-dir",
+            str(dist_dir),
+        ],
+        cwd=project_root,
+        env=_coverage_isolated_env(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert validate_existing.returncode == 0
+    assert "Validated staged artifacts:" in validate_existing.stdout
+
+
 def test_release_metadata_check_script_validates_version_and_release_docs_alignment():
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "release_metadata_check.py"
     script = script_path.read_text(encoding="utf-8")
@@ -744,6 +787,7 @@ def test_release_guide_documents_repository_release_gate_procedure():
     assert "python scripts/release_check.py" in release_guide
     assert "make release-check" in release_guide
     assert "scripts/package_check.py" in release_guide
+    assert "scripts/package_check.py --dist-dir dist" in release_guide
     assert "scripts/release_artifact_manifest.py" in release_guide
     assert "release-artifact-manifest.json" in release_guide
     assert "scripts/release_promotion_summary.py" in release_guide
@@ -772,6 +816,7 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "python scripts/release_check.py" in release_status
     assert "make release-check" in release_status
     assert "scripts/package_check.py" in release_status
+    assert "python scripts/package_check.py --dist-dir dist" in release_status
     assert "scripts/release_artifact_manifest.py" in release_status
     assert "release-artifact-manifest.json" in release_status
     assert "scripts/release_promotion_summary.py" in release_status

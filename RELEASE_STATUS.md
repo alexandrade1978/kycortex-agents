@@ -13,6 +13,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 - Local release validation is available through `python scripts/release_check.py` and `make release-check`.
 - Built package artifacts are validated through `scripts/package_check.py`.
+- The exact staged release artifacts are smoke-validated through `python scripts/package_check.py --dist-dir dist` in the tagged release workflow.
 - Staged artifact-promotion evidence is generated and verified through `python scripts/release_artifact_manifest.py` in the tagged release workflow.
 - Release promotion provenance is written through `python scripts/release_promotion_summary.py` after manifest verification in the tagged release workflow.
 - Release metadata alignment is validated through `python scripts/release_metadata_check.py` and `make release-metadata-check`.
@@ -57,6 +58,8 @@ The current alpha branch now also stages release artifact-promotion evidence thr
 
 The same tagged workflow now records a repository-owned `release-promotion-summary.json` packet that ties the verified manifest checksum to the pushed tag, commit SHA, and promoted wheel and source distribution.
 
+The same staged workflow now smoke-validates the exact promoted wheel and source distribution before any release metadata is attached or published.
+
 Use the following repository-owned references when validating follow-up maintenance releases:
 
 - `COMMERCIAL_LICENSE.md`
@@ -72,4 +75,4 @@ For future tagged releases:
 1. update the package version for the intended release
 2. rerun `python scripts/release_check.py`
 3. create and push the matching `v<version>` tag
-4. verify the tagged GitHub release workflow, attached artifacts, `release-artifact-manifest.json`, and `release-promotion-summary.json`
+4. verify the tagged GitHub release workflow, staged artifact smoke validation, attached artifacts, `release-artifact-manifest.json`, and `release-promotion-summary.json`

@@ -2561,7 +2561,7 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
             "cycle": 1,
             "has_started_at": True,
             "has_reason": True,
-            "failure_category": "test_validation",
+            "has_failure_category": True,
             "has_failed_tasks": True,
             "has_budget_remaining": True,
         }
@@ -2569,12 +2569,13 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
     assert project.execution_events[-1]["event"] == "workflow_repair_cycle_started"
     assert snapshot.execution_events[-1]["details"]["cycle"] == 1
     assert snapshot.execution_events[-1]["details"]["has_reason"] is True
-    assert snapshot.execution_events[-1]["details"]["failure_category"] == "test_validation"
+    assert snapshot.execution_events[-1]["details"]["has_failure_category"] is True
     assert snapshot.execution_events[-1]["details"]["has_failed_tasks"] is True
     assert snapshot.execution_events[-1]["details"]["has_budget_remaining"] is True
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "reason" not in snapshot.execution_events[-1]["details"]
     assert "started_at" not in snapshot.execution_events[-1]["details"]
+    assert "failure_category" not in snapshot.execution_events[-1]["details"]
     assert "failed_task_ids" not in snapshot.execution_events[-1]["details"]
     assert not hasattr(snapshot, "workflow_telemetry")
     assert telemetry["repair_summary"] == {
@@ -2683,18 +2684,19 @@ def test_snapshot_repair_history_uses_failed_task_presence_for_legacy_entries():
             "cycle": 1,
             "has_started_at": True,
             "has_reason": True,
-            "failure_category": "test_validation",
+            "has_failure_category": True,
             "has_failed_tasks": True,
             "has_budget_remaining": True,
         }
     ]
     assert snapshot.execution_events[0]["details"]["cycle"] == 1
     assert snapshot.execution_events[0]["details"]["has_reason"] is True
-    assert snapshot.execution_events[0]["details"]["failure_category"] == "test_validation"
+    assert snapshot.execution_events[0]["details"]["has_failure_category"] is True
     assert snapshot.execution_events[0]["details"]["has_failed_tasks"] is True
     assert snapshot.execution_events[0]["details"]["has_budget_remaining"] is True
     assert "reason" not in snapshot.execution_events[0]["details"]
     assert "started_at" not in snapshot.execution_events[0]["details"]
+    assert "failure_category" not in snapshot.execution_events[0]["details"]
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "failed_task_ids" not in snapshot.execution_events[0]["details"]
 

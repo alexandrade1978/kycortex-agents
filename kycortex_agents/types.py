@@ -327,7 +327,7 @@ class WorkflowRepairHistoryEntry(TypedDict):
     cycle: int
     has_started_at: bool
     has_reason: bool
-    failure_category: Optional[str]
+    has_failure_category: bool
     has_failed_tasks: bool
     has_budget_remaining: bool
 

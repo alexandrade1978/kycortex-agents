@@ -2385,14 +2385,13 @@ class ProjectState:
 
     def _public_repair_history_entry(self, entry: Dict[str, Any]) -> WorkflowRepairHistoryEntry:
         started_at = entry.get("started_at") if isinstance(entry.get("started_at"), str) else None
-        failure_category = entry.get("failure_category") if isinstance(entry.get("failure_category"), str) else None
         cycle = entry.get("cycle")
         budget_remaining = entry.get("budget_remaining")
         return {
             "cycle": max(int(cycle), 0) if isinstance(cycle, (int, float)) and not isinstance(cycle, bool) else 0,
             "has_started_at": started_at is not None,
             "has_reason": self._presence_flag(entry, "reason", "has_reason"),
-            "failure_category": failure_category,
+            "has_failure_category": self._presence_flag(entry, "failure_category", "has_failure_category"),
             "has_failed_tasks": self._repair_history_failed_task_count(entry) > 0,
             "has_budget_remaining": max(int(budget_remaining), 0) > 0 if isinstance(budget_remaining, (int, float)) and not isinstance(budget_remaining, bool) else False,
         }

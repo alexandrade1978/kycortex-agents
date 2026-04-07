@@ -732,7 +732,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
             "cycle": 1,
             "has_started_at": False,
             "has_reason": False,
-            "failure_category": None,
+            "has_failure_category": False,
             "has_failed_tasks": True,
             "has_budget_remaining": False,
         }

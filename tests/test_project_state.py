@@ -3474,10 +3474,12 @@ def test_snapshot_minimizes_public_workflow_finished_failure_task_details():
     workflow_event = next(event for event in snapshot.execution_events if event["event"] == "workflow_finished")
 
     assert workflow_event["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
+    assert workflow_event["details"]["has_workflow_duration"] is True
     assert "acceptance_policy" not in workflow_event["details"]
     assert "terminal_outcome" not in workflow_event["details"]
     assert "failure_category" not in workflow_event["details"]
     assert "acceptance_criteria_met" not in workflow_event["details"]
+    assert "workflow_duration_ms" not in workflow_event["details"]
     assert workflow_event["details"]["has_failure_task"] is True
     assert workflow_event["details"]["has_failure_message"] is True
     assert workflow_event["details"]["has_failure_error_type"] is True
@@ -3528,10 +3530,12 @@ def test_snapshot_workflow_finished_events_use_presence_flags_for_legacy_failure
     workflow_event = snapshot.execution_events[0]
 
     assert workflow_event["event"] == "workflow_finished"
+    assert workflow_event["details"]["has_workflow_duration"] is True
     assert "acceptance_policy" not in workflow_event["details"]
     assert "terminal_outcome" not in workflow_event["details"]
     assert "failure_category" not in workflow_event["details"]
     assert "acceptance_criteria_met" not in workflow_event["details"]
+    assert "workflow_duration_ms" not in workflow_event["details"]
     assert workflow_event["details"]["has_failure_task"] is True
     assert workflow_event["details"]["has_failure_message"] is True
     assert workflow_event["details"]["has_failure_error_type"] is True
@@ -3631,10 +3635,12 @@ def test_snapshot_workflow_finished_events_use_presence_flags_for_legacy_provide
     workflow_event = snapshot.execution_events[0]
 
     assert workflow_event["event"] == "workflow_finished"
+    assert workflow_event["details"]["has_workflow_duration"] is True
     assert "acceptance_policy" not in workflow_event["details"]
     assert "terminal_outcome" not in workflow_event["details"]
     assert "failure_category" not in workflow_event["details"]
     assert "acceptance_criteria_met" not in workflow_event["details"]
+    assert "workflow_duration_ms" not in workflow_event["details"]
     assert workflow_event["details"]["has_provider_call"] is True
     assert workflow_event["details"]["has_failure_message"] is True
     assert workflow_event["details"]["has_failure_error_type"] is True
@@ -4333,7 +4339,8 @@ def test_snapshot_includes_workflow_execution_metadata():
         "has_pending_tasks": False,
     }
     assert snapshot.execution_events[0]["event"] == "workflow_started"
-    assert snapshot.execution_events[1]["details"]["workflow_duration_ms"] == 360000.0
+    assert snapshot.execution_events[1]["details"]["has_workflow_duration"] is True
+    assert "workflow_duration_ms" not in snapshot.execution_events[1]["details"]
     assert snapshot.execution_events[1]["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
     assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
 

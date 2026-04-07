@@ -2734,6 +2734,13 @@ class ProjectState:
         public_details.pop("terminal_outcome", None)
         public_details.pop("failure_category", None)
         public_details.pop("acceptance_criteria_met", None)
+        raw_workflow_duration = details.get("workflow_duration_ms")
+        if (
+            isinstance(raw_workflow_duration, (int, float))
+            and not isinstance(raw_workflow_duration, bool)
+        ) or public_details.get("has_workflow_duration") is True:
+            public_details["has_workflow_duration"] = True
+        public_details.pop("workflow_duration_ms", None)
 
         if self._presence_flag(details, "failure_task_id", "has_failure_task"):
             public_details["has_failure_task"] = True

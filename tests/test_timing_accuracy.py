@@ -72,6 +72,9 @@ def test_retry_timing_distinguishes_total_duration_from_last_attempt(monkeypatch
     assert result.details["has_provider_duration"] is False
     assert retry_event["details"]["last_attempt_duration_ms"] == 30000.0
     assert workflow_event["details"]["workflow_duration_ms"] == 180000.0
+    public_workflow_event = next(event for event in project.snapshot().execution_events if event["event"] == "workflow_finished")
+    assert public_workflow_event["details"]["has_workflow_duration"] is True
+    assert "workflow_duration_ms" not in public_workflow_event["details"]
     assert result.started_at == "2026-03-22T10:00:10+00:00"
     assert result.completed_at == "2026-03-22T10:02:30+00:00"
 
@@ -132,9 +135,12 @@ def test_resume_preserves_initial_workflow_and_task_start_times(monkeypatch):
     assert not hasattr(result, "resource_telemetry")
     assert result.details["has_provider_duration"] is False
     assert workflow_event["details"]["workflow_duration_ms"] == 540000.0
+    public_workflow_event = next(event for event in project.snapshot().execution_events if event["event"] == "workflow_finished")
+    assert public_workflow_event["details"]["has_workflow_duration"] is True
+    assert "workflow_duration_ms" not in public_workflow_event["details"]
 
 
-def test_snapshot_preserves_submillisecond_duration_precision():
+def test_internal_workflow_finished_event_preserves_submillisecond_duration_precision():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -169,4 +175,6 @@ def test_snapshot_preserves_submillisecond_duration_precision():
     assert "last_attempt_duration_ms" not in result.details
     assert not hasattr(result, "resource_telemetry")
     assert result.details["has_provider_duration"] is False
-    assert project.snapshot().execution_events[0]["details"]["workflow_duration_ms"] == 0.4
+    assert project.execution_events[0]["details"]["workflow_duration_ms"] == 0.4
+    assert project.snapshot().execution_events[0]["details"]["has_workflow_duration"] is True
+    assert "workflow_duration_ms" not in project.snapshot().execution_events[0]["details"]

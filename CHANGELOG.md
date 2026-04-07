@@ -17,6 +17,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - Tagged GitHub release automation now smoke-validates the exact staged wheel and source distribution before generating release promotion metadata or publishing artifacts.
 - Tagged GitHub release automation now generates and verifies `release-artifact-manifest.json` before publication, attaching the verified manifest alongside the promoted wheel and source distribution.
 - Tagged GitHub release automation now writes `release-promotion-summary.json`, binding the verified manifest, pushed tag, commit SHA, and promoted artifact set into a repository-owned provenance packet before publication.
+- Tagged GitHub release automation now runs `scripts/release_published_assets_check.py` after publication, verifying the GitHub release exposes the exact attached asset set and sizes staged in `dist/`.
 - Repository docs now describe prompt-facing context as filtered `AgentView` data instead of raw `ProjectSnapshot` serialization.
 - Repository docs now point operator-facing observability to `ProjectState.internal_runtime_telemetry()` and describe the public snapshot, public execution-event, and provider-matrix telemetry removals as completed local behavior.
 - Prompt-facing completed-task outputs, semantic aliases, and planned-module hints are now scoped to the active task dependency closure instead of leaking unrelated finished-task context.
@@ -51,6 +52,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - Current package version remains `1.0.13a1` until the next maintenance update is released.
 - The unreleased boundary split now contains an explicit breaking public-telemetry removal in the local workspace.
+- The unreleased release-hardening stream now includes repository-owned post-publish GitHub release asset verification.
 
 ## 1.0.13a1 - 2026-03-30
 

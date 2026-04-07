@@ -1,10 +1,13 @@
 from pathlib import Path
+import contextlib
+import http.server
 import importlib
 import json
 import os
 import re
 import subprocess
 import sys
+import threading
 
 try:
     import tomllib
@@ -227,6 +230,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "scripts/release_artifact_manifest.py",
         "scripts/release_metadata_check.py",
         "scripts/release_check.py",
+        "scripts/release_published_assets_check.py",
         "scripts/release_promotion_summary.py",
         "kycortex_agents/agents/registry.py",
         "kycortex_agents/memory/state_store.py",
@@ -273,6 +277,7 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json" in contributing
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify" in contributing
     assert "python scripts/release_promotion_summary.py --dist-dir dist --manifest dist/release-artifact-manifest.json --tag v<version> --output dist/release-promotion-summary.json" in contributing
+    assert "GITHUB_TOKEN=<token> python scripts/release_published_assets_check.py --repository <owner>/<repo> --tag v<version> --dist-dir dist" in contributing
     assert "python scripts/release_metadata_check.py" in contributing
     assert "make release-metadata-check" in contributing
     assert "git tag v<version>" in contributing
@@ -280,6 +285,7 @@ def test_contributing_guide_documents_test_command_tiers():
     assert "RELEASE.md" in contributing
     assert "RELEASE_STATUS.md" in contributing
     assert ".github/workflows/release.yml" in contributing
+    assert "scripts/release_published_assets_check.py" in contributing
     assert "scripts/release_promotion_summary.py" in contributing
     assert "make precommit" in contributing
     assert "make prepush" in contributing
@@ -381,11 +387,13 @@ def test_github_actions_release_workflow_covers_tagged_release_automation():
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json" in release_workflow
     assert "python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify" in release_workflow
     assert "python scripts/release_promotion_summary.py --dist-dir dist --manifest dist/release-artifact-manifest.json --tag ${{ github.ref_name }} --commit-sha ${{ github.sha }} --output dist/release-promotion-summary.json" in release_workflow
+    assert "python scripts/release_published_assets_check.py --repository ${{ github.repository }} --tag ${{ github.ref_name }} --dist-dir dist --api-base-url ${{ github.api_url }}" in release_workflow
     assert "release-artifact-manifest.json" in release_workflow
     assert "release-promotion-summary.json" in release_workflow
     assert "actions/upload-artifact@v4" in release_workflow
     assert "actions/download-artifact@v4" in release_workflow
     assert "softprops/action-gh-release@v2" in release_workflow
+    assert "GITHUB_TOKEN: ${{ github.token }}" in release_workflow
     assert "generate_release_notes: true" in release_workflow
 
 
@@ -485,10 +493,12 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification" in docs_readme
     assert "scripts/package_check.py" in docs_readme
     assert "scripts/release_artifact_manifest.py" in docs_readme
+    assert "scripts/release_published_assets_check.py" in docs_readme
     assert "scripts/release_promotion_summary.py" in docs_readme
     assert "validating built wheel and source-distribution artifacts, including an already-built staged `dist/` directory, before publishing releases or changing packaging metadata" in docs_readme
     assert "staged release artifact manifest attached to tagged releases" in docs_readme
     assert "promotion provenance packet that binds the verified manifest to the release tag and promoted artifacts" in docs_readme
+    assert "published GitHub release for a tag exposes the same attached asset set staged in `dist/`" in docs_readme
     assert "manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts" in docs_readme
     assert "release notes" in docs_readme
     assert "migrating from earlier prototype revisions" in docs_readme
@@ -521,6 +531,7 @@ def test_changelog_documents_current_release_scope():
     assert "RELEASE.md" in changelog
     assert "RELEASE_STATUS.md" in changelog
     assert "release-artifact-manifest.json" in changelog
+    assert "scripts/release_published_assets_check.py" in changelog
     assert "release-promotion-summary.json" in changelog
     assert "scripts/release_metadata_check.py" in changelog
     assert "make release-metadata-check" in changelog
@@ -715,6 +726,176 @@ def test_release_promotion_summary_script_generates_provenance_packet(tmp_path):
     assert "does not match the manifest entry" in create_summary.stderr
 
 
+@contextlib.contextmanager
+def _release_api_server(release_payload: dict[str, object], expected_path: str):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path != expected_path:
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            payload = json.dumps(release_payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+
+def test_release_published_assets_check_script_verifies_github_release_assets(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    manifest_script_path = project_root / "scripts" / "release_artifact_manifest.py"
+    summary_script_path = project_root / "scripts" / "release_promotion_summary.py"
+    published_assets_script_path = project_root / "scripts" / "release_published_assets_check.py"
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+
+    wheel = dist_dir / f"kycortex_agents-{kycortex_agents.__version__}-py3-none-any.whl"
+    sdist = dist_dir / f"kycortex_agents-{kycortex_agents.__version__}.tar.gz"
+    wheel.write_bytes(b"wheel-bytes")
+    sdist.write_bytes(b"sdist-bytes")
+
+    manifest_path = dist_dir / "release-artifact-manifest.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(manifest_script_path),
+            "--dist-dir",
+            str(dist_dir),
+            "--output",
+            str(manifest_path),
+        ],
+        env=_coverage_isolated_env(),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    summary_path = dist_dir / "release-promotion-summary.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(summary_script_path),
+            "--dist-dir",
+            str(dist_dir),
+            "--manifest",
+            str(manifest_path),
+            "--tag",
+            f"v{kycortex_agents.__version__}",
+            "--commit-sha",
+            "deadbeef",
+            "--output",
+            str(summary_path),
+        ],
+        env=_coverage_isolated_env(),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    expected_assets = sorted(path for path in dist_dir.iterdir() if path.is_file())
+    release_payload = {
+        "tag_name": f"v{kycortex_agents.__version__}",
+        "html_url": (
+            "https://github.com/example/kycortex-agents/releases/tag/"
+            f"v{kycortex_agents.__version__}"
+        ),
+        "assets": [
+            {
+                "name": asset.name,
+                "size": asset.stat().st_size,
+                "state": "uploaded",
+                "browser_download_url": f"https://example.invalid/{asset.name}",
+            }
+            for asset in expected_assets
+        ],
+    }
+
+    with _release_api_server(
+        release_payload,
+        f"/repos/example/kycortex-agents/releases/tags/v{kycortex_agents.__version__}",
+    ) as api_base_url:
+        verify = subprocess.run(
+            [
+                sys.executable,
+                str(published_assets_script_path),
+                "--repository",
+                "example/kycortex-agents",
+                "--tag",
+                f"v{kycortex_agents.__version__}",
+                "--dist-dir",
+                str(dist_dir),
+                "--api-base-url",
+                api_base_url,
+                "--max-attempts",
+                "1",
+                "--retry-delay-seconds",
+                "0",
+            ],
+            env=_coverage_isolated_env({"GITHUB_TOKEN": "test-token"}),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    assert verify.returncode == 0
+    assert "Verified published GitHub release assets" in verify.stdout
+    assert "release-artifact-manifest.json" in verify.stdout
+    assert "release-promotion-summary.json" in verify.stdout
+
+    missing_summary_payload = {
+        **release_payload,
+        "assets": [
+            asset
+            for asset in release_payload["assets"]
+            if asset["name"] != "release-promotion-summary.json"
+        ],
+    }
+    with _release_api_server(
+        missing_summary_payload,
+        f"/repos/example/kycortex-agents/releases/tags/v{kycortex_agents.__version__}",
+    ) as api_base_url:
+        verify = subprocess.run(
+            [
+                sys.executable,
+                str(published_assets_script_path),
+                "--repository",
+                "example/kycortex-agents",
+                "--tag",
+                f"v{kycortex_agents.__version__}",
+                "--dist-dir",
+                str(dist_dir),
+                "--api-base-url",
+                api_base_url,
+                "--max-attempts",
+                "1",
+                "--retry-delay-seconds",
+                "0",
+            ],
+            env=_coverage_isolated_env({"GITHUB_TOKEN": "test-token"}),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    assert verify.returncode == 1
+    assert "missing assets: release-promotion-summary.json" in verify.stderr
+
+
 def test_package_check_script_validates_existing_dist_dir(tmp_path):
     project_root = Path(__file__).resolve().parents[1]
     script_path = project_root / "scripts" / "package_check.py"
@@ -789,6 +970,7 @@ def test_release_guide_documents_repository_release_gate_procedure():
     assert "scripts/package_check.py" in release_guide
     assert "scripts/package_check.py --dist-dir dist" in release_guide
     assert "scripts/release_artifact_manifest.py" in release_guide
+    assert "scripts/release_published_assets_check.py" in release_guide
     assert "release-artifact-manifest.json" in release_guide
     assert "scripts/release_promotion_summary.py" in release_guide
     assert "release-promotion-summary.json" in release_guide
@@ -819,6 +1001,7 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "python scripts/package_check.py --dist-dir dist" in release_status
     assert "scripts/release_artifact_manifest.py" in release_status
     assert "release-artifact-manifest.json" in release_status
+    assert "scripts/release_published_assets_check.py" in release_status
     assert "scripts/release_promotion_summary.py" in release_status
     assert "release-promotion-summary.json" in release_status
     assert "python scripts/release_metadata_check.py" in release_status

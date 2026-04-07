@@ -16,6 +16,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 - The exact staged release artifacts are smoke-validated through `python scripts/package_check.py --dist-dir dist` in the tagged release workflow.
 - Staged artifact-promotion evidence is generated and verified through `python scripts/release_artifact_manifest.py` in the tagged release workflow.
 - Release promotion provenance is written through `python scripts/release_promotion_summary.py` after manifest verification in the tagged release workflow.
+- Published GitHub release assets are verified through `python scripts/release_published_assets_check.py` after the tagged workflow publishes the release.
 - Release metadata alignment is validated through `python scripts/release_metadata_check.py` and `make release-metadata-check`.
 - Repository coverage is enforced through the `pytest-cov` gate configured in `pyproject.toml`.
 - Tagged release automation is defined in `.github/workflows/release.yml`.
@@ -36,6 +37,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 - `v1.0.13a1` is the current alpha release tag associated with this repository-owned release state.
 - The immediately preceding published state `v1.0.12` is now the previous maintenance baseline.
 - The next tagged release workflow is expected to attach `kycortex_agents-1.0.13a1-py3-none-any.whl`, `kycortex_agents-1.0.13a1.tar.gz`, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
+- The same tagged workflow now verifies through the GitHub API that the published release exposes exactly that attached asset set.
 
 ## Current Release Validation Snapshot
 
@@ -60,6 +62,8 @@ The same tagged workflow now records a repository-owned `release-promotion-summa
 
 The same staged workflow now smoke-validates the exact promoted wheel and source distribution before any release metadata is attached or published.
 
+The same tagged workflow now also verifies the published GitHub release asset list and sizes through `scripts/release_published_assets_check.py` immediately after publication.
+
 Use the following repository-owned references when validating follow-up maintenance releases:
 
 - `COMMERCIAL_LICENSE.md`
@@ -75,4 +79,4 @@ For future tagged releases:
 1. update the package version for the intended release
 2. rerun `python scripts/release_check.py`
 3. create and push the matching `v<version>` tag
-4. verify the tagged GitHub release workflow, staged artifact smoke validation, attached artifacts, `release-artifact-manifest.json`, and `release-promotion-summary.json`
+4. verify the tagged GitHub release workflow, staged artifact smoke validation, attached artifacts, `release-artifact-manifest.json`, `release-promotion-summary.json`, and the published-asset verification step

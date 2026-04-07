@@ -12,6 +12,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [RELEASE_STATUS.md](../RELEASE_STATUS.md): current release-state snapshot and next maintenance-release action.
 - [scripts/release_artifact_manifest.py](../scripts/release_artifact_manifest.py): staged release artifact manifest generator and verifier used between distribution build and publish.
 - [scripts/release_promotion_summary.py](../scripts/release_promotion_summary.py): promotion provenance writer used after manifest verification to bind the tag, commit, and promoted artifacts.
+- [scripts/release_published_assets_check.py](../scripts/release_published_assets_check.py): post-publish GitHub release verifier that confirms the tagged release exposes the expected uploaded asset set.
 - [CHANGELOG.md](../CHANGELOG.md): release-facing summary of the repository changes shipped in the 1.0 line.
 - [MIGRATION.md](../MIGRATION.md): upgrade guidance for users moving from the early prototype to the stabilized public API surface.
 - [.github/workflows/release.yml](../.github/workflows/release.yml): tagged-release workflow that revalidates the repository, builds distribution artifacts, and publishes GitHub releases for version tags.
@@ -80,6 +81,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/package_check.py](../scripts/package_check.py) when validating built wheel and source-distribution artifacts, including an already-built staged `dist/` directory, before publishing releases or changing packaging metadata.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_artifact_manifest.py](../scripts/release_artifact_manifest.py) when generating or verifying the staged release artifact manifest attached to tagged releases.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_promotion_summary.py](../scripts/release_promotion_summary.py) when generating the promotion provenance packet that binds the verified manifest to the release tag and promoted artifacts.
+- Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts/release_published_assets_check.py](../scripts/release_published_assets_check.py) when verifying that the published GitHub release for a tag exposes the same attached asset set staged in `dist/`.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) and [.github/workflows/release.yml](../.github/workflows/release.yml) when preparing manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts.
 - Use [CHANGELOG.md](../CHANGELOG.md) and [MIGRATION.md](../MIGRATION.md) when preparing release notes or explaining the stabilized public surface to users migrating from earlier prototype revisions.
 
@@ -99,6 +101,6 @@ The released baseline remains `1.0.13a1`.
 
 The current local architecture state reflects the completed runtime/public boundary split: prompt-facing context uses `AgentView`, `snapshot()` remains the public normalized read model, `ProjectState.internal_runtime_telemetry()` provides the dedicated internal operator-facing telemetry read path, and the public snapshot, public execution events, and provider-matrix summaries no longer expose the old exact telemetry mirrors.
 
-The maintained release track still includes coverage-gate enforcement, release-metadata validation, staged artifact smoke validation, staged artifact-manifest verification, promotion-summary provenance, and the tagged GitHub release workflow used to publish repository-safe package artifacts.
+The maintained release track still includes coverage-gate enforcement, release-metadata validation, staged artifact smoke validation, staged artifact-manifest verification, promotion-summary provenance, repository-owned published-asset verification, and the tagged GitHub release workflow used to publish repository-safe package artifacts.
 
 Use `snapshot()` for public inspection and `ProjectState.internal_runtime_telemetry()` for exact operator or UI observability.

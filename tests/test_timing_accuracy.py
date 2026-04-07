@@ -68,8 +68,9 @@ def test_retry_timing_distinguishes_total_duration_from_last_attempt(monkeypatch
     assert result.details["has_last_attempt_duration"] is True
     assert "task_duration_ms" not in result.details
     assert "last_attempt_duration_ms" not in result.details
-    assert result.resource_telemetry["task_duration_ms"] == 140000
-    assert result.resource_telemetry["last_attempt_duration_ms"] == 90000
+    assert result.resource_telemetry["has_task_duration"] is True
+    assert result.resource_telemetry["has_last_attempt_duration"] is True
+    assert result.resource_telemetry["has_provider_duration"] is False
     assert retry_event["details"]["last_attempt_duration_ms"] == 30000.0
     assert workflow_event["details"]["workflow_duration_ms"] == 180000.0
     assert result.started_at == "2026-03-22T10:00:10+00:00"
@@ -129,8 +130,9 @@ def test_resume_preserves_initial_workflow_and_task_start_times(monkeypatch):
     assert result.details["has_last_attempt_duration"] is True
     assert "task_duration_ms" not in result.details
     assert "last_attempt_duration_ms" not in result.details
-    assert result.resource_telemetry["task_duration_ms"] == 470000
-    assert result.resource_telemetry["last_attempt_duration_ms"] == 60000
+    assert result.resource_telemetry["has_task_duration"] is True
+    assert result.resource_telemetry["has_last_attempt_duration"] is True
+    assert result.resource_telemetry["has_provider_duration"] is False
     assert workflow_event["details"]["workflow_duration_ms"] == 540000.0
 
 
@@ -167,6 +169,7 @@ def test_snapshot_preserves_submillisecond_duration_precision():
     assert result.details["has_last_attempt_duration"] is True
     assert "task_duration_ms" not in result.details
     assert "last_attempt_duration_ms" not in result.details
-    assert result.resource_telemetry["task_duration_ms"] == 0.4
-    assert result.resource_telemetry["last_attempt_duration_ms"] == 0.4
+    assert result.resource_telemetry["has_task_duration"] is True
+    assert result.resource_telemetry["has_last_attempt_duration"] is True
+    assert result.resource_telemetry["has_provider_duration"] is False
     assert project.snapshot().execution_events[0]["details"]["workflow_duration_ms"] == 0.4

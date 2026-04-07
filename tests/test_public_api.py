@@ -258,9 +258,9 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
     }
     assert types_module.empty_task_resource_telemetry() == {
         "has_provider_call": False,
-        "task_duration_ms": None,
-        "last_attempt_duration_ms": None,
-        "provider_duration_ms": None,
+        "has_task_duration": False,
+        "has_last_attempt_duration": False,
+        "has_provider_duration": False,
         "usage": {},
     }
     assert types_module.empty_workflow_telemetry() == {

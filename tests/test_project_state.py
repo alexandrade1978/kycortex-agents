@@ -3523,9 +3523,9 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "last_attempt_duration_ms" not in result.failure.details
     assert result.resource_telemetry == {
         "has_provider_call": False,
-        "task_duration_ms": 360000,
-        "last_attempt_duration_ms": 60000,
-        "provider_duration_ms": None,
+        "has_task_duration": True,
+        "has_last_attempt_duration": True,
+        "has_provider_duration": False,
         "usage": {},
     }
     assert "has_provider_call" not in result.details

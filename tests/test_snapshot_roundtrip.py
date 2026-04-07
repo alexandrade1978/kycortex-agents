@@ -249,9 +249,9 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "last_provider_call" not in arch_result.details
     assert arch_result.resource_telemetry == {
         "has_provider_call": True,
-        "task_duration_ms": 120000,
-        "last_attempt_duration_ms": 120000,
-        "provider_duration_ms": 120.5,
+        "has_task_duration": True,
+        "has_last_attempt_duration": True,
+        "has_provider_duration": True,
         "usage": {"completion_tokens": 5, "prompt_tokens": 10, "total_tokens": 15},
     }
 
@@ -303,9 +303,9 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "history" not in review_result.failure.details
     assert review_result.resource_telemetry == {
         "has_provider_call": True,
-        "task_duration_ms": 330000,
-        "last_attempt_duration_ms": 60000,
-        "provider_duration_ms": 125,
+        "has_task_duration": True,
+        "has_last_attempt_duration": True,
+        "has_provider_duration": True,
         "usage": {},
     }
 
@@ -314,9 +314,9 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert docs_result.failure is None
     assert docs_result.resource_telemetry == {
         "has_provider_call": False,
-        "task_duration_ms": None,
-        "last_attempt_duration_ms": None,
-        "provider_duration_ms": None,
+        "has_task_duration": False,
+        "has_last_attempt_duration": False,
+        "has_provider_duration": False,
         "usage": {},
     }
 

@@ -2711,9 +2711,9 @@ class ProjectState:
         provider_duration_ms = self._provider_call_duration_ms(provider_call) if provider_call else None
         return {
             "has_provider_call": bool(provider_call),
-            "task_duration_ms": self._normalize_metric_number(task_duration_ms) if task_duration_ms is not None else None,
-            "last_attempt_duration_ms": self._normalize_metric_number(last_attempt_duration_ms) if last_attempt_duration_ms is not None else None,
-            "provider_duration_ms": self._normalize_metric_number(provider_duration_ms) if provider_duration_ms is not None else None,
+            "has_task_duration": task_duration_ms is not None,
+            "has_last_attempt_duration": last_attempt_duration_ms is not None,
+            "has_provider_duration": provider_duration_ms is not None,
             "usage": self._sorted_numeric_metrics(usage_metrics),
         }
 

@@ -374,6 +374,7 @@ def test_github_actions_release_workflow_covers_tagged_release_automation():
     release_workflow = (project_root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
     assert "name: Release" in release_workflow
+    assert 'FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"' in release_workflow
     assert "workflow_dispatch:" in release_workflow
     assert "tags:" in release_workflow
     assert '- "v*"' in release_workflow
@@ -1045,6 +1046,7 @@ def test_release_guide_documents_repository_release_gate_procedure():
     assert "release-artifact-manifest.json" in release_guide
     assert "scripts/release_promotion_summary.py" in release_guide
     assert "release-promotion-summary.json" in release_guide
+    assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24" in release_guide
     assert "scripts/release_metadata_check.py" in release_guide
     assert "coverage gate" in release_guide
     assert "## Tagging A Release" in release_guide

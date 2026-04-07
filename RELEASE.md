@@ -52,6 +52,8 @@ The release workflow at `.github/workflows/release.yml` will:
 7. Publish the GitHub release for the pushed tag, marking alpha, beta, and release-candidate tags as GitHub pre-releases.
 8. Verify the published GitHub release with `scripts/release_published_assets_check.py`, confirming the attached asset set matches the staged `dist/` contents and that the downloaded published artifacts match the attached manifest checksums.
 
+The workflow also sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` so JavaScript-based GitHub Actions steps avoid the runner deprecation path for Node.js 20 during artifact upload, artifact download, and release publication.
+
 ## Post-Tag Verification
 
 - Confirm the GitHub Actions release workflow completed successfully.

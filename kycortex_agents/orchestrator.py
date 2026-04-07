@@ -2038,14 +2038,24 @@ class Orchestrator:
     def _build_agent_view(self, task: Task, project: ProjectState, snapshot: ProjectSnapshot) -> AgentView:
         visible_task_ids = self._task_dependency_closure_ids(task, project)
         direct_dependency_ids = self._direct_dependency_ids(task)
+        acceptance_evaluation = snapshot.acceptance_evaluation
+        acceptance_policy = acceptance_evaluation.get("policy")
+        if not isinstance(acceptance_policy, str):
+            acceptance_policy = None
+        terminal_outcome = acceptance_evaluation.get("terminal_outcome")
+        if not isinstance(terminal_outcome, str):
+            terminal_outcome = None
+        failure_category = acceptance_evaluation.get("failure_category")
+        if not isinstance(failure_category, str):
+            failure_category = None
         return AgentView(
             project_name=snapshot.project_name,
             goal=snapshot.goal,
             workflow_status=snapshot.workflow_status,
             phase=snapshot.phase,
-            acceptance_policy=snapshot.acceptance_policy,
-            terminal_outcome=snapshot.terminal_outcome,
-            failure_category=snapshot.failure_category,
+            acceptance_policy=acceptance_policy,
+            terminal_outcome=terminal_outcome,
+            failure_category=failure_category,
             acceptance_criteria_met=snapshot.acceptance_criteria_met,
             task_results=self._agent_view_task_results(snapshot.task_results, visible_task_ids),
             decisions=self._agent_view_decisions(snapshot.decisions),

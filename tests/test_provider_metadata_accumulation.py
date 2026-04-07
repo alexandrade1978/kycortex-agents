@@ -213,8 +213,8 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert workflow_telemetry["has_tasks_without_provider_calls"] is False
     assert workflow_telemetry["has_multiple_final_providers"] is True
     assert workflow_telemetry["acceptance_summary"]["accepted"] is True
-    assert workflow_telemetry["acceptance_summary"]["policy"] == snapshot.acceptance_policy
-    assert workflow_telemetry["acceptance_summary"]["terminal_outcome"] == snapshot.terminal_outcome
+    assert workflow_telemetry["acceptance_summary"]["policy"] == snapshot.acceptance_evaluation["policy"]
+    assert workflow_telemetry["acceptance_summary"]["terminal_outcome"] == snapshot.acceptance_evaluation["terminal_outcome"]
     assert workflow_telemetry["provider_summary"]["openai"]["usage"] == {
         "input_tokens": 10,
         "output_tokens": 5,

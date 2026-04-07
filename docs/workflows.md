@@ -164,18 +164,22 @@ Artifact files themselves are written under `output_dir` only when a task actual
 
 This design ensures retries, failures, artifacts, decisions, provider metadata, and execution events survive restarts.
 
-The terminal `workflow_finished` execution event also carries a `workflow_telemetry` summary so callers can inspect provider usage, fallback activity, retries, aggregate duration, explicit workflow progress counts, aggregated provider health states, acceptance outcomes, workflow resume activity, and repair-cycle usage without manually re-scanning every task record.
+The terminal `workflow_finished` execution event now carries the public `acceptance_evaluation` summary directly and omits the old embedded `workflow_telemetry` payload. Exact operator-facing workflow telemetry now lives behind `ProjectState.internal_runtime_telemetry()`.
 
 ## Context Flow Between Tasks
 
 When a task runs, the orchestrator builds a context payload from:
 
 - project metadata
-- normalized `ProjectSnapshot` data
+- filtered `AgentView` snapshot data derived from the current task dependency closure
 - completed upstream task outputs keyed by task id
 - semantic aliases such as `architecture`, `code`, `review`, `tests`, `documentation`, and `legal`
 
 This means downstream tasks can depend on upstream outputs without needing custom global state wiring.
+
+The broader public `ProjectSnapshot` still exists for inspection and compatibility, but agents do not receive that raw snapshot directly anymore.
+
+Raw completed-task outputs, semantic aliases, and planned-module hints now follow the same dependency-closure rule, so finished tasks outside the active closure do not leak into downstream prompt context.
 
 ## Inspecting Workflow State
 
@@ -191,7 +195,9 @@ Useful public inspection methods on `ProjectState` include:
 
 These methods are the preferred way to inspect workflow progress, blocked dependencies, and normalized task results.
 
-When consumers need workflow-level observability instead of per-task detail, `snapshot().workflow_telemetry` is the supported aggregate view. It now combines provider metrics, provider health-state rollups, explicit progress counts, and acceptance, resume, and repair summaries drawn from the persisted workflow state and execution history.
+`snapshot()` remains the public read model. Exact resume state stays in `ProjectState`, and prompt-facing execution context uses `AgentView` instead of the raw snapshot.
+
+When consumers need workflow-level observability instead of per-task detail, use `ProjectState.internal_runtime_telemetry()` rather than `snapshot()`. The public snapshot intentionally omits `workflow_telemetry`, and per-task public results keep only coarse provider-call and duration presence signals in `TaskResult.details` instead of a separate `resource_telemetry` surface.
 
 ## Common Configuration Patterns
 

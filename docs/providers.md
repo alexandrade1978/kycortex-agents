@@ -181,7 +181,7 @@ The agent runtime also emits higher-level provider execution metadata such as:
 - provider timeout resolution by backend
 - circuit-breaker state and remaining cooldown
 
-This metadata is later attached to task outputs, execution events, provider-matrix summaries, and persisted project state for post-run inspection. Provider-matrix summaries now also embed the aggregate workflow-level `workflow_telemetry` payload so comparative runs can inspect acceptance, progress, resume, repair, provider behavior, and aggregated provider health states from the same compact report.
+This metadata is later persisted into task state and the internal runtime telemetry read model so retries, repair routing, and audits can reconstruct provider behavior. `ProjectState.internal_runtime_telemetry()` is now the dedicated operator-facing read path for exact provider/model, latency, usage, repair-budget, and provider-health telemetry. Public `workflow_telemetry`, per-task `resource_telemetry`, and provider-matrix `workflow_telemetry` payloads are removed from the current local public contract.
 
 The current empirical maintenance baseline treats cloud-provider full-workflow runs as the primary comparison surface. OpenAI and Anthropic are currently tracked through that matrix, while Ollama validation still depends on a reachable local `/api/tags` endpoint and the configured model being installed on the local machine.
 

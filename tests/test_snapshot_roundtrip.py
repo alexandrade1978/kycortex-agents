@@ -224,6 +224,16 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     project.save()
     reloaded = ProjectState.load(str(state_path))
     snapshot = reloaded.snapshot()
+    workflow_telemetry = reloaded._workflow_telemetry_summary()
+    arch_task = reloaded.get_task("arch")
+    review_task = reloaded.get_task("review")
+    docs_task = reloaded.get_task("docs")
+    tests_task = reloaded.get_task("tests")
+
+    assert arch_task is not None
+    assert review_task is not None
+    assert docs_task is not None
+    assert tests_task is not None
 
     assert snapshot.project_name == "Demo"
     assert snapshot.goal == "Build demo"
@@ -247,7 +257,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert arch_result.output.decisions[0].decision == "Persist snapshots"
     assert arch_result.output.decisions[0].metadata["priority"] == "high"
     assert "last_provider_call" not in arch_result.details
-    assert arch_result.resource_telemetry == {
+    assert not hasattr(arch_result, "resource_telemetry")
+    assert reloaded._task_resource_telemetry(arch_task) == {
         "has_provider_call": True,
         "has_task_duration": True,
         "has_last_attempt_duration": True,
@@ -304,7 +315,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "error_message" not in review_result.details["history"][1]
     assert "repair_context" not in review_result.failure.details
     assert "history" not in review_result.failure.details
-    assert review_result.resource_telemetry == {
+    assert not hasattr(review_result, "resource_telemetry")
+    assert reloaded._task_resource_telemetry(review_task) == {
         "has_provider_call": True,
         "has_task_duration": True,
         "has_last_attempt_duration": True,
@@ -315,7 +327,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert docs_result.status == TaskStatus.PENDING
     assert docs_result.output is None
     assert docs_result.failure is None
-    assert docs_result.resource_telemetry == {
+    assert not hasattr(docs_result, "resource_telemetry")
+    assert reloaded._task_resource_telemetry(docs_task) == {
         "has_provider_call": False,
         "has_task_duration": False,
         "has_last_attempt_duration": False,
@@ -333,7 +346,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert tests_result.details["history"][0]["event"] == "skipped"
     assert tests_result.details["history"][0]["has_error_message"] is True
     assert "error_message" not in tests_result.details["history"][0]
-    assert tests_result.resource_telemetry["has_provider_call"] is False
+    assert not hasattr(tests_result, "resource_telemetry")
+    assert reloaded._task_resource_telemetry(tests_task)["has_provider_call"] is False
 
     assert snapshot.decisions[0].topic == "architecture"
     assert snapshot.decisions[0].metadata["version"] == 2
@@ -347,7 +361,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert snapshot.execution_events[1]["details"]["has_error_type"] is True
     assert "provider_call" not in snapshot.execution_events[1]["details"]
     assert "error_type" not in snapshot.execution_events[1]["details"]
-    assert snapshot.workflow_telemetry == {
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert workflow_telemetry == {
         "has_multiple_tasks": True,
         "task_status_presence": {
             "pending": True,

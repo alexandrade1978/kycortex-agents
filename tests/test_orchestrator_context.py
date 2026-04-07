@@ -120,6 +120,7 @@ def test_orchestrator_context_for_first_task_exposes_snapshot_without_completed_
     assert context["artifacts"] == []
     assert context["snapshot"]["project_name"] == "Demo"
     assert context["snapshot"]["task_results"]["inspect"]["status"] == TaskStatus.PENDING.value
+    assert "workflow_telemetry" not in context["snapshot"]
     assert context["task"]["id"] == "inspect"
 
 
@@ -148,11 +149,73 @@ def test_orchestrator_context_includes_snapshot_decisions_and_artifacts_for_down
 
     assert context["architecture"] == "ARCHITECTURE DOC"
     assert context["decisions"][0].topic == "stack"
-    assert context["decisions"][0].metadata["owner"] == "architect"
+    assert not hasattr(context["decisions"][0], "metadata")
     assert context["artifacts"][0].name == "architecture.md"
-    assert context["artifacts"][0].metadata["task_id"] == "upstream"
+    assert context["artifacts"][0].source_task_id == "upstream"
+    assert context["artifacts"][0].content == "# Architecture"
     assert context["snapshot"]["decisions"][0]["topic"] == "stack"
     assert context["snapshot"]["artifacts"][0]["name"] == "architecture.md"
+    assert context["snapshot"]["artifacts"][0]["source_task_id"] == "upstream"
+    assert "metadata" not in context["snapshot"]["decisions"][0]
+    assert "metadata" not in context["snapshot"]["artifacts"][0]
+
+
+def test_orchestrator_context_excludes_unrelated_completed_outputs_and_planned_modules(tmp_path):
+    config = build_config(tmp_path)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="unrelated_code",
+            title="Generate payment module",
+            description="Generate payment module",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="print('payment')",
+            output_payload={
+                "summary": "print('payment')",
+                "raw_content": "print('payment')",
+                "artifacts": [
+                    {
+                        "name": "payment_module",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/payment_module.py",
+                        "content": "print('payment')",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="upstream",
+            title="Architecture",
+            description="Produce upstream output",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="inspect",
+            title="Inspector",
+            description="Inspect context",
+            assigned_to="inspector",
+            dependencies=["upstream"],
+        )
+    )
+
+    inspector = RecordingAgent()
+    context = run_inspector_task(config, project, inspector)
+
+    assert context["completed_tasks"] == {"upstream": "ARCHITECTURE DOC"}
+    assert "unrelated_code" not in context
+    assert "code" not in context
+    assert "planned_module_name" not in context
+    assert "planned_module_filename" not in context
+    assert "code_artifact_path" not in context
 
 
 @pytest.mark.parametrize(

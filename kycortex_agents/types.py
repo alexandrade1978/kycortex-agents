@@ -8,6 +8,10 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, TypeAlias, TypedDict
 
 __all__ = [
+    "AgentView",
+    "AgentViewArtifactRecord",
+    "AgentViewDecisionRecord",
+    "AgentViewTaskResult",
     "AgentInput",
     "AgentOutput",
     "ExecutionSandboxPolicy",
@@ -123,6 +127,134 @@ class TaskResourceTelemetry(TypedDict):
     usage: NumericMetricMap
 
 
+class InternalMetricDistribution(TypedDict):
+    """Exact numeric distribution used by internal runtime telemetry."""
+
+    count: int
+    total: MetricValue
+    min: MetricValue
+    max: MetricValue
+    avg: MetricValue
+
+
+class InternalTaskRuntimeTelemetry(TypedDict):
+    """Internal per-task runtime telemetry intended for operator-only surfaces."""
+
+    status: str
+    agent_name: str
+    has_provider_call: bool
+    provider: Optional[str]
+    model: Optional[str]
+    success: Optional[bool]
+    attempts_used: int
+    retry_attempt_count: int
+    task_duration_ms: MetricValue
+    last_attempt_duration_ms: MetricValue
+    provider_duration_ms: MetricValue
+    provider_latency_ms: MetricValue
+    usage: NumericMetricMap
+    provider_health: Dict[str, Dict[str, Any]]
+
+
+class InternalWorkflowResumeSummary(TypedDict):
+    """Exact workflow resume telemetry intended for internal operator surfaces."""
+
+    resume_event_count: int
+    reason_counts: Dict[str, int]
+    resumed_task_count: int
+    unique_task_count: int
+    last_resumed_at: Optional[str]
+
+
+class InternalWorkflowRepairSummary(TypedDict):
+    """Exact workflow repair telemetry intended for internal operator surfaces."""
+
+    cycle_count: int
+    max_cycles: int
+    budget_remaining: int
+    history_count: int
+    reason_counts: Dict[str, int]
+    failure_category_counts: Dict[str, int]
+    failed_task_count: int
+
+
+class InternalWorkflowProviderSummary(TypedDict):
+    """Exact per-provider workflow telemetry intended for internal operator surfaces."""
+
+    task_count: int
+    success_count: int
+    failure_count: int
+    attempt_count: int
+    retry_attempt_count: int
+    models: List[str]
+    duration_ms: InternalMetricDistribution
+    usage: NumericMetricMap
+
+
+class InternalWorkflowProviderHealthSummary(TypedDict):
+    """Exact per-provider health telemetry intended for internal operator surfaces."""
+
+    models: List[str]
+    status_counts: Dict[str, int]
+    last_outcome_counts: Dict[str, int]
+    retryable_failure_count: int
+    active_health_check_count: int
+
+
+class InternalWorkflowFallbackSummary(TypedDict):
+    """Exact workflow fallback telemetry intended for internal operator surfaces."""
+
+    task_count: int
+    entry_count: int
+    providers: List[str]
+    statuses: List[str]
+
+
+class InternalWorkflowErrorSummary(TypedDict):
+    """Exact workflow error telemetry intended for internal operator surfaces."""
+
+    final_error_count: int
+    fallback_error_count: int
+
+
+class InternalWorkflowTelemetry(TypedDict):
+    """Exact aggregate workflow telemetry intended for internal operator surfaces."""
+
+    task_count: int
+    task_status_counts: Dict[str, int]
+    tasks_with_provider_calls: int
+    tasks_without_provider_calls: int
+    acceptance_evaluation: Dict[str, Any]
+    resume_summary: InternalWorkflowResumeSummary
+    repair_summary: InternalWorkflowRepairSummary
+    final_providers: List[str]
+    observed_providers: List[str]
+    provider_summary: Dict[str, InternalWorkflowProviderSummary]
+    provider_health_summary: Dict[str, InternalWorkflowProviderHealthSummary]
+    attempt_count: int
+    retry_attempt_count: int
+    duration_ms: InternalMetricDistribution
+    usage: NumericMetricMap
+    fallback_summary: InternalWorkflowFallbackSummary
+    error_summary: InternalWorkflowErrorSummary
+
+
+class InternalRuntimeTelemetry(TypedDict):
+    """Internal runtime telemetry view intended for operator and UI surfaces."""
+
+    project_name: str
+    goal: str
+    workflow_status: WorkflowStatus
+    phase: str
+    acceptance_policy: Optional[str]
+    terminal_outcome: Optional[str]
+    failure_category: Optional[str]
+    acceptance_criteria_met: bool
+    workflow: InternalWorkflowTelemetry
+    tasks: Dict[str, InternalTaskRuntimeTelemetry]
+    updated_at: str
+
+
 class WorkflowAcceptanceSummary(TypedDict):
     """Workflow-level acceptance outcome summary embedded in aggregate telemetry."""
 
@@ -193,7 +325,7 @@ class WorkflowRepairHistoryEntry(TypedDict):
     """Public workflow repair-history entry exposed through snapshots."""
 
     cycle: int
-    started_at: Optional[str]
+    has_started_at: bool
     reason: Optional[str]
     failure_category: Optional[str]
     has_failed_tasks: bool
@@ -370,6 +502,27 @@ class DecisionRecord:
 
 
 @dataclass
+class AgentViewDecisionRecord:
+    """Filtered decision record exposed to agent prompt context."""
+
+    topic: str
+    decision: str
+    rationale: str
+    created_at: str = field(default_factory=utc_now_iso)
+
+
+@dataclass
+class AgentViewArtifactRecord:
+    """Filtered artifact record exposed to agent prompt context."""
+
+    name: str
+    artifact_type: ArtifactType = ArtifactType.OTHER
+    content: Optional[str] = None
+    created_at: str = field(default_factory=utc_now_iso)
+    source_task_id: Optional[str] = None
+
+
+@dataclass
 class FailureRecord:
     """Normalized failure details exposed through task results and snapshots."""
 
@@ -414,8 +567,20 @@ class TaskResult:
     agent_name: str
     output: Optional[AgentOutput] = None
     failure: Optional[FailureRecord] = None
-    resource_telemetry: TaskResourceTelemetry = field(default_factory=empty_task_resource_telemetry)
     details: Dict[str, Any] = field(default_factory=dict)
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+@dataclass
+class AgentViewTaskResult:
+    """Filtered task-result summary exposed to agent prompt context."""
+
+    task_id: str
+    status: TaskStatus
+    agent_name: str
+    has_output: bool = False
+    failure_category: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
 
@@ -439,8 +604,24 @@ class ProjectSnapshot:
     repair_cycle_count: int = 0
     repair_history: List[WorkflowRepairHistoryEntry] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
-    workflow_telemetry: WorkflowTelemetry = field(default_factory=empty_workflow_telemetry)
     decisions: List[DecisionRecord] = field(default_factory=list)
     artifacts: List[ArtifactRecord] = field(default_factory=list)
     execution_events: List[Dict[str, Any]] = field(default_factory=list)
     updated_at: str = field(default_factory=utc_now_iso)
+
+
+@dataclass
+class AgentView:
+    """Filtered workflow view consumed by agents during task execution."""
+
+    project_name: str
+    goal: str
+    workflow_status: WorkflowStatus = WorkflowStatus.INIT
+    phase: str = "init"
+    acceptance_policy: Optional[str] = None
+    terminal_outcome: Optional[str] = None
+    failure_category: Optional[str] = None
+    acceptance_criteria_met: bool = False
+    task_results: Dict[str, AgentViewTaskResult] = field(default_factory=dict)
+    decisions: List[AgentViewDecisionRecord] = field(default_factory=list)
+    artifacts: List[AgentViewArtifactRecord] = field(default_factory=list)

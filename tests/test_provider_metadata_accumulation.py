@@ -176,6 +176,10 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     code = require_task(project, "code")
     review = require_task(project, "review")
     snapshot = project.snapshot()
+    workflow_telemetry = project._workflow_telemetry_summary()
+    arch_resource = project._task_resource_telemetry(arch)
+    code_resource = project._task_resource_telemetry(code)
+    review_resource = project._task_resource_telemetry(review)
     arch_provider_call = require_provider_call(arch)
     code_provider_call = require_provider_call(code)
     review_provider_call = require_provider_call(review)
@@ -186,42 +190,44 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert code_provider_call["usage"]["cache_creation_input_tokens"] == 3
     assert review_provider_call["provider"] == "ollama"
     assert review_provider_call["timing"]["total_duration_ms"] == 125.0
-    assert "provider" not in snapshot.task_results["arch"].resource_telemetry
-    assert "model" not in snapshot.task_results["arch"].resource_telemetry
-    assert "model" not in snapshot.task_results["code"].resource_telemetry
-    assert "model" not in snapshot.task_results["review"].resource_telemetry
-    assert snapshot.task_results["arch"].resource_telemetry["has_provider_duration"] is True
-    assert snapshot.task_results["arch"].resource_telemetry["usage"] == {
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert not hasattr(snapshot.task_results["arch"], "resource_telemetry")
+    assert "provider" not in arch_resource
+    assert "model" not in arch_resource
+    assert "model" not in code_resource
+    assert "model" not in review_resource
+    assert arch_resource["has_provider_duration"] is True
+    assert arch_resource["usage"] == {
         "input_tokens": 10,
         "output_tokens": 5,
         "total_tokens": 15,
     }
-    assert snapshot.task_results["review"].resource_telemetry["has_provider_duration"] is True
-    assert "has_provider_call" not in snapshot.task_results["arch"].details
+    assert review_resource["has_provider_duration"] is True
+    assert snapshot.task_results["arch"].details["has_provider_call"] is True
     assert snapshot.task_results["arch"].details["last_error_present"] is False
     assert "last_provider_call" not in snapshot.task_results["arch"].details
     assert "last_provider_call" not in snapshot.task_results["code"].details
     assert "last_provider_call" not in snapshot.task_results["review"].details
     assert "provider_budget" not in snapshot.task_results["arch"].details
-    assert snapshot.workflow_telemetry["has_tasks_with_provider_calls"] is True
-    assert snapshot.workflow_telemetry["has_tasks_without_provider_calls"] is False
-    assert snapshot.workflow_telemetry["has_multiple_final_providers"] is True
-    assert snapshot.workflow_telemetry["acceptance_summary"]["accepted"] is True
-    assert snapshot.workflow_telemetry["acceptance_summary"]["policy"] == snapshot.acceptance_policy
-    assert snapshot.workflow_telemetry["acceptance_summary"]["terminal_outcome"] == snapshot.terminal_outcome
-    assert snapshot.workflow_telemetry["provider_summary"]["openai"]["usage"] == {
+    assert workflow_telemetry["has_tasks_with_provider_calls"] is True
+    assert workflow_telemetry["has_tasks_without_provider_calls"] is False
+    assert workflow_telemetry["has_multiple_final_providers"] is True
+    assert workflow_telemetry["acceptance_summary"]["accepted"] is True
+    assert workflow_telemetry["acceptance_summary"]["policy"] == snapshot.acceptance_policy
+    assert workflow_telemetry["acceptance_summary"]["terminal_outcome"] == snapshot.terminal_outcome
+    assert workflow_telemetry["provider_summary"]["openai"]["usage"] == {
         "input_tokens": 10,
         "output_tokens": 5,
         "total_tokens": 15,
     }
-    assert snapshot.workflow_telemetry["provider_summary"]["anthropic"]["usage"] == {
+    assert workflow_telemetry["provider_summary"]["anthropic"]["usage"] == {
         "cache_creation_input_tokens": 3,
         "cache_read_input_tokens": 2,
         "input_tokens": 12,
         "output_tokens": 8,
         "total_tokens": 20,
     }
-    assert snapshot.workflow_telemetry["provider_health_summary"] == {
+    assert workflow_telemetry["provider_health_summary"] == {
         "anthropic": {
             "models": ["claude-3-5-sonnet"],
             "status_presence": {"healthy": True},
@@ -244,11 +250,11 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
             "has_active_checks": True,
         },
     }
-    assert snapshot.workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
+    assert workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
         "has_samples": True,
         "has_multiple_samples": False,
     }
-    assert snapshot.workflow_telemetry["usage"] == {
+    assert workflow_telemetry["usage"] == {
         "cache_creation_input_tokens": 3,
         "cache_read_input_tokens": 2,
         "input_tokens": 36,
@@ -305,6 +311,7 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     failed = require_task(project, "arch")
     completed = require_task(project, "code")
     snapshot = project.snapshot()
+    failed_resource = project._task_resource_telemetry(failed)
     failed_provider_call = require_provider_call(failed)
     completed_provider_call = require_provider_call(completed)
     arch_failure = snapshot.task_results["arch"].failure
@@ -321,9 +328,10 @@ def test_failed_workflow_preserves_provider_metadata_on_failed_task(tmp_path):
     assert "has_provider_call" not in arch_failure.details
     assert "provider_call" not in arch_failure.details
     assert "provider_budget" not in arch_failure.details
-    assert snapshot.task_results["arch"].resource_telemetry["has_provider_call"] is True
-    assert "provider" not in snapshot.task_results["arch"].resource_telemetry
-    assert "model" not in snapshot.task_results["arch"].resource_telemetry
+    assert not hasattr(snapshot.task_results["arch"], "resource_telemetry")
+    assert failed_resource["has_provider_call"] is True
+    assert "provider" not in failed_resource
+    assert "model" not in failed_resource
     assert completed_provider_call["usage"]["total_tokens"] == 13
 
 
@@ -359,8 +367,10 @@ def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_
     )
 
     snapshot = project.snapshot()
+    workflow_telemetry = project._workflow_telemetry_summary()
 
-    assert snapshot.workflow_telemetry["provider_health_summary"] == {
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert workflow_telemetry["provider_health_summary"] == {
         "openai": {
             "models": ["gpt-4o"],
             "status_presence": {"degraded": True},
@@ -424,6 +434,8 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
 
     task = require_task(project, "arch")
     snapshot = project.snapshot()
+    task_resource = project._task_resource_telemetry(task)
+    workflow_telemetry = project._workflow_telemetry_summary()
     provider_call = require_provider_call(task)
 
     assert task.status == TaskStatus.DONE.value
@@ -438,18 +450,20 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
         }
     ]
     assert provider_call["provider_health"]["openai"]["status"] == "degraded"
-    assert "provider" not in snapshot.task_results["arch"].resource_telemetry
-    assert "model" not in snapshot.task_results["arch"].resource_telemetry
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert not hasattr(snapshot.task_results["arch"], "resource_telemetry")
+    assert "provider" not in task_resource
+    assert "model" not in task_resource
     assert "last_provider_call" not in snapshot.task_results["arch"].details
-    assert snapshot.workflow_telemetry["has_multiple_observed_providers"] is True
-    assert snapshot.workflow_telemetry["has_multiple_final_providers"] is False
-    assert snapshot.workflow_telemetry["fallback_summary"] == {
+    assert workflow_telemetry["has_multiple_observed_providers"] is True
+    assert workflow_telemetry["has_multiple_final_providers"] is False
+    assert workflow_telemetry["fallback_summary"] == {
         "has_multiple_tasks": False,
         "has_entries": True,
         "has_multiple_providers": False,
         "has_multiple_statuses": False,
     }
-    assert snapshot.workflow_telemetry["provider_health_summary"] == {
+    assert workflow_telemetry["provider_health_summary"] == {
         "anthropic": {
             "models": ["claude-3-5-sonnet"],
             "status_presence": {"healthy": True},
@@ -465,7 +479,7 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
             "has_active_checks": True,
         },
     }
-    assert snapshot.workflow_telemetry["error_summary"]["has_fallback_errors"] is True
+    assert workflow_telemetry["error_summary"]["has_fallback_errors"] is True
     assert any(
         event["task_id"] == "arch"
         and event["details"].get("provider_call", {}).get("fallback_history")
@@ -494,7 +508,8 @@ def test_provider_metadata_survives_save_load_round_trip(tmp_path, state_filenam
     reloaded_code = require_task(reloaded, "code")
     assert require_provider_call(reloaded_arch)["provider"] == "openai"
     assert require_provider_call(reloaded_code)["provider"] == "anthropic"
-    assert snapshot.task_results["arch"].resource_telemetry["usage"]["total_tokens"] == 15
-    assert snapshot.task_results["code"].resource_telemetry["usage"]["total_tokens"] == 20
+    assert not hasattr(snapshot.task_results["arch"], "resource_telemetry")
+    assert reloaded._task_resource_telemetry(reloaded_arch)["usage"]["total_tokens"] == 15
+    assert reloaded._task_resource_telemetry(reloaded_code)["usage"]["total_tokens"] == 20
     assert "last_provider_call" not in snapshot.task_results["arch"].details
     assert "last_provider_call" not in snapshot.task_results["code"].details

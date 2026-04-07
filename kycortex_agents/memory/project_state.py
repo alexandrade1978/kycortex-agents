@@ -17,6 +17,14 @@ from kycortex_agents.types import (
     DecisionRecord,
     FailureCategory,
     FailureRecord,
+    InternalMetricDistribution,
+    InternalRuntimeTelemetry,
+    InternalTaskRuntimeTelemetry,
+    InternalWorkflowProviderHealthSummary,
+    InternalWorkflowProviderSummary,
+    InternalWorkflowRepairSummary,
+    InternalWorkflowResumeSummary,
+    InternalWorkflowTelemetry,
     MetricDistribution,
     NumericMetricMap,
     ProjectSnapshot,
@@ -947,8 +955,7 @@ class ProjectState:
         )
         self.acceptance_evaluation = dict(acceptance_evaluation or {})
         terminal_failure_context = self._terminal_failure_context(self.failure_category)
-        workflow_telemetry = self._workflow_telemetry_summary()
-        public_acceptance_evaluation = cast(Dict[str, Any], dict(workflow_telemetry["acceptance_summary"]))
+        public_acceptance_evaluation = cast(Dict[str, Any], dict(self._acceptance_summary()))
         self._record_policy_enforcement_event(
             source_event="workflow_finished",
             timestamp=finished_at,
@@ -967,7 +974,6 @@ class ProjectState:
             "failure_category": self.failure_category,
             "acceptance_criteria_met": self.acceptance_criteria_met,
             "acceptance_evaluation": public_acceptance_evaluation,
-            "workflow_telemetry": workflow_telemetry,
         }
         if terminal_failure_context:
             failure_task_id = terminal_failure_context.get("task_id")
@@ -1025,9 +1031,7 @@ class ProjectState:
 
         recorded_at = datetime.now(timezone.utc).isoformat()
         workflow_telemetry = self._workflow_telemetry_summary()
-        details: Dict[str, Any] = {
-            "workflow_telemetry": workflow_telemetry,
-        }
+        details: Dict[str, Any] = {}
         if task_status is not None:
             details["task_status"] = task_status
         self._record_execution_event(
@@ -1370,6 +1374,8 @@ class ProjectState:
                 "required_for_acceptance": task.required_for_acceptance,
                 "last_error_present": last_error_present,
                 "last_error_category": task.last_error_category,
+                "has_provider_call": resource_telemetry["has_provider_call"],
+                "has_provider_duration": resource_telemetry["has_provider_duration"],
                 "repair_context": public_repair_context,
                 "repair_attempt": task.repair_attempt,
                 "last_attempt_started_at": task.last_attempt_started_at,
@@ -1391,7 +1397,6 @@ class ProjectState:
                 agent_name=task.assigned_to,
                 output=output,
                 failure=failure,
-                resource_telemetry=resource_telemetry,
                 details=cast(
                     Dict[str, Any],
                     _redact_payload(public_details),
@@ -1401,15 +1406,31 @@ class ProjectState:
             )
         return results
 
+    def internal_runtime_telemetry(self) -> InternalRuntimeTelemetry:
+        """Build the internal runtime telemetry view without reusing the public snapshot contract."""
+
+        return {
+            "project_name": _redact_text(self.project_name) or "",
+            "goal": _redact_text(self.goal) or "",
+            "workflow_status": self._workflow_status(),
+            "phase": self.phase,
+            "acceptance_policy": self.acceptance_policy,
+            "terminal_outcome": self.terminal_outcome,
+            "failure_category": self.failure_category,
+            "acceptance_criteria_met": self.acceptance_criteria_met,
+            "workflow": self._internal_workflow_telemetry_summary(),
+            "tasks": self._internal_task_runtime_telemetry(),
+            "updated_at": self.updated_at,
+        }
+
     def snapshot(self) -> ProjectSnapshot:
         """Build a normalized project snapshot for downstream orchestration and inspection."""
 
         self._normalize_legacy_decision_timestamps()
         self._normalize_legacy_artifact_timestamps()
-        workflow_telemetry = self._workflow_telemetry_summary()
         public_acceptance_evaluation = cast(
             WorkflowAcceptanceSummary,
-            dict(workflow_telemetry["acceptance_summary"]),
+            dict(self._acceptance_summary()),
         )
         return ProjectSnapshot(
             project_name=_redact_text(self.project_name) or "",
@@ -1427,7 +1448,6 @@ class ProjectState:
             repair_cycle_count=self.repair_cycle_count,
             repair_history=[self._public_repair_history_entry(entry) for entry in self.repair_history if isinstance(entry, dict)],
             task_results=self.task_results(),
-            workflow_telemetry=workflow_telemetry,
             decisions=[
                 self._redacted_decision_record(
                     DecisionRecord(
@@ -1566,7 +1586,7 @@ class ProjectState:
             details = redacted_event.get("details")
             if not isinstance(details, dict):
                 return redacted_event
-            public_repair_context = self._public_repair_context(details)
+            public_repair_context = self._public_task_results_repair_context(details)
             details.clear()
             details.update(cast(Dict[str, Any], public_repair_context))
             return redacted_event
@@ -1960,6 +1980,17 @@ class ProjectState:
             failure_category=self.failure_category,
         )
 
+    def _internal_acceptance_evaluation(self) -> Dict[str, Any]:
+        normalized_evaluation = dict(self.acceptance_evaluation) if isinstance(self.acceptance_evaluation, dict) else {}
+        if isinstance(self.acceptance_policy, str) and self.acceptance_policy:
+            normalized_evaluation["policy"] = self.acceptance_policy
+        normalized_evaluation["accepted"] = bool(self.acceptance_criteria_met)
+        if isinstance(self.terminal_outcome, str) and self.terminal_outcome:
+            normalized_evaluation["terminal_outcome"] = self.terminal_outcome
+        if isinstance(self.failure_category, str) and self.failure_category:
+            normalized_evaluation["failure_category"] = self.failure_category
+        return cast(Dict[str, Any], _redact_payload(normalized_evaluation))
+
     def _public_acceptance_evaluation(
         self,
         acceptance_evaluation: Any,
@@ -2023,6 +2054,29 @@ class ProjectState:
             "last_resumed_at": self.workflow_last_resumed_at,
         }
 
+    def _internal_resume_summary(self) -> InternalWorkflowResumeSummary:
+        resumed_events = [
+            event for event in self.execution_events
+            if isinstance(event, dict) and event.get("event") == "workflow_resumed"
+        ]
+        reason_counts: Dict[str, int] = {}
+        resumed_task_ids: List[str] = []
+        for event in resumed_events:
+            raw_details = event.get("details")
+            details: Dict[str, Any] = raw_details if isinstance(raw_details, dict) else {}
+            reason = details.get("reason")
+            if isinstance(reason, str) and reason:
+                redacted_reason = _redact_text(reason) or reason
+                reason_counts[redacted_reason] = reason_counts.get(redacted_reason, 0) + 1
+            resumed_task_ids.extend(self._string_list(details.get("task_ids")))
+        return {
+            "resume_event_count": len(resumed_events),
+            "reason_counts": self._sorted_count_map(reason_counts),
+            "resumed_task_count": len(resumed_task_ids),
+            "unique_task_count": len(set(resumed_task_ids)),
+            "last_resumed_at": self.workflow_last_resumed_at,
+        }
+
     def _repair_summary(self) -> WorkflowRepairSummary:
         reasons: set[str] = set()
         last_reason_present = False
@@ -2052,6 +2106,263 @@ class ProjectState:
             "has_failed_tasks": bool(failed_task_ids),
         }
 
+    def _internal_repair_summary(self) -> InternalWorkflowRepairSummary:
+        reason_counts: Dict[str, int] = {}
+        failure_category_counts: Dict[str, int] = {}
+        failed_task_ids: set[str] = set()
+        valid_entry_count = 0
+        for entry in self.repair_history:
+            if not isinstance(entry, dict):
+                continue
+            valid_entry_count += 1
+            reason = entry.get("reason")
+            if isinstance(reason, str) and reason:
+                redacted_reason = _redact_text(reason) or reason
+                reason_counts[redacted_reason] = reason_counts.get(redacted_reason, 0) + 1
+            failure_category = entry.get("failure_category")
+            if isinstance(failure_category, str) and failure_category:
+                failure_category_counts[failure_category] = failure_category_counts.get(failure_category, 0) + 1
+            failed_task_ids.update(self._string_list(entry.get("failed_task_ids")))
+        return {
+            "cycle_count": self.repair_cycle_count,
+            "max_cycles": self.repair_max_cycles,
+            "budget_remaining": max(self.repair_max_cycles - self.repair_cycle_count, 0),
+            "history_count": valid_entry_count,
+            "reason_counts": self._sorted_count_map(reason_counts),
+            "failure_category_counts": self._sorted_count_map(failure_category_counts),
+            "failed_task_count": len(failed_task_ids),
+        }
+
+    def _internal_provider_health(self, raw_provider_health: Any) -> Dict[str, Dict[str, Any]]:
+        if not isinstance(raw_provider_health, dict):
+            return {}
+        internal_provider_health: Dict[str, Dict[str, Any]] = {}
+        for provider_name in sorted(raw_provider_health):
+            raw_health_entry = raw_provider_health[provider_name]
+            if not isinstance(provider_name, str) or not provider_name:
+                continue
+            if not isinstance(raw_health_entry, dict):
+                continue
+            redacted_entry = _redact_payload(raw_health_entry)
+            if not isinstance(redacted_entry, dict):
+                continue
+            internal_provider_health[provider_name] = cast(Dict[str, Any], redacted_entry)
+        return internal_provider_health
+
+    def _internal_workflow_telemetry_summary(self) -> InternalWorkflowTelemetry:
+        task_status_counts: Dict[str, int] = {}
+        tasks_with_provider_calls = 0
+        final_providers: set[str] = set()
+        observed_providers: set[str] = set()
+        provider_summary: Dict[str, Dict[str, Any]] = {}
+        provider_health_summary: Dict[str, Dict[str, Any]] = {}
+        usage_totals: Dict[str, float] = {}
+        duration_values: List[float] = []
+        attempt_count = 0
+        retry_attempt_count = 0
+        fallback_task_count = 0
+        fallback_entry_count = 0
+        fallback_providers: set[str] = set()
+        fallback_statuses: set[str] = set()
+        final_error_count = 0
+        fallback_error_count = 0
+
+        for task in self.tasks:
+            task_status_counts[task.status] = task_status_counts.get(task.status, 0) + 1
+            provider_call = task.last_provider_call
+            if not isinstance(provider_call, dict):
+                continue
+            tasks_with_provider_calls += 1
+
+            provider_name = provider_call.get("provider")
+            model_name = provider_call.get("model")
+            summary_for_provider: Optional[Dict[str, Any]] = None
+            if isinstance(provider_name, str) and provider_name:
+                final_providers.add(provider_name)
+                observed_providers.add(provider_name)
+                summary_for_provider = provider_summary.setdefault(
+                    provider_name,
+                    {
+                        "task_count": 0,
+                        "success_count": 0,
+                        "failure_count": 0,
+                        "attempt_count": 0,
+                        "retry_attempt_count": 0,
+                        "models": set(),
+                        "duration_values": [],
+                        "usage": {},
+                    },
+                )
+                summary_for_provider["task_count"] += 1
+                if isinstance(model_name, str) and model_name:
+                    summary_for_provider["models"].add(model_name)
+                if provider_call.get("success") is True:
+                    summary_for_provider["success_count"] += 1
+                elif provider_call.get("success") is False:
+                    summary_for_provider["failure_count"] += 1
+
+            attempts_used = self._provider_attempt_count(provider_call)
+            attempt_count += attempts_used
+            if summary_for_provider is not None:
+                summary_for_provider["attempt_count"] += attempts_used
+
+            retry_attempts = self._provider_retry_attempt_count(provider_call, attempts_used)
+            retry_attempt_count += retry_attempts
+            if summary_for_provider is not None:
+                summary_for_provider["retry_attempt_count"] += retry_attempts
+
+            duration_ms = self._provider_call_total_duration_ms(provider_call)
+            if duration_ms is not None:
+                duration_values.append(duration_ms)
+                if summary_for_provider is not None:
+                    summary_for_provider["duration_values"].append(duration_ms)
+
+            usage = provider_call.get("usage")
+            if isinstance(usage, dict):
+                self._accumulate_numeric_metrics(usage_totals, usage)
+                if summary_for_provider is not None:
+                    self._accumulate_numeric_metrics(summary_for_provider["usage"], usage)
+
+            raw_provider_health = provider_call.get("provider_health")
+            if isinstance(raw_provider_health, dict):
+                for health_provider_name, raw_health_entry in raw_provider_health.items():
+                    if not isinstance(health_provider_name, str) or not health_provider_name:
+                        continue
+                    if not isinstance(raw_health_entry, dict):
+                        continue
+                    health_summary = provider_health_summary.setdefault(
+                        health_provider_name,
+                        {
+                            "models": set(),
+                            "status_counts": {},
+                            "last_outcome_counts": {},
+                            "retryable_failure_count": 0,
+                            "active_health_check_count": 0,
+                        },
+                    )
+                    health_model_name = raw_health_entry.get("model")
+                    if isinstance(health_model_name, str) and health_model_name:
+                        health_summary["models"].add(health_model_name)
+                    health_status = raw_health_entry.get("status")
+                    if isinstance(health_status, str) and health_status:
+                        health_summary["status_counts"][health_status] = (
+                            health_summary["status_counts"].get(health_status, 0) + 1
+                        )
+                    last_outcome = raw_health_entry.get("last_outcome")
+                    if isinstance(last_outcome, str) and last_outcome:
+                        health_summary["last_outcome_counts"][last_outcome] = (
+                            health_summary["last_outcome_counts"].get(last_outcome, 0) + 1
+                        )
+                    if _provider_health_entry_has_retryable_failure(raw_health_entry):
+                        health_summary["retryable_failure_count"] += 1
+                    last_health_check = raw_health_entry.get("last_health_check")
+                    if (
+                        isinstance(last_health_check, dict)
+                        and last_health_check.get("active_check") is True
+                        and last_health_check.get("cooldown_cached") is not True
+                    ):
+                        health_summary["active_health_check_count"] += 1
+
+            if provider_call.get("success") is False:
+                error_type = provider_call.get("error_type")
+                if (
+                    (isinstance(error_type, str) and error_type)
+                    or provider_call.get("has_error_type") is True
+                ):
+                    final_error_count += 1
+
+            fallback_history = provider_call.get("fallback_history")
+            if not isinstance(fallback_history, list) or not fallback_history:
+                continue
+            fallback_task_count += 1
+            fallback_entry_count += len(fallback_history)
+            for entry in fallback_history:
+                if not isinstance(entry, dict):
+                    continue
+                fallback_provider = entry.get("provider")
+                if isinstance(fallback_provider, str) and fallback_provider:
+                    observed_providers.add(fallback_provider)
+                    fallback_providers.add(fallback_provider)
+                fallback_status = entry.get("status")
+                if isinstance(fallback_status, str) and fallback_status:
+                    fallback_statuses.add(fallback_status)
+                fallback_error_type = entry.get("error_type")
+                if (
+                    (isinstance(fallback_error_type, str) and fallback_error_type)
+                    or entry.get("has_error_type") is True
+                ):
+                    fallback_error_count += 1
+
+        normalized_provider_summary: Dict[str, InternalWorkflowProviderSummary] = {}
+        for provider_name in sorted(provider_summary):
+            raw_summary = provider_summary[provider_name]
+            raw_duration_series = raw_summary.get("duration_values")
+            duration_series = [
+                float(value)
+                for value in raw_duration_series
+                if isinstance(value, (int, float)) and not isinstance(value, bool)
+            ] if isinstance(raw_duration_series, list) else []
+            usage_metrics: Dict[str, float] = {}
+            raw_usage_metrics = raw_summary.get("usage")
+            if isinstance(raw_usage_metrics, dict):
+                for metric_name, metric_value in raw_usage_metrics.items():
+                    if not isinstance(metric_name, str):
+                        continue
+                    if not isinstance(metric_value, (int, float)) or isinstance(metric_value, bool):
+                        continue
+                    usage_metrics[metric_name] = float(metric_value)
+            raw_models = raw_summary.get("models")
+            normalized_provider_summary[provider_name] = {
+                "task_count": max(int(raw_summary.get("task_count", 0)), 0),
+                "success_count": max(int(raw_summary.get("success_count", 0)), 0),
+                "failure_count": max(int(raw_summary.get("failure_count", 0)), 0),
+                "attempt_count": max(int(raw_summary.get("attempt_count", 0)), 0),
+                "retry_attempt_count": max(int(raw_summary.get("retry_attempt_count", 0)), 0),
+                "models": sorted(raw_models) if isinstance(raw_models, set) else [],
+                "duration_ms": self._internal_metric_distribution(duration_series),
+                "usage": self._sorted_numeric_metrics(usage_metrics),
+            }
+
+        normalized_provider_health_summary: Dict[str, InternalWorkflowProviderHealthSummary] = {}
+        for provider_name in sorted(provider_health_summary):
+            raw_health_summary = provider_health_summary[provider_name]
+            raw_models = raw_health_summary.get("models")
+            normalized_provider_health_summary[provider_name] = {
+                "models": sorted(raw_models) if isinstance(raw_models, set) else [],
+                "status_counts": self._sorted_count_map(raw_health_summary.get("status_counts", {})),
+                "last_outcome_counts": self._sorted_count_map(raw_health_summary.get("last_outcome_counts", {})),
+                "retryable_failure_count": max(int(raw_health_summary.get("retryable_failure_count", 0)), 0),
+                "active_health_check_count": max(int(raw_health_summary.get("active_health_check_count", 0)), 0),
+            }
+
+        return {
+            "task_count": len(self.tasks),
+            "task_status_counts": self._sorted_count_map(task_status_counts),
+            "tasks_with_provider_calls": tasks_with_provider_calls,
+            "tasks_without_provider_calls": max(len(self.tasks) - tasks_with_provider_calls, 0),
+            "acceptance_evaluation": self._internal_acceptance_evaluation(),
+            "resume_summary": self._internal_resume_summary(),
+            "repair_summary": self._internal_repair_summary(),
+            "final_providers": sorted(final_providers),
+            "observed_providers": sorted(observed_providers),
+            "provider_summary": normalized_provider_summary,
+            "provider_health_summary": normalized_provider_health_summary,
+            "attempt_count": attempt_count,
+            "retry_attempt_count": retry_attempt_count,
+            "duration_ms": self._internal_metric_distribution(duration_values),
+            "usage": self._sorted_numeric_metrics(usage_totals),
+            "fallback_summary": {
+                "task_count": fallback_task_count,
+                "entry_count": fallback_entry_count,
+                "providers": sorted(fallback_providers),
+                "statuses": sorted(fallback_statuses),
+            },
+            "error_summary": {
+                "final_error_count": final_error_count,
+                "fallback_error_count": fallback_error_count,
+            },
+        }
+
     def _public_repair_history_entry(self, entry: Dict[str, Any]) -> WorkflowRepairHistoryEntry:
         started_at = entry.get("started_at") if isinstance(entry.get("started_at"), str) else None
         reason = entry.get("reason") if isinstance(entry.get("reason"), str) else None
@@ -2060,7 +2371,7 @@ class ProjectState:
         budget_remaining = entry.get("budget_remaining")
         return {
             "cycle": max(int(cycle), 0) if isinstance(cycle, (int, float)) and not isinstance(cycle, bool) else 0,
-            "started_at": started_at,
+            "has_started_at": started_at is not None,
             "reason": reason,
             "failure_category": failure_category,
             "has_failed_tasks": self._repair_history_failed_task_count(entry) > 0,
@@ -2069,7 +2380,7 @@ class ProjectState:
 
     def _public_workflow_repair_cycle_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = dict(self._public_repair_history_entry(details))
-        public_details.pop("started_at", None)
+        public_details.pop("has_started_at", None)
         return public_details
 
     def _public_workflow_resumed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
@@ -2374,42 +2685,28 @@ class ProjectState:
         if self._presence_flag(details, "task_status", "has_task_status"):
             public_details["has_task_status"] = True
         public_details.pop("task_status", None)
-
-        if isinstance(details.get("workflow_telemetry"), dict) or public_details.get("has_workflow_telemetry") is True:
-            public_details["has_workflow_telemetry"] = True
-        public_details.pop("workflow_telemetry", None)
         public_details.pop("provider_budget", None)
         return public_details
 
     def _public_workflow_finished_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))
-        workflow_telemetry = public_details.get("workflow_telemetry")
-        if isinstance(workflow_telemetry, dict):
-            acceptance_summary = workflow_telemetry.get("acceptance_summary")
-            if isinstance(acceptance_summary, dict):
-                public_details["acceptance_evaluation"] = cast(Dict[str, Any], _redact_payload(dict(acceptance_summary)))
-            else:
-                public_details["acceptance_evaluation"] = cast(
-                    Dict[str, Any],
-                    self._public_acceptance_evaluation(
-                        public_details.get("acceptance_evaluation"),
-                        acceptance_policy=public_details.get("acceptance_policy"),
-                        acceptance_criteria_met=public_details.get("acceptance_criteria_met"),
-                        terminal_outcome=public_details.get("terminal_outcome"),
-                        failure_category=public_details.get("failure_category"),
-                    ),
-                )
-        else:
-            public_details["acceptance_evaluation"] = cast(
-                Dict[str, Any],
-                self._public_acceptance_evaluation(
-                    public_details.get("acceptance_evaluation"),
-                    acceptance_policy=public_details.get("acceptance_policy"),
-                    acceptance_criteria_met=public_details.get("acceptance_criteria_met"),
-                    terminal_outcome=public_details.get("terminal_outcome"),
-                    failure_category=public_details.get("failure_category"),
-                ),
-            )
+        legacy_workflow_telemetry = details.get("workflow_telemetry")
+        acceptance_source = public_details.get("acceptance_evaluation")
+        if isinstance(legacy_workflow_telemetry, dict):
+            legacy_acceptance_summary = legacy_workflow_telemetry.get("acceptance_summary")
+            if isinstance(legacy_acceptance_summary, dict):
+                acceptance_source = legacy_acceptance_summary
+        public_details["acceptance_evaluation"] = cast(
+            Dict[str, Any],
+            self._public_acceptance_evaluation(
+                acceptance_source,
+                acceptance_policy=public_details.get("acceptance_policy"),
+                acceptance_criteria_met=public_details.get("acceptance_criteria_met"),
+                terminal_outcome=public_details.get("terminal_outcome"),
+                failure_category=public_details.get("failure_category"),
+            ),
+        )
+        public_details.pop("workflow_telemetry", None)
 
         if self._presence_flag(details, "failure_task_id", "has_failure_task"):
             public_details["has_failure_task"] = True
@@ -2531,22 +2828,6 @@ class ProjectState:
             public_context["has_decomposition_failure_category"] = True
         public_context.pop("decomposition_failure_category", None)
 
-        raw_failure_message = raw_context.get("failure_message")
-        if (
-            isinstance(raw_failure_message, str)
-            and bool(raw_failure_message.strip())
-        ) or raw_context.get("has_failure_message") is True:
-            public_context["has_failure_message"] = True
-        public_context.pop("failure_message", None)
-
-        raw_failure_error_type = raw_context.get("failure_error_type")
-        if (
-            isinstance(raw_failure_error_type, str)
-            and bool(raw_failure_error_type.strip())
-        ) or raw_context.get("has_failure_error_type") is True:
-            public_context["has_failure_error_type"] = True
-        public_context.pop("failure_error_type", None)
-
         raw_failed_output = raw_context.get("failed_output")
         if (
             isinstance(raw_failed_output, str)
@@ -2572,6 +2853,22 @@ class ProjectState:
         if self._presence_flag(raw_context, "decomposition_target_task_id", "has_decomposition_target_task"):
             public_context["has_decomposition_target_task"] = True
         public_context.pop("decomposition_target_task_id", None)
+
+        raw_failure_message = raw_context.get("failure_message")
+        if (
+            isinstance(raw_failure_message, str)
+            and bool(raw_failure_message.strip())
+        ) or raw_context.get("has_failure_message") is True:
+            public_context["has_failure_message"] = True
+        public_context.pop("failure_message", None)
+
+        raw_failure_error_type = raw_context.get("failure_error_type")
+        if (
+            isinstance(raw_failure_error_type, str)
+            and bool(raw_failure_error_type.strip())
+        ) or raw_context.get("has_failure_error_type") is True:
+            public_context["has_failure_error_type"] = True
+        public_context.pop("failure_error_type", None)
 
         if isinstance(raw_context.get("provider_call"), dict) or raw_context.get("has_provider_call") is True:
             public_context["has_provider_call"] = True
@@ -2665,6 +2962,17 @@ class ProjectState:
         raw_count = acceptance_evaluation.get(count_key)
         if isinstance(raw_count, (int, float)) and not isinstance(raw_count, bool):
             return max(int(raw_count), 0)
+        presence_flags = {
+            "evaluated_task_ids": "has_evaluated_tasks",
+            "required_task_ids": "has_required_tasks",
+            "completed_task_ids": "has_completed_tasks",
+            "failed_task_ids": "has_failed_tasks",
+            "skipped_task_ids": "has_skipped_tasks",
+            "pending_task_ids": "has_pending_tasks",
+        }
+        flag_key = presence_flags.get(task_ids_key)
+        if isinstance(flag_key, str) and acceptance_evaluation.get(flag_key) is True:
+            return 1
         return 0
 
     def _repair_history_failed_task_count(self, entry: Dict[str, Any]) -> int:
@@ -2704,17 +3012,67 @@ class ProjectState:
             return 0
         return attempts_used - 1
 
-    def _provider_call_duration_ms(self, provider_call: Dict[str, Any]) -> Optional[float]:
+    def _provider_call_total_duration_ms(self, provider_call: Dict[str, Any]) -> Optional[float]:
+        timing = provider_call.get("timing")
         for value in (
             provider_call.get("duration_ms"),
-            provider_call.get("latency_ms"),
-            (provider_call.get("timing") or {}).get("total_duration_ms") if isinstance(provider_call.get("timing"), dict) else None,
-            (provider_call.get("timing") or {}).get("duration_ms") if isinstance(provider_call.get("timing"), dict) else None,
-            (provider_call.get("timing") or {}).get("latency_ms") if isinstance(provider_call.get("timing"), dict) else None,
+            timing.get("total_duration_ms") if isinstance(timing, dict) else None,
+            timing.get("duration_ms") if isinstance(timing, dict) else None,
         ):
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 return round(float(value), 3)
         return None
+
+    def _provider_call_latency_ms(self, provider_call: Dict[str, Any]) -> Optional[float]:
+        timing = provider_call.get("timing")
+        for value in (
+            provider_call.get("latency_ms"),
+            timing.get("latency_ms") if isinstance(timing, dict) else None,
+        ):
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return round(float(value), 3)
+        return None
+
+    def _provider_call_duration_ms(self, provider_call: Dict[str, Any]) -> Optional[float]:
+        duration_ms = self._provider_call_total_duration_ms(provider_call)
+        if duration_ms is not None:
+            return duration_ms
+        return self._provider_call_latency_ms(provider_call)
+
+    def _internal_task_runtime_telemetry(self) -> Dict[str, InternalTaskRuntimeTelemetry]:
+        telemetry: Dict[str, InternalTaskRuntimeTelemetry] = {}
+        for task in self.tasks:
+            provider_call = task.last_provider_call if isinstance(task.last_provider_call, dict) else {}
+            usage_metrics: Dict[str, float] = {}
+            usage = provider_call.get("usage")
+            if isinstance(usage, dict):
+                self._accumulate_numeric_metrics(usage_metrics, usage)
+            task_duration_ms = self._duration_ms(task.started_at, task.completed_at)
+            last_attempt_duration_ms = self._duration_ms(task.last_attempt_started_at, task.completed_at)
+            provider_duration_ms = self._provider_call_total_duration_ms(provider_call) if provider_call else None
+            provider_latency_ms = self._provider_call_latency_ms(provider_call) if provider_call else None
+            attempts_used = self._provider_attempt_count(provider_call)
+            retry_attempt_count = self._provider_retry_attempt_count(provider_call, attempts_used)
+            provider = provider_call.get("provider")
+            model = provider_call.get("model")
+            success = provider_call.get("success")
+            telemetry[task.id] = {
+                "status": self._normalize_task_status(task.status).value,
+                "agent_name": task.assigned_to,
+                "has_provider_call": bool(provider_call),
+                "provider": _redact_text(provider) if isinstance(provider, str) and provider else None,
+                "model": _redact_text(model) if isinstance(model, str) and model else None,
+                "success": success if isinstance(success, bool) else None,
+                "attempts_used": attempts_used,
+                "retry_attempt_count": retry_attempt_count,
+                "task_duration_ms": self._normalize_metric_number(task_duration_ms) if task_duration_ms is not None else None,
+                "last_attempt_duration_ms": self._normalize_metric_number(last_attempt_duration_ms) if last_attempt_duration_ms is not None else None,
+                "provider_duration_ms": self._normalize_metric_number(provider_duration_ms) if provider_duration_ms is not None else None,
+                "provider_latency_ms": self._normalize_metric_number(provider_latency_ms) if provider_latency_ms is not None else None,
+                "usage": self._sorted_numeric_metrics(usage_metrics),
+                "provider_health": self._internal_provider_health(provider_call.get("provider_health")),
+            }
+        return telemetry
 
     def _task_resource_telemetry(self, task: Task) -> TaskResourceTelemetry:
         task_duration_ms = self._duration_ms(task.started_at, task.completed_at)
@@ -2745,6 +3103,19 @@ class ProjectState:
             for key, value in sorted(metrics.items())
         }
 
+    def _sorted_count_map(self, counts: Dict[str, int]) -> Dict[str, int]:
+        ordered_counts: Dict[str, int] = {}
+        for key, value in sorted(counts.items()):
+            if not isinstance(key, str) or not key:
+                continue
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                continue
+            normalized_value = max(int(value), 0)
+            if normalized_value <= 0:
+                continue
+            ordered_counts[key] = normalized_value
+        return ordered_counts
+
     def _metric_distribution(self, values: List[float]) -> MetricDistribution:
         if not values:
             return {
@@ -2754,6 +3125,24 @@ class ProjectState:
         return {
             "has_samples": True,
             "has_multiple_samples": len(values) > 1,
+        }
+
+    def _internal_metric_distribution(self, values: List[float]) -> InternalMetricDistribution:
+        if not values:
+            return {
+                "count": 0,
+                "total": 0,
+                "min": 0,
+                "max": 0,
+                "avg": 0,
+            }
+        total = sum(values)
+        return {
+            "count": len(values),
+            "total": self._normalize_metric_number(total),
+            "min": self._normalize_metric_number(min(values)),
+            "max": self._normalize_metric_number(max(values)),
+            "avg": self._normalize_metric_number(total / len(values)),
         }
 
     def _normalize_metric_number(self, value: float) -> int | float:

@@ -23,6 +23,7 @@ from kycortex_agents.providers import OpenAIProvider as ProviderOpenAIProvider
 from kycortex_agents.providers import probe_provider_health
 from kycortex_agents.providers import factory as provider_factory_module
 from kycortex_agents import (
+    AgentView,
     AgentRegistry,
     AnthropicProvider,
     ArchitectAgent,
@@ -68,6 +69,7 @@ def test_public_api_exports_core_symbols():
     assert __version__ == pyproject["project"]["version"]
     assert Orchestrator is not None
     assert KYCortexConfig is not None
+    assert AgentView is not None
     assert ProjectState is MemoryProjectState
     assert Task is MemoryTask
     assert AgentRegistry is not None
@@ -144,6 +146,10 @@ def test_public_contract_modules_define_explicit_exports():
         "WorkflowDefinitionError",
     ]
     assert types_module.__all__ == [
+        "AgentView",
+        "AgentViewArtifactRecord",
+        "AgentViewDecisionRecord",
+        "AgentViewTaskResult",
         "AgentInput",
         "AgentOutput",
         "ExecutionSandboxPolicy",
@@ -229,11 +235,14 @@ def test_public_type_module_defines_docstrings():
     assert types_module.ArtifactType.__doc__ == "Normalized artifact categories emitted by agents and snapshots."
     assert types_module.MetricDistribution.__doc__ == "Normalized numeric distribution used by aggregate telemetry summaries."
     assert types_module.ArtifactRecord.__doc__ == "Structured artifact entry captured from an agent output or project snapshot."
+    assert types_module.AgentViewDecisionRecord.__doc__ == "Filtered decision record exposed to agent prompt context."
+    assert types_module.AgentViewArtifactRecord.__doc__ == "Filtered artifact record exposed to agent prompt context."
     assert types_module.DecisionRecord.__doc__ == "Structured project decision captured during workflow execution."
     assert types_module.FailureRecord.__doc__ == "Normalized failure details exposed through task results and snapshots."
     assert types_module.TaskResourceTelemetry.__doc__ == "Per-task normalized timing and provider-usage summary exposed through task results."
     assert types_module.AgentInput.__doc__ == "Validated input payload passed into an agent execution entrypoint."
     assert types_module.AgentOutput.__doc__ == "Normalized agent result payload persisted back into workflow state."
+    assert types_module.AgentViewTaskResult.__doc__ == "Filtered task-result summary exposed to agent prompt context."
     assert types_module.TaskResult.__doc__ == "Public task-result view exposed through workflow snapshots."
     assert types_module.WorkflowAcceptanceSummary.__doc__ == "Workflow-level acceptance outcome summary embedded in aggregate telemetry."
     assert types_module.WorkflowProgressSummary.__doc__ == "Workflow execution-progress summary embedded in aggregate telemetry."
@@ -246,6 +255,7 @@ def test_public_type_module_defines_docstrings():
     assert types_module.WorkflowErrorSummary.__doc__ == "Workflow-level final and fallback error tallies."
     assert types_module.WorkflowTelemetry.__doc__ == "Aggregate workflow observability payload exposed through public snapshots."
     assert types_module.ProjectSnapshot.__doc__ == "Immutable workflow snapshot consumed by agents, callers, and tests."
+    assert types_module.AgentView.__doc__ == "Filtered workflow view consumed by agents during task execution."
 
 
 def test_private_empty_telemetry_helpers_return_zeroed_payloads():
@@ -568,11 +578,12 @@ def test_snapshot_inspection_example_documents_snapshot_outputs_and_provider_met
     assert 'class FakeMetadataProvider(BaseLLMProvider):' in example
     assert 'def health_check(self) -> dict[str, Any]:' in example
     assert 'snapshot = project.snapshot()' in example
+    assert 'internal_runtime_telemetry = project.internal_runtime_telemetry()' in example
     assert 'snapshot.workflow_status' in example
     assert 'snapshot.task_results.items()' in example
-    assert 'resource_telemetry = task_result.resource_telemetry' in example
-    assert 'snapshot.workflow_telemetry["progress_summary"]' in example
-    assert 'snapshot.workflow_telemetry["provider_health_summary"]' in example
+    assert 'task_runtime_telemetry: Mapping[str, Any] = internal_runtime_telemetry["tasks"].get(task_id, {})' in example
+    assert 'workflow_telemetry = internal_runtime_telemetry["workflow"]' in example
+    assert 'workflow_telemetry["provider_health_summary"]' in example
     assert 'snapshot.artifacts' in example
     assert 'snapshot.decisions' in example
     assert 'snapshot.execution_events' in example

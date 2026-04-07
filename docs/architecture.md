@@ -18,11 +18,14 @@ The typed runtime revolves around the public contracts in `kycortex_agents.types
 
 - `AgentInput`: validated task, project, and context payload passed into agents.
 - `AgentOutput`: normalized agent result containing summary text, raw content, artifacts, decisions, and metadata.
-- `ProjectSnapshot`: immutable orchestration snapshot used for downstream context assembly and inspection.
+- `ProjectSnapshot`: immutable public read model used for inspection and compatibility surfaces.
+- `AgentView`: filtered prompt-facing projection derived from the current task dependency closure.
 - `TaskResult`, `FailureRecord`, `DecisionRecord`, and `ArtifactRecord`: normalized public result and audit structures.
 - `TaskStatus` and `WorkflowStatus`: public workflow lifecycle enums.
 
 These contracts define the stable boundary between orchestration, agents, persistence, and downstream consumers.
+
+The active boundary split now treats four views explicitly: internal persisted workflow state is the exact resume source of truth, `ProjectSnapshot` is the public normalized read model, `AgentView` is the prompt-facing filtered projection, and `InternalRuntimeTelemetry` is the private operator surface exposed through `ProjectState.internal_runtime_telemetry()`. The local workspace now includes the full three-slice split: the `AgentView` wall is active, the dedicated internal telemetry read path is active, and the old public snapshot, public execution-event, and provider-matrix telemetry mirrors are removed.
 
 ## Workflow Execution Model
 
@@ -39,17 +42,21 @@ Failure behavior is controlled by `workflow_failure_policy` and `workflow_resume
 
 ## Context Assembly
 
-Before each task runs, the orchestrator builds a context payload from the current `ProjectSnapshot` and previously completed task outputs.
+Before each task runs, the orchestrator builds a context payload from the current `ProjectSnapshot` and previously completed task outputs, then serializes only `AgentView` into `context["snapshot"]`.
 
 The context includes:
 
 - project name and goal
 - current phase and task metadata
-- full normalized snapshot data
+- filtered agent-view snapshot data derived from the current task dependency closure
 - completed upstream task outputs keyed by task id
 - semantic aliases such as `architecture`, `code`, `review`, `tests`, `documentation`, and `legal` when they can be inferred from agent roles or task titles
 
 This model keeps downstream tasks dependency-aware without relying on implicit global state.
+
+`AgentView` artifact selection is intentionally deterministic so tests can lock the rule directly: an artifact record is visible when its `metadata.task_id` is absent or belongs to the current task dependency closure, and `content` is present only when that source task is a direct dependency of the current task. The direct-dependency set includes `task.dependencies`, `repair_origin_task_id`, and `repair_context["budget_decomposition_plan_task_id"]` when present.
+
+The same dependency closure now also gates raw completed-task outputs, semantic aliases, and planned-module hints inside prompt context so unrelated finished tasks do not leak into downstream agent inputs.
 
 ## Persistence Model
 
@@ -68,6 +75,8 @@ Persisted state includes:
 
 This persistence model supports deterministic reload, resume, and snapshot reconstruction across backends.
 
+Persisted state remains the exact resume source of truth. `ProjectSnapshot` is reconstructed from that state for public inspection and compatibility, but it is no longer the prompt-facing context wall.
+
 ## Provider Layer
 
 The provider layer isolates backend-specific model calls from the rest of the runtime.
@@ -76,7 +85,7 @@ The provider layer isolates backend-specific model calls from the rest of the ru
 - `create_provider()` selects the configured built-in provider.
 - `OpenAIProvider`, `AnthropicProvider`, and `OllamaProvider` adapt their respective backends into a shared runtime surface.
 
-Provider-call metadata is propagated back into task state and snapshots so usage, latency, and failure details survive persistence.
+Provider-call metadata is propagated back into task state so usage, latency, and failure details survive persistence. `ProjectState.internal_runtime_telemetry()` now exposes the operator-facing runtime view with exact provider/model identities, usage, durations, latencies, repair-budget counters, and richer provider-health data. Public snapshots, public execution events, and provider-matrix summaries no longer carry those exact telemetry mirrors.
 
 ## Extension Points
 
@@ -96,6 +105,7 @@ The package intentionally separates public contracts from internal helper behavi
 - consumers should prefer top-level imports from `kycortex_agents`
 - workflow execution should flow through `Orchestrator`
 - state should be inspected through `ProjectState` or `ProjectSnapshot`
+- agent prompts should consume `AgentView`, not raw `ProjectSnapshot`
 - provider and persistence customization should use the exported interfaces instead of internal helper functions
 
 This boundary keeps the 1.0 runtime stable while still allowing controlled extension.

@@ -306,6 +306,7 @@ def test_run_task_exposes_semantic_context(tmp_path):
             title="Implementation",
             description="Implement the application",
             assigned_to="code_engineer",
+            dependencies=["arch"],
         )
     )
 
@@ -323,6 +324,7 @@ def test_run_task_exposes_semantic_context(tmp_path):
     assert agent.last_context["completed_tasks"]["arch"] == "ARCHITECTURE DOC"
     assert agent.last_context["task"]["id"] == "code"
     assert agent.last_context["snapshot"]["project_name"] == "Demo"
+    assert "workflow_telemetry" not in agent.last_context["snapshot"]
     assert agent.last_context["module_name"] == "code_implementation"
     assert agent.last_context["module_filename"] == "code_implementation.py"
 
@@ -346,6 +348,7 @@ def test_run_task_redacts_sensitive_agent_input_and_context(tmp_path):
             title="Repair tests password=hunter2",
             description="Fix Authorization: Bearer sk-ant-secret-987654",
             assigned_to="qa_tester",
+            dependencies=["arch"],
             repair_context={
                 "repair_owner": "qa_tester",
                 "failure_message": "api_key=sk-secret-123456",
@@ -372,6 +375,7 @@ def test_run_task_redacts_sensitive_agent_input_and_context(tmp_path):
     assert agent.last_context["existing_tests"] == "password=[REDACTED]"
     assert agent.last_context["test_validation_summary"] == "Authorization: Bearer [REDACTED]"
     assert agent.last_context["snapshot"]["goal"] == "Build demo api_key=[REDACTED]"
+    assert "workflow_telemetry" not in agent.last_context["snapshot"]
 
 
 def test_run_task_exposes_generated_code_module_context_to_downstream_agents(tmp_path):
@@ -419,6 +423,8 @@ def test_run_task_exposes_generated_code_module_context_to_downstream_agents(tmp
     assert agent.last_context["code"] == "def main():\n    return 1"
     assert agent.last_context["module_name"] == "code_implementation"
     assert agent.last_context["module_filename"] == "code_implementation.py"
+    assert agent.last_context["planned_module_name"] == "code_implementation"
+    assert agent.last_context["planned_module_filename"] == "code_implementation.py"
     assert agent.last_context["code_artifact_path"] == "artifacts/code_implementation.py"
     assert agent.last_context["code_summary"] == "def main():"
     assert agent.last_context["code_outline"] == "def main():"
@@ -7055,6 +7061,7 @@ def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_pat
             title="Tests",
             description="Write tests",
             assigned_to="qa_tester",
+            dependencies=["code"],
             status=TaskStatus.DONE.value,
             output=(
                 "from code_implementation import Color, Thing\n\n"
@@ -7166,6 +7173,7 @@ def test_run_task_exposes_dependency_manifest_validation_to_downstream_agents(tm
             title="Dependencies",
             description="Infer dependencies",
             assigned_to="dependency_manager",
+            dependencies=["code"],
             status=TaskStatus.DONE.value,
             output="# No external runtime dependencies",
             output_payload={
@@ -8428,6 +8436,7 @@ def test_build_context_compacts_architecture_for_low_budget_code_tasks_with_anch
             "- Supporting validation surface: ComplianceIntakeService.validate_request(request)"
         ),
         assigned_to="code_engineer",
+        dependencies=["arch"],
     )
     project.add_task(code_task)
 
@@ -9378,10 +9387,10 @@ def test_execute_workflow_emits_structured_workflow_logs(tmp_path, caplog):
     }
     assert finished_record.project_name == "Demo"
     assert finished_record.terminal_outcome == WorkflowOutcome.COMPLETED.value
-    assert finished_record.workflow_telemetry["has_multiple_tasks"] is False
-    assert finished_record.workflow_telemetry["has_tasks_with_provider_calls"] is False
-    assert finished_record.workflow_telemetry["has_tasks_without_provider_calls"] is True
-    assert finished_record.workflow_telemetry["acceptance_summary"]["accepted"] is True
+    assert finished_record.workflow_telemetry["task_count"] == 1
+    assert finished_record.workflow_telemetry["tasks_with_provider_calls"] == 0
+    assert finished_record.workflow_telemetry["tasks_without_provider_calls"] == 1
+    assert finished_record.workflow_telemetry["acceptance_evaluation"]["accepted"] is True
 
 
 def test_orchestrator_control_logs_redact_sensitive_reasons(tmp_path, caplog):
@@ -9549,28 +9558,9 @@ def test_execute_workflow_respects_task_dependencies(tmp_path):
     assert progress_events[0]["task_id"] == "arch"
     assert progress_events[0]["status"] == "execution"
     assert progress_events[0]["details"]["task_status"] == TaskStatus.DONE.value
-    assert progress_events[0]["details"]["workflow_telemetry"]["task_status_presence"] == {
-        "pending": True,
-        "done": True,
-    }
-    assert progress_events[0]["details"]["workflow_telemetry"]["progress_summary"] == {
-        "has_pending_tasks": True,
-        "has_running_tasks": False,
-        "has_runnable_tasks": True,
-        "has_blocked_tasks": False,
-        "has_terminal_tasks": True,
-        "all_tasks_terminal": False,
-    }
+    assert "workflow_telemetry" not in progress_events[0]["details"]
     assert progress_events[1]["task_id"] == "code"
-    assert progress_events[1]["details"]["workflow_telemetry"]["task_status_presence"] == {"done": True}
-    assert progress_events[1]["details"]["workflow_telemetry"]["progress_summary"] == {
-        "has_pending_tasks": False,
-        "has_running_tasks": False,
-        "has_runnable_tasks": False,
-        "has_blocked_tasks": False,
-        "has_terminal_tasks": True,
-        "all_tasks_terminal": True,
-    }
+    assert "workflow_telemetry" not in progress_events[1]["details"]
     assert project.execution_events[-1]["event"] == "workflow_finished"
     assert project.execution_events[-1]["details"]["workflow_duration_ms"] is not None
     assert project.execution_events[-1]["details"]["terminal_outcome"] == WorkflowOutcome.COMPLETED.value
@@ -12485,6 +12475,16 @@ def test_build_agent_input_includes_budget_decomposition_brief_without_overridin
             assigned_to="architect",
             status=TaskStatus.DONE.value,
             output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.FAILED.value,
+            dependencies=["arch"],
         )
     )
     project.add_task(

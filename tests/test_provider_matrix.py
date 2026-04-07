@@ -243,10 +243,6 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
         {
             "status": type("FakeStatus", (), {"value": "done"})(),
             "output": type("FakeOutput", (), {"summary": "Architecture snapshot ready"})(),
-            "resource_telemetry": {
-                "provider": "openai",
-                "model": "snapshot-openai-demo",
-            },
             "details": {"has_provider_call": True},
         },
     )()
@@ -256,32 +252,6 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
         {
             "workflow_status": "completed",
             "task_results": {"arch": task_result},
-            "workflow_telemetry": {
-                "has_multiple_tasks": True,
-                "has_tasks_with_provider_calls": True,
-                "has_tasks_without_provider_calls": True,
-                "has_multiple_observed_providers": True,
-                "has_multiple_final_providers": False,
-                "has_attempts": True,
-                "has_retry_attempts": False,
-                "progress_summary": {
-                    "has_pending_tasks": False,
-                    "has_running_tasks": False,
-                    "has_runnable_tasks": False,
-                    "has_blocked_tasks": False,
-                    "has_terminal_tasks": True,
-                    "all_tasks_terminal": True,
-                },
-                "provider_health_summary": {
-                    "openai": {
-                        "models": ["snapshot-openai-demo"],
-                        "status_presence": {"healthy": True},
-                        "last_outcome_presence": {"success": True},
-                        "has_retryable_failures": True,
-                        "has_active_checks": True,
-                    }
-                },
-            },
             "artifacts": [type("FakeArtifact", (), {"name": "architecture"})()],
             "decisions": [type("FakeDecision", (), {"topic": "architecture_snapshot"})()],
             "execution_events": [
@@ -290,8 +260,40 @@ def test_snapshot_inspection_example_limits_public_telemetry_dump(capsys, monkey
             ],
         },
     )()
+    internal_runtime_telemetry = {
+        "workflow": {
+            "task_count": 2,
+            "observed_providers": ["anthropic", "openai"],
+            "final_providers": ["openai"],
+            "attempt_count": 2,
+            "retry_attempt_count": 0,
+            "provider_health_summary": {
+                "openai": {
+                    "models": ["snapshot-openai-demo"],
+                    "status_counts": {"healthy": 1},
+                    "last_outcome_counts": {"success": 1},
+                    "active_health_check_count": 1,
+                }
+            },
+        },
+        "tasks": {
+            "arch": {
+                "provider": "openai",
+                "model": "snapshot-openai-demo",
+            }
+        },
+    }
 
-    fake_project = type("FakeProject", (), {"snapshot": lambda self: snapshot})()
+    fake_project = type(
+        "FakeProject",
+        (),
+        {
+            "snapshot": lambda self: snapshot,
+            "internal_runtime_telemetry": lambda self: internal_runtime_telemetry,
+            "runnable_tasks": lambda self: [],
+            "blocked_tasks": lambda self: [],
+        },
+    )()
 
     class FakeOrchestrator:
         def __init__(self, config, registry=None):
@@ -711,6 +713,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         model="llama3",
         output_dir=str(tmp_path / "output"),
     )
+    workflow_telemetry = project._workflow_telemetry_summary()
 
     assert summary["terminal_outcome"] == "completed"
     assert "provider" not in summary
@@ -727,14 +730,15 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     assert summary["repair_history"] == [
         {
             "cycle": 1,
-            "started_at": None,
+            "has_started_at": False,
             "reason": None,
             "failure_category": None,
             "has_failed_tasks": True,
             "has_budget_remaining": False,
         }
     ]
-    assert summary["workflow_telemetry"]["acceptance_summary"] == {
+    assert "workflow_telemetry" not in summary
+    assert workflow_telemetry["acceptance_summary"] == {
         "policy": "required_tasks",
         "accepted": True,
         "reason": "all_required_tasks_done",
@@ -747,7 +751,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
         "has_skipped_tasks": False,
         "has_pending_tasks": False,
     }
-    assert summary["workflow_telemetry"]["resume_summary"] == {
+    assert workflow_telemetry["resume_summary"] == {
         "has_multiple_resume_events": False,
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": False,
@@ -756,7 +760,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     }
     assert "workflow_last_resumed_at" not in summary
     assert "workflow_finished_at" not in summary
-    assert summary["workflow_telemetry"]["repair_summary"] == {
+    assert workflow_telemetry["repair_summary"] == {
         "has_repair_cycles": True,
         "max_cycles": 1,
         "budget_remaining": 0,

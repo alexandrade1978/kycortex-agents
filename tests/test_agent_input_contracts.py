@@ -124,6 +124,16 @@ def test_orchestrator_context_exposes_only_completed_outputs_and_transitive_sema
     )
     project.add_task(
         Task(
+            id="docs",
+            title="Docs refresh",
+            description="Refresh documentation",
+            assigned_to="documentation_agent",
+            status=TaskStatus.DONE.value,
+            output="README UPDATE",
+        )
+    )
+    project.add_task(
+        Task(
             id="review",
             title="Review",
             description="Review implementation",
@@ -148,7 +158,11 @@ def test_orchestrator_context_exposes_only_completed_outputs_and_transitive_sema
         "code": "print('hello')",
     }
     assert "blocked" not in context
+    assert "docs" not in context
+    assert "documentation" not in context
     assert "review" not in context
     assert "review" not in context["completed_tasks"]
+    assert set(context["snapshot"]["task_results"]) == {"arch", "code", "review"}
+    assert "workflow_telemetry" not in context["snapshot"]
     review_task = require_task(project, "review")
     assert review_task.status == TaskStatus.DONE.value

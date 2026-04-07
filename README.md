@@ -203,6 +203,19 @@ kycortex_agents/
 └── types.py        # Public typed contracts
 ```
 
+## Runtime Boundary Model
+
+The current architecture treats four views explicitly:
+
+- internal persisted workflow state as the exact resume source of truth
+- `ProjectSnapshot` as the public normalized read model
+- `AgentView` as the prompt-facing filtered projection
+- `ProjectState.internal_runtime_telemetry()` as the exact operator-facing telemetry read path
+
+Agent prompts consume `AgentView`, not the raw `ProjectSnapshot`. Public snapshots no longer expose `workflow_telemetry`, public task results no longer expose a separate `resource_telemetry` surface, and exact runtime telemetry is intentionally available only through `ProjectState.internal_runtime_telemetry()`.
+
+See `docs/architecture.md`, `docs/workflows.md`, and `docs/persistence.md` for the detailed boundary rules.
+
 ## Roadmap
 
 - [ ] Add vector store for long-term memory

@@ -1161,6 +1161,7 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
 
     resumed = project.resume_failed_tasks(include_failed_tasks=False, failed_task_ids=["arch"], additional_task_ids=["arch__repair_1"])
     snapshot = project.snapshot()
+    telemetry = project._workflow_telemetry_summary()
 
     assert resumed == ["review"]
     arch_task = require_task(project, "arch")
@@ -1176,7 +1177,8 @@ def test_resume_failed_tasks_can_resume_only_failed_descendants_when_requested()
     assert "unique_task_count" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "task_ids" not in snapshot.execution_events[-1]["details"]
-    assert snapshot.workflow_telemetry["resume_summary"] == {
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert telemetry["resume_summary"] == {
         "has_multiple_resume_events": False,
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": True,
@@ -1198,7 +1200,8 @@ def test_record_workflow_progress_includes_task_status_and_preserves_explicit_pr
     assert project.execution_events[-1]["event"] == "workflow_progress"
     assert project.execution_events[-1]["task_id"] == "code"
     assert project.execution_events[-1]["details"]["task_status"] == TaskStatus.RUNNING.value
-    assert project.execution_events[-1]["details"]["workflow_telemetry"] == telemetry
+    assert telemetry == project._workflow_telemetry_summary()
+    assert "workflow_telemetry" not in project.execution_events[-1]["details"]
     assert "provider_budget" in project.execution_events[-1]["details"]
 
     project.record_workflow_progress(task_id="review")
@@ -1226,10 +1229,10 @@ def test_snapshot_workflow_progress_minimizes_embedded_workflow_telemetry():
 
     assert progress_event["event"] == "workflow_progress"
     assert progress_event["details"]["has_task_status"] is True
-    assert progress_event["details"]["has_workflow_telemetry"] is True
     assert "task_status" not in progress_event["details"]
     assert "workflow_telemetry" not in progress_event["details"]
     assert "provider_budget" not in progress_event["details"]
+    assert not hasattr(snapshot, "workflow_telemetry")
 
 
 def test_create_repair_task_records_lineage_and_requeue_audit():
@@ -1801,6 +1804,7 @@ def test_resume_workflow_clears_pause_state_and_records_resume_summary():
 
     changed = project.resume_workflow(reason="paused_workflow")
     snapshot = project.snapshot()
+    telemetry = project._workflow_telemetry_summary()
 
     assert changed is True
     assert project.phase == "execution"
@@ -1819,7 +1823,8 @@ def test_resume_workflow_clears_pause_state_and_records_resume_summary():
     assert "unique_task_count" not in snapshot.execution_events[-1]["details"]
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "task_ids" not in snapshot.execution_events[-1]["details"]
-    assert snapshot.workflow_telemetry["resume_summary"] == {
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert telemetry["resume_summary"] == {
         "has_multiple_resume_events": False,
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": False,
@@ -2208,22 +2213,36 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert planned_event["details"]["has_source_failure_task"] is True
     assert planned_event["details"]["has_budget_decomposition_plan"] is True
     assert planned_event["details"]["has_provider_call"] is True
-    assert planned_event["details"]["instruction"] == "Repair the generated Python module."
-    assert planned_event["details"]["repair_owner"] == "code_engineer"
-    assert planned_event["details"]["original_assigned_to"] == "code_engineer"
-    assert planned_event["details"]["helper_surface_usages"] == ["RiskScoringService (line 33)"]
-    assert planned_event["details"]["helper_surface_symbols"] == ["RiskScoringService"]
-    assert planned_event["details"]["decomposition_mode"] == "budget_compaction_planner"
-    assert planned_event["details"]["decomposition_target_agent"] == "architect"
-    assert planned_event["details"]["decomposition_failure_category"] == "code_validation"
-    assert planned_event["details"]["failed_artifact_content"] == "def broken():\n    return missing_symbol"
-    assert planned_event["details"]["failure_message"] == "Generated module failed import validation."
-    assert planned_event["details"]["failure_error_type"] == "ImportError"
-    assert planned_event["details"]["failed_output"] == "def broken():\n    return missing_symbol"
-    assert planned_event["details"]["validation_summary"] == "Generated code validation:\n- Syntax OK: no"
-    assert planned_event["details"]["existing_tests"] == "def test_broken():\n    assert broken() == 1"
+    assert planned_event["details"]["has_instruction"] is True
+    assert planned_event["details"]["has_repair_owner"] is True
+    assert planned_event["details"]["has_original_assigned_to"] is True
+    assert planned_event["details"]["has_helper_surface_usages"] is True
+    assert planned_event["details"]["has_helper_surface_symbols"] is True
+    assert planned_event["details"]["has_decomposition_mode"] is True
+    assert planned_event["details"]["has_decomposition_target_agent"] is True
+    assert planned_event["details"]["has_decomposition_failure_category"] is True
+    assert planned_event["details"]["has_failed_artifact_content"] is True
+    assert planned_event["details"]["has_failure_message"] is True
+    assert planned_event["details"]["has_failure_error_type"] is True
+    assert planned_event["details"]["has_failed_output"] is True
+    assert planned_event["details"]["has_validation_summary"] is True
+    assert planned_event["details"]["has_existing_tests"] is True
     assert "source_failure_task_id" not in planned_event["details"]
     assert "budget_decomposition_plan_task_id" not in planned_event["details"]
+    assert "instruction" not in planned_event["details"]
+    assert "repair_owner" not in planned_event["details"]
+    assert "original_assigned_to" not in planned_event["details"]
+    assert "helper_surface_usages" not in planned_event["details"]
+    assert "helper_surface_symbols" not in planned_event["details"]
+    assert "decomposition_mode" not in planned_event["details"]
+    assert "decomposition_target_agent" not in planned_event["details"]
+    assert "decomposition_failure_category" not in planned_event["details"]
+    assert "failed_artifact_content" not in planned_event["details"]
+    assert "failure_message" not in planned_event["details"]
+    assert "failure_error_type" not in planned_event["details"]
+    assert "failed_output" not in planned_event["details"]
+    assert "validation_summary" not in planned_event["details"]
+    assert "existing_tests" not in planned_event["details"]
     assert "provider_call" not in planned_event["details"]
     assert "provider_budget" not in planned_event["details"]
 
@@ -2259,6 +2278,84 @@ def test_snapshot_minimizes_public_repair_lineage_event_details():
     assert "error_type" not in failed_event["details"]
     assert "repair_task_id" not in failed_event["details"]
     assert "repair_attempt" not in failed_event["details"]
+
+
+def test_snapshot_task_repair_planned_events_use_presence_flags_for_legacy_repair_context_details():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        execution_events=[
+            {
+                "event": "task_repair_planned",
+                "timestamp": "2026-03-22T10:06:00+00:00",
+                "task_id": "code",
+                "status": "failed",
+                "details": {
+                    "cycle": 1,
+                    "failure_category": FailureCategory.CODE_VALIDATION.value,
+                    "instruction": "Repair the generated Python module.",
+                    "repair_owner": "code_engineer",
+                    "original_assigned_to": "code_engineer",
+                    "helper_surface_usages": ["RiskScoringService (line 33)"],
+                    "helper_surface_symbols": ["RiskScoringService"],
+                    "decomposition_mode": "budget_compaction_planner",
+                    "decomposition_target_agent": "architect",
+                    "decomposition_failure_category": FailureCategory.CODE_VALIDATION.value,
+                    "failure_message": "Generated module failed import validation.",
+                    "failure_error_type": "ImportError",
+                    "failed_artifact_content": "def broken():\n    return missing_symbol",
+                    "failed_output": "def broken():\n    return missing_symbol",
+                    "validation_summary": "Generated code validation:\n- Syntax OK: no",
+                    "existing_tests": "def test_broken():\n    assert broken() == 1",
+                    "source_failure_task_id": "tests",
+                    "budget_decomposition_plan_task_id": "code__repair_plan_1",
+                    "provider_call": {"provider": "openai", "success": False},
+                },
+            }
+        ],
+        updated_at="2026-03-22T10:06:00+00:00",
+    )
+
+    snapshot = project.snapshot()
+    planned_event = snapshot.execution_events[0]
+
+    assert planned_event["event"] == "task_repair_planned"
+    assert planned_event["details"]["cycle"] == 1
+    assert planned_event["details"]["failure_category"] == FailureCategory.CODE_VALIDATION.value
+    assert planned_event["details"]["has_instruction"] is True
+    assert planned_event["details"]["has_repair_owner"] is True
+    assert planned_event["details"]["has_original_assigned_to"] is True
+    assert planned_event["details"]["has_helper_surface_usages"] is True
+    assert planned_event["details"]["has_helper_surface_symbols"] is True
+    assert planned_event["details"]["has_decomposition_mode"] is True
+    assert planned_event["details"]["has_decomposition_target_agent"] is True
+    assert planned_event["details"]["has_decomposition_failure_category"] is True
+    assert planned_event["details"]["has_failure_message"] is True
+    assert planned_event["details"]["has_failure_error_type"] is True
+    assert planned_event["details"]["has_failed_artifact_content"] is True
+    assert planned_event["details"]["has_failed_output"] is True
+    assert planned_event["details"]["has_validation_summary"] is True
+    assert planned_event["details"]["has_existing_tests"] is True
+    assert planned_event["details"]["has_source_failure_task"] is True
+    assert planned_event["details"]["has_budget_decomposition_plan"] is True
+    assert planned_event["details"]["has_provider_call"] is True
+    assert "instruction" not in planned_event["details"]
+    assert "repair_owner" not in planned_event["details"]
+    assert "original_assigned_to" not in planned_event["details"]
+    assert "helper_surface_usages" not in planned_event["details"]
+    assert "helper_surface_symbols" not in planned_event["details"]
+    assert "decomposition_mode" not in planned_event["details"]
+    assert "decomposition_target_agent" not in planned_event["details"]
+    assert "decomposition_failure_category" not in planned_event["details"]
+    assert "failure_message" not in planned_event["details"]
+    assert "failure_error_type" not in planned_event["details"]
+    assert "failed_artifact_content" not in planned_event["details"]
+    assert "failed_output" not in planned_event["details"]
+    assert "validation_summary" not in planned_event["details"]
+    assert "existing_tests" not in planned_event["details"]
+    assert "source_failure_task_id" not in planned_event["details"]
+    assert "budget_decomposition_plan_task_id" not in planned_event["details"]
+    assert "provider_call" not in planned_event["details"]
 
 
 def test_snapshot_task_repair_created_events_use_presence_flags_for_legacy_assigned_to_details():
@@ -2433,6 +2530,7 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
         failed_task_ids=["tests"],
     )
     snapshot = project.snapshot()
+    telemetry = project._workflow_telemetry_summary()
 
     assert entry["cycle"] == 1
     assert entry["failure_category"] == "test_validation"
@@ -2444,7 +2542,7 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
     assert snapshot.repair_history == [
         {
             "cycle": 1,
-            "started_at": entry["started_at"],
+            "has_started_at": True,
             "reason": "resume_failed_tasks",
             "failure_category": "test_validation",
             "has_failed_tasks": True,
@@ -2460,7 +2558,8 @@ def test_start_repair_cycle_updates_snapshot_and_execution_history():
     assert "provider_budget" not in snapshot.execution_events[-1]["details"]
     assert "started_at" not in snapshot.execution_events[-1]["details"]
     assert "failed_task_ids" not in snapshot.execution_events[-1]["details"]
-    assert snapshot.workflow_telemetry["repair_summary"] == {
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert telemetry["repair_summary"] == {
         "has_repair_cycles": True,
         "max_cycles": 2,
         "budget_remaining": 1,
@@ -2486,7 +2585,7 @@ def test_repair_summary_aggregates_repair_reasons_across_cycles():
         failed_task_ids=["deps", "tests"],
     )
 
-    assert project.snapshot().workflow_telemetry["repair_summary"] == {
+    assert project._workflow_telemetry_summary()["repair_summary"] == {
         "has_repair_cycles": True,
         "max_cycles": 3,
         "budget_remaining": 1,
@@ -2564,7 +2663,7 @@ def test_snapshot_repair_history_uses_failed_task_presence_for_legacy_entries():
     assert snapshot.repair_history == [
         {
             "cycle": 1,
-            "started_at": "2026-03-22T10:01:00+00:00",
+            "has_started_at": True,
             "reason": "resume_failed_tasks",
             "failure_category": "test_validation",
             "has_failed_tasks": True,
@@ -2597,6 +2696,7 @@ def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
     ]
 
     snapshot = project.snapshot()
+    telemetry = project._workflow_telemetry_summary()
 
     assert snapshot.execution_events[0]["details"]["reason"] == "failed_workflow"
     assert snapshot.execution_events[0]["details"]["has_resumed_tasks"] is True
@@ -2605,7 +2705,8 @@ def test_snapshot_workflow_resumed_events_use_task_counts_for_legacy_entries():
     assert "unique_task_count" not in snapshot.execution_events[0]["details"]
     assert "provider_budget" not in snapshot.execution_events[0]["details"]
     assert "task_ids" not in snapshot.execution_events[0]["details"]
-    assert snapshot.workflow_telemetry["resume_summary"] == {
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert telemetry["resume_summary"] == {
         "has_multiple_resume_events": False,
         "has_multiple_reasons": False,
         "has_multiple_resumed_tasks": True,
@@ -2727,20 +2828,9 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "has_skipped_tasks": False,
         "has_pending_tasks": False,
     }
-    assert event["details"]["workflow_telemetry"]["acceptance_summary"] == {
-        "policy": "required_tasks",
-        "accepted": True,
-        "reason": "all_required_tasks_done",
-        "terminal_outcome": WorkflowOutcome.COMPLETED.value,
-        "failure_category": None,
-        "has_evaluated_tasks": True,
-        "has_required_tasks": True,
-        "has_completed_tasks": True,
-        "has_failed_tasks": False,
-        "has_skipped_tasks": False,
-        "has_pending_tasks": False,
-    }
-    assert snapshot.workflow_telemetry["acceptance_summary"] == event["details"]["workflow_telemetry"]["acceptance_summary"]
+    assert "workflow_telemetry" not in event["details"]
+    assert snapshot.acceptance_evaluation == event["details"]["acceptance_evaluation"]
+    assert not hasattr(snapshot, "workflow_telemetry")
 
 
 def test_mark_workflow_finished_records_policy_enforcement_for_security_failures():
@@ -3503,6 +3593,9 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     )
 
     result = project.snapshot().task_results["code"]
+    task = project.get_task("code")
+
+    assert task is not None
 
     assert result.started_at == "2026-03-22T10:00:00+00:00"
     assert result.failure is not None
@@ -3521,14 +3614,15 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "has_last_attempt_duration" not in result.failure.details
     assert "task_duration_ms" not in result.failure.details
     assert "last_attempt_duration_ms" not in result.failure.details
-    assert result.resource_telemetry == {
+    assert not hasattr(result, "resource_telemetry")
+    assert project._task_resource_telemetry(task) == {
         "has_provider_call": False,
         "has_task_duration": True,
         "has_last_attempt_duration": True,
         "has_provider_duration": False,
         "usage": {},
     }
-    assert "has_provider_call" not in result.details
+    assert result.details["has_provider_call"] is False
     assert result.details["last_error_present"] is True
     assert result.details["has_attempts"] is True
     assert result.details["has_retry_limit"] is True
@@ -3572,6 +3666,9 @@ def test_snapshot_preserves_failure_record_for_failed_task_without_output():
     )
 
     result = project.snapshot().task_results["code"]
+    task = project.get_task("code")
+
+    assert task is not None
 
     assert result.status == TaskStatus.FAILED
     assert result.failure is not None
@@ -3579,9 +3676,8 @@ def test_snapshot_preserves_failure_record_for_failed_task_without_output():
     assert result.failure.error_type == "TimeoutError"
     assert result.failure.category == "unknown"
     assert "provider_call" not in result.failure.details
-    assert result.resource_telemetry["has_provider_call"] is True
-    assert "provider" not in result.resource_telemetry
-    assert "model" not in result.resource_telemetry
+    assert not hasattr(result, "resource_telemetry")
+    assert project._task_resource_telemetry(task)["has_provider_call"] is True
 
 
 def test_snapshot_preserves_failure_category_and_terminal_outcome_fields():
@@ -3678,7 +3774,10 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
         }
     )
 
-    telemetry = project.snapshot().workflow_telemetry
+    snapshot = project.snapshot()
+    telemetry = project._workflow_telemetry_summary()
+
+    assert not hasattr(snapshot, "workflow_telemetry")
 
     assert telemetry["resume_summary"]["has_multiple_resume_events"] is False
     assert telemetry["resume_summary"]["has_multiple_reasons"] is False
@@ -3714,6 +3813,255 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["error_summary"] == {
         "has_final_errors": True,
         "has_fallback_errors": True,
+    }
+
+
+def test_internal_runtime_telemetry_exposes_exact_metrics_without_changing_public_snapshot_contract():
+    project = ProjectState(
+        project_name="Demo",
+        goal="Build demo",
+        phase="review",
+        acceptance_policy="strict",
+        acceptance_criteria_met=False,
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category=FailureCategory.TEST_VALIDATION.value,
+        repair_max_cycles=5,
+        repair_cycle_count=2,
+        acceptance_evaluation={
+            "evaluated_task_ids": ["code", "review"],
+            "required_task_ids": ["code"],
+            "completed_task_ids": ["code"],
+            "failed_task_ids": ["review"],
+            "reason": "quality gate failed",
+        },
+    )
+    project.workflow_last_resumed_at = "2026-03-22T10:08:00+00:00"
+    project.repair_history = [
+        {
+            "cycle": 1,
+            "started_at": "2026-03-22T10:09:00+00:00",
+            "reason": "fix failing tests",
+            "failure_category": FailureCategory.TEST_VALIDATION.value,
+            "failed_task_ids": ["review"],
+            "budget_remaining": 4,
+        },
+        {
+            "cycle": 2,
+            "started_at": "2026-03-22T10:10:00+00:00",
+            "reason": "fix failing tests",
+            "failure_category": FailureCategory.TEST_VALIDATION.value,
+            "failed_task_ids": ["review"],
+            "budget_remaining": 3,
+        },
+    ]
+    project.execution_events.append(
+        {
+            "event": "workflow_resumed",
+            "details": {
+                "reason": "manual resume",
+                "task_ids": ["code", "review"],
+            },
+        }
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            started_at="2026-03-22T10:00:00+00:00",
+            last_attempt_started_at="2026-03-22T10:01:00+00:00",
+            completed_at="2026-03-22T10:03:00+00:00",
+            last_provider_call={
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "success": True,
+                "duration_ms": 12.5,
+                "latency_ms": 9.5,
+                "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+                "attempt_history": [
+                    {"success": False, "retryable": True},
+                    {"success": True, "retryable": False},
+                ],
+                "provider_health": {
+                    "openai": {
+                        "model": "gpt-4.1",
+                        "status": "open_circuit",
+                        "last_outcome": "failure",
+                        "last_failure_retryable": True,
+                        "last_health_check": {
+                            "active_check": True,
+                            "cooldown_cached": False,
+                        },
+                    }
+                },
+                "fallback_history": [
+                    {
+                        "provider": "anthropic",
+                        "status": "failed_health_check",
+                        "error_type": "ProviderTransientError",
+                    }
+                ],
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="review",
+            title="Review",
+            description="Review the changes",
+            assigned_to="code_reviewer",
+            status=TaskStatus.FAILED.value,
+            started_at="2026-03-22T10:04:00+00:00",
+            last_attempt_started_at="2026-03-22T10:05:00+00:00",
+            completed_at="2026-03-22T10:07:00+00:00",
+            last_provider_call={
+                "provider": "anthropic",
+                "model": "claude-sonnet-4",
+                "success": False,
+                "timing": {"total_duration_ms": 40, "latency_ms": 30},
+                "usage": {"prompt_tokens": 3},
+                "error_type": "AgentExecutionError",
+            },
+        )
+    )
+
+    internal_telemetry = project.internal_runtime_telemetry()
+    snapshot = project.snapshot()
+    code_task = project.get_task("code")
+    public_workflow_telemetry = project._workflow_telemetry_summary()
+
+    assert code_task is not None
+
+    assert internal_telemetry["project_name"] == "Demo"
+    assert internal_telemetry["goal"] == "Build demo"
+    assert internal_telemetry["workflow_status"] == WorkflowStatus.FAILED
+    assert internal_telemetry["phase"] == "review"
+    assert internal_telemetry["acceptance_policy"] == "strict"
+    assert internal_telemetry["terminal_outcome"] == WorkflowOutcome.FAILED.value
+    assert internal_telemetry["failure_category"] == FailureCategory.TEST_VALIDATION.value
+
+    assert internal_telemetry["tasks"]["code"] == {
+        "status": TaskStatus.DONE.value,
+        "agent_name": "code_engineer",
+        "has_provider_call": True,
+        "provider": "openai",
+        "model": "gpt-4.1",
+        "success": True,
+        "attempts_used": 2,
+        "retry_attempt_count": 1,
+        "task_duration_ms": 180000,
+        "last_attempt_duration_ms": 120000,
+        "provider_duration_ms": 12.5,
+        "provider_latency_ms": 9.5,
+        "usage": {"completion_tokens": 2, "prompt_tokens": 5},
+        "provider_health": {
+            "openai": {
+                "model": "gpt-4.1",
+                "status": "open_circuit",
+                "last_outcome": "failure",
+                "last_failure_retryable": True,
+                "last_health_check": {
+                    "active_check": True,
+                    "cooldown_cached": False,
+                },
+            }
+        },
+    }
+    assert internal_telemetry["tasks"]["review"]["provider"] == "anthropic"
+    assert internal_telemetry["tasks"]["review"]["model"] == "claude-sonnet-4"
+    assert internal_telemetry["tasks"]["review"]["provider_duration_ms"] == 40
+    assert internal_telemetry["tasks"]["review"]["provider_latency_ms"] == 30
+
+    workflow_telemetry = internal_telemetry["workflow"]
+    assert workflow_telemetry["task_count"] == 2
+    assert workflow_telemetry["task_status_counts"] == {
+        TaskStatus.DONE.value: 1,
+        TaskStatus.FAILED.value: 1,
+    }
+    assert workflow_telemetry["tasks_with_provider_calls"] == 2
+    assert workflow_telemetry["tasks_without_provider_calls"] == 0
+    assert workflow_telemetry["acceptance_evaluation"] == {
+        "evaluated_task_ids": ["code", "review"],
+        "required_task_ids": ["code"],
+        "completed_task_ids": ["code"],
+        "failed_task_ids": ["review"],
+        "reason": "quality gate failed",
+        "policy": "strict",
+        "accepted": False,
+        "terminal_outcome": WorkflowOutcome.FAILED.value,
+        "failure_category": FailureCategory.TEST_VALIDATION.value,
+    }
+    assert workflow_telemetry["resume_summary"] == {
+        "resume_event_count": 1,
+        "reason_counts": {"manual resume": 1},
+        "resumed_task_count": 2,
+        "unique_task_count": 2,
+        "last_resumed_at": "2026-03-22T10:08:00+00:00",
+    }
+    assert workflow_telemetry["repair_summary"] == {
+        "cycle_count": 2,
+        "max_cycles": 5,
+        "budget_remaining": 3,
+        "history_count": 2,
+        "reason_counts": {"fix failing tests": 2},
+        "failure_category_counts": {FailureCategory.TEST_VALIDATION.value: 2},
+        "failed_task_count": 1,
+    }
+    assert workflow_telemetry["final_providers"] == ["anthropic", "openai"]
+    assert workflow_telemetry["observed_providers"] == ["anthropic", "openai"]
+    assert workflow_telemetry["provider_summary"]["openai"] == {
+        "task_count": 1,
+        "success_count": 1,
+        "failure_count": 0,
+        "attempt_count": 2,
+        "retry_attempt_count": 1,
+        "models": ["gpt-4.1"],
+        "duration_ms": {"count": 1, "total": 12.5, "min": 12.5, "max": 12.5, "avg": 12.5},
+        "usage": {"completion_tokens": 2, "prompt_tokens": 5},
+    }
+    assert workflow_telemetry["provider_health_summary"]["openai"] == {
+        "models": ["gpt-4.1"],
+        "status_counts": {"open_circuit": 1},
+        "last_outcome_counts": {"failure": 1},
+        "retryable_failure_count": 1,
+        "active_health_check_count": 1,
+    }
+    assert workflow_telemetry["attempt_count"] == 2
+    assert workflow_telemetry["retry_attempt_count"] == 1
+    assert workflow_telemetry["duration_ms"] == {"count": 2, "total": 52.5, "min": 12.5, "max": 40, "avg": 26.25}
+    assert workflow_telemetry["usage"] == {"completion_tokens": 2, "prompt_tokens": 8}
+    assert workflow_telemetry["fallback_summary"] == {
+        "task_count": 1,
+        "entry_count": 1,
+        "providers": ["anthropic"],
+        "statuses": ["failed_health_check"],
+    }
+    assert workflow_telemetry["error_summary"] == {
+        "final_error_count": 1,
+        "fallback_error_count": 1,
+    }
+
+    assert not hasattr(snapshot.task_results["code"], "resource_telemetry")
+    assert snapshot.task_results["code"].details["has_provider_call"] is True
+    assert snapshot.task_results["code"].details["has_provider_duration"] is True
+    assert project._task_resource_telemetry(code_task) == {
+        "has_provider_call": True,
+        "has_task_duration": True,
+        "has_last_attempt_duration": True,
+        "has_provider_duration": True,
+        "usage": {"completion_tokens": 2, "prompt_tokens": 5},
+    }
+    assert not hasattr(snapshot, "workflow_telemetry")
+    assert public_workflow_telemetry["provider_summary"]["openai"] == {
+        "has_multiple_tasks": False,
+        "has_successes": True,
+        "has_failures": False,
+        "has_attempts": True,
+        "has_retry_attempts": True,
+        "duration_ms": {"has_samples": True, "has_multiple_samples": False},
+        "usage": {"completion_tokens": 2, "prompt_tokens": 5},
     }
 
 
@@ -4415,8 +4763,8 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.started_at is None
     assert result.output is not None
     assert result.output.summary == "Skipped because dependency 'arch' failed"
-    assert result.resource_telemetry["has_provider_call"] is False
-    assert "has_provider_call" not in result.details
+    assert not hasattr(result, "resource_telemetry")
+    assert result.details["has_provider_call"] is False
     assert result.details["last_error_present"] is True
     assert "last_error" not in result.details
     assert "last_provider_call" not in result.details

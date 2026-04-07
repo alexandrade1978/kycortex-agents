@@ -411,7 +411,6 @@ def summarize_workflow_run(
         "phase": project.phase,
         "terminal_outcome": project.terminal_outcome,
         "repair_history": list(snapshot.repair_history),
-        "workflow_telemetry": snapshot.workflow_telemetry,
         "state_file": _public_path_label(project.state_file),
         "output_dir": _public_path_label(output_dir),
         "task_status_counts": task_status_counts,

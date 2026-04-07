@@ -14,6 +14,8 @@ This guide explains how workflow state is persisted in `kycortex-agents`, how th
 
 `ProjectState.save()` serializes that state through the configured state-store backend, and `ProjectState.load(path)` restores it into the current runtime dataclasses.
 
+Exact resume semantics stay in `ProjectState` plus the selected state-store payload. `ProjectSnapshot` is rebuilt from that state as a public normalized read model rather than serving as the authoritative checkpoint format.
+
 The configured `output_dir` is related but separate: it is the root used for persisted task artifacts and validation files, and it is created lazily when the runtime first needs to write there.
 
 ## Backend Selection
@@ -98,15 +100,18 @@ Persistence is what makes resume behavior deterministic across processes.
 
 `ProjectState.snapshot()` returns a normalized `ProjectSnapshot` built from persisted state.
 
+It is the public read model for inspection code. Prompt-facing agent context is derived from `AgentView`, not from serializing the raw snapshot.
+
 That snapshot exposes:
 
-- `task_results` with `TaskResult`, `AgentOutput`, `FailureRecord`, and per-task `resource_telemetry` data
-- `workflow_telemetry` with aggregated per-workflow provider usage, provider health-state rollups, duration, retry, fallback, progress, acceptance, resume, and repair summaries, including repair trigger reasons, following the public `WorkflowTelemetry` contract in `kycortex_agents.types`
+- `task_results` with `TaskResult`, `AgentOutput`, `FailureRecord`, and coarse public detail flags that preserve supported product-level signals without a separate public `resource_telemetry` surface
 - normalized `DecisionRecord` and `ArtifactRecord` collections
 - workflow lifecycle timestamps and overall `WorkflowStatus`
-- durable execution-event audit trails for workflow and task transitions, including intermediate `workflow_progress` telemetry snapshots during active execution
+- durable execution-event audit trails for workflow and task transitions, including public workflow lifecycle details without embedded workflow telemetry
 
-This is the preferred read model for inspection code because it normalizes legacy payloads and backend-specific storage details.
+This is the preferred public read model for inspection code because it normalizes legacy payloads and backend-specific storage details. It is not the operator telemetry surface: exact workflow and task runtime telemetry now lives behind `ProjectState.internal_runtime_telemetry()`, and the public `workflow_telemetry`, public `resource_telemetry`, and public execution-event telemetry echoes are already removed from the current local contract.
+
+`ProjectState.internal_runtime_telemetry()` is now the dedicated internal read path for operator and UI telemetry. It preserves exact per-task provider/model identities, usage, durations and latencies, repair-budget counters, and richer provider-health data without widening the public snapshot contract.
 
 ## Legacy Compatibility
 

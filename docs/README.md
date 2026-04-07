@@ -24,18 +24,18 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [examples/example_custom_agent.py](../examples/example_custom_agent.py): custom-agent example using `BaseAgent` and `AgentRegistry` through the public API.
 - [examples/example_multi_provider.py](../examples/example_multi_provider.py): provider-configuration example showing the same workflow across OpenAI, Anthropic, and Ollama.
 - [examples/example_release_user_smoke.py](../examples/example_release_user_smoke.py): user-style live smoke example that generates a small project through the public API and validates the produced Python artifact.
-- [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py): empirical provider-matrix runner that skips unavailable providers, verifies provider readiness, and writes a structured full-workflow validation summary including aggregate workflow telemetry.
+- [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py): empirical provider-matrix runner that skips unavailable providers, verifies provider readiness, and writes a structured full-workflow validation summary under the current minimized public-summary contract.
 - [examples/example_test_mode.py](../examples/example_test_mode.py): deterministic local execution example using fake agents instead of live provider calls.
 - [examples/example_complex_workflow.py](../examples/example_complex_workflow.py): converging multi-parent workflow example showing merged artifacts and decisions flowing into a downstream task.
 - [examples/example_failure_recovery.py](../examples/example_failure_recovery.py): persisted failure-and-resume example showing retry exhaustion, reload, and `resume_failed` recovery.
-- [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py): structured snapshot-inspection example showing task results, aggregate workflow telemetry, provider health summaries, artifacts, decisions, and execution events.
+- [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py): structured snapshot-inspection example showing the public `snapshot()` read model together with `ProjectState.internal_runtime_telemetry()` for exact operator-facing telemetry, plus provider health summaries, artifacts, decisions, and execution events.
 
 ## Public API Navigation
 
 - `kycortex_agents`: top-level public package exporting the main runtime, config, types, providers, memory, and workflow symbols.
 - [kycortex_agents/config.py](../kycortex_agents/config.py): runtime configuration and provider validation.
 - [kycortex_agents/orchestrator.py](../kycortex_agents/orchestrator.py): workflow execution coordinator.
-- [kycortex_agents/types.py](../kycortex_agents/types.py): public typed contracts such as `AgentInput`, `AgentOutput`, `TaskResult`, task and workflow telemetry summaries, and workflow statuses.
+- [kycortex_agents/types.py](../kycortex_agents/types.py): public typed contracts such as `AgentInput`, `AgentOutput`, `AgentView`, `TaskResult`, task and workflow statuses, and the normalized public summary shapes used by inspection helpers.
 - [kycortex_agents/exceptions.py](../kycortex_agents/exceptions.py): public exception hierarchy.
 
 ## Module Guides
@@ -62,7 +62,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [examples/example_test_mode.py](../examples/example_test_mode.py) when validating workflow behavior locally without calling a live provider.
 - Use [examples/example_complex_workflow.py](../examples/example_complex_workflow.py) when learning how converging DAGs expose merged upstream artifacts and decisions to a downstream agent.
 - Use [examples/example_failure_recovery.py](../examples/example_failure_recovery.py) when learning how persisted failed workflows reload and continue under `workflow_resume_policy="resume_failed"`.
-- Use [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py) when learning how snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events, plus explicit workflow progress and provider-health telemetry.
+- Use [examples/example_snapshot_inspection.py](../examples/example_snapshot_inspection.py) when learning how `snapshot()` exposes structured task results, artifacts, decisions, and execution events while exact operator-facing observability comes from `ProjectState.internal_runtime_telemetry()`.
 - Use [CONTRIBUTING.md](../CONTRIBUTING.md) for repository setup plus focused public-API, packaging/docs, and full-suite test commands before making changes.
 - Use [CONTRIBUTOR_RIGHTS.md](../CONTRIBUTOR_RIGHTS.md) when you need the repository's contributor-rights policy for dual-licensed maintenance.
 - Use [COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md) when you need the repository's dual-license overview or the contact path for commercial terms.
@@ -91,6 +91,8 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Current Release State
 
-Phase 13 is complete. The repository now ships a 1.0.0 baseline with changelog and migration guidance, release-metadata validation, coverage-gate enforcement, and tagged release automation.
+The released baseline remains `1.0.13a1`.
 
-The current maintenance track also documents provider model-readiness checks, completion-aware output validation, lazy output-directory creation, and the bounded provider-matrix validation workflow used for empirical cloud-provider regression tracking.
+The current local architecture state reflects the completed runtime/public boundary split: prompt-facing context uses `AgentView`, `snapshot()` remains the public normalized read model, `ProjectState.internal_runtime_telemetry()` provides the dedicated internal operator-facing telemetry read path, and the public snapshot, public execution events, and provider-matrix summaries no longer expose the old exact telemetry mirrors.
+
+Use `snapshot()` for public inspection and `ProjectState.internal_runtime_telemetry()` for exact operator or UI observability.

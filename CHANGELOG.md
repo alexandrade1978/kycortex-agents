@@ -8,19 +8,28 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Added
 
-- No unreleased changes yet.
+- Documented the four-view boundary model for the active runtime/public split: internal persisted workflow state, `ProjectSnapshot`, `AgentView`, and internal runtime telemetry.
+- Added a dedicated `ProjectState.internal_runtime_telemetry()` read path for exact operator-facing runtime telemetry after moving exact workflow and per-task runtime telemetry off the public snapshot path.
 
 ### Changed
 
-- No unreleased changes yet.
+- Repository docs now describe prompt-facing context as filtered `AgentView` data instead of raw `ProjectSnapshot` serialization.
+- Repository docs now point operator-facing observability to `ProjectState.internal_runtime_telemetry()` and describe the public snapshot, public execution-event, and provider-matrix telemetry removals as completed local behavior.
+- Prompt-facing completed-task outputs, semantic aliases, and planned-module hints are now scoped to the active task dependency closure instead of leaking unrelated finished-task context.
+- Public `task_repair_planned` execution-event details now align with the minimized public `TaskResult.details.repair_context` contract, replacing exact repair-planning instruction, owner, helper-surface, failed-artifact, failed-output, validation-summary, and existing-test payloads with coarse presence flags.
+- Public `task_repair_planned` execution-event details now expose `has_failure_message` and `has_failure_error_type` instead of the exact failure message and failure error type.
+- Breaking change note: the active boundary split has removed public `ProjectSnapshot.workflow_telemetry`, public `TaskResult.resource_telemetry`, and the remaining public telemetry echoes with no deprecation bridge.
+- Public `repair_history` entries now expose `has_started_at` instead of the exact `started_at` timestamp while public `workflow_repair_cycle_started` event details continue to rely on the event's top-level `timestamp`.
 
 ### Fixed
 
-- No unreleased changes yet.
+- Repository docs no longer advertise full normalized snapshots, public snapshot telemetry, or provider-matrix telemetry as stable prompt-facing or public observability behavior.
+- Completed a repository documentation consistency sweep so `README.md` and `docs/README.md` now anchor the same four-view boundary model and direct exact observability readers to `ProjectState.internal_runtime_telemetry()` instead of stale compatibility-telemetry wording.
 
 ### Release Readiness Notes
 
 - Current package version remains `1.0.13a1` until the next maintenance update is released.
+- The unreleased boundary split now contains an explicit breaking public-telemetry removal in the local workspace.
 
 ## 1.0.13a1 - 2026-03-30
 

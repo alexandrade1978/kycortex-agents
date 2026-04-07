@@ -25,6 +25,7 @@ from kycortex_agents.providers import AnthropicProvider, BaseLLMProvider, Ollama
 from kycortex_agents.memory import BaseStateStore, JsonStateStore, ProjectState, SqliteStateStore, Task, resolve_state_store
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.types import (
+	AgentView,
 	AgentInput,
 	AgentOutput,
 	ArtifactRecord,
@@ -45,6 +46,7 @@ __all__ = [
 	"AgentInput",
 	"AgentOutput",
 	"AgentExecutionError",
+	"AgentView",
 	"AgentRegistry",
 	"agents",
 	"AnthropicProvider",

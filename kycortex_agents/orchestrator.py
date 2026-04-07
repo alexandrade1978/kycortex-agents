@@ -31,13 +31,19 @@ from kycortex_agents.providers.base import (
     sanitize_provider_call_metadata,
 )
 from kycortex_agents.types import (
+    AgentView,
+    AgentViewArtifactRecord,
+    AgentViewDecisionRecord,
+    AgentViewTaskResult,
     AgentInput,
     AgentOutput,
     ArtifactRecord,
     ArtifactType,
     ExecutionSandboxPolicy,
     FailureCategory,
+    ProjectSnapshot,
     TaskStatus,
+    TaskResult,
     WorkflowOutcome,
 )
 
@@ -1899,6 +1905,8 @@ class Orchestrator:
 
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
         snapshot = project.snapshot()
+        agent_view = self._build_agent_view(task, project, snapshot)
+        visible_task_ids = self._task_dependency_closure_ids(task, project)
         execution_agent_name = self._execution_agent_name(task)
         repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
         budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
@@ -1916,12 +1924,12 @@ class Orchestrator:
                 "assigned_to": task.assigned_to,
                 "execution_agent": execution_agent_name,
             },
-            "snapshot": asdict(snapshot),
+            "snapshot": asdict(agent_view),
             "completed_tasks": {},
-            "decisions": snapshot.decisions,
-            "artifacts": snapshot.artifacts,
+            "decisions": agent_view.decisions,
+            "artifacts": agent_view.artifacts,
         }
-        ctx.update(self._planned_module_context(project))
+        ctx.update(self._planned_module_context(project, visible_task_ids))
         default_module_name = self._default_module_name_for_task(task)
         if default_module_name:
             ctx["module_name"] = default_module_name
@@ -1933,6 +1941,8 @@ class Orchestrator:
             if self._should_compact_architecture_context(task, task_public_contract_anchor):
                 compact_architecture_context = self._compact_architecture_context(task, task_public_contract_anchor)
         for prev_task in project.tasks:
+            if prev_task.id not in visible_task_ids:
+                continue
             if prev_task.status == TaskStatus.DONE.value and prev_task.output:
                 ctx[prev_task.id] = prev_task.output
                 ctx["completed_tasks"][prev_task.id] = prev_task.output
@@ -1991,6 +2001,142 @@ class Orchestrator:
                 if "dependency_validation_summary" not in ctx and isinstance(validation_summary, str) and validation_summary.strip():
                     ctx["dependency_validation_summary"] = validation_summary
         return cast(Dict[str, Any], redact_sensitive_data(ctx))
+
+    def _task_dependency_closure_ids(self, task: Task, project: ProjectState) -> set[str]:
+        visible_task_ids = {task.id}
+        pending_task_ids = list(task.dependencies)
+        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+        budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
+        if isinstance(budget_decomposition_plan_task_id, str) and budget_decomposition_plan_task_id.strip():
+            pending_task_ids.append(budget_decomposition_plan_task_id)
+        if task.repair_origin_task_id:
+            pending_task_ids.append(task.repair_origin_task_id)
+
+        while pending_task_ids:
+            dependency_id = pending_task_ids.pop()
+            if dependency_id in visible_task_ids:
+                continue
+            visible_task_ids.add(dependency_id)
+            dependency_task = project.get_task(dependency_id)
+            if dependency_task is None:
+                continue
+            pending_task_ids.extend(dependency_task.dependencies)
+
+        return visible_task_ids
+
+    @staticmethod
+    def _direct_dependency_ids(task: Task) -> set[str]:
+        direct_dependency_ids = set(task.dependencies)
+        if task.repair_origin_task_id:
+            direct_dependency_ids.add(task.repair_origin_task_id)
+        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+        budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
+        if isinstance(budget_decomposition_plan_task_id, str) and budget_decomposition_plan_task_id.strip():
+            direct_dependency_ids.add(budget_decomposition_plan_task_id)
+        return direct_dependency_ids
+
+    def _build_agent_view(self, task: Task, project: ProjectState, snapshot: ProjectSnapshot) -> AgentView:
+        visible_task_ids = self._task_dependency_closure_ids(task, project)
+        direct_dependency_ids = self._direct_dependency_ids(task)
+        return AgentView(
+            project_name=snapshot.project_name,
+            goal=snapshot.goal,
+            workflow_status=snapshot.workflow_status,
+            phase=snapshot.phase,
+            acceptance_policy=snapshot.acceptance_policy,
+            terminal_outcome=snapshot.terminal_outcome,
+            failure_category=snapshot.failure_category,
+            acceptance_criteria_met=snapshot.acceptance_criteria_met,
+            task_results=self._agent_view_task_results(snapshot.task_results, visible_task_ids),
+            decisions=self._agent_view_decisions(snapshot.decisions),
+            artifacts=self._agent_view_artifacts(snapshot.artifacts, visible_task_ids, direct_dependency_ids),
+        )
+
+    @staticmethod
+    def _agent_view_task_results(
+        task_results: Dict[str, TaskResult],
+        visible_task_ids: set[str],
+    ) -> Dict[str, AgentViewTaskResult]:
+        filtered_results: Dict[str, AgentViewTaskResult] = {}
+        for task_id, task_result in task_results.items():
+            if task_id not in visible_task_ids:
+                continue
+            failure_category = None
+            if task_result.failure is not None:
+                failure_category = task_result.failure.category
+            filtered_results[task_id] = AgentViewTaskResult(
+                task_id=task_result.task_id,
+                status=task_result.status,
+                agent_name=task_result.agent_name,
+                has_output=task_result.output is not None,
+                failure_category=failure_category,
+                started_at=task_result.started_at,
+                completed_at=task_result.completed_at,
+            )
+        return filtered_results
+
+    @staticmethod
+    def _agent_view_decisions(decisions: list[Any]) -> list[AgentViewDecisionRecord]:
+        filtered_decisions: list[AgentViewDecisionRecord] = []
+        for decision in decisions:
+            if isinstance(decision, dict):
+                topic = decision.get("topic")
+                decision_text = decision.get("decision")
+                rationale = decision.get("rationale")
+                created_at = decision.get("created_at")
+            else:
+                topic = getattr(decision, "topic", None)
+                decision_text = getattr(decision, "decision", None)
+                rationale = getattr(decision, "rationale", None)
+                created_at = getattr(decision, "created_at", None)
+            if isinstance(topic, str) and isinstance(decision_text, str) and isinstance(rationale, str):
+                filtered_decisions.append(
+                    AgentViewDecisionRecord(
+                        topic=topic,
+                        decision=decision_text,
+                        rationale=rationale,
+                        created_at=created_at if isinstance(created_at, str) else "",
+                    )
+                )
+        return filtered_decisions
+
+    @staticmethod
+    def _agent_view_artifacts(
+        artifacts: list[Any],
+        visible_task_ids: set[str],
+        direct_dependency_ids: set[str],
+    ) -> list[AgentViewArtifactRecord]:
+        filtered_artifacts: list[AgentViewArtifactRecord] = []
+        for artifact in artifacts:
+            if isinstance(artifact, dict):
+                metadata = artifact.get("metadata")
+                source_task_id = metadata.get("task_id") if isinstance(metadata, dict) else None
+                artifact_name = artifact.get("name")
+                artifact_type = artifact.get("artifact_type", ArtifactType.OTHER)
+                artifact_content = artifact.get("content")
+                created_at = artifact.get("created_at")
+            else:
+                metadata = artifact.metadata if isinstance(artifact.metadata, dict) else None
+                source_task_id = metadata.get("task_id") if isinstance(metadata, dict) else None
+                artifact_name = getattr(artifact, "name", None)
+                artifact_type = getattr(artifact, "artifact_type", ArtifactType.OTHER)
+                artifact_content = getattr(artifact, "content", None)
+                created_at = getattr(artifact, "created_at", None)
+            if isinstance(source_task_id, str) and source_task_id not in visible_task_ids:
+                continue
+            include_content = isinstance(source_task_id, str) and source_task_id in direct_dependency_ids
+            if not isinstance(artifact_name, str):
+                continue
+            filtered_artifacts.append(
+                AgentViewArtifactRecord(
+                    name=artifact_name,
+                    artifact_type=artifact_type if isinstance(artifact_type, ArtifactType) else ArtifactType(str(artifact_type)),
+                    content=artifact_content if include_content and isinstance(artifact_content, str) else None,
+                    created_at=created_at if isinstance(created_at, str) else "",
+                    source_task_id=source_task_id if isinstance(source_task_id, str) else None,
+                )
+            )
+        return filtered_artifacts
 
     def _build_repair_instruction(self, task: Task, failure_category: str) -> str:
         instructions = {
@@ -2854,8 +3000,10 @@ class Orchestrator:
             and task.id not in active_repair_origins
         ]
 
-    def _planned_module_context(self, project: ProjectState) -> Dict[str, Any]:
+    def _planned_module_context(self, project: ProjectState, visible_task_ids: Optional[set[str]] = None) -> Dict[str, Any]:
         for existing_task in project.tasks:
+            if visible_task_ids is not None and existing_task.id not in visible_task_ids:
+                continue
             if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
                 continue
             module_name = self._default_module_name_for_task(existing_task)
@@ -6119,5 +6267,5 @@ class Orchestrator:
             project_name=project.project_name,
             phase=project.phase,
             terminal_outcome=project.terminal_outcome,
-            workflow_telemetry=project.snapshot().workflow_telemetry,
+            workflow_telemetry=project.internal_runtime_telemetry()["workflow"],
         )

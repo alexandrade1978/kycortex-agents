@@ -14,17 +14,23 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 in CI
 import kycortex_agents
 
 
-def _refresh_generated_egg_info() -> Path:
-    project_root = Path(__file__).resolve().parents[1]
+def _coverage_isolated_env(extra_env: dict[str, str] | None = None) -> dict[str, str]:
     env = {
         key: value
         for key, value in os.environ.items()
         if not (key.startswith("COV_CORE_") or key.startswith("COVERAGE"))
     }
+    if extra_env is not None:
+        env.update(extra_env)
+    return env
+
+
+def _refresh_generated_egg_info() -> Path:
+    project_root = Path(__file__).resolve().parents[1]
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "--quiet"],
         cwd=project_root,
-        env=env,
+        env=_coverage_isolated_env(),
         check=True,
         capture_output=True,
         text=True,
@@ -567,6 +573,7 @@ def test_release_artifact_manifest_script_generates_and_verifies_manifest(tmp_pa
             "--output",
             str(manifest_path),
         ],
+        env=_coverage_isolated_env(),
         check=True,
         capture_output=True,
         text=True,
@@ -588,6 +595,7 @@ def test_release_artifact_manifest_script_generates_and_verifies_manifest(tmp_pa
             str(manifest_path),
             "--verify",
         ],
+        env=_coverage_isolated_env(),
         check=False,
         capture_output=True,
         text=True,
@@ -606,6 +614,7 @@ def test_release_artifact_manifest_script_generates_and_verifies_manifest(tmp_pa
             str(manifest_path),
             "--verify",
         ],
+        env=_coverage_isolated_env(),
         check=False,
         capture_output=True,
         text=True,
@@ -636,6 +645,7 @@ def test_release_promotion_summary_script_generates_provenance_packet(tmp_path):
             "--output",
             str(manifest_path),
         ],
+        env=_coverage_isolated_env(),
         check=True,
         capture_output=True,
         text=True,
@@ -657,6 +667,7 @@ def test_release_promotion_summary_script_generates_provenance_packet(tmp_path):
             "--output",
             str(summary_path),
         ],
+        env=_coverage_isolated_env(),
         check=False,
         capture_output=True,
         text=True,
@@ -693,6 +704,7 @@ def test_release_promotion_summary_script_generates_provenance_packet(tmp_path):
             "--output",
             str(summary_path),
         ],
+        env=_coverage_isolated_env(),
         check=False,
         capture_output=True,
         text=True,

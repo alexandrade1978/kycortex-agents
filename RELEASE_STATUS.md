@@ -1,12 +1,13 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.13a1 alpha release.
+This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.13a2 alpha release.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.13a1`
+- Package version in `pyproject.toml`: `1.0.13a2`
 - Latest released version: `1.0.13a1`
-- Release tag for this version: `v1.0.13a1`
+- Release tag for this version: `v1.0.13a2`
+- Most recent published release tag: `v1.0.13a1`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -34,9 +35,9 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Latest Published Release Verification
 
-- `v1.0.13a1` is the current alpha release tag associated with this repository-owned release state.
+- `v1.0.13a1` is the current alpha release tag associated with the latest published repository-owned release state.
 - The immediately preceding published state `v1.0.12` is now the previous maintenance baseline.
-- The next tagged release workflow is expected to attach `kycortex_agents-1.0.13a1-py3-none-any.whl`, `kycortex_agents-1.0.13a1.tar.gz`, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
+- The next tagged release workflow is expected to attach `kycortex_agents-1.0.13a2-py3-none-any.whl`, `kycortex_agents-1.0.13a2.tar.gz`, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
 - The same tagged workflow now verifies through the GitHub API that the published release exposes exactly that attached asset set and that the downloaded wheel and source distribution match the attached manifest checksums.
 
 ## Current Release Validation Snapshot
@@ -50,7 +51,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Release Outcome
 
-The 1.0.13a1 alpha-release state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs.
+The 1.0.13a2 alpha-candidate state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs, while `1.0.13a1` remains the latest released alpha tag.
 
 The repository's public licensing guidance continues to document the AGPL open-source distribution together with a separate commercial licensing path.
 

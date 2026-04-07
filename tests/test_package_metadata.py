@@ -538,7 +538,9 @@ def test_changelog_documents_current_release_scope():
     assert "GitHub release automation" in changelog
     assert "Python 3.10 CI hardening" in changelog
     assert (
-        f"Version `{version}` is now the released alpha package baseline." in changelog
+        f"Current package version remains `{version}`" in changelog
+        or f"Current package version is now `{version}` ahead of the next alpha release." in changelog
+        or f"Version `{version}` is now the released alpha package baseline." in changelog
         or f"Version `{version}` is now the released package baseline." in changelog
     )
     assert "shipped `1.0.0` baseline" in changelog
@@ -571,8 +573,8 @@ def test_release_artifact_manifest_script_generates_and_verifies_manifest(tmp_pa
     dist_dir = tmp_path / "dist"
     dist_dir.mkdir()
 
-    wheel = dist_dir / "kycortex_agents-1.0.13a1-py3-none-any.whl"
-    sdist = dist_dir / "kycortex_agents-1.0.13a1.tar.gz"
+    wheel = dist_dir / f"kycortex_agents-{kycortex_agents.__version__}-py3-none-any.whl"
+    sdist = dist_dir / f"kycortex_agents-{kycortex_agents.__version__}.tar.gz"
     wheel.write_bytes(b"wheel-bytes")
     sdist.write_bytes(b"sdist-bytes")
 
@@ -1057,12 +1059,14 @@ def test_release_status_documents_current_repository_release_readiness_state():
     release_status_path = Path(__file__).resolve().parents[1] / "RELEASE_STATUS.md"
     release_status = release_status_path.read_text(encoding="utf-8")
     version = kycortex_agents.__version__
+    latest_released_version = "1.0.13a1"
 
     assert "# Release Status" in release_status
     assert "## Current State" in release_status
     assert f"Package version in `pyproject.toml`: `{version}`" in release_status
-    assert f"Latest released version: `{version}`" in release_status
+    assert f"Latest released version: `{latest_released_version}`" in release_status
     assert f"Release tag for this version: `v{version}`" in release_status
+    assert f"Most recent published release tag: `v{latest_released_version}`" in release_status
     assert "## Repository Release Gates" in release_status
     assert "python scripts/release_check.py" in release_status
     assert "make release-check" in release_status

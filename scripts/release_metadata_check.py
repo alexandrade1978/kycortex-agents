@@ -7,7 +7,7 @@ import sys
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover - Python 3.10 support path
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -73,11 +73,14 @@ def main() -> int:
         release_state = f"target={target_version}"
     elif released_version_match is not None:
         released_version = released_version_match.group(1)
-        if released_version != project_version:
+        if _parse_version(released_version) > _parse_version(project_version):
             raise ValueError(
-                "RELEASE_STATUS.md latest released version does not match the current package version"
+                "RELEASE_STATUS.md latest released version cannot be greater than the current package version"
             )
-        release_state = f"released={released_version}"
+        if _parse_version(released_version) == _parse_version(project_version):
+            release_state = f"released={released_version}"
+        else:
+            release_state = f"preparing={project_version}, released={released_version}"
     else:
         raise ValueError("RELEASE_STATUS.md must declare either a future release target or the latest released version")
 
@@ -85,8 +88,17 @@ def main() -> int:
         raise ValueError("RELEASE.md must use generic version-tag examples")
 
     changelog_line = f"Current package version remains `{project_version}`"
+    preparing_changelog_line = (
+        f"Current package version is now `{project_version}` ahead of the next alpha release."
+    )
     released_changelog_line = f"Version `{project_version}` is now the released package baseline."
-    if changelog_line not in changelog and released_changelog_line not in changelog:
+    released_alpha_changelog_line = f"Version `{project_version}` is now the released alpha package baseline."
+    if (
+        changelog_line not in changelog
+        and preparing_changelog_line not in changelog
+        and released_changelog_line not in changelog
+        and released_alpha_changelog_line not in changelog
+    ):
         raise ValueError("CHANGELOG.md does not reflect the current package version")
 
     print(

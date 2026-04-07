@@ -97,7 +97,7 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Current Release State
 
-The released baseline remains `1.0.13a1`.
+The next alpha candidate is `1.0.13a2`, while the latest released baseline remains `1.0.13a1`.
 
 The current local architecture state reflects the completed runtime/public boundary split: prompt-facing context uses `AgentView`, `snapshot()` remains the public normalized read model, `ProjectState.internal_runtime_telemetry()` provides the dedicated internal operator-facing telemetry read path, and the public snapshot, public execution events, and provider-matrix summaries no longer expose the old exact telemetry mirrors.
 

@@ -1386,6 +1386,7 @@ class ProjectState:
             }
             public_details = self._apply_task_attempt_presence_flag(public_details, public_details)
             public_details = self._apply_task_retry_limit_presence_flag(public_details, public_details)
+            public_details = self._apply_task_error_category_presence_flag(public_details, public_details)
             public_details = self._apply_repair_attempt_presence_flag(public_details, public_details)
             public_details = self._apply_task_duration_presence_flags(public_details, public_details)
             public_details = self._apply_task_timestamp_presence_flags(public_details, public_details)
@@ -2589,6 +2590,17 @@ class ProjectState:
         ):
             public_details["has_retry_limit"] = True
         public_details.pop("retry_limit", None)
+        return public_details
+
+    def _apply_task_error_category_presence_flag(
+        self,
+        details: Dict[str, Any],
+        public_details: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        public_details.pop("has_error_category", None)
+        if self._presence_flag(details, "last_error_category", "has_error_category"):
+            public_details["has_error_category"] = True
+        public_details.pop("last_error_category", None)
         return public_details
 
     def _apply_repair_attempt_presence_flag(

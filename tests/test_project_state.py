@@ -3702,6 +3702,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     }
     assert result.details["has_provider_call"] is False
     assert result.details["last_error_present"] is True
+    assert "has_error_category" not in result.details
     assert result.details["has_attempts"] is True
     assert result.details["has_retry_limit"] is True
     assert result.details["has_last_attempt_started_at"] is True
@@ -3709,6 +3710,7 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert "last_attempt_started_at" not in result.details
     assert "last_resumed_at" not in result.details
     assert "last_error" not in result.details
+    assert "last_error_category" not in result.details
     assert "attempts" not in result.details
     assert "retry_limit" not in result.details
     assert result.details["has_task_duration"] is True
@@ -3791,6 +3793,8 @@ def test_snapshot_preserves_failure_category_and_terminal_outcome_fields():
     assert snapshot.acceptance_evaluation["accepted"] is False
     assert snapshot.task_results["tests"].failure is not None
     assert snapshot.task_results["tests"].failure.category == "test_validation"
+    assert snapshot.task_results["tests"].details["has_error_category"] is True
+    assert "last_error_category" not in snapshot.task_results["tests"].details
 
 
 def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_metadata():
@@ -4851,9 +4855,11 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert not hasattr(result, "resource_telemetry")
     assert result.details["has_provider_call"] is False
     assert result.details["last_error_present"] is True
+    assert "has_error_category" not in result.details
     assert "last_error" not in result.details
     assert "last_provider_call" not in result.details
     assert "last_error_type" not in result.details
+    assert "last_error_category" not in result.details
     assert result.details["history"][0]["event"] == "skipped"
     assert result.details["history"][0]["has_error_message"] is True
     assert "error_message" not in result.details["history"][0]

@@ -23,6 +23,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - Public `workflow_telemetry.provider_health_summary` now exposes `has_models` instead of exact provider model-name lists while preserving the exact internal provider-health telemetry.
 - Public `workflow_telemetry` aggregate `usage` maps now expose presence-by-key instead of exact numeric values while preserving exact task-level provider usage and the internal exact workflow telemetry.
 - Public `TaskResourceTelemetry.usage` now exposes presence-by-key instead of exact numeric values while preserving exact provider-call metadata and the internal exact task runtime telemetry.
+- Public `TaskResult.details` now exposes `has_error_category` instead of the exact `last_error_category` string while preserving canonical failure categories through `FailureRecord.category`.
 - Public `workflow_finished` snapshot events no longer duplicate top-level `acceptance_policy`, `terminal_outcome`, `failure_category`, or `acceptance_criteria_met`, relying on the canonical nested public `acceptance_evaluation` summary instead.
 - Public snapshots no longer duplicate top-level `acceptance_criteria_met`, and `AgentView` now derives that prompt-facing boolean from the canonical public `acceptance_evaluation.accepted` field instead.
 - Public snapshots no longer duplicate top-level `acceptance_policy`, `terminal_outcome`, or `failure_category` fields, and `AgentView` now derives those prompt-facing values from the canonical public `acceptance_evaluation` summary.

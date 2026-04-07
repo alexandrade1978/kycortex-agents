@@ -276,11 +276,13 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert "provider_call" not in review_result.failure.details
     assert "last_resumed_at" not in review_result.failure.details
     assert review_result.details["last_error_present"] is True
+    assert "has_error_category" not in review_result.details
     assert review_result.details["has_last_attempt_started_at"] is True
     assert review_result.details["has_last_resumed_at"] is True
     assert "last_attempt_started_at" not in review_result.details
     assert "last_resumed_at" not in review_result.details
     assert "last_error" not in review_result.details
+    assert "last_error_category" not in review_result.details
     assert review_result.details["repair_context"]["cycle"] == 2
     assert review_result.details["repair_context"]["failure_category"] == "code_validation"
     assert review_result.details["repair_context"]["has_failed_artifact_content"] is True

@@ -286,7 +286,7 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
         "acceptance_summary": {
             "policy": None,
             "accepted": False,
-            "reason": None,
+            "has_reason": False,
             "terminal_outcome": None,
             "failure_category": None,
             "has_evaluated_tasks": False,

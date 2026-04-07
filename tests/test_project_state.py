@@ -2877,7 +2877,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
     assert event["details"]["acceptance_evaluation"] == {
         "policy": "required_tasks",
         "accepted": True,
-        "reason": "all_required_tasks_done",
+        "has_reason": True,
         "terminal_outcome": WorkflowOutcome.COMPLETED.value,
         "failure_category": None,
         "has_evaluated_tasks": True,
@@ -2887,6 +2887,7 @@ def test_mark_workflow_finished_records_acceptance_summary_in_workflow_telemetry
         "has_skipped_tasks": False,
         "has_pending_tasks": False,
     }
+    assert "reason" not in event["details"]["acceptance_evaluation"]
     assert "workflow_telemetry" not in event["details"]
     assert snapshot.acceptance_evaluation == event["details"]["acceptance_evaluation"]
     assert not hasattr(snapshot, "workflow_telemetry")
@@ -2932,7 +2933,7 @@ def test_mark_workflow_finished_records_policy_enforcement_for_security_failures
     assert workflow_event["details"]["acceptance_evaluation"] == {
         "policy": "required_tasks",
         "accepted": False,
-        "reason": None,
+        "has_reason": False,
         "terminal_outcome": WorkflowOutcome.FAILED.value,
         "failure_category": FailureCategory.SANDBOX_SECURITY_VIOLATION.value,
         "has_evaluated_tasks": False,
@@ -4306,7 +4307,7 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.acceptance_evaluation == {
         "policy": "required_tasks",
         "accepted": True,
-        "reason": None,
+        "has_reason": False,
         "terminal_outcome": "completed",
         "failure_category": None,
         "has_evaluated_tasks": False,

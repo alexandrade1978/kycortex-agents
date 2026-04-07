@@ -383,7 +383,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
         "acceptance_summary": {
             "policy": None,
             "accepted": False,
-            "reason": None,
+            "has_reason": False,
             "terminal_outcome": None,
             "failure_category": None,
             "has_evaluated_tasks": False,

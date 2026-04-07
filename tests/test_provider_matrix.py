@@ -741,7 +741,7 @@ def test_provider_matrix_summary_reports_repair_lineage(tmp_path):
     assert workflow_telemetry["acceptance_summary"] == {
         "policy": "required_tasks",
         "accepted": True,
-        "reason": "all_required_tasks_done",
+        "has_reason": True,
         "terminal_outcome": "completed",
         "failure_category": None,
         "has_evaluated_tasks": True,

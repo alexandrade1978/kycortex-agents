@@ -260,7 +260,7 @@ class WorkflowAcceptanceSummary(TypedDict):
 
     policy: Optional[str]
     accepted: bool
-    reason: Optional[str]
+    has_reason: bool
     terminal_outcome: Optional[str]
     failure_category: Optional[str]
     has_evaluated_tasks: bool
@@ -275,7 +275,7 @@ def empty_workflow_acceptance_summary() -> WorkflowAcceptanceSummary:
     return {
         "policy": None,
         "accepted": False,
-        "reason": None,
+        "has_reason": False,
         "terminal_outcome": None,
         "failure_category": None,
         "has_evaluated_tasks": False,

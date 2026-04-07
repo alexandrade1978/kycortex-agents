@@ -2044,7 +2044,7 @@ class ProjectState:
         return {
             "policy": policy,
             "accepted": accepted,
-            "reason": normalized_evaluation.get("reason") if isinstance(normalized_evaluation.get("reason"), str) else None,
+            "has_reason": self._presence_flag(normalized_evaluation, "reason", "has_reason"),
             "terminal_outcome": outcome,
             "failure_category": category,
             "has_evaluated_tasks": self._acceptance_task_count(normalized_evaluation, "evaluated_task_ids", "evaluated_task_count") > 0,

@@ -4319,9 +4319,11 @@ def test_snapshot_includes_workflow_execution_metadata():
 
     snapshot = project.snapshot()
 
-    assert snapshot.started_at == "2026-03-22T10:00:00+00:00"
-    assert snapshot.finished_at == "2026-03-22T10:06:00+00:00"
+    assert snapshot.has_started_at is True
+    assert snapshot.has_finished_at is True
     assert snapshot.has_last_resumed_at is True
+    assert not hasattr(snapshot, "started_at")
+    assert not hasattr(snapshot, "finished_at")
     assert not hasattr(snapshot, "acceptance_policy")
     assert not hasattr(snapshot, "terminal_outcome")
     assert not hasattr(snapshot, "acceptance_criteria_met")

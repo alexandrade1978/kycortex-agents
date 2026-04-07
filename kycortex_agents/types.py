@@ -594,8 +594,8 @@ class ProjectSnapshot:
     workflow_status: WorkflowStatus = WorkflowStatus.INIT
     phase: str = "init"
     acceptance_evaluation: WorkflowAcceptanceSummary = field(default_factory=empty_workflow_acceptance_summary)
-    started_at: Optional[str] = None
-    finished_at: Optional[str] = None
+    has_started_at: bool = False
+    has_finished_at: bool = False
     has_last_resumed_at: bool = False
     repair_history: List[WorkflowRepairHistoryEntry] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)

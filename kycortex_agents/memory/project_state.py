@@ -1558,6 +1558,14 @@ class ProjectState:
     def _redacted_execution_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         redacted_event = cast(Dict[str, Any], _redact_payload(dict(event)))
         event_name = redacted_event.get("event")
+        if event_name == "workflow_paused":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_paused_details = self._public_workflow_paused_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_paused_details))
+            return redacted_event
         if event_name == "workflow_resumed":
             details = redacted_event.get("details")
             if not isinstance(details, dict):
@@ -1613,6 +1621,22 @@ class ProjectState:
             public_requeued_details = self._public_task_requeued_details(details)
             details.clear()
             details.update(cast(Dict[str, Any], public_requeued_details))
+            return redacted_event
+        if event_name == "task_cancelled":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_cancelled_details = self._public_task_cancelled_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_cancelled_details))
+            return redacted_event
+        if event_name == "task_overridden":
+            details = redacted_event.get("details")
+            if not isinstance(details, dict):
+                return redacted_event
+            public_overridden_details = self._public_task_overridden_details(details)
+            details.clear()
+            details.update(cast(Dict[str, Any], public_overridden_details))
             return redacted_event
         if event_name == "task_started":
             details = redacted_event.get("details")
@@ -2383,8 +2407,16 @@ class ProjectState:
         public_details.pop("has_started_at", None)
         return public_details
 
+    def _public_reason_presence_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        public_details: Dict[str, Any] = {}
+        if self._presence_flag(details, "reason", "has_reason"):
+            public_details["has_reason"] = True
+        return public_details
+
+    def _public_workflow_paused_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        return self._public_reason_presence_details(details)
+
     def _public_workflow_resumed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        reason = details.get("reason") if isinstance(details.get("reason"), str) else None
         task_ids = self._string_list(details.get("task_ids"))
         if task_ids:
             task_count = len(task_ids)
@@ -2404,7 +2436,7 @@ class ProjectState:
             )
             if unique_task_count > task_count:
                 unique_task_count = task_count
-        public_details: Dict[str, Any] = {"reason": reason}
+        public_details = self._public_reason_presence_details(details)
         if task_count > 0:
             public_details["has_resumed_tasks"] = True
         if unique_task_count > 1:
@@ -2412,7 +2444,6 @@ class ProjectState:
         return public_details
 
     def _public_workflow_cancelled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        reason = details.get("reason") if isinstance(details.get("reason"), str) else None
         terminal_outcome = details.get("terminal_outcome") if isinstance(details.get("terminal_outcome"), str) else None
         cancelled_task_ids = self._string_list(details.get("cancelled_task_ids"))
         if cancelled_task_ids:
@@ -2424,10 +2455,8 @@ class ProjectState:
                 if isinstance(raw_cancelled_task_count, (int, float)) and not isinstance(raw_cancelled_task_count, bool)
                 else 0
             )
-        public_details: Dict[str, Any] = {
-            "reason": reason,
-            "terminal_outcome": terminal_outcome,
-        }
+        public_details = self._public_reason_presence_details(details)
+        public_details["terminal_outcome"] = terminal_outcome
         if cancelled_task_count > 0:
             public_details["has_cancelled_tasks"] = True
         if cancelled_task_count > 1:
@@ -2435,7 +2464,6 @@ class ProjectState:
         return public_details
 
     def _public_workflow_replayed_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
-        reason = details.get("reason") if isinstance(details.get("reason"), str) else None
         replayed_task_ids = self._string_list(details.get("replayed_task_ids"))
         removed_task_ids = self._string_list(details.get("removed_task_ids"))
         if replayed_task_ids:
@@ -2468,7 +2496,7 @@ class ProjectState:
             if isinstance(raw_cleared_artifact_count, (int, float)) and not isinstance(raw_cleared_artifact_count, bool)
             else 0
         )
-        public_details: Dict[str, Any] = {"reason": reason}
+        public_details = self._public_reason_presence_details(details)
         if replayed_task_count > 0:
             public_details["has_replayed_tasks"] = True
         if replayed_task_count > 1:
@@ -2902,6 +2930,12 @@ class ProjectState:
         if self._presence_flag(details, "repair_task_id", "has_repair_task"):
             public_details["has_repair_task"] = True
         return public_details
+
+    def _public_task_cancelled_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        return self._public_reason_presence_details(details)
+
+    def _public_task_overridden_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        return self._public_reason_presence_details(details)
 
     def _public_task_started_details(self, details: Dict[str, Any]) -> Dict[str, Any]:
         public_details = cast(Dict[str, Any], _redact_payload(dict(details)))

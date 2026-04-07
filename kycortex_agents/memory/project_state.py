@@ -1382,6 +1382,7 @@ class ProjectState:
             public_details = self._apply_task_retry_limit_presence_flag(public_details, public_details)
             public_details = self._apply_repair_attempt_presence_flag(public_details, public_details)
             public_details = self._apply_task_duration_presence_flags(public_details, public_details)
+            public_details = self._apply_task_timestamp_presence_flags(public_details, public_details)
             if self._identifier_present(task.repair_origin_task_id):
                 public_details["has_repair_origin"] = True
             results[task.id] = TaskResult(
@@ -2219,6 +2220,21 @@ class ProjectState:
                 (isinstance(raw_duration, (int, float)) and not isinstance(raw_duration, bool))
                 or details.get(flag_name) is True
             ):
+                public_details[flag_name] = True
+            public_details.pop(field_name, None)
+        return public_details
+
+    def _apply_task_timestamp_presence_flags(
+        self,
+        details: Dict[str, Any],
+        public_details: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        for field_name, flag_name in (
+            ("last_attempt_started_at", "has_last_attempt_started_at"),
+            ("last_resumed_at", "has_last_resumed_at"),
+        ):
+            public_details.pop(flag_name, None)
+            if self._presence_flag(details, field_name, flag_name):
                 public_details[flag_name] = True
             public_details.pop(field_name, None)
         return public_details

@@ -3532,8 +3532,10 @@ def test_snapshot_uses_persisted_execution_metadata_for_started_at_and_failure_d
     assert result.details["last_error_present"] is True
     assert result.details["has_attempts"] is True
     assert result.details["has_retry_limit"] is True
-    assert result.details["last_attempt_started_at"] == "2026-03-22T10:05:00+00:00"
-    assert result.details["last_resumed_at"] == "2026-03-22T10:04:00+00:00"
+    assert result.details["has_last_attempt_started_at"] is True
+    assert result.details["has_last_resumed_at"] is True
+    assert "last_attempt_started_at" not in result.details
+    assert "last_resumed_at" not in result.details
     assert "last_error" not in result.details
     assert "attempts" not in result.details
     assert "retry_limit" not in result.details
@@ -4420,8 +4422,10 @@ def test_skip_task_clears_stale_structured_output_from_snapshot():
     assert result.details["history"][0]["event"] == "skipped"
     assert result.details["history"][0]["has_error_message"] is True
     assert "error_message" not in result.details["history"][0]
-    assert result.details["last_attempt_started_at"] is None
-    assert result.details["last_resumed_at"] is None
+    assert "has_last_attempt_started_at" not in result.details
+    assert "has_last_resumed_at" not in result.details
+    assert "last_attempt_started_at" not in result.details
+    assert "last_resumed_at" not in result.details
     assert "has_task_duration" not in result.details
     assert "has_last_attempt_duration" not in result.details
     assert "task_duration_ms" not in result.details

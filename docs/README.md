@@ -95,4 +95,6 @@ The released baseline remains `1.0.13a1`.
 
 The current local architecture state reflects the completed runtime/public boundary split: prompt-facing context uses `AgentView`, `snapshot()` remains the public normalized read model, `ProjectState.internal_runtime_telemetry()` provides the dedicated internal operator-facing telemetry read path, and the public snapshot, public execution events, and provider-matrix summaries no longer expose the old exact telemetry mirrors.
 
+The maintained release track still includes coverage-gate enforcement, release-metadata validation, and the tagged GitHub release workflow used to publish repository-safe package artifacts.
+
 Use `snapshot()` for public inspection and `ProjectState.internal_runtime_telemetry()` for exact operator or UI observability.

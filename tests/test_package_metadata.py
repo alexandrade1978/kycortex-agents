@@ -458,7 +458,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "validating workflow behavior locally without calling a live provider" in docs_readme
     assert "converging DAGs expose merged upstream artifacts and decisions" in docs_readme
     assert "persisted failed workflows reload and continue" in docs_readme
-    assert "snapshot() exposes structured task results, provider metadata, artifacts, decisions, and execution events" in docs_readme
+    assert "snapshot()` exposes structured task results, artifacts, decisions, and execution events while exact operator-facing observability comes from `ProjectState.internal_runtime_telemetry()`" in docs_readme
     assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
     assert "dual-license overview" in docs_readme
     assert "contributor-rights policy" in docs_readme

@@ -124,7 +124,7 @@ class TaskResourceTelemetry(TypedDict):
     has_task_duration: bool
     has_last_attempt_duration: bool
     has_provider_duration: bool
-    usage: NumericMetricMap
+    usage: Dict[str, bool]
 
 
 class InternalMetricDistribution(TypedDict):

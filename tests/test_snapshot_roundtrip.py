@@ -266,7 +266,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
         "has_task_duration": True,
         "has_last_attempt_duration": True,
         "has_provider_duration": True,
-        "usage": {"completion_tokens": 5, "prompt_tokens": 10, "total_tokens": 15},
+        "usage": {"completion_tokens": True, "prompt_tokens": True, "total_tokens": True},
     }
 
     assert review_result.status == TaskStatus.FAILED

@@ -3127,7 +3127,7 @@ class ProjectState:
             "has_task_duration": task_duration_ms is not None,
             "has_last_attempt_duration": last_attempt_duration_ms is not None,
             "has_provider_duration": provider_duration_ms is not None,
-            "usage": self._sorted_numeric_metrics(usage_metrics),
+            "usage": self._metric_key_presence(usage_metrics),
         }
 
     def _accumulate_numeric_metrics(self, target: Dict[str, float], metrics: Dict[str, Any]) -> None:

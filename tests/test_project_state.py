@@ -4132,7 +4132,7 @@ def test_internal_runtime_telemetry_exposes_exact_metrics_without_changing_publi
         "has_task_duration": True,
         "has_last_attempt_duration": True,
         "has_provider_duration": True,
-        "usage": {"completion_tokens": 2, "prompt_tokens": 5},
+        "usage": {"completion_tokens": True, "prompt_tokens": True},
     }
     assert not hasattr(snapshot, "workflow_telemetry")
     assert public_workflow_telemetry["provider_summary"]["openai"] == {

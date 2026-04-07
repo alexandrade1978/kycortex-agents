@@ -198,9 +198,9 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     assert "model" not in review_resource
     assert arch_resource["has_provider_duration"] is True
     assert arch_resource["usage"] == {
-        "input_tokens": 10,
-        "output_tokens": 5,
-        "total_tokens": 15,
+        "input_tokens": True,
+        "output_tokens": True,
+        "total_tokens": True,
     }
     assert review_resource["has_provider_duration"] is True
     assert snapshot.task_results["arch"].details["has_provider_call"] is True
@@ -509,7 +509,7 @@ def test_provider_metadata_survives_save_load_round_trip(tmp_path, state_filenam
     assert require_provider_call(reloaded_arch)["provider"] == "openai"
     assert require_provider_call(reloaded_code)["provider"] == "anthropic"
     assert not hasattr(snapshot.task_results["arch"], "resource_telemetry")
-    assert reloaded._task_resource_telemetry(reloaded_arch)["usage"]["total_tokens"] == 15
-    assert reloaded._task_resource_telemetry(reloaded_code)["usage"]["total_tokens"] == 20
+    assert reloaded._task_resource_telemetry(reloaded_arch)["usage"]["total_tokens"] is True
+    assert reloaded._task_resource_telemetry(reloaded_code)["usage"]["total_tokens"] is True
     assert "last_provider_call" not in snapshot.task_results["arch"].details
     assert "last_provider_call" not in snapshot.task_results["code"].details

@@ -2048,6 +2048,7 @@ class Orchestrator:
         failure_category = acceptance_evaluation.get("failure_category")
         if not isinstance(failure_category, str):
             failure_category = None
+        acceptance_criteria_met = bool(acceptance_evaluation.get("accepted"))
         return AgentView(
             project_name=snapshot.project_name,
             goal=snapshot.goal,
@@ -2056,7 +2057,7 @@ class Orchestrator:
             acceptance_policy=acceptance_policy,
             terminal_outcome=terminal_outcome,
             failure_category=failure_category,
-            acceptance_criteria_met=snapshot.acceptance_criteria_met,
+            acceptance_criteria_met=acceptance_criteria_met,
             task_results=self._agent_view_task_results(snapshot.task_results, visible_task_ids),
             decisions=self._agent_view_decisions(snapshot.decisions),
             artifacts=self._agent_view_artifacts(snapshot.artifacts, visible_task_ids, direct_dependency_ids),

@@ -3767,9 +3767,10 @@ def test_snapshot_preserves_failure_category_and_terminal_outcome_fields():
 
     assert not hasattr(snapshot, "terminal_outcome")
     assert not hasattr(snapshot, "failure_category")
+    assert not hasattr(snapshot, "acceptance_criteria_met")
     assert snapshot.acceptance_evaluation["terminal_outcome"] == WorkflowOutcome.FAILED.value
     assert snapshot.acceptance_evaluation["failure_category"] == "test_validation"
-    assert snapshot.acceptance_criteria_met is False
+    assert snapshot.acceptance_evaluation["accepted"] is False
     assert snapshot.task_results["tests"].failure is not None
     assert snapshot.task_results["tests"].failure.category == "test_validation"
 
@@ -4305,7 +4306,7 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.has_last_resumed_at is True
     assert not hasattr(snapshot, "acceptance_policy")
     assert not hasattr(snapshot, "terminal_outcome")
-    assert snapshot.acceptance_criteria_met is True
+    assert not hasattr(snapshot, "acceptance_criteria_met")
     assert snapshot.acceptance_evaluation == {
         "policy": "required_tasks",
         "accepted": True,

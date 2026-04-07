@@ -593,7 +593,6 @@ class ProjectSnapshot:
     goal: str
     workflow_status: WorkflowStatus = WorkflowStatus.INIT
     phase: str = "init"
-    acceptance_criteria_met: bool = False
     acceptance_evaluation: WorkflowAcceptanceSummary = field(default_factory=empty_workflow_acceptance_summary)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None

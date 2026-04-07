@@ -1437,7 +1437,6 @@ class ProjectState:
             goal=_redact_text(self.goal) or "",
             workflow_status=self._workflow_status(),
             phase=self.phase,
-            acceptance_criteria_met=self.acceptance_criteria_met,
             acceptance_evaluation=public_acceptance_evaluation,
             started_at=self.workflow_started_at,
             finished_at=self.workflow_finished_at,

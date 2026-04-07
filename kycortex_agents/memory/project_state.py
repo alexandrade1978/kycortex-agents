@@ -2730,6 +2730,10 @@ class ProjectState:
             ),
         )
         public_details.pop("workflow_telemetry", None)
+        public_details.pop("acceptance_policy", None)
+        public_details.pop("terminal_outcome", None)
+        public_details.pop("failure_category", None)
+        public_details.pop("acceptance_criteria_met", None)
 
         if self._presence_flag(details, "failure_task_id", "has_failure_task"):
             public_details["has_failure_task"] = True

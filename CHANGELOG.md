@@ -16,6 +16,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - Repository docs now describe prompt-facing context as filtered `AgentView` data instead of raw `ProjectSnapshot` serialization.
 - Repository docs now point operator-facing observability to `ProjectState.internal_runtime_telemetry()` and describe the public snapshot, public execution-event, and provider-matrix telemetry removals as completed local behavior.
 - Prompt-facing completed-task outputs, semantic aliases, and planned-module hints are now scoped to the active task dependency closure instead of leaking unrelated finished-task context.
+- Public `workflow_finished` snapshot events no longer duplicate top-level `acceptance_policy`, `terminal_outcome`, `failure_category`, or `acceptance_criteria_met`, relying on the canonical nested public `acceptance_evaluation` summary instead.
 - Public snapshots no longer duplicate top-level `acceptance_criteria_met`, and `AgentView` now derives that prompt-facing boolean from the canonical public `acceptance_evaluation.accepted` field instead.
 - Public snapshots no longer duplicate top-level `acceptance_policy`, `terminal_outcome`, or `failure_category` fields, and `AgentView` now derives those prompt-facing values from the canonical public `acceptance_evaluation` summary.
 - Public snapshots now expose `has_last_resumed_at` instead of the exact top-level `last_resumed_at` timestamp while preserving `started_at`, `finished_at`, and the internal exact resume state.

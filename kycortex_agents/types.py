@@ -597,7 +597,6 @@ class ProjectSnapshot:
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     has_last_resumed_at: bool = False
-    repair_cycle_count: int = 0
     repair_history: List[WorkflowRepairHistoryEntry] = field(default_factory=list)
     task_results: Dict[str, TaskResult] = field(default_factory=dict)
     decisions: List[DecisionRecord] = field(default_factory=list)

@@ -1930,7 +1930,7 @@ class ProjectState:
             raw_health_summary = provider_health_summary[provider_name]
             raw_models = raw_health_summary.get("models")
             normalized_provider_health_summary[provider_name] = {
-                "models": sorted(raw_models) if isinstance(raw_models, set) else [],
+                "has_models": bool(raw_models) if isinstance(raw_models, set) else False,
                 "status_presence": self._ordered_presence(raw_health_summary.get("status_counts", {})),
                 "last_outcome_presence": self._ordered_presence(raw_health_summary.get("last_outcome_counts", {})),
                 "has_retryable_failures": int(raw_health_summary.get("retryable_failure_count", 0)) > 0,

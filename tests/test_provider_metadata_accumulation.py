@@ -229,21 +229,21 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
     }
     assert workflow_telemetry["provider_health_summary"] == {
         "anthropic": {
-            "models": ["claude-3-5-sonnet"],
+            "has_models": True,
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "has_retryable_failures": False,
             "has_active_checks": True,
         },
         "ollama": {
-            "models": ["llama3"],
+            "has_models": True,
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "has_retryable_failures": False,
             "has_active_checks": True,
         },
         "openai": {
-            "models": ["gpt-4o"],
+            "has_models": True,
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "has_retryable_failures": False,
@@ -372,7 +372,7 @@ def test_cached_health_snapshots_do_not_increment_active_health_check_count(tmp_
     assert not hasattr(snapshot, "workflow_telemetry")
     assert workflow_telemetry["provider_health_summary"] == {
         "openai": {
-            "models": ["gpt-4o"],
+            "has_models": True,
             "status_presence": {"degraded": True},
             "last_outcome_presence": {"failure": True},
             "has_retryable_failures": True,
@@ -465,14 +465,14 @@ def test_workflow_records_fallback_after_primary_health_check_failure(tmp_path, 
     }
     assert workflow_telemetry["provider_health_summary"] == {
         "anthropic": {
-            "models": ["claude-3-5-sonnet"],
+            "has_models": True,
             "status_presence": {"healthy": True},
             "last_outcome_presence": {"success": True},
             "has_retryable_failures": False,
             "has_active_checks": True,
         },
         "openai": {
-            "models": ["gpt-4o"],
+            "has_models": True,
             "status_presence": {"degraded": True},
             "last_outcome_presence": {"failure": True},
             "has_retryable_failures": True,

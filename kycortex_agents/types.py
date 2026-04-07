@@ -347,7 +347,7 @@ class WorkflowProviderSummary(TypedDict):
 class WorkflowProviderHealthSummary(TypedDict):
     """Per-provider health-state aggregate rolled up across workflow execution."""
 
-    models: List[str]
+    has_models: bool
     status_presence: Dict[str, bool]
     last_outcome_presence: Dict[str, bool]
     has_retryable_failures: bool

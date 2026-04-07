@@ -88,6 +88,9 @@ jobs:
       - name: Verify release artifact manifest
         run: python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify
 
+      - name: Generate release promotion summary
+        run: python scripts/release_promotion_summary.py --dist-dir dist --manifest dist/release-artifact-manifest.json --tag ${{ github.ref_name }} --commit-sha ${{ github.sha }} --output dist/release-promotion-summary.json
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:

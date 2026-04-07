@@ -15,6 +15,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - Tagged and manual GitHub release automation now runs the repository-owned `scripts/release_check.py` gate before building distribution artifacts, keeping workflow promotion aligned with the documented release metadata, coverage, packaging, and full-suite policy.
 - Tagged GitHub release automation now generates and verifies `release-artifact-manifest.json` before publication, attaching the verified manifest alongside the promoted wheel and source distribution.
+- Tagged GitHub release automation now writes `release-promotion-summary.json`, binding the verified manifest, pushed tag, commit SHA, and promoted artifact set into a repository-owned provenance packet before publication.
 - Repository docs now describe prompt-facing context as filtered `AgentView` data instead of raw `ProjectSnapshot` serialization.
 - Repository docs now point operator-facing observability to `ProjectState.internal_runtime_telemetry()` and describe the public snapshot, public execution-event, and provider-matrix telemetry removals as completed local behavior.
 - Prompt-facing completed-task outputs, semantic aliases, and planned-module hints are now scoped to the active task dependency closure instead of leaking unrelated finished-task context.

@@ -55,6 +55,7 @@ make package-check
 python -m build
 python scripts/release_artifact_manifest.py --dist-dir dist --output dist/release-artifact-manifest.json
 python scripts/release_artifact_manifest.py --dist-dir dist --manifest dist/release-artifact-manifest.json --verify
+python scripts/release_promotion_summary.py --dist-dir dist --manifest dist/release-artifact-manifest.json --tag v<version> --output dist/release-promotion-summary.json
 ```
 
 - Trigger the repository release workflow after local validation:
@@ -127,9 +128,10 @@ make test
 - `.pre-commit-config.yaml`: repository-local pre-commit and pre-push automation for linting, type checking, and focused public-surface regressions.
 - `scripts/package_check.py`: local built-artifact validator that builds both wheel and source distributions, installs them into temporary virtual environments, and smoke-tests the public package imports.
 - `scripts/release_artifact_manifest.py`: repository-owned generator and verifier for `release-artifact-manifest.json`, the staged checksum manifest attached to tagged releases after distribution build.
+- `scripts/release_promotion_summary.py`: repository-owned provenance writer for `release-promotion-summary.json`, tying the verified manifest, tag, commit, and promoted artifacts together before publication.
 - `scripts/release_metadata_check.py`: local release-metadata validator that checks package version alignment, release-state metadata, and release-facing documentation cues before a tag is created.
 - `scripts/release_check.py`: local release validator that runs the repository lint, type-check, focused regression, package-validation, coverage-gate, and full-suite commands in the same order used for release readiness.
-- `.github/workflows/release.yml`: tagged-release automation that reruns validation, builds wheel and source distributions, uploads them as workflow artifacts, and publishes them on GitHub releases for `v*` tags.
+- `.github/workflows/release.yml`: tagged-release automation that reruns validation, builds wheel and source distributions, verifies the staged manifest, writes the promotion summary, and publishes them on GitHub releases for `v*` tags.
 - `coverage.py` and `pytest-cov`: repository-owned coverage gate tooling configured through `pyproject.toml` and exercised in both local validation and GitHub Actions.
 - `ruff`: repository lint baseline for the package, examples, tests, and docs-adjacent Python files.
 - `mypy`: local type-check baseline for `kycortex_agents` and `examples`, with third-party `anthropic` imports excluded from stub enforcement.

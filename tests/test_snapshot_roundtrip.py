@@ -241,7 +241,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert snapshot.workflow_status == WorkflowStatus.FAILED
     assert snapshot.started_at == "2026-03-22T10:00:00+00:00"
     assert snapshot.finished_at == "2026-03-22T10:09:00+00:00"
-    assert snapshot.last_resumed_at == "2026-03-22T10:07:00+00:00"
+    assert snapshot.has_last_resumed_at is True
     assert snapshot.updated_at == reloaded.updated_at
 
     arch_result = snapshot.task_results["arch"]

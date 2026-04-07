@@ -4300,7 +4300,7 @@ def test_snapshot_includes_workflow_execution_metadata():
 
     assert snapshot.started_at == "2026-03-22T10:00:00+00:00"
     assert snapshot.finished_at == "2026-03-22T10:06:00+00:00"
-    assert snapshot.last_resumed_at == "2026-03-22T10:04:00+00:00"
+    assert snapshot.has_last_resumed_at is True
     assert snapshot.acceptance_policy == "required_tasks"
     assert snapshot.terminal_outcome == "completed"
     assert snapshot.acceptance_criteria_met is True

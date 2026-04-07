@@ -1444,7 +1444,7 @@ class ProjectState:
             acceptance_evaluation=public_acceptance_evaluation,
             started_at=self.workflow_started_at,
             finished_at=self.workflow_finished_at,
-            last_resumed_at=self.workflow_last_resumed_at,
+            has_last_resumed_at=isinstance(self.workflow_last_resumed_at, str) and bool(self.workflow_last_resumed_at),
             repair_cycle_count=self.repair_cycle_count,
             repair_history=[self._public_repair_history_entry(entry) for entry in self.repair_history if isinstance(entry, dict)],
             task_results=self.task_results(),

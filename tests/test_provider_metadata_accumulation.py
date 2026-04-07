@@ -245,11 +245,8 @@ def test_workflow_accumulates_provider_metadata_across_tasks(tmp_path):
         },
     }
     assert snapshot.workflow_telemetry["provider_summary"]["ollama"]["duration_ms"] == {
+        "has_samples": True,
         "has_multiple_samples": False,
-        "total": review_provider_call["duration_ms"],
-        "min": review_provider_call["duration_ms"],
-        "max": review_provider_call["duration_ms"],
-        "avg": review_provider_call["duration_ms"],
     }
     assert snapshot.workflow_telemetry["usage"] == {
         "cache_creation_input_tokens": 3,

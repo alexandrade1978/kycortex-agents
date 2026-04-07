@@ -3688,6 +3688,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["provider_summary"]["openai"]["has_failures"] is False
     assert telemetry["provider_summary"]["openai"]["has_attempts"] is True
     assert telemetry["provider_summary"]["openai"]["has_retry_attempts"] is False
+    assert telemetry["provider_summary"]["openai"]["duration_ms"]["has_samples"] is True
     assert telemetry["provider_summary"]["openai"]["duration_ms"]["has_multiple_samples"] is False
     assert telemetry["provider_summary"]["openai"]["usage"] == {"prompt_tokens": 5}
     assert telemetry["provider_health_summary"]["openai"] == {
@@ -3701,6 +3702,7 @@ def test_workflow_telemetry_summary_tracks_sparse_provider_health_and_fallback_m
     assert telemetry["has_multiple_observed_providers"] is True
     assert telemetry["has_attempts"] is True
     assert telemetry["has_retry_attempts"] is False
+    assert telemetry["duration_ms"]["has_samples"] is True
     assert telemetry["duration_ms"]["has_multiple_samples"] is True
     assert telemetry["usage"] == {"completion_tokens": 2, "prompt_tokens": 5}
     assert telemetry["fallback_summary"] == {

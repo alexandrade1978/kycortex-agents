@@ -250,11 +250,8 @@ def test_public_type_module_defines_docstrings():
 
 def test_private_empty_telemetry_helpers_return_zeroed_payloads():
     assert types_module._empty_metric_distribution() == {
+        "has_samples": False,
         "has_multiple_samples": False,
-        "total": 0,
-        "min": None,
-        "max": None,
-        "avg": None,
     }
     assert types_module.empty_task_resource_telemetry() == {
         "has_provider_call": False,
@@ -313,11 +310,8 @@ def test_private_empty_telemetry_helpers_return_zeroed_payloads():
         "has_attempts": False,
         "has_retry_attempts": False,
         "duration_ms": {
+            "has_samples": False,
             "has_multiple_samples": False,
-            "total": 0,
-            "min": None,
-            "max": None,
-            "avg": None,
         },
         "usage": {},
         "fallback_summary": {

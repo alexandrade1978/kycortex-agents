@@ -4344,7 +4344,8 @@ def test_snapshot_includes_workflow_execution_metadata():
     assert snapshot.execution_events[1]["details"]["has_workflow_duration"] is True
     assert "workflow_duration_ms" not in snapshot.execution_events[1]["details"]
     assert snapshot.execution_events[1]["details"]["acceptance_evaluation"] == snapshot.acceptance_evaluation
-    assert snapshot.updated_at == "2026-03-22T10:06:00+00:00"
+    assert snapshot.has_updated_at is True
+    assert not hasattr(snapshot, "updated_at")
 
 
 def test_snapshot_reports_completed_when_acceptance_policy_completes_with_optional_failures():

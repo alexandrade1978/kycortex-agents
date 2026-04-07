@@ -16,6 +16,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - Repository docs now describe prompt-facing context as filtered `AgentView` data instead of raw `ProjectSnapshot` serialization.
 - Repository docs now point operator-facing observability to `ProjectState.internal_runtime_telemetry()` and describe the public snapshot, public execution-event, and provider-matrix telemetry removals as completed local behavior.
 - Prompt-facing completed-task outputs, semantic aliases, and planned-module hints are now scoped to the active task dependency closure instead of leaking unrelated finished-task context.
+- Public snapshots now expose `has_updated_at` instead of the exact top-level `updated_at` timestamp while preserving the internal exact update timestamp.
 - Public snapshots now expose `has_started_at` and `has_finished_at` instead of the exact top-level workflow `started_at` and `finished_at` timestamps while preserving the exact public workflow event timestamps.
 - Public snapshots no longer duplicate top-level `repair_cycle_count`, relying on the retained public `repair_history` contract for repair-lineage visibility instead.
 - Public `workflow_finished` snapshot events now expose `has_workflow_duration` instead of the exact public `workflow_duration_ms` value while preserving the internal exact event duration and the rest of the minimized public event contract.

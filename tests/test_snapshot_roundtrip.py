@@ -244,7 +244,8 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert snapshot.has_last_resumed_at is True
     assert not hasattr(snapshot, "started_at")
     assert not hasattr(snapshot, "finished_at")
-    assert snapshot.updated_at == reloaded.updated_at
+    assert snapshot.has_updated_at is True
+    assert not hasattr(snapshot, "updated_at")
 
     arch_result = snapshot.task_results["arch"]
     review_result = snapshot.task_results["review"]

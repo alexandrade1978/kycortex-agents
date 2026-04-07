@@ -602,7 +602,7 @@ class ProjectSnapshot:
     decisions: List[DecisionRecord] = field(default_factory=list)
     artifacts: List[ArtifactRecord] = field(default_factory=list)
     execution_events: List[Dict[str, Any]] = field(default_factory=list)
-    updated_at: str = field(default_factory=utc_now_iso)
+    has_updated_at: bool = False
 
 
 @dataclass

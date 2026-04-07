@@ -1457,7 +1457,7 @@ class ProjectState:
             ],
             artifacts=[self._redacted_artifact_record(self._deserialize_artifact_record(artifact)) for artifact in self.artifacts],
             execution_events=[self._redacted_execution_event(event) for event in self.execution_events],
-            updated_at=self.updated_at,
+            has_updated_at=isinstance(self.updated_at, str) and bool(self.updated_at),
         )
 
     def _touch(self, timestamp: Optional[str] = None):

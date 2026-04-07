@@ -1352,9 +1352,6 @@ class ProjectState:
             public_history = self._public_task_history(task.history)
             last_error_present = bool(task.last_error or task.last_error_type or task.last_error_category)
             if task_status == TaskStatus.FAILED:
-                failure_details: Dict[str, Any] = {
-                    "repair_context": public_repair_context,
-                }
                 failure = FailureRecord(
                     message=_redact_text(task.output or task.last_error or "Task failed without output") or "Task failed without output",
                     error_type=task.last_error_type or "runtime_error",
@@ -1362,7 +1359,7 @@ class ProjectState:
                     retryable=task.attempts <= task.retry_limit,
                     details=cast(
                         Dict[str, Any],
-                        _redact_payload(failure_details),
+                        _redact_payload({}),
                     ),
                 )
             if task.output or task.output_payload:

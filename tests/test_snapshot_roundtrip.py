@@ -299,36 +299,7 @@ def test_snapshot_round_trip_preserves_mixed_task_state_integrity(tmp_path, stat
     assert review_result.details["history"][1]["event"] == "failed"
     assert review_result.details["history"][1]["has_error_message"] is True
     assert "error_message" not in review_result.details["history"][1]
-    assert review_result.failure.details["repair_context"]["has_failed_artifact_content"] is True
-    assert review_result.failure.details["repair_context"]["has_instruction"] is True
-    assert review_result.failure.details["repair_context"]["has_repair_owner"] is True
-    assert review_result.failure.details["repair_context"]["has_original_assigned_to"] is True
-    assert review_result.failure.details["repair_context"]["has_helper_surface_usages"] is True
-    assert review_result.failure.details["repair_context"]["has_helper_surface_symbols"] is True
-    assert review_result.failure.details["repair_context"]["has_decomposition_mode"] is True
-    assert review_result.failure.details["repair_context"]["has_decomposition_target_agent"] is True
-    assert review_result.failure.details["repair_context"]["has_decomposition_failure_category"] is True
-    assert review_result.failure.details["repair_context"]["has_failure_message"] is True
-    assert review_result.failure.details["repair_context"]["has_failure_error_type"] is True
-    assert review_result.failure.details["repair_context"]["has_failed_output"] is True
-    assert review_result.failure.details["repair_context"]["has_validation_summary"] is True
-    assert review_result.failure.details["repair_context"]["has_existing_tests"] is True
-    assert review_result.failure.details["repair_context"]["has_source_failure_task"] is True
-    assert review_result.failure.details["repair_context"]["has_provider_call"] is True
-    assert "failed_artifact_content" not in review_result.failure.details["repair_context"]
-    assert "instruction" not in review_result.failure.details["repair_context"]
-    assert "repair_owner" not in review_result.failure.details["repair_context"]
-    assert "original_assigned_to" not in review_result.failure.details["repair_context"]
-    assert "helper_surface_usages" not in review_result.failure.details["repair_context"]
-    assert "helper_surface_symbols" not in review_result.failure.details["repair_context"]
-    assert "decomposition_mode" not in review_result.failure.details["repair_context"]
-    assert "decomposition_target_agent" not in review_result.failure.details["repair_context"]
-    assert "decomposition_failure_category" not in review_result.failure.details["repair_context"]
-    assert "failure_message" not in review_result.failure.details["repair_context"]
-    assert "failure_error_type" not in review_result.failure.details["repair_context"]
-    assert "failed_output" not in review_result.failure.details["repair_context"]
-    assert "validation_summary" not in review_result.failure.details["repair_context"]
-    assert "existing_tests" not in review_result.failure.details["repair_context"]
+    assert "repair_context" not in review_result.failure.details
     assert "history" not in review_result.failure.details
     assert review_result.resource_telemetry == {
         "has_provider_call": True,

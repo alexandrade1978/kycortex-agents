@@ -4073,14 +4073,22 @@ class Orchestrator:
         return f"{task.id}_implementation"
 
     def _context_code_module_name(self, task: Task, project: Optional[ProjectState] = None) -> Optional[str]:
-        if project is not None and task.repair_origin_task_id:
-            origin_task = project.get_task(task.repair_origin_task_id)
+        if project is None:
+            return self._default_module_name_for_task(task)
+
+        current_task = task
+        visited_task_ids: set[str] = set()
+        while current_task.repair_origin_task_id:
+            origin_task = project.get_task(current_task.repair_origin_task_id)
             if (
-                origin_task is not None
-                and AgentRegistry.normalize_key(origin_task.assigned_to) == "code_engineer"
+                origin_task is None
+                or origin_task.id in visited_task_ids
+                or AgentRegistry.normalize_key(origin_task.assigned_to) != "code_engineer"
             ):
-                return self._default_module_name_for_task(origin_task)
-        return self._default_module_name_for_task(task)
+                break
+            visited_task_ids.add(origin_task.id)
+            current_task = origin_task
+        return self._default_module_name_for_task(current_task)
 
     def _task_public_contract_anchor(self, task_description: str) -> str:
         if not isinstance(task_description, str) or not task_description.strip():

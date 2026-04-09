@@ -571,6 +571,131 @@ def test_build_context_keeps_code_repair_module_surfaces_aligned_to_origin_task(
     assert "code__repair_1_implementation" not in context["module_name"]
 
 
+def test_build_context_keeps_nested_code_repair_module_surfaces_aligned_to_root_task(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def main():\n    return 1\n",
+            output_payload={
+                "summary": "def main():",
+                "raw_content": "def main():\n    return 1\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def main():\n    return 1\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair implementation",
+            description="Repair the implementation",
+            assigned_to="code_engineer",
+            dependencies=["code"],
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            status=TaskStatus.DONE.value,
+            output="def main():\n    return 2\n",
+            output_payload={
+                "summary": "def main():",
+                "raw_content": "def main():\n    return 2\n",
+                "artifacts": [
+                    {
+                        "name": "code__repair_1_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code__repair_1_implementation.py",
+                        "content": "def main():\n    return 2\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1__repair_1",
+            title="Repair repair implementation",
+            description="Repair the repaired implementation",
+            assigned_to="code_engineer",
+            dependencies=["code__repair_1"],
+            repair_origin_task_id="code__repair_1",
+            repair_attempt=1,
+            status=TaskStatus.DONE.value,
+            output="def main():\n    return 3\n",
+            output_payload={
+                "summary": "def main():",
+                "raw_content": "def main():\n    return 3\n",
+                "artifacts": [
+                    {
+                        "name": "code__repair_1__repair_1_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code__repair_1__repair_1_implementation.py",
+                        "content": "def main():\n    return 3\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it remains aligned to the planned module surface.",
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests__repair_1",
+            title="Repair tests",
+            description="Repair the tests",
+            assigned_to="qa_tester",
+            dependencies=["code__repair_1__repair_1"],
+            repair_origin_task_id="tests",
+            repair_attempt=1,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it imports the current target module.",
+                "validation_summary": "Generated test validation:\n- Verdict: FAIL",
+                "failed_output": "from code__repair_1_implementation import main",
+                "failed_artifact_content": "from code__repair_1_implementation import main",
+            },
+        )
+    )
+
+    context = orchestrator._build_context(project.tasks[3], project)
+
+    assert context["code"] == "def main():\n    return 3\n"
+    assert context["module_name"] == "code_implementation"
+    assert context["module_filename"] == "code_implementation.py"
+    assert context["code_artifact_path"] == "artifacts/code_implementation.py"
+    assert "code__repair_1_implementation" not in context["module_name"]
+    assert "code__repair_1__repair_1_implementation" not in context["module_name"]
+
+
 def test_build_context_uses_raw_content_fallback_for_budget_decomposition_brief(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

@@ -2123,11 +2123,66 @@ Return complete raw Python only."""
             )
         )
 
+    @staticmethod
+    def _python_import_roots(raw_content: object) -> set[str]:
+        if not isinstance(raw_content, str) or not raw_content.strip():
+            return set()
+
+        try:
+            tree = ast.parse(raw_content)
+        except SyntaxError:
+            return set()
+
+        import_roots: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root_name = alias.name.split(".", 1)[0]
+                    if root_name:
+                        import_roots.add(root_name)
+                continue
+            if isinstance(node, ast.ImportFrom):
+                if node.level:
+                    continue
+                module_name = (node.module or "").split(".", 1)[0]
+                if module_name:
+                    import_roots.add(module_name)
+        return import_roots
+
+    @classmethod
+    def _stale_generated_module_import_roots(
+        cls,
+        existing_tests: object,
+        module_name: object,
+        module_filename: object,
+    ) -> list[str]:
+        expected_root = ""
+        if isinstance(module_filename, str) and module_filename.strip():
+            expected_root = module_filename.strip().rsplit("/", 1)[-1]
+            if expected_root.endswith(".py"):
+                expected_root = expected_root[:-3]
+        if not expected_root and isinstance(module_name, str) and module_name.strip():
+            expected_root = module_name.strip()
+        if not expected_root:
+            return []
+
+        import_roots = cls._python_import_roots(existing_tests)
+        relevant_roots = sorted(
+            root
+            for root in import_roots
+            if root == expected_root or root.endswith("_implementation")
+        )
+        if not relevant_roots:
+            return []
+        return [root for root in relevant_roots if root != expected_root]
+
     @classmethod
     def _existing_tests_context_and_instruction(
         cls,
         *,
         existing_tests: object,
+        module_name: object,
+        module_filename: object,
         code_exact_test_contract: object,
         repair_validation_summary: object,
         implementation_code: object = "",
@@ -2187,6 +2242,22 @@ Return complete raw Python only."""
                 f"{rendered_names}. Rebuild the suite from the Exact test contract and current implementation instead of patching guessed helper wiring in place.",
                 "The previous validation summary reported undefined helper or collaborator aliases outside the Exact test contract: "
                 f"{rendered_names}. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and do not replace those guessed helpers with near-match record or dataclass imports.",
+            )
+
+        stale_generated_module_roots = cls._stale_generated_module_import_roots(
+            existing_tests,
+            module_name,
+            module_filename,
+        )
+        if stale_generated_module_roots:
+            rendered_roots = ", ".join(stale_generated_module_roots)
+            current_module_name = module_name if isinstance(module_name, str) and module_name.strip() else "the current target module"
+            current_module_file = module_filename if isinstance(module_filename, str) and module_filename.strip() else f"{current_module_name}.py"
+            return (
+                "Previous invalid pytest file omitted because it imports stale generated module targets such as "
+                f"{rendered_roots} instead of the current module file {current_module_file}. Rebuild the suite from the current implementation and import only from {current_module_name}.",
+                "The previous invalid pytest file imports stale generated module targets such as "
+                f"{rendered_roots} instead of the current module file {current_module_file}. Do not preserve or patch that file in place. Rebuild the suite from the current implementation, and import only from {current_module_name} instead of any older generated repair module alias.",
             )
 
         if has_missing_datetime_import_issue and not available_module_symbol_names:
@@ -2472,6 +2543,8 @@ Return complete raw Python only."""
         )
         existing_tests_context, repair_instruction = self._existing_tests_context_and_instruction(
             existing_tests=existing_tests,
+            module_name=module_name,
+            module_filename=module_filename,
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
             implementation_code=implementation_code,
@@ -2792,6 +2865,8 @@ Module file: {module_filename}
         )
         existing_tests_context, repair_instruction = self._existing_tests_context_and_instruction(
             existing_tests=existing_tests,
+            module_name=module_name,
+            module_filename=module_filename,
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
             implementation_code=implementation_code,

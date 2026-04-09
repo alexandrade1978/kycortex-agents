@@ -1914,6 +1914,73 @@ def test_qa_tester_omits_overreaching_prior_suite_when_validation_flags_action_m
     assert "If the implementation stores `ReviewAction(action_id, ...)` or another action record with its own generated identifier" in agent.last_user_message
 
 
+def test_qa_tester_omits_prior_suite_when_it_imports_stale_generated_repair_module(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class VendorSubmission:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: float\n\n"
+                "class VendorRiskReviewService:\n"
+                "    def validate_request(self, request):\n"
+                "        return 'vendor_id' in request.details\n\n"
+                "    def handle_request(self, request):\n"
+                "        if not self.validate_request(request):\n"
+                "            raise ValueError('Invalid vendor submission')\n"
+                "        return {'request_id': request.request_id}\n"
+            ),
+            "module_name": "code_implementation",
+            "module_filename": "code_implementation.py",
+            "code_summary": "Vendor onboarding workflow",
+            "code_outline": "class VendorRiskReviewService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- VendorSubmission(request_id, request_type, details, timestamp)\n- VendorRiskReviewService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: VendorRiskReviewService, VendorSubmission\n"
+                "- Preferred service or workflow facades: VendorRiskReviewService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: VendorRiskReviewService.handle_request(request), VendorRiskReviewService.validate_request(request)\n"
+                "- Exact constructor fields: VendorSubmission(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: VendorRiskReviewService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request returns a mapping that includes the submitted request_id for valid input",
+            "task_public_contract_anchor": (
+                "- Public facade: VendorRiskReviewService\n"
+                "- Primary request model: VendorSubmission(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: VendorRiskReviewService.handle_request(request)\n"
+                "- Supporting validation surface: VendorRiskReviewService.validate_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from code__repair_1_implementation import VendorRiskReviewService, VendorSubmission\n\n"
+                "def test_happy_path():\n"
+                "    service = VendorRiskReviewService()\n"
+                "    request = VendorSubmission(request_id='req-1', request_type='onboarding', details={'vendor_id': 'V123'}, timestamp=1.0)\n"
+                "    assert service.handle_request(request)['request_id'] == 'req-1'\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest summary: FAILED tests_tests.py::test_happy_path - AssertionError\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous invalid pytest file omitted because it imports stale generated module targets such as code__repair_1_implementation instead of the current module file code_implementation.py." in agent.last_user_message
+    assert "Do not preserve or patch that file in place. Rebuild the suite from the current implementation, and import only from code_implementation instead of any older generated repair module alias." in agent.last_user_message
+    assert "from code__repair_1_implementation import VendorRiskReviewService, VendorSubmission" not in agent.last_user_message
+
+
 def test_qa_tester_combines_return_shape_and_did_not_raise_repair_guidance(tmp_path):
     agent = CaptureQATesterAgent(build_config(tmp_path))
 

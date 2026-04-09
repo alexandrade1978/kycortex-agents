@@ -3013,6 +3013,15 @@ class Orchestrator:
                     f"{instruction} The exact broken call {duplicate_call_hint} still appears in the failed artifact. "
                     f"Do not return that call unchanged; rewrite that construction so {field_name} is bound exactly once and that exact call no longer appears anywhere in the module."
                 )
+            explicit_rewrite_hint = self._duplicate_constructor_explicit_rewrite_hint(
+                validation_summary,
+                failed_artifact_content,
+            )
+            if duplicate_call_hint and explicit_rewrite_hint:
+                instruction = (
+                    f"{instruction} For this failed artifact, rewrite {duplicate_call_hint} to {explicit_rewrite_hint} "
+                    "or an equivalent explicit constructor call that binds each field once and supplies safe defaults for fields omitted by valid inputs."
+                )
             return instruction
         missing_attribute_details = self._missing_object_attribute_details(
             validation_summary,
@@ -3723,6 +3732,19 @@ class Orchestrator:
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[str]:
+        call_details = self._duplicate_constructor_argument_call_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        if call_details is None:
+            return None
+        return call_details[2]
+
+    def _duplicate_constructor_argument_call_details(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object,
+    ) -> Optional[tuple[str, str, str, str, str]]:
         duplicate_argument_details = self._duplicate_constructor_argument_details(
             validation_summary,
         )
@@ -3743,23 +3765,124 @@ class Orchestrator:
             if self._callable_name(node) != class_name:
                 continue
 
-            has_star_mapping = any(keyword.arg is None for keyword in node.keywords)
-            if not has_star_mapping:
+            mapping_expression = ""
+            for keyword in node.keywords:
+                if keyword.arg is None:
+                    mapping_expression = self._render_expression(keyword.value).strip()
+                    break
+            if not mapping_expression:
                 continue
 
-            has_named_field = any(keyword.arg == field_name for keyword in node.keywords)
-            positional_matches = any(
-                self._render_expression(argument).strip() == field_name
-                or self._expression_root_name(argument) == field_name
-                for argument in node.args
-            )
-            if not has_named_field and not positional_matches:
+            field_expression = ""
+            for keyword in node.keywords:
+                if keyword.arg == field_name:
+                    field_expression = self._render_expression(keyword.value).strip()
+                    break
+            if not field_expression:
+                for argument in node.args:
+                    rendered_argument = self._render_expression(argument).strip()
+                    if (
+                        rendered_argument == field_name
+                        or self._expression_root_name(argument) == field_name
+                    ):
+                        field_expression = rendered_argument
+                        break
+            if not field_expression:
                 continue
 
             rendered_call = self._render_expression(node).strip()
             if rendered_call:
-                return rendered_call
+                return class_name, field_name, rendered_call, mapping_expression, field_expression
         return None
+
+    def _duplicate_constructor_explicit_rewrite_hint(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object,
+    ) -> Optional[str]:
+        call_details = self._duplicate_constructor_argument_call_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        if call_details is None:
+            return None
+
+        class_name, field_name, _, mapping_expression, field_expression = call_details
+        class_fields = self._class_field_names_from_failed_artifact(
+            failed_artifact_content,
+            class_name,
+        )
+        if not class_fields:
+            return None
+
+        required_fields = set(self._required_field_list_from_failed_artifact(failed_artifact_content))
+        annotation_map = self._class_field_annotations_from_failed_artifact(
+            failed_artifact_content,
+            class_name,
+        )
+        rendered_arguments: list[str] = []
+        for class_field in class_fields:
+            if class_field == field_name:
+                field_value = field_expression
+            elif class_field in required_fields:
+                field_value = f"{mapping_expression}[{class_field!r}]"
+            else:
+                default_value = self._default_value_for_annotation(annotation_map.get(class_field, ""))
+                if default_value:
+                    field_value = f"{mapping_expression}.get({class_field!r}, {default_value})"
+                else:
+                    field_value = f"{mapping_expression}.get({class_field!r})"
+            rendered_arguments.append(f"{class_field}={field_value}")
+
+        if not rendered_arguments:
+            return None
+        return f"{class_name}({', '.join(rendered_arguments)})"
+
+    @staticmethod
+    def _class_field_annotations_from_failed_artifact(
+        failed_artifact_content: object,
+        class_name: str,
+    ) -> dict[str, str]:
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return {}
+
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return {}
+
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef) or node.name != class_name:
+                continue
+            annotations: dict[str, str] = {}
+            for statement in node.body:
+                if not isinstance(statement, ast.AnnAssign):
+                    continue
+                if isinstance(statement.target, ast.Name):
+                    annotations[statement.target.id] = ast.unparse(statement.annotation).strip()
+            return annotations
+        return {}
+
+    @staticmethod
+    def _default_value_for_annotation(annotation: str) -> str:
+        normalized = annotation.strip()
+        if not normalized:
+            return ""
+        if normalized == "bool":
+            return "False"
+        if normalized == "str":
+            return "''"
+        if normalized == "int":
+            return "0"
+        if normalized == "float":
+            return "0.0"
+        if normalized in {"dict", "Dict"} or normalized.startswith(("dict[", "Dict[")):
+            return "{}"
+        if normalized in {"list", "List"} or normalized.startswith(("list[", "List[")):
+            return "[]"
+        if normalized in {"set", "Set"} or normalized.startswith(("set[", "Set[")):
+            return "set()"
+        return ""
 
     @staticmethod
     def _class_field_names_from_failed_artifact(
@@ -6951,6 +7074,10 @@ class Orchestrator:
             validation_summary,
             failed_artifact_content,
         )
+        duplicate_constructor_explicit_rewrite_hint = self._duplicate_constructor_explicit_rewrite_hint(
+            validation_summary,
+            failed_artifact_content,
+        )
         missing_attribute_details = self._missing_object_attribute_details(
             validation_summary,
             failed_artifact_content,
@@ -7002,6 +7129,10 @@ class Orchestrator:
                 if duplicate_constructor_call_hint:
                     lines.append(
                         f"The exact broken call {duplicate_constructor_call_hint} still appears in the failed artifact. Do not return that call unchanged; rewrite that construction so {field_name} is bound once and that exact call disappears from the final module."
+                    )
+                if duplicate_constructor_call_hint and duplicate_constructor_explicit_rewrite_hint:
+                    lines.append(
+                        f"For this failed artifact, rewrite {duplicate_constructor_call_hint} to {duplicate_constructor_explicit_rewrite_hint} or an equivalent explicit constructor call that binds each field once and supplies safe defaults for fields omitted by valid inputs."
                     )
             if missing_attribute_details is not None:
                 class_name, attribute_name, class_fields = missing_attribute_details

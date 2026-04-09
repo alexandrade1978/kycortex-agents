@@ -14979,6 +14979,24 @@ def test_build_repair_context_preserves_prior_repair_objective_for_repair_tasks(
 def test_build_code_repair_context_from_test_failure_preserves_prior_repair_objective_for_repair_tasks(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
+    failed_code = (
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class VendorProfile:\n"
+        "    vendor_id: str\n"
+        "    service_category: str\n"
+        "    due_diligence_evidence: list[str]\n"
+        "    is_sanctioned: bool\n"
+        "    certifications: list[dict]\n"
+        "    critical_service: bool\n"
+        "    incidents: list[str]\n\n"
+        "def validate_request(request):\n"
+        "    required_fields = ['vendor_id', 'service_category', 'due_diligence_evidence']\n"
+        "    return all(field in request.details for field in required_fields)\n\n"
+        "def build_vendor_profile(request):\n"
+        "    vendor_id = request.details['vendor_id']\n"
+        "    return VendorProfile(vendor_id, **request.details)\n"
+    )
     code_task = Task(
         id="code__repair_1",
         title="Repair implementation",
@@ -14986,11 +15004,7 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
         assigned_to="code_engineer",
         repair_origin_task_id="code",
         repair_attempt=1,
-        output=(
-            "def build_vendor_profile(request):\n"
-            "    vendor_id = request.details['vendor_id']\n"
-            "    return VendorProfile(vendor_id, **request.details)\n"
-        ),
+        output=failed_code,
         repair_context={
             "cycle": 1,
             "failure_category": FailureCategory.CODE_VALIDATION.value,
@@ -15006,20 +15020,12 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
         },
         output_payload={
             "summary": "def build_vendor_profile(request):",
-            "raw_content": (
-                "def build_vendor_profile(request):\n"
-                "    vendor_id = request.details['vendor_id']\n"
-                "    return VendorProfile(vendor_id, **request.details)\n"
-            ),
+            "raw_content": failed_code,
             "artifacts": [
                 {
                     "name": "code__repair_1_implementation",
                     "artifact_type": ArtifactType.CODE.value,
-                    "content": (
-                        "def build_vendor_profile(request):\n"
-                        "    vendor_id = request.details['vendor_id']\n"
-                        "    return VendorProfile(vendor_id, **request.details)\n"
-                    ),
+                    "content": failed_code,
                 }
             ],
             "metadata": {},
@@ -15064,6 +15070,8 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
     assert "expired_certifications" in repair_context["instruction"]
     assert "The exact broken call VendorProfile(vendor_id, **request.details) still appears in the failed artifact" in repair_context["instruction"]
     assert "Do not return that call unchanged" in repair_context["instruction"]
+    assert "rewrite VendorProfile(vendor_id, **request.details) to VendorProfile(vendor_id=vendor_id" in repair_context["instruction"]
+    assert "request.details.get('is_sanctioned', False)" in repair_context["instruction"]
     assert "Prior unresolved repair context:" in repair_context["validation_summary"]
     assert "got multiple values for argument 'vendor_id'" in repair_context["validation_summary"]
     assert "expired_certifications'" in repair_context["validation_summary"]
@@ -15466,6 +15474,24 @@ def test_build_agent_input_adds_duplicate_constructor_binding_code_repair_priori
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
+    failed_code = (
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class VendorProfile:\n"
+        "    vendor_id: str\n"
+        "    service_category: str\n"
+        "    due_diligence_evidence: list[str]\n"
+        "    is_sanctioned: bool\n"
+        "    certifications: list[dict]\n"
+        "    critical_service: bool\n"
+        "    incidents: list[str]\n\n"
+        "def validate_request(request):\n"
+        "    required_fields = ['vendor_id', 'service_category', 'due_diligence_evidence']\n"
+        "    return all(field in request.details for field in required_fields)\n\n"
+        "def build_vendor_profile(request):\n"
+        "    vendor_id = request.details['vendor_id']\n"
+        "    return VendorProfile(vendor_id, **request.details)\n"
+    )
     project.add_task(
         Task(
             id="code",
@@ -15484,16 +15510,8 @@ def test_build_agent_input_adds_duplicate_constructor_binding_code_repair_priori
                     "- Pytest failure details: FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'\n"
                     "- Verdict: FAIL"
                 ),
-                "failed_output": (
-                    "def build_vendor_profile(request):\n"
-                    "    vendor_id = request.details['vendor_id']\n"
-                    "    return VendorProfile(vendor_id, **request.details)\n"
-                ),
-                "failed_artifact_content": (
-                    "def build_vendor_profile(request):\n"
-                    "    vendor_id = request.details['vendor_id']\n"
-                    "    return VendorProfile(vendor_id, **request.details)\n"
-                ),
+                "failed_output": failed_code,
+                "failed_artifact_content": failed_code,
             },
         )
     )
@@ -15505,6 +15523,8 @@ def test_build_agent_input_adds_duplicate_constructor_binding_code_repair_priori
     assert "remove it from any expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once" in agent_input.task_description
     assert "The exact broken call VendorProfile(vendor_id, **request.details) still appears in the failed artifact" in agent_input.task_description
     assert "Do not return that call unchanged" in agent_input.task_description
+    assert "rewrite VendorProfile(vendor_id, **request.details) to VendorProfile(vendor_id=vendor_id" in agent_input.task_description
+    assert "request.details.get('is_sanctioned', False)" in agent_input.task_description
 
 
 def test_build_agent_input_adds_missing_object_attribute_code_repair_priority(tmp_path):

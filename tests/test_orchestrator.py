@@ -15062,6 +15062,8 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
     assert "valid happy-path and batch requests do not fail because the same constructor field is bound twice" in repair_context["instruction"]
     assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in repair_context["instruction"]
     assert "expired_certifications" in repair_context["instruction"]
+    assert "The exact broken call VendorProfile(vendor_id, **request.details) still appears in the failed artifact" in repair_context["instruction"]
+    assert "Do not return that call unchanged" in repair_context["instruction"]
     assert "Prior unresolved repair context:" in repair_context["validation_summary"]
     assert "got multiple values for argument 'vendor_id'" in repair_context["validation_summary"]
     assert "expired_certifications'" in repair_context["validation_summary"]
@@ -15501,6 +15503,8 @@ def test_build_agent_input_adds_duplicate_constructor_binding_code_repair_priori
     assert "If pytest reports TypeError from VendorProfile.__init__() saying it got multiple values for argument 'vendor_id'" in agent_input.task_description
     assert "do not pass vendor_id both positionally and through **request.details, **request.data, **payload, or a duplicated keyword" in agent_input.task_description
     assert "remove it from any expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once" in agent_input.task_description
+    assert "The exact broken call VendorProfile(vendor_id, **request.details) still appears in the failed artifact" in agent_input.task_description
+    assert "Do not return that call unchanged" in agent_input.task_description
 
 
 def test_build_agent_input_adds_missing_object_attribute_code_repair_priority(tmp_path):

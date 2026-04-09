@@ -87,6 +87,7 @@ def _repair_directives_block(task_description: str) -> str:
     lines.extend(
         [
             "Treat the existing code below as the buggy baseline to edit, not as a template to preserve unchanged.",
+            "Do not return the broken module unchanged. Rewrite every cited failure site so the final file materially differs at the bug locations called out in these repair directives.",
             "During repair, architecture is secondary guidance. If it conflicts with the repair objective, repair priorities, or cited validation failures, follow the repair directions and the cited failures.",
         ]
     )

@@ -2997,13 +2997,23 @@ class Orchestrator:
         duplicate_argument_details = self._duplicate_constructor_argument_details(validation_summary)
         if duplicate_argument_details is not None:
             class_name, field_name = duplicate_argument_details
-            return (
+            instruction = (
                 "Repair the generated Python module so valid happy-path and batch requests do not fail because the same constructor field is bound twice. "
                 "Keep internal constructor calls unambiguous and preserve the documented contract. "
                 f"The current failed artifact still passes {field_name} twice to {class_name}(...). "
                 f"Do not pass {field_name} both positionally and through **request.details or another expanded mapping. "
                 "Remove the duplicate from the expanded payload or switch to explicit keyword construction so each constructor field is bound exactly once."
             )
+            duplicate_call_hint = self._duplicate_constructor_argument_call_hint(
+                validation_summary,
+                failed_artifact_content,
+            )
+            if duplicate_call_hint:
+                instruction = (
+                    f"{instruction} The exact broken call {duplicate_call_hint} still appears in the failed artifact. "
+                    f"Do not return that call unchanged; rewrite that construction so {field_name} is bound exactly once and that exact call no longer appears anywhere in the module."
+                )
+            return instruction
         missing_attribute_details = self._missing_object_attribute_details(
             validation_summary,
             failed_artifact_content,
@@ -3707,6 +3717,49 @@ class Orchestrator:
         if match is None:
             return None
         return match.group(1), match.group(2)
+
+    def _duplicate_constructor_argument_call_hint(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object,
+    ) -> Optional[str]:
+        duplicate_argument_details = self._duplicate_constructor_argument_details(
+            validation_summary,
+        )
+        if duplicate_argument_details is None:
+            return None
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return None
+
+        class_name, field_name = duplicate_argument_details
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return None
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if self._callable_name(node) != class_name:
+                continue
+
+            has_star_mapping = any(keyword.arg is None for keyword in node.keywords)
+            if not has_star_mapping:
+                continue
+
+            has_named_field = any(keyword.arg == field_name for keyword in node.keywords)
+            positional_matches = any(
+                self._render_expression(argument).strip() == field_name
+                or self._expression_root_name(argument) == field_name
+                for argument in node.args
+            )
+            if not has_named_field and not positional_matches:
+                continue
+
+            rendered_call = self._render_expression(node).strip()
+            if rendered_call:
+                return rendered_call
+        return None
 
     @staticmethod
     def _class_field_names_from_failed_artifact(
@@ -6894,6 +6947,10 @@ class Orchestrator:
         duplicate_constructor_argument_details = self._duplicate_constructor_argument_details(
             validation_summary,
         )
+        duplicate_constructor_call_hint = self._duplicate_constructor_argument_call_hint(
+            validation_summary,
+            failed_artifact_content,
+        )
         missing_attribute_details = self._missing_object_attribute_details(
             validation_summary,
             failed_artifact_content,
@@ -6942,6 +6999,10 @@ class Orchestrator:
                 lines.append(
                     f"When {field_name} is extracted separately before constructing {class_name}(...), remove it from any expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once."
                 )
+                if duplicate_constructor_call_hint:
+                    lines.append(
+                        f"The exact broken call {duplicate_constructor_call_hint} still appears in the failed artifact. Do not return that call unchanged; rewrite that construction so {field_name} is bound once and that exact call disappears from the final module."
+                    )
             if missing_attribute_details is not None:
                 class_name, attribute_name, class_fields = missing_attribute_details
                 replacement_field = self._suggest_declared_attribute_replacement(attribute_name, class_fields)

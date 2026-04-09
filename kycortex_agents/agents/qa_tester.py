@@ -1,3 +1,4 @@
+import ast
 import re
 
 from kycortex_agents.agents.base_agent import BaseAgent
@@ -27,7 +28,9 @@ Do not import `main`, CLI/demo entrypoints, or any symbol listed under the provi
 Treat CLI wrapper classes such as names ending in `CLI` or `Cli` as entrypoint surfaces to avoid in tests unless the task explicitly requires CLI coverage with controlled argv or input.
 Import every production function you call from the target module.
 Import every production class you instantiate or reference in a test or fixture from the target module.
+Before finalizing, verify that every non-local name used anywhere in the suite is either imported from the target module, imported from the standard library or pytest, or defined in the file. If the implementation defines a production collaborator such as AuditLogger or RiskScorer and the suite uses it, import it explicitly at the top of the file instead of leaving it as an undefined local.
 If behavior is exposed as a class method, instantiate the class and call the method on the instance instead of importing the method name as a top-level function.
+Never use `assert True`, `assert False`, or placeholder comments such as `Assuming ...` to stand in for a real expectation. Every retained test must assert a concrete contract-backed outcome.
 Write complete pytest code only; do not stop mid-test, mid-string, or mid-fixture.
 Keep tests compact and execution-safe: prefer a few correct tests over broad but speculative coverage.
 When a task gives only a maximum number of top-level tests, plan the full suite before writing and stay comfortably under that cap unless an exact count is explicitly required.
@@ -51,6 +54,8 @@ Do not assert exact categorical score bands or labels at boundary values unless 
 If derived labels depend on count-based scores and the thresholds are not explicit, do not use borderline counts such as 2 to assert an exact low or medium label. Use 1 for a clear low case, 3 for a clear medium case, or assert only the numeric score.
 Do not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone. Assert those outcomes only when the behavior contract or the current implementation explicitly defines the trigger; otherwise assert direct observable state, totals, or non-exact invariants.
 Do not hard-code exact response status labels such as accepted, rejected, pending_review, or flagged, and do not hard-code exact risk-summary bucket totals for specific batch items, unless the behavior contract or current implementation explicitly defines those triggers.
+Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests unless the behavior contract or current implementation explicitly defines those triggers.
+Do not assume internal action or review dictionaries such as review_actions are keyed by request_id, vendor_id, or another request-identity field unless the contract explicitly says so. If stored values expose their own action_id or record_id, assert collection size or inspect stored values instead of membership by request identity.
 When an API accepts a request, filter, or payload dict with documented required fields, either supply every required field or omit that optional dict entirely. Do not assume partial filter payloads are accepted unless the contract explicitly marks those keys optional.
 If a service stores the full raw request payload in a field such as request.data, do not assume that field was normalized to only an inner sub-dict. Example: if request_data = {"id": "req1", "data": {"field1": "value1"}} and intake_request stores ComplianceRequest.data = request_data, assert compliance_request.data == request_data or compliance_request.data["data"] == {"field1": "value1"} instead of asserting compliance_request.data == {"field1": "value1"}.
 When a constructor or callable signature is listed in the API contract, use exactly that signature in every test.
@@ -60,12 +65,16 @@ Example: if the contract lists ComplianceRequest(id, data, timestamp, status), w
 Mirror the listed constructor exactly in every test call. If the public API says ComplianceRequest(id, user_id, data, timestamp, status), every constructor call in the suite must pass all five named arguments; do not omit status and rely on the dataclass default.
 When you pass an explicit constructor field such as timestamp, use a self-contained literal or a local value defined before the constructor call. Do not read attributes from the object you are still constructing or any other undefined local. Example: define fixed_time = datetime(2023, 1, 1, 0, 0, 0) and pass timestamp=fixed_time instead of writing timestamp=request.timestamp inside request = ComplianceRequest(...).
 Do not instantiate helper validators, scorers, loggers, dataclasses, or batch processors merely to wire a higher-level service fixture unless the public API contract explicitly requires that direct setup.
+Record-shaped value models such as AuditLog, RiskScore, ResultRecord, or similar typed data holders are not service collaborators unless the public API contract explicitly says so. Do not instantiate them merely to satisfy service setup, and do not replace an undefined helper alias with a similarly named record type just because it imports cleanly.
 When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models rather than auxiliary validators, scorers, loggers, repositories, processors, or engines.
 If you use isinstance or another exact type assertion against a returned production class, import that class explicitly; otherwise assert on returned fields or behavior without naming the unimported type.
 When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity from that contract. Do not invent generic placeholders such as id, data, timestamp, or status when the contract lists different fields.
 Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger. Otherwise assert stable invariants such as success, request identity, audit growth, and non-negative or relative scores.
 Do not hard-code exact response.status labels such as accepted, rejected, pending_review, or flagged, and do not hard-code exact risk-summary bucket totals for specific batch items, unless the behavior contract or current implementation explicitly defines those triggers.
+Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests unless the behavior contract or current implementation explicitly defines those triggers.
 When repairing a previously generated suite that already passed static validation, preserve the existing imported symbols, constructor shapes, fixture payload structure, and scenario skeleton unless the validation summary explicitly identifies one of those pieces as invalid.
+If the previous validation summary reports contract overreach signals, that prior suite guessed behavior beyond the documented contract. Discard brittle exact batch-count or status-threshold assertions and rebuild only the minimum contract-backed scenarios instead of patching the old file in place.
+If the previous validation summary reports tests without assertion-like checks, that prior suite skeleton is invalid. Discard the hollow test bodies and rewrite only the minimum contract-backed scenarios with explicit assertions instead of patching the old file in place.
 Preserve the exact documented public method names from the prior valid suite and contract during repair. Do not rename submit_intake(...) to submit(...) or batch_submit_intakes(...) to submit_batch(...).
 When the previous validation summary reports constructor arity mismatches, treat those constructor calls as invalid and remove or rewrite them instead of preserving them from the earlier suite.
 If the previous validation summary reports undefined local names or undefined fixtures, remove or rewrite every offending test unless you explicitly import or define those names in the rewritten file. In a compact suite, delete helper-only tests before adding new fixtures, caplog assertions, or extra helper imports.
@@ -82,9 +91,14 @@ Do not reference helper names or expected-value variables inside test bodies unl
 Do not call `main()`, CLI/demo entrypoints, or `argparse`-driven functions directly unless the task explicitly requires CLI testing and you fully control `sys.argv` or monkeypatch the parser inputs.
 If the module exposes a CLI wrapper class or `run()` method for command-line flow, leave it out of the suite unless the task explicitly requires CLI testing and you fully control argv or input.
 For happy-path tests, derive input payloads from the implementation summary so they satisfy the module's own validation rules.
+If the implementation validates a required document or evidence list before scoring, every happy-path or valid batch item must include the full required set named by that validator. Do not use a single placeholder document like ["ID"] when the implementation names additional required evidence items.
+If the implementation validates required payload keys before processing, every happy-path or valid batch item must include that full required key set. Do not omit fields like claim_type, amount, timestamp, or similar required payload keys from supposedly valid scenarios.
+If the implementation shows a named required_evidence or required_documents list, copy that full list verbatim into every valid happy-path or valid batch payload instead of shrinking it to a representative subset.
+Do not require a strictly positive score, non-empty risk list, or similar nonzero scoring side effect from a generic happy-path input unless the chosen payload actually exercises a documented risk factor. For a plain valid request, prefer asserting that scoring completed, a score record exists, or the score is non-negative.
 When the task names only high-level workflow scenarios, keep the suite on the main service or batch surface and do not add direct unit tests for validators, scorers, enums, loggers, dataclasses, or helper utilities unless the task explicitly asks for them.
 In compact high-level workflow suites, do not spend top-level tests on validator units, scorer units, dataclass serialization, audit logger wrappers, or other helper-only coverage unless the task explicitly names those helpers.
 When the task requires both a validation-failure scenario and a batch-processing scenario, keep the validation-failure coverage on the direct intake or validation surface unless the behavior contract explicitly requires batch-level failure coverage.
+When the suite already contains a dedicated validation-failure test, do not reuse that invalid payload inside test_batch_processing or any other supposedly valid batch scenario. Keep every batch item fully valid unless the behavior contract explicitly documents partial batch failure handling.
 If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface so the test isolates one clear contract violation.
 If required fields are validated before score_request, score_risk, process_request, or batch handling, do not create a separate invalid-scoring test that first calls intake_request on an invalid object. Keep that failure case on intake_request or validate_request, and reserve scoring assertions for already-valid inputs.
 Do not assume empty strings, placeholder IDs, or domain keywords are invalid unless the behavior contract or implementation explicitly says so. For validation-failure coverage, prefer missing required fields or clearly wrong types over guessed business rules. If the implementation only checks types such as isinstance(id, str) or isinstance(data, dict), an empty string or same-type placeholder still satisfies that validator, so use a non-string, non-dict, or similarly wrong-type value instead.
@@ -135,12 +149,22 @@ For compact anchored workflow tasks, default to exactly three top-level tests na
 For compact anchored workflow tasks with a hard line cap such as 150 lines, treat that trio as the effective maximum unless the exact contract or behavior contract explicitly requires more coverage. Delete any fourth-or-later top-level test before returning.
 Do not use per-test docstrings in this compact mode. Strip comments, extra blank lines, and optional helper-only imports before returning.
 If any test keeps datetime.now() or another bare datetime reference, a matching datetime import is mandatory at the top of the file. Otherwise remove bare datetime references and use a self-contained timestamp value that still satisfies the implementation contract.
+Before finalizing, verify that every non-local name used anywhere in the suite is either imported from the target module, imported from the standard library or pytest, or defined in the file. If the implementation defines a production collaborator such as AuditLogger or RiskScorer and the suite uses it, import it explicitly at the top of the file instead of leaving it as an undefined local.
 If batch behavior is documented as repeated single-request calls on the main facade, write the batch scenario that way instead of inventing renamed batch helpers.
+Never use `assert True`, `assert False`, or placeholder comments such as `Assuming ...` to stand in for a real expectation. Every retained test must assert a concrete contract-backed outcome.
 Do not copy placeholder example names or invent alternate helpers.
+If the implementation validates a required document or evidence list before scoring, every happy-path or valid batch item must include the full required set named by that validator. Do not use a single placeholder document like ["ID"] when the implementation names additional required evidence items.
+If the implementation validates required payload keys before processing, every happy-path or valid batch item must include that full required key set. Do not omit fields like claim_type, amount, timestamp, or similar required payload keys from supposedly valid scenarios.
+If the implementation shows a named required_evidence or required_documents list, copy that full list verbatim into every valid happy-path or valid batch payload instead of shrinking it to a representative subset.
+Do not require a strictly positive score, non-empty risk list, or similar nonzero scoring side effect from a generic happy-path input unless the chosen payload actually exercises a documented risk factor. For a plain valid request, prefer asserting that scoring completed, a score record exists, or the score is non-negative.
 Stay under stated line, fixture, and top-level test limits.
 Do not add duplicate-detection, risk-tier, audit-only, or helper-only tests unless the exact contract or behavior contract explicitly requires them.
 Do not add helper-only imports or helper-only tests when a documented public service facade exists.
+Record-shaped value models such as AuditLog, RiskScore, ResultRecord, or similar typed data holders are not service collaborators unless the exact contract explicitly says so. Do not replace an undefined helper alias with a similarly named record type just because it imports cleanly.
 If repair feedback reports unknown symbols, invalid members, or constructor mismatches, rebuild from the exact contract and remove those invalid surfaces entirely.
+If the previous validation summary reports contract overreach signals, that prior suite guessed behavior beyond the documented contract. Discard brittle exact batch-count or status-threshold assertions and rebuild only the minimum contract-backed scenarios instead of patching the old file in place.
+If repair feedback reports contract overreach signals, discard the prior overreaching assertions and rebuild only contract-backed scenarios instead of preserving brittle exact batch-count or threshold guesses.
+If repair feedback reports tests without assertion-like checks, discard the prior hollow test bodies and rebuild the minimum contract-backed suite with explicit assertions instead of patching the old file in place.
 Write a complete syntactically valid pytest module."""
 
 class QATesterAgent(BaseAgent):
@@ -319,12 +343,36 @@ class QATesterAgent(BaseAgent):
         return "\n".join(lines)
 
     @staticmethod
-    def _repair_focus_block(repair_validation_summary: object) -> str:
+    def _repair_focus_block(
+        repair_validation_summary: object,
+        implementation_code: object = "",
+        existing_tests: object = "",
+    ) -> str:
         if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
             return ""
 
         normalized = repair_validation_summary.lower()
         focus_lines: list[str] = []
+        required_payload_keys = QATesterAgent._implementation_required_payload_keys(implementation_code) or []
+        presence_only_validation_sample_issue = (
+            QATesterAgent._summary_has_presence_only_validation_sample_issue(
+                repair_validation_summary,
+                existing_tests,
+                implementation_code,
+            )
+        )
+        required_payload_runtime_issue = QATesterAgent._summary_has_required_payload_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        undefined_local_entries = [
+            item.split(" (line ", 1)[0].strip()
+            for item in QATesterAgent._comma_separated_items(
+                QATesterAgent._summary_issue_value(repair_validation_summary, "Undefined local names")
+            )
+            if item.strip()
+        ]
         undefined_local_names = {
             name.lower()
             for name in re.findall(
@@ -332,6 +380,17 @@ class QATesterAgent(BaseAgent):
                 QATesterAgent._summary_issue_value(repair_validation_summary, "Undefined local names"),
             )
         }
+        available_module_symbol_names = QATesterAgent._undefined_available_module_symbol_names(
+            implementation_code,
+            repair_validation_summary,
+        )
+        available_module_symbol_lowers = {name.lower() for name in available_module_symbol_names}
+        helper_alias_names = [
+            name
+            for name in undefined_local_entries
+            if name.lower() not in available_module_symbol_lowers
+            if QATesterAgent._is_helper_alias_like_name(name)
+        ]
 
         if "pytest" in undefined_local_names or "name 'pytest' is not defined" in normalized:
             focus_lines.append(
@@ -342,10 +401,31 @@ class QATesterAgent(BaseAgent):
             focus_lines.append(
                 "- The previous file referenced `datetime` without importing it. If any rewritten test keeps `datetime.now()` or another bare `datetime` reference, add a matching import such as `from datetime import datetime` or `import datetime` at the top before finalizing. Otherwise remove every bare `datetime` reference and switch those timestamp values to a self-contained literal or previously defined local that still matches the implementation contract."
             )
+            focus_lines.append(
+                "- Do not copy the previous invalid file forward unchanged. The rewritten suite must resolve every bare `datetime` reference before returning, either by adding the matching import or by replacing those constructor arguments with a self-contained local value."
+            )
+            if QATesterAgent._implementation_prefers_direct_datetime_import(implementation_code):
+                focus_lines.append(
+                    "- The implementation already uses `from datetime import datetime`. Match that import style in the rewritten tests and prefer a local fixed timestamp such as `fixed_time = datetime(2024, 1, 1, 0, 0, 0)` for constructor arguments instead of repeating unresolved bare `datetime.now()` calls."
+                )
 
         if "line count" in normalized and "exceeds maximum" in normalized:
             focus_lines.append(
                 "- The previous file failed because it exceeded the hard line budget. Rewrite to only the minimum contract-required trio, delete any fourth-or-later top-level test, remove per-test docstrings, comments, and extra blank lines, and drop validator-only, audit-only, risk-tier, or other helper-only coverage before touching the required scenarios."
+            )
+
+        if available_module_symbol_names:
+            rendered_names = ", ".join(available_module_symbol_names)
+            focus_lines.append(
+                "- The previous file referenced real production symbols that exist in the module but were never imported, such as "
+                f"`{rendered_names}`. Add each one to the import list at the top of the file before use instead of deleting, renaming, or leaving it as an undefined local."
+            )
+
+        if helper_alias_names:
+            rendered_names = ", ".join(helper_alias_names)
+            focus_lines.append(
+                "- The previous file referenced undefined helper or collaborator aliases such as "
+                f"`{rendered_names}`. Do not repair those names by swapping to a similarly named record or dataclass like `AuditLog()`; delete that guessed collaborator wiring and rebuild around the documented service facade or directly exchanged request or result models only."
             )
 
         other_undefined_names = sorted(
@@ -359,6 +439,81 @@ class QATesterAgent(BaseAgent):
         if ("audit_log" in normalized or "audit_logs" in normalized) and "assertionerror: assert" in normalized:
             focus_lines.append(
                 "- The previous runtime failure came from a fragile exact audit-length check. Recreate fresh service/request objects inside each test and replace exact batch audit totals with stable delta, monotonic growth, or identity checks unless the contract explicitly enumerates every emitted entry."
+            )
+
+        if "exact batch audit length" in normalized:
+            focus_lines.append(
+                "- The previous suite overreached by expecting more batch audit entries than the visible number of processed items. Remove that guessed extra-count assertion and prefer result count, request identity, or monotonic audit growth unless the contract explicitly defines extra summary entries."
+            )
+
+        if "exact status/action label mismatch" in normalized:
+            focus_lines.append(
+                "- The previous runtime failure came from a brittle exact status or action label guess. Unless the contract explicitly defines the trigger, replace blocked, escalated, approved, conditional approval, straight-through, straight-through review, manual investigation, fraud escalation, time-boxed approval, or similar label guesses with stable invariants or with clearly non-borderline inputs whose outcome is documented."
+            )
+            focus_lines.append(
+                "- In happy-path or valid batch scenarios, do not assert exact outcome strings such as `straight-through` or `manual investigation` unless the contract explicitly defines that input-to-label mapping; prefer request identity, audit growth, or another documented invariant instead."
+            )
+            focus_lines.append(
+                "- Apply the same rule to return-review labels such as `auto-approve`, `manual inspection`, and `abuse escalation`; do not hard-code them in happy-path or valid batch tests unless the contract explicitly defines that mapping."
+            )
+
+        if "exact internal action-map key assumption" in normalized:
+            focus_lines.append(
+                "- The previous runtime failure came from assuming an internal action or review map used request identity as its key. Do not assert membership like `request.request_id in service.review_actions` unless the contract explicitly defines that storage key."
+            )
+            focus_lines.append(
+                "- If the implementation stores `ReviewAction(action_id, ...)` or another action record with its own generated identifier, assert the action-map size or inspect stored action values instead of assuming the map key equals request_id, vendor_id, or another request-identity field."
+            )
+
+        if presence_only_validation_sample_issue:
+            focus_lines.append(
+                "- The previous validation-failure test still kept every required payload field that the current validator only checks for presence. Do not keep all required keys with same-type placeholder values like `\"value\"`; omit at least one required field or choose another input that the validator actually rejects."
+            )
+            if required_payload_keys:
+                focus_lines.append(
+                    "- The current validator only requires the presence of "
+                    f"{', '.join(required_payload_keys)} inside the payload. Keep the rest of the rejection case valid and omit one of those required fields instead of keeping all of them with placeholder values."
+                )
+
+        if required_payload_runtime_issue:
+            focus_lines.append(
+                "- The previous happy-path or batch test still omitted required payload fields that the current validator checks before processing. Do not keep partial payloads in supposedly valid scenarios."
+            )
+            if required_payload_keys and len(required_payload_keys) > 0:
+                focus_lines.append(
+                    "- Every valid happy-path or batch payload must include all required payload keys named by the current validator: "
+                    f"{', '.join(required_payload_keys)}. Keep missing-field coverage isolated to the explicit validation-failure test."
+                )
+
+        if "exact validation-failure score-state emptiness assertion" in normalized:
+            focus_lines.append(
+                "- The previous runtime failure came from assuming a rejected or invalid request leaves internal score state empty. Do not assert len(service.get_risk_scores()) == 0 or a similar exact zero-length check on internal score maps, caches, or derived-state collections unless the contract explicitly guarantees that post-validation state; prefer the rejected outcome, documented audit or action evidence, or another observable contract-backed effect."
+            )
+            focus_lines.append(
+                "- In a validation-failure test, remove direct reads of `service.get_risk_scores()` or similar internal score state unless that post-failure state is itself the documented contract. Assert the rejected return value, blocked audit entry, or another documented effect instead."
+            )
+
+        if "exact return-shape attribute assumption" in normalized:
+            focus_lines.append(
+                "- The previous runtime failure came from assuming a wrapped object return shape that the current runtime did not provide. Do not assert attributes such as `.request_id` or `.outcome` on the return value unless the contract or implementation explicitly exposes that wrapper type; prefer direct value checks or documented mapping keys instead."
+            )
+            focus_lines.append(
+                "- Delete every `.request_id`, `.outcome`, or similar attribute read on the workflow return value in happy-path and batch tests. If the workflow currently returns a direct string or other primitive, compare that direct value or assert a documented side effect instead of inventing a wrapper object."
+            )
+
+        if "did not raise" in normalized:
+            focus_lines.append(
+                "- A previous validation-failure test expected an exception that the current input did not trigger. Do not keep `pytest.raises(...)` around a same-type business variation; choose an input that actually violates the current validator, such as a missing required field, unsupported request type, or wrong top-level type, or assert the documented non-exception outcome instead."
+            )
+
+        if "assert false" in normalized:
+            focus_lines.append(
+                "- The previous suite used a placeholder boolean failure such as `assert False` instead of a real contract-backed expectation. Delete that placeholder and replace it with an explicit validation result, raised exception, or observable side effect."
+            )
+
+        if "exact return-shape attribute assumption" in normalized and "did not raise" in normalized:
+            focus_lines.append(
+                "- The failed suite mixed a guessed return wrapper with a guessed exception path. Rebuild from scratch: keep happy-path and batch checks on the direct value or documented side effects of the workflow call, and make the validation-failure test use an input that the current validator actually rejects instead of a same-type business variation."
             )
 
         if "pytest timed out" in normalized:
@@ -411,6 +566,756 @@ class QATesterAgent(BaseAgent):
         return ""
 
     @staticmethod
+    def _summary_has_placeholder_boolean_assertion_issue(
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if "pytest failure details" not in summary_lower:
+            return False
+        if "assert false" not in summary_lower and "assert true" not in summary_lower:
+            return False
+
+        if isinstance(content, str) and content.strip():
+            if re.search(r"(?m)^\s*assert\s+(?:True|False)\s*(?:#.*)?$", content):
+                return True
+            if re.search(r"(?im)#\s*assuming\b", content):
+                return True
+            return False
+
+        return True
+
+    @staticmethod
+    def _test_function_block(content: object, test_name: str) -> str:
+        if not isinstance(content, str) or not content.strip() or not test_name.strip():
+            return ""
+        match = re.search(
+            rf"(?ms)^def\s+{re.escape(test_name)}\s*\([^)]*\):\n.*?(?=^def\s+|\Z)",
+            content,
+        )
+        if not match:
+            return ""
+        return match.group(0)
+
+    @classmethod
+    def _summary_has_validation_side_effect_without_workflow_call_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        block = cls._test_function_block(content, "test_validation_failure")
+        if not block:
+            return False
+
+        block_lower = block.lower()
+        if "validate_request(" not in block_lower:
+            return False
+        if any(
+            workflow_call in block_lower
+            for workflow_call in (
+                "handle_request(",
+                "process_request(",
+                "intake_request(",
+                "submit_request(",
+                "submit_intake(",
+            )
+        ):
+            return False
+        if not any(
+            token in block_lower
+            for token in (
+                "get_audit_log(",
+                "audit_log",
+                "get_risk_scores(",
+                "risk_scores",
+                "blocked",
+                "rejected",
+                "approved",
+            )
+        ):
+            return False
+
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return True
+        summary_lower = repair_validation_summary.lower()
+        return "pytest execution: fail" in summary_lower or "assert 0 == 1" in summary_lower
+
+    @staticmethod
+    def _is_helper_alias_like_name(name: str) -> bool:
+        normalized = name.strip().lower()
+        if not normalized:
+            return False
+        return normalized.endswith((
+            "logger",
+            "scorer",
+            "processor",
+            "manager",
+            "repository",
+            "validator",
+            "engine",
+            "service",
+        ))
+
+    @classmethod
+    def _undefined_local_names(cls, repair_validation_summary: object) -> list[str]:
+        value = cls._summary_issue_value(repair_validation_summary, "Undefined local names")
+        if not value:
+            return []
+        names: list[str] = []
+        seen: set[str] = set()
+        for item in cls._comma_separated_items(value):
+            name = item.split(" (line ", 1)[0].strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        return names
+
+    @classmethod
+    def _undefined_helper_alias_names_outside_exact_contract(
+        cls,
+        code_exact_test_contract: object,
+        repair_validation_summary: object,
+        implementation_code: object = "",
+    ) -> list[str]:
+        allowed_imports = {
+            item.lower()
+            for item in cls._comma_separated_items(
+                cls._contract_line_value(code_exact_test_contract, "Allowed production imports")
+            )
+        }
+        module_defined_symbols = {
+            name.lower() for name in cls._module_defined_symbol_names(implementation_code)
+        }
+        return [
+            name
+            for name in cls._undefined_local_names(repair_validation_summary)
+            if name.lower() not in {"pytest", "datetime"}
+            and name.lower() not in allowed_imports
+            and name.lower() not in module_defined_symbols
+            and cls._is_helper_alias_like_name(name)
+        ]
+
+    @classmethod
+    def _undefined_available_module_symbol_names(
+        cls,
+        implementation_code: object,
+        repair_validation_summary: object,
+    ) -> list[str]:
+        module_symbols = {
+            name.lower(): name for name in cls._module_defined_symbol_names(implementation_code)
+        }
+        available_names: list[str] = []
+        seen: set[str] = set()
+        for name in cls._undefined_local_names(repair_validation_summary):
+            normalized = name.lower()
+            if normalized in {"pytest", "datetime"}:
+                continue
+            actual_name = module_symbols.get(normalized)
+            if not actual_name or actual_name in seen:
+                continue
+            seen.add(actual_name)
+            available_names.append(actual_name)
+        return available_names
+
+    @staticmethod
+    def _content_has_matching_datetime_import(content: object) -> bool:
+        if not isinstance(content, str) or not content.strip():
+            return False
+        return bool(
+            re.search(
+                r"^\s*(?:from\s+datetime\s+import\s+[^\n]*\bdatetime\b|import\s+datetime\b)",
+                content,
+                flags=re.MULTILINE,
+            )
+        )
+
+    @staticmethod
+    def _content_has_bare_datetime_reference(content: object) -> bool:
+        if not isinstance(content, str) or not content.strip():
+            return False
+        return bool(
+            re.search(
+                r"(?<![A-Za-z0-9_\.])datetime(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(",
+                content,
+            )
+        )
+
+    @classmethod
+    def _summary_has_missing_datetime_import_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+        summary_lower = repair_validation_summary.lower()
+        if (
+            "undefined local names: datetime" not in summary_lower
+            and "name 'datetime' is not defined" not in summary_lower
+        ):
+            return False
+        if isinstance(content, str) and content.strip():
+            return (
+                cls._content_has_bare_datetime_reference(content)
+                and not cls._content_has_matching_datetime_import(content)
+            )
+        return True
+
+    @staticmethod
+    def _implementation_prefers_direct_datetime_import(implementation_code: object) -> bool:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return False
+        return bool(
+            re.search(
+                r"^\s*from\s+datetime\s+import\s+[^\n]*\bdatetime\b",
+                implementation_code,
+                flags=re.MULTILINE,
+            )
+        )
+
+    @classmethod
+    def _datetime_like_parameter_names(cls, signature: str) -> list[str]:
+        _, parameters = cls._signature_name_and_params(signature)
+        names: list[str] = []
+        for parameter in parameters:
+            parameter_name = cls._parameter_name(parameter)
+            if not parameter_name:
+                continue
+            lowered = parameter_name.lower()
+            if lowered in {"timestamp", "date", "time"} or lowered.endswith(
+                ("_timestamp", "_time", "_date", "_at")
+            ):
+                names.append(parameter_name)
+        return names
+
+    @staticmethod
+    def _string_literal_sequence(node: ast.AST | None) -> list[str]:
+        if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return []
+
+        values: list[str] = []
+        for element in node.elts:
+            if not isinstance(element, ast.Constant) or not isinstance(element.value, str):
+                return []
+            values.append(element.value)
+        return values
+
+    @classmethod
+    def _implementation_required_evidence_items(cls, implementation_code: object) -> list[str]:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return []
+
+        try:
+            tree = ast.parse(implementation_code)
+        except SyntaxError:
+            return []
+
+        for node in ast.walk(tree):
+            target_names: list[str] = []
+            value_node: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                value_node = node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                target_names = [node.target.id]
+                value_node = node.value
+            if not any(name in {"required_evidence", "required_documents"} for name in target_names):
+                continue
+            items = cls._string_literal_sequence(value_node)
+            if items:
+                return cls._merge_preserving_order(items)
+        return []
+
+    @classmethod
+    def _implementation_required_payload_keys(cls, implementation_code: object) -> list[str]:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return []
+
+        try:
+            tree = ast.parse(implementation_code)
+        except SyntaxError:
+            return []
+
+        keys: list[str] = []
+        seen: set[str] = set()
+
+        def append_key(value: str) -> None:
+            normalized = value.strip()
+            if not normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            keys.append(normalized)
+
+        for node in ast.walk(tree):
+            target_names: list[str] = []
+            value_node: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                value_node = node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                target_names = [node.target.id]
+                value_node = node.value
+            if any(name in {"required_fields", "required_keys"} for name in target_names):
+                for item in cls._string_literal_sequence(value_node):
+                    append_key(item)
+
+            if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+                continue
+            if not isinstance(node.ops[0], ast.NotIn):
+                continue
+            if not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
+                continue
+            comparator_text = ast.unparse(node.comparators[0]).lower()
+            if any(token in comparator_text for token in (".details", ".data", ".metadata", "['details']", "['data']", "['metadata']")):
+                append_key(node.left.value)
+
+        return keys
+
+    @staticmethod
+    def _sample_literal_for_required_key(key: str) -> str:
+        mapping = {
+            "policy_id": '"policy123"',
+            "claim_type": '"collision"',
+            "amount": "5000",
+            "loss_amount": "5000",
+            "value": "500",
+            "quantity": "1",
+            "name": '"John Doe"',
+            "documents": '["ID", "Passport"]',
+            "role": '"admin"',
+            "request_type": '"screening"',
+            "requester": '"analyst"',
+            "timestamp": "fixed_time",
+        }
+        return mapping.get(key.lower(), '"value"')
+
+    @classmethod
+    def _required_payload_argument_overrides(
+        cls,
+        signature: str,
+        implementation_code: object,
+    ) -> dict[str, str]:
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        if not required_payload_keys:
+            return {}
+
+        payload_parameter_names = cls._payload_like_parameter_names(signature)
+        if not payload_parameter_names:
+            return {}
+
+        payload_literal = "{" + ", ".join(
+            f'"{key}": {cls._sample_literal_for_required_key(key)}'
+            for key in required_payload_keys
+        ) + "}"
+        return {payload_parameter_names[0]: payload_literal}
+
+    @classmethod
+    def _validation_failure_argument_overrides(
+        cls,
+        signature: str,
+        implementation_code: object,
+    ) -> dict[str, str]:
+        overrides: dict[str, str] = {}
+        payload_parameter_names = cls._payload_like_parameter_names(signature)
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+
+        if payload_parameter_names and required_payload_keys:
+            omitted_key = "documents" if "documents" in required_payload_keys else required_payload_keys[-1]
+            retained_keys = [key for key in required_payload_keys if key != omitted_key]
+            if retained_keys:
+                rendered_items = ", ".join(
+                    f'"{key}": {cls._sample_literal_for_required_key(key)}'
+                    for key in retained_keys
+                )
+                payload_literal = "{" + rendered_items + "}"
+            else:
+                payload_literal = "{}"
+            overrides[payload_parameter_names[0]] = payload_literal
+
+        if cls._implementation_prefers_direct_datetime_import(implementation_code):
+            for name in cls._datetime_like_parameter_names(signature):
+                overrides.setdefault(name, "fixed_time")
+
+        return overrides
+
+    @staticmethod
+    def _implementation_raises_value_error(implementation_code: object) -> bool:
+        return isinstance(implementation_code, str) and bool(re.search(r"raise\s+ValueError\b", implementation_code))
+
+    @classmethod
+    def _implementation_call_returns_none(cls, implementation_code: object, callable_ref: str) -> bool:
+        if not isinstance(implementation_code, str) or not implementation_code.strip() or not callable_ref:
+            return False
+
+        try:
+            tree = ast.parse(implementation_code)
+        except SyntaxError:
+            return False
+
+        normalized_ref, _ = cls._signature_name_and_params(callable_ref)
+        normalized_ref = normalized_ref or callable_ref.strip()
+
+        target_class = ""
+        target_name = normalized_ref
+        if "." in normalized_ref:
+            target_class, target_name = normalized_ref.split(".", 1)
+
+        if target_class:
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef) or node.name != target_class:
+                    continue
+                for child in node.body:
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == target_name:
+                        return cls._function_returns_only_none(child)
+            return False
+
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == target_name:
+                return cls._function_returns_only_none(node)
+        return False
+
+    @classmethod
+    def _function_returns_only_none(cls, function_node: ast.AST) -> bool:
+        if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+
+        def iter_returns(node: ast.AST) -> list[ast.Return]:
+            returns: list[ast.Return] = []
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.Return):
+                    returns.append(child)
+                    continue
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                    continue
+                returns.extend(iter_returns(child))
+            return returns
+
+        return_nodes = iter_returns(function_node)
+        if not return_nodes:
+            return True
+        return all(
+            return_node.value is None
+            or (
+                isinstance(return_node.value, ast.Constant)
+                and return_node.value.value is None
+            )
+            for return_node in return_nodes
+        )
+
+    @staticmethod
+    def _call_expression_without_assignment(call_line: str) -> str:
+        if call_line.startswith("result = "):
+            return call_line.split(" = ", 1)[1]
+        if call_line.startswith("is_valid = "):
+            return call_line.split(" = ", 1)[1]
+        return call_line
+
+    @staticmethod
+    def _return_shape_assertion_line(repair_validation_summary: object) -> str:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return ""
+        match = re.search(
+            r"exact return-shape attribute assumption \('\.[^']+' on '([^']+)'\)",
+            repair_validation_summary,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return ""
+        runtime_type = match.group(1)
+        runtime_assertion_map = {
+            "bool": "bool",
+            "dict": "dict",
+            "float": "float",
+            "int": "int",
+            "list": "list",
+            "NoneType": "type(None)",
+            "str": "str",
+            "tuple": "tuple",
+        }
+        assertion_type = runtime_assertion_map.get(runtime_type)
+        if not assertion_type:
+            return ""
+        return f"assert isinstance(result, {assertion_type})"
+
+    @staticmethod
+    def _validation_support_method(exact_methods: list[str], preferred_facades: list[str]) -> str:
+        for facade in preferred_facades:
+            for method in exact_methods:
+                if method.startswith(f"{facade}.") and ".validate" in method:
+                    return method
+        return next((method for method in exact_methods if ".validate" in method), "")
+
+    @classmethod
+    def _payload_like_parameter_names(cls, signature: str) -> list[str]:
+        _, parameters = cls._signature_name_and_params(signature)
+        names: list[str] = []
+        for parameter in parameters:
+            parameter_name = cls._parameter_name(parameter)
+            if not parameter_name:
+                continue
+            lowered = parameter_name.lower()
+            if lowered in {
+                "details",
+                "detail",
+                "data",
+                "payload",
+                "metadata",
+                "meta",
+                "attributes",
+                "context",
+                "request_data",
+                "document_data",
+            } or lowered.endswith(("_details", "_data", "_payload", "_metadata")):
+                names.append(parameter_name)
+        return names
+
+    @classmethod
+    def _required_evidence_argument_overrides(
+        cls,
+        signature: str,
+        implementation_code: object,
+    ) -> dict[str, str]:
+        required_evidence_items = cls._implementation_required_evidence_items(implementation_code)
+        if not required_evidence_items:
+            return {}
+
+        payload_literal = "{'documents': " + repr(required_evidence_items) + "}"
+        return {
+            parameter_name: payload_literal
+            for parameter_name in cls._payload_like_parameter_names(signature)
+        }
+
+    @classmethod
+    def _content_has_incomplete_required_evidence_payload(
+        cls,
+        content: object,
+        implementation_code: object,
+    ) -> bool:
+        required_evidence_items = cls._implementation_required_evidence_items(implementation_code)
+        if len(required_evidence_items) <= 1:
+            return False
+        if not isinstance(content, str) or not content.strip():
+            return False
+
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return False
+
+        required_evidence_set = set(required_evidence_items)
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            function_name = node.name.lower()
+            if any(token in function_name for token in ("validation", "invalid", "reject", "error", "failure")):
+                continue
+            if not (
+                any(token in function_name for token in ("happy", "batch"))
+                or any(
+                    (isinstance(child, ast.Attribute) and child.attr == "risk_scores")
+                    or (isinstance(child, ast.Name) and child.id == "risk_scores")
+                    for child in ast.walk(node)
+                )
+            ):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Dict):
+                    continue
+                document_items: list[str] | None = None
+                for key, value in zip(child.keys, child.values):
+                    if isinstance(key, ast.Constant) and key.value == "documents":
+                        document_items = cls._string_literal_sequence(value)
+                        break
+                if document_items is None:
+                    continue
+                if not required_evidence_set.issubset(set(document_items)):
+                    return True
+        return False
+
+    @classmethod
+    def _summary_has_required_evidence_runtime_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+        implementation_code: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+            return False
+        if not any(
+            int(actual_count) < int(expected_count)
+            for actual_count, expected_count in re.findall(r"assert\s+(\d+)\s*==\s*(\d+)", summary_lower)
+        ):
+            return False
+        if isinstance(content, str) and content.strip() and "risk_scores" not in content.lower():
+            return False
+        return cls._content_has_incomplete_required_evidence_payload(content, implementation_code)
+
+    @classmethod
+    def _content_has_incomplete_required_payload_for_valid_paths(
+        cls,
+        content: object,
+        implementation_code: object,
+    ) -> bool:
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        if not required_payload_keys:
+            return False
+        if not isinstance(content, str) or not content.strip():
+            return False
+
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return False
+
+        required_payload_set = set(required_payload_keys)
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            function_name = node.name.lower()
+            if any(token in function_name for token in ("validation", "invalid", "reject", "error", "failure")):
+                continue
+            if not any(token in function_name for token in ("happy", "batch")):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Dict):
+                    continue
+                dict_keys = {
+                    key.value
+                    for key in child.keys
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                }
+                if not dict_keys or not (dict_keys & required_payload_set):
+                    continue
+                if not required_payload_set.issubset(dict_keys):
+                    return True
+        return False
+
+    @classmethod
+    def _summary_has_required_payload_runtime_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+        implementation_code: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+            return False
+        if "valueerror" not in summary_lower:
+            return False
+        if not any(token in summary_lower for token in ("test_happy_path", "test_batch", "test_batch_processing")):
+            return False
+        return cls._content_has_incomplete_required_payload_for_valid_paths(content, implementation_code)
+
+    @classmethod
+    def _implementation_has_presence_only_required_field_validation(
+        cls,
+        implementation_code: object,
+    ) -> bool:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return False
+
+        try:
+            tree = ast.parse(implementation_code)
+        except SyntaxError:
+            return False
+
+        validate_nodes: list[ast.AST] = []
+        for module_node in tree.body:
+            if isinstance(module_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and module_node.name.startswith("validate"):
+                validate_nodes.append(module_node)
+            elif isinstance(module_node, ast.ClassDef):
+                for class_child in module_node.body:
+                    if isinstance(class_child, (ast.FunctionDef, ast.AsyncFunctionDef)) and class_child.name.startswith("validate"):
+                        validate_nodes.append(class_child)
+
+        for validate_node in validate_nodes:
+            required_field_names = False
+            presence_checks = False
+            type_checks = False
+            for child in ast.walk(validate_node):
+                target_names: list[str] = []
+                value_node: ast.AST | None = None
+                if isinstance(child, ast.Assign):
+                    target_names = [target.id for target in child.targets if isinstance(target, ast.Name)]
+                    value_node = child.value
+                elif isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+                    target_names = [child.target.id]
+                    value_node = child.value
+
+                if any(name in {"required_fields", "required_keys"} for name in target_names):
+                    if cls._string_literal_sequence(value_node):
+                        required_field_names = True
+
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and child.func.attr == "issubset":
+                    call_text = ast.unparse(child).lower()
+                    if any(token in call_text for token in ("request.details", "request.data", "request.metadata")):
+                        presence_checks = True
+
+                if isinstance(child, ast.Compare) and len(child.comparators) == 1:
+                    if any(isinstance(op, ast.NotIn) for op in child.ops):
+                        comparator_text = ast.unparse(child.comparators[0]).lower()
+                        if any(token in comparator_text for token in ("request.details", "request.data", "request.metadata")):
+                            presence_checks = True
+
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == "isinstance":
+                    type_checks = True
+
+            if required_field_names and presence_checks and not type_checks:
+                return True
+
+        return False
+
+    @staticmethod
+    def _block_mentions_all_required_payload_keys(block: str, required_payload_keys: list[str]) -> bool:
+        if not block.strip() or not required_payload_keys:
+            return False
+        return all(
+            re.search(rf"['\"]{re.escape(key)}['\"]\s*:", block) is not None
+            for key in required_payload_keys
+        )
+
+    @classmethod
+    def _summary_has_presence_only_validation_sample_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+        implementation_code: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if "assert true is false" not in summary_lower and "assert not true" not in summary_lower:
+            return False
+        if not cls._implementation_has_presence_only_required_field_validation(implementation_code):
+            return False
+
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        if not required_payload_keys:
+            return False
+
+        block = cls._test_function_block(content, "test_validation_failure")
+        if not block:
+            return False
+
+        block_lower = block.lower()
+        if "validate_request(" not in block_lower and "pytest.raises" not in block_lower:
+            return False
+
+        return cls._block_mentions_all_required_payload_keys(block, required_payload_keys)
+
+    @staticmethod
     def _contract_line_value(contract: object, label: str) -> str:
         if not isinstance(contract, str):
             return ""
@@ -460,6 +1365,41 @@ class QATesterAgent(BaseAgent):
         if item and item.lower() != "none":
             items.append(item)
         return items
+
+    @staticmethod
+    def _merge_preserving_order(*groups: list[str]) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for group in groups:
+            for item in group:
+                if not isinstance(item, str):
+                    continue
+                normalized = item.strip()
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                merged.append(normalized)
+        return merged
+
+    @staticmethod
+    def _module_defined_symbol_names(implementation_code: object) -> list[str]:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return []
+        try:
+            tree = ast.parse(implementation_code)
+        except SyntaxError:
+            return []
+
+        names: list[str] = []
+        seen: set[str] = set()
+        for node in tree.body:
+            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name in seen:
+                continue
+            seen.add(node.name)
+            names.append(node.name)
+        return names
 
     @staticmethod
     def _string_list(raw_value: object) -> list[str]:
@@ -579,13 +1519,17 @@ Use 0 fixtures by default in this compact mode and inline setup instead of spend
 Keep mutable service instances and request objects local to each test or a local helper; do not share a module-level service or request object across tests.
 If the suite uses `pytest.` anywhere, keep `import pytest` explicitly at the top of the module.
 If the suite uses `datetime.now()` or any other bare `datetime` reference, you must add a matching datetime import at the top before finalizing. Do not leave bare `datetime.now()` calls without that import; if you choose not to import datetime, remove every bare datetime reference and use a self-contained timestamp value that still satisfies the implementation contract.
+If the module already imports `from datetime import datetime` and the suite needs a typed timestamp, match that style and prefer a local fixed value such as `fixed_time = datetime(2024, 1, 1, 0, 0, 0)` over repeating `datetime.now()` directly inside constructor arguments.
 Pass every documented constructor field explicitly, including timestamp when it is listed.
 If no dedicated batch helper is documented, keep batch coverage on the documented single-request surface by looping over valid inputs instead of inventing renamed helpers.
 Stay on the main service facade; do not add helper-only imports or helper-only tests.
+Record-shaped value models such as AuditLog, RiskScore, ResultRecord, or similar typed data holders are not service collaborators unless the exact contract explicitly says so. Do not replace an undefined helper alias with a similarly named record type just because it imports cleanly.
+When the suite already contains a dedicated validation-failure test, do not reuse that invalid payload inside test_batch_processing or any other supposedly valid batch scenario. Keep every batch item fully valid unless the behavior contract explicitly documents partial batch failure handling.
 Do not add duplicate-detection, risk-tier, audit-only, or helper-only tests unless the exact contract or behavior contract explicitly requires them.
 Keep the suite under the stated line, fixture, and top-level-test caps.
 Avoid guessed exact score totals, guessed derived labels, and guessed exact audit lengths unless the behavior contract explicitly defines them.
 Avoid guessed exact response.status labels and guessed exact risk-summary bucket totals for batch items unless the behavior contract or current implementation explicitly defines those triggers.
+Avoid guessed exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests unless the behavior contract or current implementation explicitly defines those triggers.
 When batch behavior mutates audit state, prefer stable delta or monotonic-growth checks over a global exact total unless the contract explicitly enumerates every emitted entry.
 If repair feedback lists unknown symbols, invalid members, or constructor mismatches, remove those invalid surfaces and rebuild from the exact contract instead of patching guessed helpers.
 Assume the module code already exists in `{module_filename}`.
@@ -680,11 +1624,29 @@ Return complete raw Python only."""
         return variable_name, f"{variable_name} = {constructor_expr}"
 
     @classmethod
+    def _constructor_scaffold_line_with_overrides(
+        cls,
+        signature: str,
+        *,
+        argument_overrides: dict[str, str] | None = None,
+    ) -> tuple[str, str]:
+        class_name, constructor_expr = cls._constructor_call_expression(
+            signature,
+            argument_overrides=argument_overrides,
+        )
+        if not class_name:
+            return "", ""
+
+        variable_name = cls._instance_name_for_class(class_name)
+        return variable_name, f"{variable_name} = {constructor_expr}"
+
+    @classmethod
     def _constructor_call_expression(
         cls,
         signature: str,
         *,
         index_offset: int = 0,
+        argument_overrides: dict[str, str] | None = None,
     ) -> tuple[str, str]:
         class_name, parameters = cls._signature_name_and_params(signature)
         if not class_name:
@@ -698,6 +1660,10 @@ Return complete raw Python only."""
             parameter_name = cls._parameter_name(parameter)
             if not parameter_name:
                 continue
+            override_value = (argument_overrides or {}).get(parameter_name)
+            if override_value is not None:
+                arguments.append(f"{parameter_name}={override_value}")
+                continue
             arguments.append(
                 f"{parameter_name}={cls._sample_literal_for_parameter(parameter_name, index=index + index_offset)}"
             )
@@ -709,6 +1675,7 @@ Return complete raw Python only."""
         *,
         primary_method: str,
         preferred_constructor: str,
+        argument_overrides: dict[str, str] | None = None,
     ) -> list[str]:
         if "." not in primary_method or not preferred_constructor:
             return []
@@ -718,10 +1685,12 @@ Return complete raw Python only."""
         _, first_request_expr = cls._constructor_call_expression(
             preferred_constructor,
             index_offset=0,
+            argument_overrides=argument_overrides,
         )
         _, second_request_expr = cls._constructor_call_expression(
             preferred_constructor,
             index_offset=1,
+            argument_overrides=argument_overrides,
         )
         if not first_request_expr or not second_request_expr:
             return []
@@ -765,7 +1734,9 @@ Return complete raw Python only."""
         if "." not in method_ref:
             return "", ""
 
-        class_name, method_name = method_ref.split(".", 1)
+        class_name, raw_method_name = method_ref.split(".", 1)
+        method_name, _ = cls._signature_name_and_params(raw_method_name)
+        method_name = method_name or raw_method_name.strip()
         service_name = cls._instance_name_for_class(class_name)
         service_line = f"{service_name} = {class_name}()"
 
@@ -776,6 +1747,19 @@ Return complete raw Python only."""
             return service_line, f"result = {service_name}.{method_name}(...)"
         return service_line, f"result = {service_name}.{method_name}()"
 
+    @staticmethod
+    def _prepend_fixed_time_line(lines: list[str]) -> list[str]:
+        if not any("fixed_time" in line for line in lines):
+            return lines
+        if any(line.startswith("fixed_time = datetime(") for line in lines):
+            return lines
+        insert_at = 1 if lines and lines[0].startswith("service =") else 0
+        return [
+            *lines[:insert_at],
+            "fixed_time = datetime(2024, 1, 1, 0, 0, 0)",
+            *lines[insert_at:],
+        ]
+
     @classmethod
     def _deterministic_surface_scaffold_block(
         cls,
@@ -785,6 +1769,8 @@ Return complete raw Python only."""
         code_exact_test_contract: object,
         code_test_targets: object,
         task_public_contract_anchor: object,
+        implementation_code: object = "",
+        repair_validation_summary: object = "",
     ) -> str:
         if not isinstance(code_exact_test_contract, str) or not code_exact_test_contract.strip():
             return ""
@@ -807,14 +1793,35 @@ Return complete raw Python only."""
 
         anchor_overrides = cls._task_anchor_overrides(task_public_contract_anchor)
         if anchor_overrides:
-            allowed_imports = cls._string_list(anchor_overrides.get("allowed_imports")) or allowed_imports
+            allowed_imports = cls._merge_preserving_order(
+                cls._string_list(anchor_overrides.get("allowed_imports")),
+                allowed_imports,
+            ) or allowed_imports
             preferred_facades = cls._string_list(anchor_overrides.get("preferred_facades")) or preferred_facades
             exact_callables = []
             exact_methods = cls._string_list(anchor_overrides.get("exact_methods")) or exact_methods
-            exact_constructors = cls._string_list(anchor_overrides.get("exact_constructors")) or exact_constructors
+            exact_constructors = cls._merge_preserving_order(
+                cls._string_list(anchor_overrides.get("exact_constructors")),
+                exact_constructors,
+            ) or exact_constructors
 
         preferred_constructor = cls._preferred_constructor_signature(exact_constructors, preferred_facades)
-        constructor_variable, constructor_line = cls._constructor_scaffold_line(preferred_constructor)
+        argument_overrides = cls._required_payload_argument_overrides(
+            preferred_constructor,
+            implementation_code,
+        )
+        argument_overrides.update(cls._required_evidence_argument_overrides(
+            preferred_constructor,
+            implementation_code,
+        ))
+        if cls._implementation_prefers_direct_datetime_import(implementation_code):
+            argument_overrides.update({
+                name: "fixed_time" for name in cls._datetime_like_parameter_names(preferred_constructor)
+            })
+        constructor_variable, constructor_line = cls._constructor_scaffold_line_with_overrides(
+            preferred_constructor,
+            argument_overrides=argument_overrides,
+        )
 
         primary_method = ""
         if preferred_facades:
@@ -883,14 +1890,90 @@ Return complete raw Python only."""
         documented_batch_surface = any(
             "batch" in item.lower() for item in [*exact_callables, *exact_methods]
         )
-        primary_body_lines = [line for line in (service_line, constructor_line, call_line) if line]
+        primary_surface_ref = primary_method or primary_callable
+        primary_returns_none = cls._implementation_call_returns_none(
+            implementation_code,
+            primary_surface_ref,
+        )
+        return_shape_assertion_line = cls._return_shape_assertion_line(repair_validation_summary)
+
+        validation_body_lines: list[str] = []
+        validation_method = cls._validation_support_method(exact_methods, preferred_facades)
+        primary_body_lines = [line for line in (service_line, constructor_line) if line]
+        if call_line:
+            primary_body_lines.append(call_line)
+        if return_shape_assertion_line and call_line.startswith("result = "):
+            primary_body_lines.append(return_shape_assertion_line)
+        elif primary_returns_none and call_line.startswith("result = "):
+            primary_body_lines.append("assert result is None")
+
+        if preferred_constructor and (primary_method or primary_callable):
+            validation_overrides = cls._validation_failure_argument_overrides(
+                preferred_constructor,
+                implementation_code,
+            )
+            validation_constructor_variable, validation_constructor_line = cls._constructor_scaffold_line_with_overrides(
+                preferred_constructor,
+                argument_overrides=validation_overrides,
+            )
+            validation_service_line = service_line
+            validation_call_line = ""
+            if primary_method:
+                validation_service_line, validation_call_line = cls._method_scaffold_lines(
+                    primary_method,
+                    validation_constructor_variable,
+                )
+            elif primary_callable:
+                validation_call_line = cls._callable_scaffold_line(
+                    primary_callable,
+                    validation_constructor_variable,
+                )
+
+            validation_body_lines = [line for line in (validation_service_line, validation_constructor_line) if line]
+            if validation_method and "." in validation_method:
+                validation_owner, raw_validation_method_name = validation_method.split(".", 1)
+                validation_method_name, _ = cls._signature_name_and_params(raw_validation_method_name)
+                validation_method_name = validation_method_name or raw_validation_method_name.strip()
+                validation_service_name = cls._instance_name_for_class(validation_owner)
+                validation_service_assignment = f"{validation_service_name} = {validation_owner}()"
+                if validation_body_lines and validation_body_lines[0] != validation_service_assignment:
+                    validation_body_lines.insert(0, validation_service_assignment)
+                elif not validation_body_lines:
+                    validation_body_lines.append(validation_service_assignment)
+                validation_body_lines.append(
+                    f"is_valid = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
+                )
+                validation_body_lines.append("assert is_valid is False")
+
+            validation_call_expression = cls._call_expression_without_assignment(validation_call_line)
+            if validation_call_expression:
+                if cls._implementation_raises_value_error(implementation_code):
+                    validation_body_lines.append("with pytest.raises(ValueError):")
+                    validation_body_lines.append(f"    {validation_call_expression}")
+                elif primary_returns_none and validation_call_line.startswith("result = "):
+                    validation_body_lines.append(validation_call_line)
+                    validation_body_lines.append("assert result is None")
+                else:
+                    validation_body_lines.append(validation_call_expression)
+
         batch_body_lines = [line for line in (service_line, constructor_line, batch_call_line) if line]
+        batch_surface_ref = batch_method or batch_callable
+        batch_returns_none = cls._implementation_call_returns_none(
+            implementation_code,
+            batch_surface_ref,
+        )
+        if batch_returns_none and batch_call_line.startswith("result = "):
+            batch_body_lines.append("assert result is None")
         if batch_requested and not batch_call_line and primary_method and preferred_constructor:
             batch_body_lines = cls._batch_loop_scaffold_lines(
                 primary_method=primary_method,
                 preferred_constructor=preferred_constructor,
+                argument_overrides=argument_overrides,
             )
-        body_lines = [*primary_body_lines, *batch_body_lines]
+        primary_body_lines = cls._prepend_fixed_time_line(primary_body_lines)
+        validation_body_lines = cls._prepend_fixed_time_line(validation_body_lines)
+        batch_body_lines = cls._prepend_fixed_time_line(batch_body_lines)
+        body_lines = [*primary_body_lines, *validation_body_lines, *batch_body_lines]
         if not allowed_imports and not body_lines:
             return ""
 
@@ -901,6 +1984,8 @@ Return complete raw Python only."""
             "```python",
             "import pytest",
         ]
+        if any(value == "fixed_time" for value in argument_overrides.values()):
+            lines.append("from datetime import datetime")
         if allowed_imports:
             lines.append(f"from {module_name} import {', '.join(allowed_imports)}")
         if primary_body_lines or batch_body_lines:
@@ -914,6 +1999,18 @@ Return complete raw Python only."""
                         continue
                     seen_primary_lines.add(line)
                     lines.append(f"    {line}")
+            if validation_body_lines:
+                lines.append("")
+                lines.append("def test_validation_failure():")
+                seen_validation_lines: set[str] = set()
+                for line in validation_body_lines:
+                    if line in seen_validation_lines:
+                        continue
+                    seen_validation_lines.add(line)
+                    if line.startswith("    "):
+                        lines.append(f"    {line}")
+                    else:
+                        lines.append(f"    {line}")
             if batch_body_lines:
                 lines.append("")
                 lines.append("def test_batch_processing():")
@@ -933,6 +2030,10 @@ Return complete raw Python only."""
         lines.append(
             "- In compact contract-first mode, default to only the required trio: happy path, validation failure, and batch processing. Do not add duplicate-detection, risk-tier, audit-only, or other speculative extras unless the exact contract explicitly requires them."
         )
+        if validation_body_lines:
+            lines.append(
+                "- If `test_validation_failure` later asserts audit records, risk-score state, or another workflow side effect, keep the documented workflow call in that test. `validate_request(...)` alone only checks validity; it does not emit workflow side effects by itself."
+            )
         if preferred_facades:
             lines.append(
                 f"- Keep the suite centered on {', '.join(preferred_facades)} instead of auxiliary helpers."
@@ -960,9 +2061,59 @@ Return complete raw Python only."""
         *,
         code_exact_test_contract: object,
         repair_validation_summary: object,
+        existing_tests: object = "",
+        implementation_code: object = "",
     ) -> bool:
         if not isinstance(code_exact_test_contract, str) or not code_exact_test_contract.strip():
             return False
+        available_module_symbol_names = cls._undefined_available_module_symbol_names(
+            implementation_code,
+            repair_validation_summary,
+        )
+        required_evidence_runtime_issue = cls._summary_has_required_evidence_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        required_payload_runtime_issue = cls._summary_has_required_payload_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        presence_only_validation_sample_issue = cls._summary_has_presence_only_validation_sample_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        if cls._undefined_helper_alias_names_outside_exact_contract(
+            code_exact_test_contract,
+            repair_validation_summary,
+            implementation_code,
+        ):
+            return True
+        if cls._summary_has_missing_datetime_import_issue(repair_validation_summary) and not available_module_symbol_names:
+            return True
+        if required_evidence_runtime_issue and not available_module_symbol_names:
+            return True
+        if required_payload_runtime_issue and not available_module_symbol_names:
+            return True
+        if presence_only_validation_sample_issue:
+            return True
+        if cls._summary_has_placeholder_boolean_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        ):
+            return True
+        if cls._summary_has_validation_side_effect_without_workflow_call_issue(
+            repair_validation_summary,
+            existing_tests,
+        ):
+            return True
+        if cls._summary_has_active_issue(
+            repair_validation_summary,
+            "contract overreach signals",
+        ):
+            return True
         return any(
             cls._summary_has_active_issue(repair_validation_summary, label)
             for label in (
@@ -979,14 +2130,134 @@ Return complete raw Python only."""
         existing_tests: object,
         code_exact_test_contract: object,
         repair_validation_summary: object,
+        implementation_code: object = "",
     ) -> tuple[str, str]:
+        has_missing_datetime_import_issue = cls._summary_has_missing_datetime_import_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        has_required_evidence_runtime_issue = cls._summary_has_required_evidence_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        has_required_payload_runtime_issue = cls._summary_has_required_payload_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        has_presence_only_validation_sample_issue = cls._summary_has_presence_only_validation_sample_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        has_placeholder_boolean_assertion_issue = cls._summary_has_placeholder_boolean_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        has_validation_side_effect_without_workflow_call_issue = cls._summary_has_validation_side_effect_without_workflow_call_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        available_module_symbol_names = cls._undefined_available_module_symbol_names(
+            implementation_code,
+            repair_validation_summary,
+        )
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        required_payload_suffix = ""
+        if required_payload_keys:
+            required_payload_suffix = (
+                f" The current validator only checks for the presence of {required_payload_keys!r}."
+            )
+        required_evidence_items = cls._implementation_required_evidence_items(implementation_code)
+        required_evidence_suffix = ""
+        if required_evidence_items:
+            required_evidence_suffix = (
+                f" The implementation names that required evidence list as {required_evidence_items!r}."
+            )
+        helper_alias_names = cls._undefined_helper_alias_names_outside_exact_contract(
+            code_exact_test_contract,
+            repair_validation_summary,
+            implementation_code,
+        )
+        if helper_alias_names:
+            rendered_names = ", ".join(helper_alias_names)
+            return (
+                "Previous invalid pytest file omitted because the validation summary reported undefined helper or collaborator aliases outside the Exact test contract: "
+                f"{rendered_names}. Rebuild the suite from the Exact test contract and current implementation instead of patching guessed helper wiring in place.",
+                "The previous validation summary reported undefined helper or collaborator aliases outside the Exact test contract: "
+                f"{rendered_names}. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and do not replace those guessed helpers with near-match record or dataclass imports.",
+            )
+
+        if has_missing_datetime_import_issue and not available_module_symbol_names:
+            return (
+                "Previous invalid pytest file omitted because the validation summary already reported bare `datetime` references without a matching import. Rebuild the suite from the Exact test contract and current implementation instead of copying the previous file forward unchanged.",
+                "The previous validation summary already reported bare `datetime` references without a matching import. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and resolve every bare `datetime` reference before returning the rewritten file.",
+            )
+
+        if has_required_evidence_runtime_issue and not available_module_symbol_names:
+            return (
+                "Previous invalid pytest file omitted because the current runtime failure shows that supposed happy-path or batch payloads still omit required evidence named by the implementation validator. Rebuild the suite from the Exact test contract and current implementation instead of copying the stale placeholder-document payload forward."
+                f"{required_evidence_suffix}",
+                "The current runtime failure shows that supposed happy-path or batch payloads still omit required evidence named by the implementation validator. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, copy the full required evidence list into every valid happy-path or batch payload, and isolate missing-document coverage to the explicit validation-failure test."
+                f"{required_evidence_suffix}",
+            )
+
+        if has_required_payload_runtime_issue and not available_module_symbol_names:
+            return (
+                "Previous invalid pytest file omitted because the current runtime failure shows that supposed happy-path or batch payloads still omit required payload fields named by the implementation validator. Rebuild the suite from the Exact test contract and current implementation instead of copying the stale partial payload forward."
+                f"{required_payload_suffix}",
+                "The current runtime failure shows that supposed happy-path or batch payloads still omit required payload fields named by the implementation validator. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, copy the full required payload key set into every valid happy-path or batch payload, and isolate missing-field coverage to the explicit validation-failure test."
+                f"{required_payload_suffix}",
+            )
+
+        if has_presence_only_validation_sample_issue:
+            return (
+                "Previous invalid pytest file omitted because the validation-failure payload still keeps every required field that the current validator only checks for presence. Rebuild the suite from the Exact test contract and current implementation instead of preserving same-shape placeholder values that still satisfy validation."
+                f"{required_payload_suffix}",
+                "The current validation-failure payload still keeps every required field that the current validator only checks for presence. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and make the rejection case omit one required field or use a clearly wrong top-level type instead of keeping all required fields with placeholder values."
+                f"{required_payload_suffix}",
+            )
+
+        if cls._summary_has_active_issue(
+            repair_validation_summary,
+            "contract overreach signals",
+        ):
+            return (
+                "Previous overreaching pytest file omitted because the validation summary already reported contract-overreach assertions. Rebuild the suite from the current implementation and documented contract instead of preserving brittle exact batch-count, derived-state, or threshold guesses.",
+                "The previous validation summary already reported contract-overreach assertions. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only contract-backed scenarios, and replace brittle exact batch-count, derived-state, or status-threshold guesses with stable invariants unless the contract explicitly defines them.",
+            )
+
+        if has_placeholder_boolean_assertion_issue:
+            return (
+                "Previous hollow pytest file omitted because the validation summary already reported placeholder boolean assertions instead of real expectations. Rebuild the suite from the current implementation and documented contract instead of preserving `assert True`, `assert False`, or `Assuming ...` placeholders.",
+                "The previous validation summary already reported placeholder boolean assertions instead of real expectations. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only the minimum contract-backed scenarios, and replace every placeholder boolean or `Assuming ...` comment with a concrete assertion on a validation result, raised exception, or observable side effect.",
+            )
+
+        if has_validation_side_effect_without_workflow_call_issue:
+            return (
+                "Previous invalid pytest file omitted because the validation-failure test asserted audit or service side effects after calling only `validate_request(...)` without executing the workflow. Rebuild the suite from the current implementation and documented contract instead of preserving that incomplete side-effect pattern.",
+                "The previous validation-failure test asserted audit or service side effects after calling only `validate_request(...)` without executing the workflow. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch, and if the validation-failure test asserts audit records, risk-score state, or another workflow side effect, keep the documented workflow call in that test instead of checking those side effects after only `validate_request(...)`.",
+            )
+
         if cls._should_rebuild_from_exact_contract(
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
+            existing_tests=existing_tests,
+            implementation_code=implementation_code,
         ):
             return (
                 "Previous invalid pytest file omitted because the validation summary already reported invalid import, member, or constructor surface errors. Rebuild the suite from the Exact test contract and current implementation instead of preserving or patching the prior file.",
                 "The previous validation summary already reported invalid import, member, or constructor surfaces. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation instead.",
+            )
+
+        if cls._summary_has_active_issue(
+            repair_validation_summary,
+            "tests without assertion-like checks",
+        ):
+            return (
+                "Previous hollow pytest file omitted because the validation summary already reported top-level tests without assertion-like checks. Rebuild the suite from the current implementation and documented contract instead of preserving call-only tests or the previous suite skeleton.",
+                "The previous validation summary already reported hollow top-level tests without assertion-like checks. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only the minimum contract-backed scenarios, and ensure every retained top-level test contains at least one explicit assertion-like check.",
             )
 
         if isinstance(existing_tests, str):
@@ -1006,10 +2277,14 @@ Return complete raw Python only."""
         code_exact_test_contract: object,
         repair_validation_summary: object,
         task_public_contract_anchor: object,
+        existing_tests: object = "",
+        implementation_code: object = "",
     ) -> str:
         if not cls._should_rebuild_from_exact_contract(
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
+            existing_tests=existing_tests,
+            implementation_code=implementation_code,
         ):
             return ""
 
@@ -1033,11 +2308,19 @@ Return complete raw Python only."""
 
         anchor_overrides = cls._task_anchor_overrides(task_public_contract_anchor)
         if anchor_overrides:
-            allowed_imports = cls._string_list(anchor_overrides.get("allowed_imports")) or allowed_imports
+            allowed_imports = cls._merge_preserving_order(
+                cls._string_list(anchor_overrides.get("allowed_imports")),
+                allowed_imports,
+            ) or allowed_imports
             preferred_facades = ", ".join(cls._string_list(anchor_overrides.get("preferred_facades"))) or preferred_facades
             exact_callables = []
             exact_methods = cls._string_list(anchor_overrides.get("exact_methods")) or exact_methods
-            exact_constructors = ", ".join(cls._string_list(anchor_overrides.get("exact_constructors"))) or exact_constructors
+            exact_constructors = ", ".join(
+                cls._merge_preserving_order(
+                    cls._string_list(anchor_overrides.get("exact_constructors")),
+                    cls._comma_separated_items(exact_constructors),
+                )
+            ) or exact_constructors
         unknown_symbols = cls._summary_issue_value(
             repair_validation_summary,
             "Unknown module symbols",
@@ -1046,6 +2329,18 @@ Return complete raw Python only."""
             repair_validation_summary,
             "Invalid member references",
         )
+        required_evidence_runtime_issue = cls._summary_has_required_evidence_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        required_payload_runtime_issue = cls._summary_has_required_payload_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        required_evidence_items = cls._implementation_required_evidence_items(implementation_code)
 
         exact_surfaces = [*exact_callables, *exact_methods]
         documented_batch_surface = any("batch" in item.lower() for item in exact_surfaces)
@@ -1085,6 +2380,44 @@ Return complete raw Python only."""
         if request_model_name and "timestamp" in request_model_signature:
             lines.append(
                 f"- Because the task-level anchor lists {request_model_signature}, every {request_model_name}(...) call must pass timestamp explicitly."
+            )
+        if cls._summary_has_missing_datetime_import_issue(repair_validation_summary):
+            lines.append(
+                "- The previous failed suite used bare `datetime` references without a matching import. Do not copy that file forward unchanged. Resolve every bare `datetime` reference in the rewritten file before returning it."
+            )
+            if cls._implementation_prefers_direct_datetime_import(implementation_code):
+                lines.append(
+                    "- Match the implementation's datetime style: add `from datetime import datetime` at the top and prefer a local fixed timestamp such as `fixed_time = datetime(2024, 1, 1, 0, 0, 0)` for constructor arguments instead of repeating bare `datetime.now()` calls."
+                )
+        if required_evidence_runtime_issue:
+            lines.append(
+                "- The previous failed suite kept an incomplete document payload inside a supposed happy-path or batch scenario. Do not copy that stale subset forward unchanged."
+            )
+            if required_evidence_items:
+                lines.append(
+                    f"- The implementation validator names the full required evidence list as {required_evidence_items!r}. Copy that exact list into every valid happy-path or batch payload."
+                )
+            else:
+                lines.append(
+                    "- Copy the full required evidence list named by the implementation validator into every valid happy-path or batch payload instead of shrinking it to a placeholder subset."
+                )
+            lines.append(
+                "- Keep missing-document coverage isolated to `test_validation_failure` or another explicit validation-rejection case. Do not reuse reduced or empty document subsets like ['ID'] or [] inside happy-path or batch tests."
+            )
+        if required_payload_runtime_issue:
+            lines.append(
+                "- The previous failed suite omitted required payload fields inside a supposed happy-path or batch scenario. Do not copy that stale partial payload forward unchanged."
+            )
+            if required_payload_keys:
+                lines.append(
+                    f"- The implementation validator requires the full payload key set {required_payload_keys!r} for valid processing. Copy that exact key set into every valid happy-path or batch payload."
+                )
+            else:
+                lines.append(
+                    "- Copy the full required payload key set named by the implementation validator into every valid happy-path or batch payload instead of omitting part of that required set."
+                )
+            lines.append(
+                "- Keep missing-field coverage isolated to `test_validation_failure` or another explicit validation-rejection case. Do not reuse partial payloads that omit required keys inside happy-path or batch tests."
             )
         if documented_single_surface and not documented_batch_surface:
             lines.append(
@@ -1132,16 +2465,23 @@ Return complete raw Python only."""
             else ""
         )
         repair_helper_surface_block = self._repair_helper_surface_block(agent_input.context)
-        repair_focus_block = self._repair_focus_block(repair_validation_summary)
+        repair_focus_block = self._repair_focus_block(
+            repair_validation_summary,
+            implementation_code,
+            existing_tests,
+        )
         existing_tests_context, repair_instruction = self._existing_tests_context_and_instruction(
             existing_tests=existing_tests,
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
+            implementation_code=implementation_code,
         )
         exact_rebuild_surface_block = self._exact_rebuild_surface_block(
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
             task_public_contract_anchor=task_public_contract_anchor,
+            existing_tests=existing_tests,
+            implementation_code=implementation_code,
         )
         deterministic_surface_scaffold_block = self._deterministic_surface_scaffold_block(
             module_name=module_name,
@@ -1149,6 +2489,8 @@ Return complete raw Python only."""
             code_exact_test_contract=code_exact_test_contract,
             code_test_targets=code_test_targets,
             task_public_contract_anchor=task_public_contract_anchor,
+            implementation_code=implementation_code,
+            repair_validation_summary=repair_validation_summary,
         )
         task_public_contract_anchor_block = self._task_public_contract_anchor_block(
             task_public_contract_anchor
@@ -1204,6 +2546,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not import or instantiate CLI wrapper classes such as names ending in `CLI` or `Cli` unless the task explicitly requires CLI testing and you fully control argv or input.
     Import every production class you instantiate or reference in a fixture or test body.
     Do not hand-wire validator, scorer, logger, batch-processor, dataclass, or similar helper objects into a service fixture unless the public API contract explicitly requires those constructor arguments.
+    Record-shaped value models such as AuditLog, RiskScore, ResultRecord, or similar typed data holders are not service collaborators unless the public API contract explicitly says so. Do not replace an undefined helper alias with a similarly named record type just because it imports cleanly.
     When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models instead of auxiliary validators, scorers, loggers, repositories, processors, or engines.
     If you use isinstance or another exact type assertion against a returned production class, import that class explicitly; otherwise assert on returned fields or behavior without naming the unimported type.
     When the API contract exposes typed request or result models, instantiate them with the exact field names and full constructor arity from that contract. Do not invent generic placeholders such as id, data, timestamp, or status when the contract lists different fields.
@@ -1214,6 +2557,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     When you pass an explicit constructor field such as timestamp, use a self-contained literal or a local value defined before the constructor call. Do not read attributes from the object you are still constructing or any other undefined local. Example: define fixed_time = datetime(2023, 1, 1, 0, 0, 0) and pass timestamp=fixed_time instead of writing timestamp=request.timestamp inside request = ComplianceRequest(...).
     Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger. Otherwise assert stable invariants such as success, request identity, audit growth, and non-negative or relative scores.
     Do not hard-code exact response.status labels such as accepted, rejected, pending_review, or flagged, and do not hard-code exact risk-summary bucket totals for specific batch items unless the behavior contract or current implementation explicitly defines those triggers.
+    Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests unless the behavior contract or current implementation explicitly defines those triggers.
     Do not duplicate the implementation code in the tests.
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
@@ -1281,6 +2625,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     If derived labels depend on count-based scores and the thresholds are not explicit, do not use borderline counts such as 2 to assert an exact low or medium label. Use 1 for a clear low case, 3 for a clear medium case, or assert only the numeric score.
     Do not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone. Assert those outcomes only when the behavior contract or current implementation explicitly defines the trigger.
     Do not hard-code exact response.status labels such as accepted, rejected, pending_review, or flagged, and do not hard-code exact risk-summary bucket totals for specific batch items unless the behavior contract or current implementation explicitly defines those triggers.
+    Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests unless the behavior contract or current implementation explicitly defines those triggers.
     When an API accepts a request, filter, or payload dict with documented required fields, either supply every required field or omit that optional dict entirely. Do not assume partial filter payloads are accepted unless the contract explicitly marks those keys optional.
     If a service stores the full raw request payload in a field such as request.data, do not assume that field was normalized to only an inner sub-dict. Example: if request_data = {{"id": "req1", "data": {{"field1": "value1"}}}} and intake_request stores ComplianceRequest.data = request_data, assert compliance_request.data == request_data or compliance_request.data["data"] == {{"field1": "value1"}} instead of asserting compliance_request.data == {{"field1": "value1"}}.
     If the API contract does not list a symbol or enum member, do not use it.
@@ -1440,16 +2785,23 @@ Module file: {module_filename}
             else ""
         )
         repair_helper_surface_block = self._repair_helper_surface_block(context)
-        repair_focus_block = self._repair_focus_block(repair_validation_summary)
+        repair_focus_block = self._repair_focus_block(
+            repair_validation_summary,
+            implementation_code,
+            existing_tests,
+        )
         existing_tests_context, repair_instruction = self._existing_tests_context_and_instruction(
             existing_tests=existing_tests,
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
+            implementation_code=implementation_code,
         )
         exact_rebuild_surface_block = self._exact_rebuild_surface_block(
             code_exact_test_contract=code_exact_test_contract,
             repair_validation_summary=repair_validation_summary,
             task_public_contract_anchor=task_public_contract_anchor,
+            existing_tests=existing_tests,
+            implementation_code=implementation_code,
         )
         deterministic_surface_scaffold_block = self._deterministic_surface_scaffold_block(
             module_name=module_name,
@@ -1457,6 +2809,8 @@ Module file: {module_filename}
             code_exact_test_contract=code_exact_test_contract,
             code_test_targets=code_test_targets,
             task_public_contract_anchor=task_public_contract_anchor,
+            implementation_code=implementation_code,
+            repair_validation_summary=repair_validation_summary,
         )
         task_public_contract_anchor_block = self._task_public_contract_anchor_block(
             task_public_contract_anchor
@@ -1515,6 +2869,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     Do not rely on Python dataclass defaults just because omission would run. If the public API says ComplianceRequest(id, user_id, data, timestamp, status), every constructor call in the suite must pass all five named arguments; do not omit status and rely on the dataclass default.
     Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger. Otherwise assert stable invariants such as success, request identity, audit growth, and non-negative or relative scores.
     Do not hard-code exact response.status labels such as accepted, rejected, pending_review, or flagged, and do not hard-code exact risk-summary bucket totals for specific batch items unless the behavior contract or current implementation explicitly defines those triggers.
+    Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests unless the behavior contract or current implementation explicitly defines those triggers.
     Do not duplicate the implementation code in the tests.
     Assume the module code already exists in `{module_filename}` and keep the tests compact and deterministic.
     Respect the task's line budget and requested scenario count exactly. Prefer top-level test functions and inline setup over class-based suites or extra helper fixtures when the task asks for compact coverage.
@@ -1568,6 +2923,7 @@ Import from `{module_name}` and test the actual public functions and classes fro
     If derived labels depend on count-based scores and the thresholds are not explicit, do not use borderline counts such as 2 to assert an exact low or medium label. Use 1 for a clear low case, 3 for a clear medium case, or assert only the numeric score.
     Do not infer derived status transitions, escalation flags, or report counters from suggestive field names, keywords, or audit vocabulary alone. Assert those outcomes only when the behavior contract or current implementation explicitly defines the trigger.
     Do not hard-code exact response.status labels such as accepted, rejected, pending_review, or flagged, and do not hard-code exact risk-summary bucket totals for specific batch items unless the behavior contract or current implementation explicitly defines those triggers.
+    Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests unless the behavior contract or current implementation explicitly defines those triggers.
     When an API accepts a request, filter, or payload dict with documented required fields, either supply every required field or omit that optional dict entirely. Do not assume partial filter payloads are accepted unless the contract explicitly marks those keys optional.
     If validation or scoring guards a nested field with isinstance(...) before using it, a wrong nested field type is usually ignored rather than raising. Example: if calculate_risk_score only adds risk_factor when isinstance(request_data["risk_factor"], (int, float)), then risk_factor="invalid" does not raise TypeError; use a wrong top-level type or missing required field for failure coverage instead.
     If a service stores the full raw request payload in a field such as request.data, do not assume that field was normalized to only an inner sub-dict. Example: if request_data = {{"id": "req1", "data": {{"field1": "value1"}}}} and intake_request stores ComplianceRequest.data = request_data, assert compliance_request.data == request_data or compliance_request.data["data"] == {{"field1": "value1"}} instead of asserting compliance_request.data == {{"field1": "value1"}}.

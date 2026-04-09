@@ -10,6 +10,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - Documented the four-view boundary model for the active runtime/public split: internal persisted workflow state, `ProjectSnapshot`, `AgentView`, and internal runtime telemetry.
 - Added a dedicated `ProjectState.internal_runtime_telemetry()` read path for exact operator-facing runtime telemetry after moving exact workflow and per-task runtime telemetry off the public snapshot path.
+- Added `docs/go-live-policy.md`, defining repository-owned SLOs, error budgets, and staged gates for canary and production go-live decisions.
 
 ### Changed
 
@@ -22,6 +23,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - Package metadata now declares OpenAI SDK compatibility through the current validated 2.x runtime line, aligning the published dependency constraint with the tested provider implementation.
 - Repository docs now describe prompt-facing context as filtered `AgentView` data instead of raw `ProjectSnapshot` serialization.
 - Repository docs now point operator-facing observability to `ProjectState.internal_runtime_telemetry()` and describe the public snapshot, public execution-event, and provider-matrix telemetry removals as completed local behavior.
+- Repository docs now distinguish package-release readiness from production go-live readiness, anchoring deployment claims to the new repository-owned go-live policy.
 - Prompt-facing completed-task outputs, semantic aliases, and planned-module hints are now scoped to the active task dependency closure instead of leaking unrelated finished-task context.
 - Public snapshots now expose `has_updated_at` instead of the exact top-level `updated_at` timestamp while preserving the internal exact update timestamp.
 - Public snapshots now expose `has_started_at` and `has_finished_at` instead of the exact top-level workflow `started_at` and `finished_at` timestamps while preserving the exact public workflow event timestamps.

@@ -216,6 +216,16 @@ Agent prompts consume `AgentView`, not the raw `ProjectSnapshot`. Public snapsho
 
 See `docs/architecture.md`, `docs/workflows.md`, and `docs/persistence.md` for the detailed boundary rules.
 
+## Operational Readiness
+
+Tagged package releases and production go-live are separate decisions in this repository.
+
+- The current public line remains Alpha.
+- A workflow is only successful when its declared acceptance criteria pass end to end.
+- Production go-live remains blocked until the repository-owned SLO, error-budget, and staged go-live gates in `docs/go-live-policy.md` are satisfied.
+
+Use `RELEASE.md` for package publication and `docs/go-live-policy.md` for production-readiness policy.
+
 ## Roadmap
 
 - [ ] Add vector store for long-term memory
@@ -245,6 +255,7 @@ The published package metadata currently reflects the open-source distribution l
 
 - **Repository**: [github.com/alexandrade1978/kycortex-agents](https://github.com/alexandrade1978/kycortex-agents)
 - **Documentation**: [docs/README.md](docs/README.md)
+- **Go-Live Policy**: [docs/go-live-policy.md](docs/go-live-policy.md)
 - **Commercial Licensing**: [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)
 - **Contributor Rights**: [CONTRIBUTOR_RIGHTS.md](CONTRIBUTOR_RIGHTS.md)
 - **Release Guide**: [RELEASE.md](RELEASE.md)

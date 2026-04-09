@@ -433,6 +433,306 @@ def test_run_task_exposes_generated_code_module_context_to_downstream_agents(tmp
     assert agent.last_context["module_run_command"] == ""
 
 
+def test_build_context_uses_raw_content_fallback_for_completed_tasks_and_semantic_aliases(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="",
+            output_payload={
+                "summary": "Architecture",
+                "raw_content": "ARCHITECTURE DOC",
+                "artifacts": [],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+        )
+    )
+
+    context = orchestrator._build_context(project.tasks[1], project)
+
+    assert context["snapshot"]["task_results"]["arch"]["has_output"] is True
+    assert context["completed_tasks"]["arch"] == "ARCHITECTURE DOC"
+    assert context["architecture"] == "ARCHITECTURE DOC"
+
+
+def test_build_context_falls_back_to_raw_code_context_when_code_artifacts_are_missing(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    raw_code = "def main():\n    return 1\n"
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=raw_code,
+            output_payload={
+                "summary": "def main():",
+                "raw_content": raw_code,
+                "artifacts": [],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    context = orchestrator._build_context(project.tasks[1], project)
+
+    assert context["code"] == raw_code
+    assert context["planned_module_name"] == "code_implementation"
+    assert context["planned_module_filename"] == "code_implementation.py"
+    assert context["module_name"] == "code_implementation"
+    assert context["module_filename"] == "code_implementation.py"
+    assert context["code_artifact_path"] == "artifacts/code_implementation.py"
+    assert "Functions:" in context["code_public_api"]
+    assert "Exact test contract:" in context["code_exact_test_contract"]
+    assert "Test targets:" in context["code_test_targets"]
+
+
+def test_build_context_keeps_code_repair_module_surfaces_aligned_to_origin_task(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def main():\n    return 1\n",
+            output_payload={
+                "summary": "def main():",
+                "raw_content": "def main():\n    return 1\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def main():\n    return 1\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair implementation",
+            description="Repair the implementation",
+            assigned_to="code_engineer",
+            dependencies=["code"],
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+            },
+        )
+    )
+
+    context = orchestrator._build_context(project.tasks[1], project)
+
+    assert context["planned_module_name"] == "code_implementation"
+    assert context["planned_module_filename"] == "code_implementation.py"
+    assert context["module_name"] == "code_implementation"
+    assert context["module_filename"] == "code_implementation.py"
+    assert "code__repair_1_implementation" not in context["module_name"]
+
+
+def test_build_context_uses_raw_content_fallback_for_budget_decomposition_brief(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.FAILED.value,
+            dependencies=["arch"],
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1__budget_plan",
+            title="Budget plan for Implementation",
+            description="Write code",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="",
+            output_payload={
+                "summary": "Budget plan",
+                "raw_content": "- Keep the public facade.\n- Remove optional helpers.",
+                "artifacts": [],
+                "decisions": [],
+                "metadata": {},
+            },
+            repair_context={"decomposition_mode": "budget_compaction_planner"},
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": "Generated code validation:\n- Verdict: FAIL",
+                "budget_decomposition_plan_task_id": "code__repair_1__budget_plan",
+            },
+        )
+    )
+
+    context = orchestrator._build_context(project.tasks[3], project)
+
+    assert context["snapshot"]["task_results"]["code__repair_1__budget_plan"]["has_output"] is True
+    assert context["completed_tasks"]["code__repair_1__budget_plan"].startswith("- Keep the public facade")
+    assert context["budget_decomposition_brief"].startswith("- Keep the public facade")
+
+
+def test_build_context_keeps_downstream_repaired_code_module_surfaces_aligned_to_origin_task(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def main():\n    return 0\n",
+            output_payload={
+                "summary": "def main():",
+                "raw_content": "def main():\n    return 0\n",
+                "artifacts": [],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            status=TaskStatus.FAILED.value,
+            output="Generated test validation failed",
+            last_error="Generated test validation failed",
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            output_payload={
+                "summary": "tests",
+                "raw_content": "from code_implementation import main",
+                "artifacts": [],
+                "decisions": [],
+                "metadata": {
+                    "validation": {
+                        "test_execution": {"available": True, "ran": True, "returncode": 1, "summary": "1 failed"}
+                    }
+                },
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair implementation",
+            description="Repair the implementation",
+            assigned_to="code_engineer",
+            dependencies=["code"],
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            status=TaskStatus.DONE.value,
+            output="def main():\n    return 1\n",
+            output_payload={
+                "summary": "def main():",
+                "raw_content": "def main():\n    return 1\n",
+                "artifacts": [],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests__repair_1",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code__repair_1"],
+            repair_origin_task_id="tests",
+            repair_attempt=1,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "validation_summary": "Generated test validation:\n- Verdict: FAIL",
+                "failed_output": "from code_implementation import main",
+                "failed_artifact_content": "from code_implementation import main",
+            },
+        )
+    )
+
+    context = orchestrator._build_context(project.tasks[3], project)
+
+    assert context["code"] == "def main():\n    return 1\n"
+    assert context["module_name"] == "code_implementation"
+    assert context["module_filename"] == "code_implementation.py"
+    assert context["code_artifact_path"] == "artifacts/code_implementation.py"
+    assert "code__repair_1_implementation" not in context["module_name"]
+
+
 def test_run_task_uses_repair_owner_and_failure_context_for_code_validation(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")
@@ -855,6 +1155,84 @@ def test_validate_code_output_skips_import_validation_for_third_party_imports(tm
     )
 
     assert orchestrator._validate_code_output(output, task=task) is None
+
+
+def test_validate_code_output_rejects_task_public_contract_mismatches(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="code",
+        raw_content=(
+            "class ComplianceService:\n"
+            "    def validate_request(self, data):\n"
+            "        return True\n"
+        ),
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description=(
+            "Write one Python module.\n\n"
+            "Public contract anchor:\n"
+            "- Public facade: ComplianceIntakeService\n"
+            "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+            "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+            "- Supporting validation surface: ComplianceIntakeService.validate_request(request)"
+        ),
+        assigned_to="code_engineer",
+    )
+
+    with pytest.raises(AgentExecutionError, match="task public contract mismatch") as excinfo:
+        orchestrator._validate_code_output(output, task=task)
+
+    message = str(excinfo.value)
+    assert "missing public facade ComplianceIntakeService" in message
+    assert "missing primary request model ComplianceRequest" in message
+    assert "missing required surface ComplianceIntakeService.handle_request" in message
+    contract_preflight = output.metadata["validation"]["task_public_contract_preflight"]
+    assert contract_preflight["passed"] is False
+    assert "missing public facade ComplianceIntakeService" in contract_preflight["issues"]
+
+
+def test_validate_code_output_accepts_matching_task_public_contract_with_optional_request_fields(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="code",
+        raw_content=(
+            "from dataclasses import dataclass\n\n"
+            "@dataclass\n"
+            "class ComplianceRequest:\n"
+            "    request_id: str\n"
+            "    request_type: str\n"
+            "    details: dict[str, str]\n"
+            "    timestamp: str\n"
+            "    status: str = 'pending'\n\n"
+            "class ComplianceIntakeService:\n"
+            "    def handle_request(self, request: ComplianceRequest):\n"
+            "        return request\n\n"
+            "    def validate_request(self, request: ComplianceRequest):\n"
+            "        return True\n"
+        ),
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description=(
+            "Write one Python module.\n\n"
+            "Public contract anchor:\n"
+            "- Public facade: ComplianceIntakeService\n"
+            "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+            "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+            "- Supporting validation surface: ComplianceIntakeService.validate_request(request)"
+        ),
+        assigned_to="code_engineer",
+    )
+
+    assert orchestrator._validate_code_output(output, task=task) is None
+    contract_preflight = output.metadata["validation"]["task_public_contract_preflight"]
+    assert contract_preflight["passed"] is True
+    assert contract_preflight["issues"] == []
 
 
 def test_classify_task_failure_returns_workflow_definition_for_definition_errors(tmp_path):
@@ -1324,6 +1702,34 @@ def test_build_context_includes_test_repair_content_and_summary(tmp_path):
     assert context["test_validation_summary"] == "Generated test validation: failed"
 
 
+def test_build_context_omits_hollow_test_repair_content_from_existing_tests(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    task = Task(
+        id="tests",
+        title="Repair tests",
+        description="Fix the tests",
+        assigned_to="qa_tester",
+        repair_context={
+            "repair_owner": "qa_tester",
+            "validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Tests without assertion-like checks: test_happy_path (line 1)\n"
+                "- Verdict: FAIL"
+            ),
+            "failed_artifact_content": "def test_happy_path():\n    handle_request({'id': '1'})",
+        },
+    )
+    project.add_task(task)
+
+    context = orchestrator._build_context(task, project)
+
+    assert "existing_tests" not in context
+    assert context["test_validation_summary"].startswith("Generated test validation:")
+
+
 def test_build_context_includes_dependency_repair_content_and_summary_without_existing_context(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -1478,6 +1884,37 @@ def test_build_code_validation_summary_includes_import_validation(tmp_path):
 
     assert "Module import: FAIL" in summary
     assert "Import summary: TypeError: non-default argument 'value' follows default argument" in summary
+
+
+def test_build_code_validation_summary_includes_task_public_contract_preflight(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_code_validation_summary(
+        {"syntax_ok": True, "third_party_imports": []},
+        "",
+        task_public_contract_preflight={
+            "anchor_present": True,
+            "passed": False,
+            "public_facade": "ComplianceIntakeService",
+            "primary_request_model": "ComplianceRequest(request_id, request_type, details, timestamp)",
+            "required_surfaces": [
+                "ComplianceIntakeService.handle_request(request)",
+                "ComplianceIntakeService.validate_request(request)",
+            ],
+            "issues": [
+                "missing public facade ComplianceIntakeService",
+                "missing required surface ComplianceIntakeService.handle_request",
+            ],
+        },
+    )
+
+    assert "Task public contract anchor: present" in summary
+    assert "Task public contract: FAIL" in summary
+    assert "Public facade anchor: ComplianceIntakeService" in summary
+    assert "Primary request model anchor: ComplianceRequest(request_id, request_type, details, timestamp)" in summary
+    assert "Required public surfaces: ComplianceIntakeService.handle_request(request), ComplianceIntakeService.validate_request(request)" in summary
+    assert "Task public contract mismatches: missing public facade ComplianceIntakeService, missing required surface ComplianceIntakeService.handle_request" in summary
 
 
 def test_build_code_public_api_marks_constructor_fields_explicit_for_tests(tmp_path):
@@ -2574,6 +3011,124 @@ def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path)
     assert analysis["unknown_module_symbols"] == []
 
 
+def test_analyze_test_module_tracks_assertion_strength(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = orchestrator._analyze_python_module(
+        "def add(a, b):\n"
+        "    return a + b\n"
+    )
+    test_content = (
+        "import pytest\n"
+        "from module_under_test import add\n\n"
+        "def test_add():\n"
+        "    assert add(1, 2) == 3\n\n"
+        "def test_type_error():\n"
+        "    with pytest.raises(TypeError):\n"
+        "        add('a', 2)\n\n"
+        "def test_hollow_smoke():\n"
+        "    add(2, 3)\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["assertion_like_count"] == 2
+    assert len(analysis["tests_without_assertions"]) == 1
+    assert analysis["tests_without_assertions"][0].startswith("test_hollow_smoke (line ")
+
+
+def test_analyze_test_module_flags_batch_audit_length_contract_overreach(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = orchestrator._analyze_python_module(
+        "class ComplianceRequest:\n"
+        "    pass\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self):\n"
+        "        self.audit_log = []\n\n"
+        "    def handle_request(self, request):\n"
+        "        self.audit_log.append(request)\n"
+    )
+    test_content = (
+        "from module_under_test import ComplianceIntakeService, ComplianceRequest\n\n"
+        "def test_batch_processing():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    requests = [ComplianceRequest(), ComplianceRequest()]\n"
+        "    for request in requests:\n"
+        "        service.handle_request(request)\n"
+        "    assert len(service.audit_log) == 3\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["contract_overreach_signals"] == [
+        "exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)"
+    ]
+
+
+def test_analyze_test_module_flags_validation_failure_score_state_emptiness_contract_overreach(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = orchestrator._analyze_python_module(
+        "class ComplianceRequest:\n"
+        "    pass\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self):\n"
+        "        self.risk_scores = {}\n\n"
+        "    def handle_request(self, request):\n"
+        "        return 'rejected'\n\n"
+        "    def get_risk_scores(self):\n"
+        "        return self.risk_scores\n"
+    )
+    test_content = (
+        "from module_under_test import ComplianceIntakeService, ComplianceRequest\n\n"
+        "def test_validation_failure():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    request = ComplianceRequest()\n"
+        "    service.handle_request(request)\n"
+        "    assert len(service.get_risk_scores()) == 0\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+
+    assert analysis["contract_overreach_signals"] == [
+        "exact validation-failure score-state emptiness assertion on 'service.get_risk_scores()' in test_validation_failure (line 7) assumes rejected input leaves internal score state empty"
+    ]
+
+
+def test_analyze_test_module_allows_validation_failure_score_state_assertion_when_behavior_contract_defines_it(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    module_analysis = orchestrator._analyze_python_module(
+        "class ComplianceRequest:\n"
+        "    pass\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self):\n"
+        "        self.risk_scores = {}\n\n"
+        "    def handle_request(self, request):\n"
+        "        return 'rejected'\n\n"
+        "    def get_risk_scores(self):\n"
+        "        return self.risk_scores\n"
+    )
+    test_content = (
+        "from module_under_test import ComplianceIntakeService, ComplianceRequest\n\n"
+        "def test_validation_failure():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    request = ComplianceRequest()\n"
+        "    service.handle_request(request)\n"
+        "    assert len(service.get_risk_scores()) == 0\n"
+    )
+
+    analysis = orchestrator._analyze_test_module(
+        test_content,
+        "module_under_test",
+        module_analysis,
+        "Behavior contract:\n- handle_request appends to risk_scores only for valid requests",
+    )
+
+    assert analysis["contract_overreach_signals"] == []
+
+
 def test_analyze_test_module_flags_helper_surface_usages_when_workflow_class_exists(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -3476,6 +4031,52 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
         )
 
 
+def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(summary="tests", raw_content="def test_one():\n    pass\n")
+
+    monkeypatch.setattr(
+        orchestrator,
+        "_analyze_test_module",
+        lambda *args, **kwargs: {
+            "syntax_ok": True,
+            "top_level_test_count": 2,
+            "fixture_count": 0,
+            "assertion_like_count": 0,
+            "tests_without_assertions": ["test_one (line 1)", "test_two (line 4)"],
+        },
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_execute_generated_tests",
+        lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_completion_diagnostics_from_output",
+        lambda *args, **kwargs: {"likely_truncated": False, "hit_token_limit": False},
+    )
+
+    with pytest.raises(
+        AgentExecutionError,
+        match="tests without assertion-like checks: test_one \\(line 1\\), test_two \\(line 4\\)",
+    ):
+        orchestrator._validate_test_output(
+            {
+                "module_name": "code_implementation",
+                "code": "def ok():\n    return 1",
+            },
+            output,
+            task=Task(
+                id="tests",
+                title="Tests",
+                description="Write tests",
+                assigned_to="qa_tester",
+            ),
+        )
+
+
 def test_call_argument_value_handles_keywords_constructors_and_non_name_callables(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -3738,6 +4339,239 @@ def test_build_test_validation_summary_includes_exact_limits_and_fixture_budget(
     assert "Top-level test functions: 2/2" in exact_summary
     assert "Fixture count: 1/1" in exact_summary
     assert "Top-level test functions: 2/3 max" in max_summary
+
+
+def test_build_test_validation_summary_reports_assertion_strength_failures(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 2,
+            "fixture_count": 0,
+            "assertion_like_count": 0,
+            "tests_without_assertions": ["test_one (line 1)", "test_two (line 4)"],
+        }
+    )
+
+    assert "Assertion-like checks: 0" in summary
+    assert "Tests without assertion-like checks: test_one (line 1), test_two (line 4)" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_contract_overreach_signals(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+            "contract_overreach_signals": [
+                "exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)"
+            ],
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_batch_processing - AssertionError: assert 'escalated' == 'blocked'\n"
+                "E   AssertionError: assert 'escalated' == 'blocked'\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)" in summary
+    assert "exact status/action label mismatch ('escalated' vs 'blocked') suggests an unsupported threshold assumption" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_runtime_contract_overreach_from_membership_assertion(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_happy_path - AssertionError: assert 'Request ID: request_id-1, Outcome: blocked' in 'Request ID: request_id-1, Outcome: approved, Timestamp: 2024-01-01 00:00:00'\n"
+                "E   AssertionError: assert 'Request ID: request_id-1, Outcome: blocked' in 'Request ID: request_id-1, Outcome: approved, Timestamp: 2024-01-01 00:00:00'\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact status/action label mismatch ('blocked' vs 'approved') suggests an unsupported threshold assumption" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_runtime_contract_overreach_from_extended_status_vocabulary(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_happy_path - AssertionError: assert 'straight-through review' == 'fraud escalation'\n"
+                "E   AssertionError: assert 'straight-through review' == 'fraud escalation'\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact status/action label mismatch ('straight_through_review' vs 'fraud_escalation') suggests an unsupported threshold assumption" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_runtime_contract_overreach_from_plain_straight_through_label(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_happy_path - AssertionError: assert 'straight-through' == 'manual investigation'\n"
+                "E   AssertionError: assert 'straight-through' == 'manual investigation'\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact status/action label mismatch ('straight_through_review' vs 'manual_investigation') suggests an unsupported threshold assumption" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_runtime_contract_overreach_from_returns_action_labels(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_happy_path - AssertionError: assert 'abuse escalation' == 'auto-approve'\n"
+                "E   AssertionError: assert 'abuse escalation' == 'auto-approve'\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact status/action label mismatch ('abuse_escalation' vs 'auto_approve') suggests an unsupported threshold assumption" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_runtime_contract_overreach_from_plain_fraud_label(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_happy_path - AssertionError: assert 'fraud' == 'straight-through'\n"
+                "E   AssertionError: assert 'fraud' == 'straight-through'\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact status/action label mismatch ('fraud' vs 'straight_through_review') suggests an unsupported threshold assumption" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_runtime_contract_overreach_from_return_shape_attribute_assumption(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_happy_path - AttributeError: 'str' object has no attribute 'request_id'\n"
+                "E   AttributeError: 'str' object has no attribute 'request_id'\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact return-shape attribute assumption ('.request_id' on 'str') suggests an unsupported wrapper expectation" in summary
+    assert summary.endswith("- Verdict: FAIL")
+
+
+def test_build_test_validation_summary_reports_runtime_contract_overreach_from_action_map_key_assumption(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+
+    summary = orchestrator._build_test_validation_summary(
+        {
+            "syntax_ok": True,
+            "top_level_test_count": 1,
+            "fixture_count": 0,
+        },
+        {
+            "available": True,
+            "ran": True,
+            "returncode": 1,
+            "summary": "1 failed",
+            "stdout": (
+                "FAILED tests_tests.py::test_happy_path - AssertionError: assert 'request_id-1' in {'78e597ab-006b-4ab1-b817-764895d13fbf': ReviewAction(action_id='78e597ab-006b-4ab1-b817-764895d13fbf', action_type='approve', details=[], timestamp=datetime.datetime(2026, 4, 9, 1, 26, 43, 908194))}\n"
+                "E   AssertionError: assert 'request_id-1' in {'78e597ab-006b-4ab1-b817-764895d13fbf': ReviewAction(action_id='78e597ab-006b-4ab1-b817-764895d13fbf', action_type='approve', details=[], timestamp=datetime.datetime(2026, 4, 9, 1, 26, 43, 908194))}\n"
+                "E    +  where 'request_id-1' = VendorSubmission(request_id='request_id-1', request_type='onboarding', details={'service_category': 'IT', 'due_diligence_evidence': ['doc1.pdf', 'doc2.pdf']}, timestamp=datetime.datetime(2024, 1, 1, 0, 0)).request_id\n"
+                "E    +  and   {'78e597ab-006b-4ab1-b817-764895d13fbf': ReviewAction(action_id='78e597ab-006b-4ab1-b817-764895d13fbf', action_type='approve', details=[], timestamp=datetime.datetime(2026, 4, 9, 1, 26, 43, 908194))} = <code__repair_1_implementation.VendorRiskReviewService object at 0x7ee28d95a120>.review_actions\n"
+            ),
+        },
+    )
+
+    assert "Contract overreach signals: exact internal action-map key assumption for 'review_actions' suggests an unsupported storage-key contract" in summary
+    assert summary.endswith("- Verdict: FAIL")
 
 
 def test_run_task_fails_qa_tester_when_compact_suite_imports_helper_surfaces(tmp_path):
@@ -4351,6 +5185,318 @@ def test_build_agent_input_uses_repair_defaults_when_optional_fields_are_blank(t
     assert f"Previous failure category: {FailureCategory.UNKNOWN.value}" in agent_input.task_description
     assert "Previous failure message:" not in agent_input.task_description
     assert "Validation summary:" not in agent_input.task_description
+
+
+def test_build_agent_input_includes_source_failure_metadata_for_code_repair(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "original_assigned_to": "code_engineer",
+                "source_failure_task_id": "tests",
+                "source_failure_category": FailureCategory.TEST_VALIDATION.value,
+                "instruction": "Repair the generated Python module so it satisfies the existing valid pytest suite and the documented contract without shifting the failure onto the tests.",
+                "validation_summary": "Generated test validation:\n- Verdict: FAIL",
+                "failed_output": "def score():\n    return False",
+                "failed_artifact_content": "def score():\n    return False",
+                "existing_tests": "from code_implementation import score",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "Previous failure category: code_validation" in agent_input.task_description
+    assert "Source failure task: tests" in agent_input.task_description
+    assert "Source failure category: test_validation" in agent_input.task_description
+    assert agent_input.context["repair_context"] == {
+        "cycle": 1,
+        "failure_category": FailureCategory.CODE_VALIDATION.value,
+        "repair_owner": "code_engineer",
+        "original_assigned_to": "code_engineer",
+        "source_failure_task_id": "tests",
+        "source_failure_category": FailureCategory.TEST_VALIDATION.value,
+    }
+    assert agent_input.context["existing_code"] == "def score():\n    return False"
+    assert agent_input.context["existing_tests"] == "from code_implementation import score"
+    assert agent_input.context["repair_validation_summary"] == "Generated test validation:\n- Verdict: FAIL"
+
+
+def test_build_code_repair_context_from_test_failure_specializes_internal_constructor_strictness(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output=(
+            "from dataclasses import dataclass\n\n"
+            "@dataclass\n"
+            "class VendorProfile:\n"
+            "    vendor_id: str\n"
+            "    service_category: str\n"
+            "    due_diligence_evidence: list[str]\n"
+            "    is_sanctioned: bool\n"
+            "    certifications: list[str]\n"
+            "    critical_service: bool\n"
+            "    incidents: list[str]\n\n"
+            "def validate_request(request):\n"
+            "    required_fields = ['service_category', 'due_diligence_evidence']\n"
+            "    return all(field in request.details for field in required_fields)\n"
+        ),
+        output_payload={
+            "summary": "from dataclasses import dataclass",
+            "raw_content": (
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class VendorProfile:\n"
+                "    vendor_id: str\n"
+                "    service_category: str\n"
+                "    due_diligence_evidence: list[str]\n"
+                "    is_sanctioned: bool\n"
+                "    certifications: list[str]\n"
+                "    critical_service: bool\n"
+                "    incidents: list[str]\n\n"
+                "def validate_request(request):\n"
+                "    required_fields = ['service_category', 'due_diligence_evidence']\n"
+                "    return all(field in request.details for field in required_fields)\n"
+            ),
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": (
+                        "from dataclasses import dataclass\n\n"
+                        "@dataclass\n"
+                        "class VendorProfile:\n"
+                        "    vendor_id: str\n"
+                        "    service_category: str\n"
+                        "    due_diligence_evidence: list[str]\n"
+                        "    is_sanctioned: bool\n"
+                        "    certifications: list[str]\n"
+                        "    critical_service: bool\n"
+                        "    incidents: list[str]\n\n"
+                        "def validate_request(request):\n"
+                        "    required_fields = ['service_category', 'due_diligence_evidence']\n"
+                        "    return all(field in request.details for field in required_fields)\n"
+                    ),
+                }
+            ],
+            "metadata": {},
+        },
+    )
+    test_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.17s",
+        output_payload={
+            "summary": "import pytest",
+            "raw_content": "import pytest",
+            "artifacts": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {"syntax_ok": True},
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "2 failed, 1 passed in 0.17s",
+                        "stdout": (
+                            "FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() missing 4 required positional arguments: 'is_sanctioned', 'certifications', 'critical_service', and 'incidents'\n"
+                        ),
+                    },
+                }
+            },
+        },
+    )
+
+    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        {"cycle": 1},
+    )
+
+    assert "valid happy-path and batch requests do not fail while constructing internal models" in repair_context["instruction"]
+    assert "Do not shift new required payload fields onto the tests" in repair_context["instruction"]
+    assert "The current validator only requires service_category and due_diligence_evidence" in repair_context["instruction"]
+    assert "VendorProfile(...) still requires is_sanctioned, certifications, critical_service, and incidents" in repair_context["instruction"]
+    assert "Derive those internal values or give them safe defaults" in repair_context["instruction"]
+
+
+def test_build_code_repair_context_from_test_failure_specializes_duplicate_constructor_binding(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output=(
+            "def build_vendor_profile(request):\n"
+            "    vendor_id = request.details['vendor_id']\n"
+            "    return VendorProfile(vendor_id, **request.details)\n"
+        ),
+        output_payload={
+            "summary": "def build_vendor_profile(request):",
+            "raw_content": (
+                "def build_vendor_profile(request):\n"
+                "    vendor_id = request.details['vendor_id']\n"
+                "    return VendorProfile(vendor_id, **request.details)\n"
+            ),
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": (
+                        "def build_vendor_profile(request):\n"
+                        "    vendor_id = request.details['vendor_id']\n"
+                        "    return VendorProfile(vendor_id, **request.details)\n"
+                    ),
+                }
+            ],
+            "metadata": {},
+        },
+    )
+    test_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
+        output_payload={
+            "summary": "import pytest",
+            "raw_content": "import pytest",
+            "artifacts": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {"syntax_ok": True},
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "2 failed, 1 passed in 0.19s",
+                        "stdout": (
+                            "FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'\n"
+                        ),
+                    },
+                }
+            },
+        },
+    )
+
+    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        {"cycle": 1},
+    )
+
+    assert "valid happy-path and batch requests do not fail because the same constructor field is bound twice" in repair_context["instruction"]
+    assert "passes vendor_id twice to VendorProfile(...)" in repair_context["instruction"]
+    assert "Do not pass vendor_id both positionally and through **request.details" in repair_context["instruction"]
+    assert "each constructor field is bound exactly once" in repair_context["instruction"]
+
+
+def test_build_code_repair_context_from_test_failure_specializes_missing_object_attribute(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output=(
+            "from dataclasses import dataclass\n\n"
+            "@dataclass\n"
+            "class VendorProfile:\n"
+            "    certifications: list[str]\n"
+            "    incidents: list[str]\n\n"
+            "def score(profile):\n"
+            "    return profile.expired_certifications\n"
+        ),
+        output_payload={
+            "summary": "from dataclasses import dataclass",
+            "raw_content": (
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class VendorProfile:\n"
+                "    certifications: list[str]\n"
+                "    incidents: list[str]\n\n"
+                "def score(profile):\n"
+                "    return profile.expired_certifications\n"
+            ),
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": (
+                        "from dataclasses import dataclass\n\n"
+                        "@dataclass\n"
+                        "class VendorProfile:\n"
+                        "    certifications: list[str]\n"
+                        "    incidents: list[str]\n\n"
+                        "def score(profile):\n"
+                        "    return profile.expired_certifications\n"
+                    ),
+                }
+            ],
+            "metadata": {},
+        },
+    )
+    test_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.27s",
+        output_payload={
+            "summary": "import pytest",
+            "raw_content": "import pytest",
+            "artifacts": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {"syntax_ok": True},
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "2 failed, 1 passed in 0.27s",
+                        "stdout": (
+                            "FAILED tests_tests.py::test_happy_path - AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                        ),
+                    },
+                }
+            },
+        },
+    )
+
+    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        {"cycle": 1},
+    )
+
+    assert "valid happy-path and batch requests do not fail on missing internal attributes" in repair_context["instruction"]
+    assert "reads VendorProfile.expired_certifications even though VendorProfile only defines certifications and incidents" in repair_context["instruction"]
+    assert "Rename the access to an existing field or define and derive that attribute consistently on the model" in repair_context["instruction"]
+    assert "If the rewritten module keeps .expired_certifications anywhere, VendorProfile must declare expired_certifications" in repair_context["instruction"]
+    assert "remove every undeclared read of .expired_certifications" in repair_context["instruction"]
+    assert "the closest declared field here is certifications" in repair_context["instruction"]
+    assert "prefer replacing VendorProfile.expired_certifications with VendorProfile.certifications" in repair_context["instruction"]
 
 
 def test_validate_agent_resolution_accepts_known_registry(tmp_path):
@@ -7455,6 +8601,7 @@ def test_run_task_redacts_sensitive_pytest_validation_output_in_live_state(tmp_p
         orchestrator.run_task(project.tasks[1], project)
 
     assert project.tasks[1].output is not None
+    assert project.tasks[1].output_payload is not None
     assert "sk-secret-123456" not in project.tasks[1].output
     assert "sk-ant-secret-987654" not in project.tasks[1].output
     test_execution = project.tasks[1].output_payload["metadata"]["validation"]["test_execution"]
@@ -8447,6 +9594,61 @@ def test_build_context_compacts_architecture_for_low_budget_code_tasks_with_anch
     assert "- Public facade: ComplianceIntakeService" in context["architecture"]
     assert "Stay comfortably under 300 lines" in context["architecture"]
     assert 'main() plus a literal if __name__ == "__main__": block' in context["architecture"]
+    assert context["arch"] == architecture_output
+    assert context["completed_tasks"]["arch"] == architecture_output
+
+
+def test_build_context_compacts_architecture_for_code_repairs_with_anchor(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), max_tokens=3200)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    architecture_output = (
+        "# Architecture\n\n"
+        "Illustrative code that should not override repair evidence.\n\n"
+        "```python\n"
+        "class VendorProfile:\n"
+        "    certifications: list[str]\n\n"
+        "def score(profile):\n"
+        "    return profile.expired_certifications\n"
+        "```"
+    )
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output=architecture_output,
+        )
+    )
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description=(
+            "Write one Python module for the service.\n\n"
+            "Public contract anchor:\n"
+            "- Public facade: VendorRiskReviewService\n"
+            "- Primary request model: VendorSubmission(request_id, request_type, details, timestamp)\n"
+            "- Required request workflow: VendorRiskReviewService.handle_request(request)\n"
+            "- Supporting validation surface: VendorRiskReviewService.validate_request(request)"
+        ),
+        assigned_to="code_engineer",
+        dependencies=["arch"],
+        repair_context={
+            "cycle": 1,
+            "failure_category": FailureCategory.CODE_VALIDATION.value,
+            "validation_summary": "Generated test validation:\n- Pytest execution: FAIL\n- Verdict: FAIL",
+        },
+    )
+    project.add_task(code_task)
+
+    orchestrator = Orchestrator(config)
+    context = orchestrator._build_context(code_task, project)
+
+    assert context["architecture"].startswith("Repair-focused architecture summary:")
+    assert "Do not copy illustrative code blocks over the failing implementation" in context["architecture"]
+    assert "prefer the existing failing module, the validation summary, and the cited pytest details" in context["architecture"]
+    assert "return profile.expired_certifications" not in context["architecture"]
     assert context["arch"] == architecture_output
     assert context["completed_tasks"]["arch"] == architecture_output
 
@@ -10573,6 +11775,156 @@ def test_execute_workflow_can_chain_new_failed_task_within_active_repair_cycle(t
     assert any(event["event"] == "task_repair_chained" and event["task_id"] == "tests" for event in project.execution_events)
 
 
+def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_failure(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+    )
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.repair_history = [
+        {
+            "cycle": 1,
+            "started_at": "2026-03-22T10:06:00+00:00",
+            "reason": "resume_failed_tasks",
+            "failure_category": FailureCategory.CODE_VALIDATION.value,
+            "failed_task_ids": ["code"],
+            "budget_remaining": 0,
+        }
+    ]
+    repaired_code = (
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n"
+        "from typing import Dict, List\n\n"
+        "@dataclass\n"
+        "class VendorSubmission:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: Dict\n"
+        "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+        "@dataclass\n"
+        "class VendorProfile:\n"
+        "    vendor_id: str\n"
+        "    service_category: str\n"
+        "    due_diligence_evidence: List[str]\n"
+        "    is_critical_service: bool\n"
+        "    sanctioned_regions: List[str]\n"
+        "    certifications: List[str]\n"
+        "    incidents: List[str]\n\n"
+        "def score(profile: VendorProfile) -> int:\n"
+        "    return len(profile.expired_certifications)\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=repaired_code,
+            output_payload={
+                "summary": "from dataclasses import dataclass, field",
+                "raw_content": repaired_code,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "content": repaired_code,
+                    }
+                ],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair implementation",
+            description="Repair code",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            status=TaskStatus.DONE.value,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "instruction": (
+                    "Repair the generated Python module by reordering any dataclass fields that currently place a defaulted field before a required field."
+                ),
+                "validation_summary": "Generated code validation:\n- Module import: FAIL",
+            },
+            output=repaired_code,
+            output_payload={
+                "summary": "from dataclasses import dataclass, field",
+                "raw_content": repaired_code,
+                "artifacts": [
+                    {
+                        "name": "code__repair_1_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "content": repaired_code,
+                    }
+                ],
+                "metadata": {},
+            },
+            completed_at="2026-03-22T10:07:00+00:00",
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            status=TaskStatus.FAILED.value,
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.21s",
+            output_payload={
+                "summary": "import pytest",
+                "raw_content": "import pytest",
+                "artifacts": [],
+                "metadata": {
+                    "validation": {
+                        "module_filename": "code_implementation.py",
+                        "test_filename": "tests_tests.py",
+                        "pytest_failure_origin": "code_under_test",
+                        "test_analysis": {"syntax_ok": True},
+                        "test_execution": {
+                            "available": True,
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "2 failed, 1 passed in 0.21s",
+                            "stdout": (
+                                "FAILED tests_tests.py::test_happy_path - AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                                "FAILED tests_tests.py::test_batch_processing - AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                            ),
+                        },
+                    }
+                },
+            },
+        )
+    )
+
+    assert orchestrator._queue_active_cycle_repair(project, require_task(project, "tests")) is True
+
+    tests_task = require_task(project, "tests")
+    code_repair_task = require_task(project, "code__repair_1")
+    tests_repair_task = require_task(project, "tests__repair_1")
+    assert "code__repair_1" in tests_task.dependencies
+    assert code_repair_task.status == TaskStatus.PENDING.value
+    assert "missing internal attributes" in code_repair_task.repair_context["instruction"]
+    assert "expired_certifications" in code_repair_task.repair_context["instruction"]
+    assert tests_repair_task.status == TaskStatus.PENDING.value
+    assert "code__repair_1" in tests_repair_task.dependencies
+    assert any(
+        event["event"] == "task_requeued" and event["task_id"] == "code__repair_1"
+        for event in project.execution_events
+    )
+
+
 def test_execute_workflow_does_not_spawn_duplicate_repair_task_when_pending_child_exists(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -10648,7 +12000,8 @@ def test_build_agent_input_includes_test_repair_context(tmp_path):
             id="tests",
             title="Repair tests",
             description="Write tests",
-            assigned_to="docs_writer",
+            assigned_to="qa_tester",
+            dependencies=["code"],
             repair_context={
                 "cycle": 1,
                 "failure_category": FailureCategory.TEST_VALIDATION.value,
@@ -10711,7 +12064,8 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
             id="tests",
             title="Repair tests",
             description="Write tests",
-            assigned_to="docs_writer",
+            assigned_to="qa_tester",
+            dependencies=["code"],
             repair_context={
                 "cycle": 1,
                 "failure_category": FailureCategory.TEST_VALIDATION.value,
@@ -10764,6 +12118,75 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
     assert "Never define a custom fixture named request." in agent_input.task_description
     assert "preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in agent_input.task_description
     assert "prefer stable invariants and type or shape assertions" in agent_input.task_description
+
+
+def test_build_agent_input_adds_assertionless_test_repair_priority_with_named_tests(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def handle_request(request):\n    return {'status': 'ok'}",
+            output_payload={
+                "summary": "def handle_request(request):",
+                "raw_content": "def handle_request(request):\n    return {'status': 'ok'}",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def handle_request(request):\n    return {'status': 'ok'}",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Tests without assertion-like checks: test_happy_path (line 5), test_batch_processing (line 16)\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def test_happy_path():\n    handle_request({'id': '1'})",
+                "failed_artifact_content": (
+                    "def test_happy_path():\n"
+                    "    handle_request({'id': '1'})\n\n"
+                    "def test_batch_processing():\n"
+                    "    for request_id in ['1', '2']:\n"
+                    "        handle_request({'id': request_id})"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Every top-level test must contain at least one explicit assertion-like check" in agent_input.task_description
+    assert "The validation summary already flagged these hollow top-level tests: test_happy_path (line 5), test_batch_processing (line 16)." in agent_input.task_description
+    assert "Rewrite each named test so it contains at least one direct contract-backed expectation, or delete the test" in agent_input.task_description
+    assert "Do not keep a call-only happy-path or batch test." in agent_input.task_description
+    assert "assert returned values, raised exceptions, mutated state, audit record growth, or another externally observable outcome" in agent_input.task_description
+    assert "discard the current pytest skeleton and rewrite the entire suite from scratch around only the minimum required scenarios" in agent_input.task_description
+    assert "Preserve only the valid import surface and constructor shapes from the old suite." in agent_input.task_description
 
 
 def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
@@ -10833,6 +12256,563 @@ def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
     assert "If the implementation only checks types such as isinstance(id, str) or isinstance(data, dict)" in agent_input.task_description
     assert "remove exact score totals and threshold-triggered boolean assertions" in agent_input.task_description
     assert "Do not infer derived statuses, labels, or report counters from suggestive field names or keywords alone" in agent_input.task_description
+
+
+def test_test_failure_requires_code_repair_ignores_contract_overreach_static_issue(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        output_payload={
+            "metadata": {
+                "validation": {
+                    "test_analysis": {
+                        "syntax_ok": True,
+                        "contract_overreach_signals": [
+                            "exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)"
+                        ],
+                    },
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "1 failed",
+                        "stdout": "FAILED tests_tests.py::test_batch_processing - AssertionError: assert 2 == 3\n",
+                    },
+                    "pytest_failure_origin": "tests",
+                }
+            }
+        },
+    )
+
+    assert orchestrator._test_failure_requires_code_repair(task) is False
+
+
+def test_test_failure_requires_code_repair_ignores_runtime_contract_overreach_issue(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        output_payload={
+            "metadata": {
+                "validation": {
+                    "test_analysis": {
+                        "syntax_ok": True,
+                    },
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "1 failed",
+                        "stdout": (
+                            "FAILED tests_tests.py::test_happy_path - AssertionError: assert 'Request ID: request_id-1, Outcome: blocked' in 'Request ID: request_id-1, Outcome: approved, Timestamp: 2024-01-01 00:00:00'\n"
+                            "E   AssertionError: assert 'Request ID: request_id-1, Outcome: blocked' in 'Request ID: request_id-1, Outcome: approved, Timestamp: 2024-01-01 00:00:00'\n"
+                        ),
+                    },
+                    "pytest_failure_origin": "tests",
+                }
+            }
+        },
+    )
+
+    assert orchestrator._test_failure_requires_code_repair(task) is False
+
+
+def test_build_agent_input_adds_contract_overreach_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id):\n"
+                "        self.request_id = request_id\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.audit_log = []\n\n"
+                "    def handle_request(self, request):\n"
+                "        self.audit_log.append({'request_id': request.request_id, 'status': 'approved'})\n"
+            ),
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Contract overreach signals: exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8), exact status/action label mismatch ('escalated' vs 'blocked') suggests an unsupported threshold assumption\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_batch_processing():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    requests = [ComplianceRequest('1'), ComplianceRequest('2')]\n"
+                    "    for request in requests:\n"
+                    "        service.handle_request(request)\n"
+                    "    assert len(service.audit_log) == 3\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_batch_processing():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    requests = [ComplianceRequest('1'), ComplianceRequest('2')]\n"
+                    "    for request in requests:\n"
+                    "        service.handle_request(request)\n"
+                    "    assert len(service.audit_log) == 3\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "The previous suite overreached by asserting a batch audit length larger than the visible number of processed items" in agent_input.task_description
+    assert "The previous runtime failure came from a brittle exact status or action label guess" in agent_input.task_description
+    assert "anchor it to a validation-failure path or another trigger that the implementation summary or behavior contract defines directly" in agent_input.task_description
+    assert "Apply the same rule to return-review labels such as auto-approve, manual inspection, and abuse escalation." in agent_input.task_description
+
+
+def test_build_agent_input_adds_validation_failure_score_state_overreach_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self._risk_scores = {}\n\n"
+                "    def handle_request(self, request):\n"
+                "        return 'rejected'\n\n"
+                "    def get_risk_scores(self):\n"
+                "        return dict(self._risk_scores)\n"
+            ),
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Contract overreach signals: exact validation-failure score-state emptiness assertion on 'service.get_risk_scores()' in test_validation_failure (line 7) assumes rejected input leaves internal score state empty\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest('1', 'screening', {}, 1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert len(service.get_risk_scores()) == 0\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest('1', 'screening', {}, 1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert len(service.get_risk_scores()) == 0\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "The previous runtime failure came from assuming a rejected or invalid request leaves internal score state empty." in agent_input.task_description
+    assert "Do not assert len(service.get_risk_scores()) == 0" in agent_input.task_description
+    assert "observable contract-backed effect" in agent_input.task_description
+    assert "remove direct reads of service.get_risk_scores() or similar internal score state" in agent_input.task_description
+
+
+def test_build_agent_input_adds_return_shape_and_did_not_raise_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "class AccessReviewRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class AccessReviewService:\n"
+                "    def validate_request(self, request):\n"
+                "        return request.request_type in {'role assignment', 'system access'} and 'role' in request.details\n\n"
+                "    def handle_request(self, request):\n"
+                "        if not self.validate_request(request):\n"
+                "            raise ValueError('Invalid request')\n"
+                "        return 'approved'\n"
+            ),
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Contract overreach signals: exact return-shape attribute assumption ('.request_id' on 'str') suggests an unsupported wrapper expectation\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - Failed: DID NOT RAISE <class 'ValueError'>\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import AccessReviewRequest, AccessReviewService\n\n"
+                    "def test_happy_path():\n"
+                    "    service = AccessReviewService()\n"
+                    "    request = AccessReviewRequest('1', 'role assignment', {'role': 'admin'}, 1.0)\n"
+                    "    outcome = service.handle_request(request)\n"
+                    "    assert outcome.request_id == '1'\n"
+                    "    assert outcome.outcome == 'approved'\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = AccessReviewService()\n"
+                    "    request = AccessReviewRequest('2', 'role assignment', {'role': 'user'}, 1.0)\n"
+                    "    with pytest.raises(ValueError):\n"
+                    "        service.handle_request(request)\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import AccessReviewRequest, AccessReviewService\n\n"
+                    "def test_happy_path():\n"
+                    "    service = AccessReviewService()\n"
+                    "    request = AccessReviewRequest('1', 'role assignment', {'role': 'admin'}, 1.0)\n"
+                    "    outcome = service.handle_request(request)\n"
+                    "    assert outcome.request_id == '1'\n"
+                    "    assert outcome.outcome == 'approved'\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = AccessReviewService()\n"
+                    "    request = AccessReviewRequest('2', 'role assignment', {'role': 'user'}, 1.0)\n"
+                    "    with pytest.raises(ValueError):\n"
+                    "        service.handle_request(request)\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "The previous runtime failure came from assuming a wrapped object return shape that the current runtime did not provide." in agent_input.task_description
+    assert "Delete `.request_id`, `.outcome`, and similar attribute reads on the workflow return value" in agent_input.task_description
+    assert "If the workflow currently returns a direct string or other primitive" in agent_input.task_description
+    assert "If the same failed suite also overreached on return shape, rebuild happy-path and batch checks around the direct primitive returned by the workflow" in agent_input.task_description
+
+
+def test_build_agent_input_adds_action_map_key_overreach_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "from dataclasses import dataclass, field\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class VendorSubmission:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime\n\n"
+                "@dataclass\n"
+                "class ReviewAction:\n"
+                "    action_id: str\n"
+                "    action_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+                "class VendorRiskReviewService:\n"
+                "    def __init__(self):\n"
+                "        self.review_actions = {}\n"
+                "        self.vendor_profiles = {}\n"
+                "        self.risk_scores = {}\n"
+                "\n"
+                "    def handle_request(self, request):\n"
+                "        action = ReviewAction(action_id='generated-action-id', action_type='approve', details={})\n"
+                "        self.review_actions[action.action_id] = action\n"
+            ),
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Contract overreach signals: exact internal action-map key assumption for 'review_actions' suggests an unsupported storage-key contract\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import VendorRiskReviewService, VendorSubmission\n\n"
+                    "def test_happy_path():\n"
+                    "    service = VendorRiskReviewService()\n"
+                    "    vendor_submission = VendorSubmission('request_id-1', 'onboarding', {'service_category': 'IT'}, 1.0)\n"
+                    "    service.handle_request(vendor_submission)\n"
+                    "    assert vendor_submission.request_id in service.review_actions\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import VendorRiskReviewService, VendorSubmission\n\n"
+                    "def test_happy_path():\n"
+                    "    service = VendorRiskReviewService()\n"
+                    "    vendor_submission = VendorSubmission('request_id-1', 'onboarding', {'service_category': 'IT'}, 1.0)\n"
+                    "    service.handle_request(vendor_submission)\n"
+                    "    assert vendor_submission.request_id in service.review_actions\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "The previous runtime failure came from assuming an internal action or review map used request identity as its key." in agent_input.task_description
+    assert "Do not assert request.request_id in service.review_actions or a similar membership check unless the contract explicitly defines that storage key." in agent_input.task_description
+    assert "If the implementation stores ReviewAction(action_id, ...) or another action record with its own generated identifier" in agent_input.task_description
+    assert "instead of assuming the map key equals request_id, vendor_id, or another request-identity field" in agent_input.task_description
+
+
+def test_build_agent_input_adds_placeholder_boolean_assertion_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def validate_request(self, request):\n"
+                "        return 'documents' in request.details\n\n"
+                "    def handle_request(self, request):\n"
+                "        return None\n"
+            ),
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - assert False | assert False\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest('1', 'individual', {}, 1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert False\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest('1', 'individual', {}, 1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert False  # Assuming handle_request rejects the request\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "Do not leave placeholder assertions such as assert True, assert False, or comments like 'Assuming ...' in the rewritten suite." in agent_input.task_description
+    assert "For validation-failure coverage, prefer an explicit validation result, a documented raised exception, or another observable side effect over a placeholder boolean assertion." in agent_input.task_description
+
+
+def test_build_agent_input_adds_required_evidence_and_nonzero_score_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=(
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.audit_log = []\n"
+                "        self.risk_scores = []\n\n"
+                "    def handle_request(self, request):\n"
+                "        pass\n"
+            ),
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - AssertionError: assert 0 == 1\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_happy_path():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='1', request_type='individual', details={'documents': ['ID']}, timestamp=1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert len(service.risk_scores) == 1\n"
+                    "    assert service.risk_scores[0].score > 0\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='2', request_type='individual', details={'documents': []}, timestamp=1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert len(service.risk_scores) == 0\n\n"
+                    "def test_batch_processing():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    requests = [\n"
+                    "        ComplianceRequest(request_id='3', request_type='individual', details={'documents': ['ID']}, timestamp=1.0),\n"
+                    "        ComplianceRequest(request_id='4', request_type='individual', details={'documents': []}, timestamp=1.0),\n"
+                    "    ]\n"
+                    "    for request in requests:\n"
+                    "        service.handle_request(request)\n"
+                    "    assert len(service.risk_scores) == 1\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_happy_path():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='1', request_type='individual', details={'documents': ['ID']}, timestamp=1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert len(service.risk_scores) == 1\n"
+                    "    assert service.risk_scores[0].score > 0\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    request = ComplianceRequest(request_id='2', request_type='individual', details={'documents': []}, timestamp=1.0)\n"
+                    "    service.handle_request(request)\n"
+                    "    assert len(service.risk_scores) == 0\n\n"
+                    "def test_batch_processing():\n"
+                    "    service = ComplianceIntakeService()\n"
+                    "    requests = [\n"
+                    "        ComplianceRequest(request_id='3', request_type='individual', details={'documents': ['ID']}, timestamp=1.0),\n"
+                    "        ComplianceRequest(request_id='4', request_type='individual', details={'documents': []}, timestamp=1.0),\n"
+                    "    ]\n"
+                    "    for request in requests:\n"
+                    "        service.handle_request(request)\n"
+                    "    assert len(service.risk_scores) == 1\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "every happy-path or valid batch item must include the full required set named by that validator" in agent_input.task_description
+    assert "copy that full list verbatim into every valid happy-path or valid batch payload instead of shrinking it to a representative subset" in agent_input.task_description
+    assert "When the suite already contains a dedicated validation-failure case, do not reuse that invalid missing-document payload inside test_batch_processing" in agent_input.task_description
+    assert "Do not require a strictly positive score or non-empty risk list from a generic happy-path input unless the chosen payload actually exercises a documented risk factor" in agent_input.task_description
 
 
 def test_build_agent_input_adds_audit_log_runtime_repair_priorities(tmp_path):
@@ -11712,6 +13692,51 @@ def test_build_agent_input_adds_assert_not_true_validation_repair_priorities(tmp
     assert "do not use an empty dict or nested None values to fake a validation failure" in agent_input.task_description
 
 
+def test_build_agent_input_adds_assert_true_is_false_validation_repair_priorities(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest summary: 1 failed, 2 passed in 0.08s\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - assert True is False\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "Generated test validation failed: pytest failed: AssertionError: assert True is False",
+                "failed_artifact_content": (
+                    "from code_implementation import ClaimTriageService, ClaimRequest\n\n"
+                    "def test_validation_failure():\n"
+                    "    service = ClaimTriageService()\n"
+                    "    request = ClaimRequest(request_id='request_id-1', request_type='screening', details={'policy_id': 'value', 'claim_type': 'value', 'loss_amount': 'value'}, timestamp=1.0)\n"
+                    "    is_valid = service.validate_request(request)\n"
+                    "    assert is_valid is False\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "If pytest reports `assert not True` or another failed falsy expectation" in agent_input.task_description
+    assert "Apply the same rule to `assert True is False`." in agent_input.task_description
+    assert "Replace it with a clearly wrong top-level type or a truly missing required field" in agent_input.task_description
+    assert "do not use an empty dict or nested None values to fake a validation failure" in agent_input.task_description
+    assert "If the current validator only checks for the presence of required payload fields, do not keep every named key with same-type placeholder values like \"value\" in the rejection case." in agent_input.task_description
+
+
 def test_build_agent_input_adds_exact_numeric_mismatch_repair_priority(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -12137,6 +14162,546 @@ def test_build_agent_input_adds_datetime_import_test_repair_priority(tmp_path):
     assert "If the rewritten suite keeps any `datetime.now()` call or other bare `datetime` reference" in agent_input.task_description
     assert "add `from datetime import datetime` or `import datetime` explicitly at the top of the file before finalizing" in agent_input.task_description
     assert "Otherwise remove every bare datetime reference and use a self-contained timestamp value" in agent_input.task_description
+    assert "The current failed suite still contains bare `datetime` constructor arguments without a valid import" in agent_input.task_description
+    assert "no unresolved bare `datetime` token should remain anywhere in the rewritten file" in agent_input.task_description
+
+
+def test_build_agent_input_does_not_reuse_suite_with_bare_datetime_without_import(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def handle_request(self, request: ComplianceRequest) -> str:\n"
+        "        return request.request_id\n"
+    )
+    failed_artifact_content = (
+        "from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+        "def test_happy_path():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    request = ComplianceRequest(request_id='req-1', request_type='screening', details={'source': 'web'}, timestamp=datetime.now())\n"
+        "    assert service.handle_request(request) == 'req-1'\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "from dataclasses import dataclass",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Undefined local names: datetime (line 5)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": failed_artifact_content,
+                "failed_artifact_content": failed_artifact_content,
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+    tests_task = require_task(project, "tests")
+
+    assert "existing_tests" not in agent_input.context
+    assert not orchestrator._qa_repair_should_reuse_failed_test_artifact(
+        tests_task.repair_context["validation_summary"],
+        code_content,
+        failed_artifact_content,
+    )
+    assert "Do not copy the current failed suite forward unchanged." in agent_input.task_description
+    assert "The current implementation already imports `from datetime import datetime`. Match that style in tests" in agent_input.task_description
+    assert "fixed_time = datetime(2024, 1, 1, 0, 0, 0)" in agent_input.task_description
+
+
+def test_build_agent_input_does_not_reuse_suite_with_incomplete_required_evidence_payload(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    request_id: str\n"
+        "    score: float\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self):\n"
+        "        self.risk_scores = []\n\n"
+        "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+        "        if not self.validate_request(request):\n"
+        "            return\n"
+        "        self.risk_scores.append(RiskScore(request.request_id, 0.0))\n\n"
+        "    def validate_request(self, request: ComplianceRequest) -> bool:\n"
+        "        required_evidence = ['ID', 'Address', 'Proof of Income']\n"
+        "        return all(item in request.details.get('documents', []) for item in required_evidence)\n"
+    )
+    failed_artifact_content = (
+        "from datetime import datetime\n"
+        "from code_implementation import ComplianceIntakeService, ComplianceRequest, RiskScore\n\n"
+        "def test_happy_path():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+        "    request = ComplianceRequest(request_id='req-1', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time)\n"
+        "    service.handle_request(request)\n"
+        "    assert len(service.risk_scores) == 1\n\n"
+        "def test_validation_failure():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+        "    request = ComplianceRequest(request_id='req-2', request_type='individual', details={'documents': []}, timestamp=fixed_time)\n"
+        "    service.handle_request(request)\n"
+        "    assert len(service.risk_scores) == 0\n\n"
+        "def test_batch_processing():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+        "    requests = [\n"
+        "        ComplianceRequest(request_id='req-3', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time),\n"
+        "        ComplianceRequest(request_id='req-4', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time),\n"
+        "    ]\n"
+        "    for request in requests:\n"
+        "        service.handle_request(request)\n"
+        "    assert len(service.risk_scores) == 2\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "from dataclasses import dataclass",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - AssertionError: assert 0 == 1; FAILED tests_tests.py::test_batch_processing - AssertionError: assert 0 == 2\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": failed_artifact_content,
+                "failed_artifact_content": failed_artifact_content,
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+    tests_task = require_task(project, "tests")
+
+    assert "existing_tests" not in agent_input.context
+    assert not orchestrator._qa_repair_should_reuse_failed_test_artifact(
+        tests_task.repair_context["validation_summary"],
+        code_content,
+        failed_artifact_content,
+    )
+    assert "Do not copy the current failed suite forward unchanged." in agent_input.task_description
+    assert "The implementation names the full required evidence list as ['ID', 'Address', 'Proof of Income']." in agent_input.task_description
+    assert "Copy that exact list into every valid happy-path or valid batch payload" in agent_input.task_description
+
+
+def test_build_agent_input_does_not_reuse_suite_with_invalid_batch_missing_document_item(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    request_id: str\n"
+        "    score: float\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self):\n"
+        "        self.risk_scores = []\n\n"
+        "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+        "        if not self.validate_request(request):\n"
+        "            return\n"
+        "        self.risk_scores.append(RiskScore(request.request_id, 0.0))\n\n"
+        "    def validate_request(self, request: ComplianceRequest) -> bool:\n"
+        "        required_evidence = ['ID', 'Address', 'Proof of Income']\n"
+        "        return all(item in request.details.get('documents', []) for item in required_evidence)\n"
+    )
+    failed_artifact_content = (
+        "from datetime import datetime\n"
+        "from code_implementation import ComplianceIntakeService, ComplianceRequest, RiskScore\n\n"
+        "def test_happy_path():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+        "    request = ComplianceRequest(request_id='req-1', request_type='individual', details={'documents': ['ID', 'Address', 'Proof of Income']}, timestamp=fixed_time)\n"
+        "    service.handle_request(request)\n"
+        "    assert len(service.risk_scores) == 1\n\n"
+        "def test_validation_failure():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+        "    request = ComplianceRequest(request_id='req-2', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time)\n"
+        "    service.handle_request(request)\n"
+        "    assert len(service.risk_scores) == 0\n\n"
+        "def test_batch_processing():\n"
+        "    service = ComplianceIntakeService()\n"
+        "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+        "    requests = [\n"
+        "        ComplianceRequest(request_id='req-3', request_type='individual', details={'documents': ['ID', 'Address', 'Proof of Income']}, timestamp=fixed_time),\n"
+        "        ComplianceRequest(request_id='req-4', request_type='corporate', details={'documents': []}, timestamp=fixed_time),\n"
+        "    ]\n"
+        "    for request in requests:\n"
+        "        service.handle_request(request)\n"
+        "    assert len(service.risk_scores) == 2\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "from dataclasses import dataclass",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_batch_processing - AssertionError: assert 1 == 2\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": failed_artifact_content,
+                "failed_artifact_content": failed_artifact_content,
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+    tests_task = require_task(project, "tests")
+
+    assert "existing_tests" not in agent_input.context
+    assert not orchestrator._qa_repair_should_reuse_failed_test_artifact(
+        tests_task.repair_context["validation_summary"],
+        code_content,
+        failed_artifact_content,
+    )
+    assert "Do not copy the current failed suite forward unchanged." in agent_input.task_description
+    assert "If test_batch_processing asserts the full batch size on len(service.risk_scores) or another success-path count, every batch item in that scenario must be fully valid." in agent_input.task_description
+    assert "reduced or empty documents such as ['ID'] or []" in agent_input.task_description
+
+
+def test_build_agent_input_does_not_reuse_helper_alias_suite_and_adds_alias_drift_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: float\n\n"
+        "@dataclass\n"
+        "class AuditLog:\n"
+        "    request_id: str\n"
+        "    action: str\n"
+        "    details: dict\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+        "        pass\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "from dataclasses import dataclass",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: AuditLog, ComplianceIntakeService, ComplianceRequest\n"
+                    "- Undefined local names: AuditLogger (line 6)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import AuditLog, ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_happy_path():\n"
+                    "    service = ComplianceIntakeService(AuditLogger())\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import AuditLog, ComplianceIntakeService, ComplianceRequest\n\n"
+                    "def test_happy_path():\n"
+                    "    service = ComplianceIntakeService(AuditLogger())\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "tests"), project)
+
+    assert "existing_tests" not in agent_input.context
+    assert "undefined helper or collaborator aliases outside the documented import surface: AuditLogger" in agent_input.task_description
+    assert "Do not repair those names by swapping to a near-match imported symbol with a different role or constructor contract, such as AuditLogger -> AuditLog." in agent_input.task_description
+    assert "Record or value classes such as audit logs, score records, and result objects are not service collaborators unless the contract explicitly says so." in agent_input.task_description
+
+
+def test_build_agent_input_reuses_real_module_symbol_suite_and_adds_missing_import_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "@dataclass\n"
+        "class AuditLog:\n"
+        "    request_id: str\n"
+        "    action: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    request_id: str\n"
+        "    jurisdiction: str\n"
+        "    customer_type: str\n"
+        "    adverse_indicators: bool\n"
+        "    missing_document_severity: str\n"
+        "    score: float\n\n"
+        "class RiskScorer:\n"
+        "    def score_request(self, request: ComplianceRequest) -> RiskScore:\n"
+        "        return RiskScore(request.request_id, '', '', False, '', 1.0)\n\n"
+        "class AuditLogger:\n"
+        "    def log_action(self, audit_log: AuditLog) -> None:\n"
+        "        pass\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self, risk_scorer: RiskScorer, audit_logger: AuditLogger):\n"
+        "        self.risk_scorer = risk_scorer\n"
+        "        self.audit_logger = audit_logger\n\n"
+        "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+        "        pass\n\n"
+        "    def validate_request(self, request: ComplianceRequest) -> bool:\n"
+        "        return True\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "from dataclasses import dataclass",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Repair tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.TEST_VALIDATION.value,
+                "repair_owner": "qa_tester",
+                "instruction": "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Imported module symbols: AuditLog, ComplianceIntakeService, ComplianceRequest, RiskScore, RiskScorer\n"
+                    "- Undefined local names: AuditLogger (line 6), datetime (line 18)\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from code_implementation import AuditLog, ComplianceIntakeService, ComplianceRequest, RiskScore, RiskScorer\n\n"
+                    "def test_happy_path():\n"
+                    "    risk_scorer = RiskScorer()\n"
+                    "    audit_logger = AuditLogger()\n"
+                    "    service = ComplianceIntakeService(risk_scorer, audit_logger)\n"
+                    "    request = ComplianceRequest(request_id='req-1', request_type='screening', details={'source': 'web'}, timestamp=datetime.now())\n"
+                    "    service.handle_request(request)\n"
+                ),
+                "failed_artifact_content": (
+                    "from code_implementation import AuditLog, ComplianceIntakeService, ComplianceRequest, RiskScore, RiskScorer\n\n"
+                    "def test_happy_path():\n"
+                    "    risk_scorer = RiskScorer()\n"
+                    "    audit_logger = AuditLogger()\n"
+                    "    service = ComplianceIntakeService(risk_scorer, audit_logger)\n"
+                    "    request = ComplianceRequest(request_id='req-1', request_type='screening', details={'source': 'web'}, timestamp=datetime.now())\n"
+                    "    service.handle_request(request)\n"
+                ),
+            },
+        )
+    )
+
+    repair_focus_lines = orchestrator._repair_focus_lines(
+        require_task(project, "tests").repair_context,
+        {"code": code_content},
+    )
+    tests_task = require_task(project, "tests")
+
+    assert orchestrator._qa_repair_should_reuse_failed_test_artifact(
+        tests_task.repair_context["validation_summary"],
+        code_content,
+    )
+    assert any(
+        "The previous file referenced real module symbols without importing them: AuditLogger." in line
+        for line in repair_focus_lines
+    )
+    assert any(
+        "Add those names to the import list from the target module before use instead of deleting, renaming, or leaving them as undefined locals." in line
+        for line in repair_focus_lines
+    )
+    assert all(
+        "undefined helper or collaborator aliases outside the documented import surface: AuditLogger" not in line
+        for line in repair_focus_lines
+    )
 
 
 def test_build_agent_input_adds_truncation_test_repair_priority(tmp_path):
@@ -12212,6 +14777,394 @@ def test_build_repair_context_extracts_helper_surface_names_from_test_validation
         "RiskScoringService",
         "ComplianceRepository",
     ]
+
+
+def test_build_repair_context_preserves_prior_repair_objective_for_repair_tasks(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="code__repair_1",
+        title="Repair implementation",
+        description="Repair code",
+        assigned_to="code_engineer",
+        repair_origin_task_id="code",
+        repair_attempt=1,
+        last_error_category=FailureCategory.CODE_VALIDATION.value,
+        last_error_type="AgentExecutionError",
+        last_error=(
+            "Generated code validation failed: module import failed: "
+            "TypeError: non-default argument 'details' follows default argument"
+        ),
+        output="Generated code validation failed",
+        repair_context={
+            "cycle": 1,
+            "failure_category": FailureCategory.CODE_VALIDATION.value,
+            "instruction": (
+                "Repair the generated Python module so valid happy-path and batch requests do not fail because "
+                "the same constructor field is bound twice. Remove the duplicate from the expanded payload or "
+                "switch to explicit keyword construction so each constructor field is bound exactly once."
+            ),
+            "validation_summary": (
+                "Generated test validation:\n"
+                "- Pytest failure details: TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'\n"
+                "- Verdict: FAIL"
+            ),
+        },
+        output_payload={
+            "summary": "from dataclasses import dataclass, field",
+            "raw_content": (
+                "from dataclasses import dataclass, field\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ReviewAction:\n"
+                "    action_id: str\n"
+                "    action_type: str\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n"
+                "    details: dict\n"
+            ),
+            "artifacts": [
+                {
+                    "name": "code__repair_1_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": (
+                        "from dataclasses import dataclass, field\n"
+                        "from datetime import datetime\n\n"
+                        "@dataclass\n"
+                        "class ReviewAction:\n"
+                        "    action_id: str\n"
+                        "    action_type: str\n"
+                        "    timestamp: datetime = field(default_factory=datetime.now)\n"
+                        "    details: dict\n"
+                    ),
+                }
+            ],
+            "metadata": {},
+        },
+    )
+
+    repair_context = orchestrator._build_repair_context(task, {"cycle": 2})
+
+    assert "Repair the generated Python module by reordering any dataclass fields" in repair_context["instruction"]
+    assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in repair_context["instruction"]
+    assert "the same constructor field is bound twice" in repair_context["instruction"]
+    assert "Prior unresolved repair context:" in repair_context["validation_summary"]
+    assert "got multiple values for argument 'vendor_id'" in repair_context["validation_summary"]
+
+
+def test_build_code_repair_context_from_test_failure_preserves_prior_repair_objective_for_repair_tasks(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    code_task = Task(
+        id="code__repair_1",
+        title="Repair implementation",
+        description="Repair code",
+        assigned_to="code_engineer",
+        repair_origin_task_id="code",
+        repair_attempt=1,
+        output=(
+            "def build_vendor_profile(request):\n"
+            "    vendor_id = request.details['vendor_id']\n"
+            "    return VendorProfile(vendor_id, **request.details)\n"
+        ),
+        repair_context={
+            "cycle": 1,
+            "failure_category": FailureCategory.CODE_VALIDATION.value,
+            "instruction": (
+                "Repair the generated Python module so valid happy-path and batch requests do not fail on missing internal attributes. "
+                "Replace undeclared reads of VendorProfile.expired_certifications with VendorProfile.certifications unless a separate field is explicitly required."
+            ),
+            "validation_summary": (
+                "Generated test validation:\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_happy_path - AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                "- Verdict: FAIL"
+            ),
+        },
+        output_payload={
+            "summary": "def build_vendor_profile(request):",
+            "raw_content": (
+                "def build_vendor_profile(request):\n"
+                "    vendor_id = request.details['vendor_id']\n"
+                "    return VendorProfile(vendor_id, **request.details)\n"
+            ),
+            "artifacts": [
+                {
+                    "name": "code__repair_1_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": (
+                        "def build_vendor_profile(request):\n"
+                        "    vendor_id = request.details['vendor_id']\n"
+                        "    return VendorProfile(vendor_id, **request.details)\n"
+                    ),
+                }
+            ],
+            "metadata": {},
+        },
+    )
+    test_task = Task(
+        id="tests__repair_1",
+        title="Repair tests",
+        description="Repair tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
+        output_payload={
+            "summary": "import pytest",
+            "raw_content": "import pytest",
+            "artifacts": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {"syntax_ok": True},
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "2 failed, 1 passed in 0.19s",
+                        "stdout": (
+                            "FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'\n"
+                        ),
+                    },
+                }
+            },
+        },
+    )
+
+    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        {"cycle": 2},
+    )
+
+    assert "valid happy-path and batch requests do not fail because the same constructor field is bound twice" in repair_context["instruction"]
+    assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in repair_context["instruction"]
+    assert "expired_certifications" in repair_context["instruction"]
+    assert "Prior unresolved repair context:" in repair_context["validation_summary"]
+    assert "got multiple values for argument 'vendor_id'" in repair_context["validation_summary"]
+    assert "expired_certifications'" in repair_context["validation_summary"]
+
+
+def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_test_repairs(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def original() -> None:\n    return None\n",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair implementation",
+            description="Repair code",
+            assigned_to="code_engineer",
+            dependencies=["code"],
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            status=TaskStatus.DONE.value,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "instruction": (
+                    "Repair the generated Python module so valid happy-path and batch requests do not fail on missing internal attributes. "
+                    "Replace undeclared reads of VendorProfile.expired_certifications with VendorProfile.certifications unless a separate field is explicitly required."
+                ),
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                    "- Verdict: FAIL"
+                ),
+            },
+            output=(
+                "def build_vendor_profile(request):\n"
+                "    vendor_id = request.details['vendor_id']\n"
+                "    return VendorProfile(vendor_id, **request.details)\n"
+            ),
+            output_payload={
+                "summary": "def build_vendor_profile(request):",
+                "raw_content": (
+                    "def build_vendor_profile(request):\n"
+                    "    vendor_id = request.details['vendor_id']\n"
+                    "    return VendorProfile(vendor_id, **request.details)\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code__repair_1_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "content": (
+                            "def build_vendor_profile(request):\n"
+                            "    vendor_id = request.details['vendor_id']\n"
+                            "    return VendorProfile(vendor_id, **request.details)\n"
+                        ),
+                    }
+                ],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests__repair_1",
+            title="Repair tests",
+            description="Repair tests",
+            assigned_to="qa_tester",
+            dependencies=["code", "code__repair_1"],
+            repair_origin_task_id="tests",
+            repair_attempt=1,
+            status=TaskStatus.FAILED.value,
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
+            output_payload={
+                "summary": "import pytest",
+                "raw_content": "import pytest",
+                "artifacts": [],
+                "metadata": {
+                    "validation": {
+                        "module_filename": "code_implementation.py",
+                        "test_filename": "tests_tests.py",
+                        "pytest_failure_origin": "code_under_test",
+                        "test_analysis": {"syntax_ok": True},
+                        "test_execution": {
+                            "available": True,
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "2 failed, 1 passed in 0.19s",
+                            "stdout": (
+                                "FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'\n"
+                            ),
+                        },
+                    }
+                },
+            },
+        )
+    )
+
+    orchestrator._configure_repair_attempts(project, ["tests__repair_1"], {"cycle": 2})
+
+    code_task = require_task(project, "code")
+    repaired_code_task = require_task(project, "code__repair_1")
+    assert code_task.repair_context == {}
+    assert "the same constructor field is bound twice" in repaired_code_task.repair_context["instruction"]
+    assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in repaired_code_task.repair_context["instruction"]
+    assert "expired_certifications" in repaired_code_task.repair_context["instruction"]
+    assert "Prior unresolved repair context:" in repaired_code_task.repair_context["validation_summary"]
+
+
+def test_configure_repair_attempts_prefers_imported_repaired_code_module_for_original_failed_tests(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def original() -> None:\n    return None\n",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair implementation",
+            description="Repair code",
+            assigned_to="code_engineer",
+            dependencies=["code"],
+            repair_origin_task_id="code",
+            repair_attempt=1,
+            status=TaskStatus.DONE.value,
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "instruction": (
+                    "Repair the generated Python module so valid happy-path and batch requests do not fail on missing internal attributes. "
+                    "Replace undeclared reads of VendorProfile.expired_certifications with VendorProfile.certifications unless a separate field is explicitly required."
+                ),
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                    "- Verdict: FAIL"
+                ),
+            },
+            output=(
+                "def build_vendor_profile(request):\n"
+                "    vendor_id = request.details['vendor_id']\n"
+                "    return VendorProfile(vendor_id, **request.details)\n"
+            ),
+            output_payload={
+                "summary": "def build_vendor_profile(request):",
+                "raw_content": (
+                    "def build_vendor_profile(request):\n"
+                    "    vendor_id = request.details['vendor_id']\n"
+                    "    return VendorProfile(vendor_id, **request.details)\n"
+                ),
+                "artifacts": [
+                    {
+                        "name": "code__repair_1_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "content": (
+                            "def build_vendor_profile(request):\n"
+                            "    vendor_id = request.details['vendor_id']\n"
+                            "    return VendorProfile(vendor_id, **request.details)\n"
+                        ),
+                    }
+                ],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+            status=TaskStatus.FAILED.value,
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
+            output_payload={
+                "summary": "import pytest",
+                "raw_content": (
+                    "import pytest\n"
+                    "from code__repair_1_implementation import VendorProfile\n"
+                ),
+                "artifacts": [],
+                "metadata": {
+                    "validation": {
+                        "module_filename": "code_implementation.py",
+                        "test_filename": "tests_tests.py",
+                        "pytest_failure_origin": "code_under_test",
+                        "test_analysis": {"syntax_ok": True},
+                        "test_execution": {
+                            "available": True,
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "2 failed, 1 passed in 0.19s",
+                            "stdout": (
+                                "FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'\n"
+                            ),
+                        },
+                    }
+                },
+            },
+        )
+    )
+
+    orchestrator._configure_repair_attempts(project, ["tests"], {"cycle": 2})
+
+    code_task = require_task(project, "code")
+    repaired_code_task = require_task(project, "code__repair_1")
+    assert code_task.repair_context == {}
+    assert "the same constructor field is bound twice" in repaired_code_task.repair_context["instruction"]
+    assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in repaired_code_task.repair_context["instruction"]
+    assert "expired_certifications" in repaired_code_task.repair_context["instruction"]
+    assert "Prior unresolved repair context:" in repaired_code_task.repair_context["validation_summary"]
 
 
 def test_build_agent_input_adds_targeted_code_repair_priorities_for_pytest_assertions(tmp_path):
@@ -12323,7 +15276,213 @@ def test_build_agent_input_adds_dataclass_field_order_code_repair_priority(tmp_p
 
     assert "reorder the fields so every required non-default field appears before any field with a default" in agent_input.task_description
     assert "while preserving the documented constructor contract" in agent_input.task_description
+    assert "Inspect every dataclass declaration in the failed module, including audit, review, and result record types." in agent_input.task_description
     assert "AuditLog(action, details, timestamp=field(default_factory=...))" in agent_input.task_description
+
+
+def test_build_agent_input_adds_internal_constructor_strictness_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so valid happy-path and batch requests do not fail while constructing internal models.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() missing 4 required positional arguments: 'is_sanctioned', 'certifications', 'critical_service', and 'incidents'\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "def validate_request(request):\n"
+                    "    required_fields = ['service_category', 'due_diligence_evidence']\n"
+                    "    return all(field in request.details for field in required_fields)\n"
+                ),
+                "failed_artifact_content": (
+                    "from dataclasses import dataclass\n\n"
+                    "@dataclass\n"
+                    "class VendorProfile:\n"
+                    "    vendor_id: str\n"
+                    "    service_category: str\n"
+                    "    due_diligence_evidence: list[str]\n"
+                    "    is_sanctioned: bool\n"
+                    "    certifications: list[str]\n"
+                    "    critical_service: bool\n"
+                    "    incidents: list[str]\n\n"
+                    "def validate_request(request):\n"
+                    "    required_fields = ['service_category', 'due_diligence_evidence']\n"
+                    "    return all(field in request.details for field in required_fields)\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "If valid happy-path or batch pytest cases fail with TypeError from VendorProfile.__init__(), the implementation is stricter than the documented contract." in agent_input.task_description
+    assert "Align that internal model with validate_request(...) and the cited valid inputs instead of pushing new required payload keys onto the tests." in agent_input.task_description
+    assert "The current validator only requires service_category and due_diligence_evidence" in agent_input.task_description
+    assert "do not make VendorProfile(...) additionally require is_sanctioned, certifications, critical_service, and incidents" in agent_input.task_description
+    assert "Derive those internal values or give them safe defaults when building the internal record." in agent_input.task_description
+
+
+def test_build_agent_input_adds_duplicate_constructor_binding_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so valid happy-path and batch requests do not fail because the same constructor field is bound twice.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "def build_vendor_profile(request):\n"
+                    "    vendor_id = request.details['vendor_id']\n"
+                    "    return VendorProfile(vendor_id, **request.details)\n"
+                ),
+                "failed_artifact_content": (
+                    "def build_vendor_profile(request):\n"
+                    "    vendor_id = request.details['vendor_id']\n"
+                    "    return VendorProfile(vendor_id, **request.details)\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "If pytest reports TypeError from VendorProfile.__init__() saying it got multiple values for argument 'vendor_id'" in agent_input.task_description
+    assert "do not pass vendor_id both positionally and through **request.details, **request.data, **payload, or a duplicated keyword" in agent_input.task_description
+    assert "remove it from any expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once" in agent_input.task_description
+
+
+def test_build_agent_input_adds_missing_object_attribute_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so valid happy-path and batch requests do not fail on missing internal attributes.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from dataclasses import dataclass\n\n"
+                    "@dataclass\n"
+                    "class VendorProfile:\n"
+                    "    certifications: list[str]\n"
+                    "    incidents: list[str]\n\n"
+                    "def score(profile):\n"
+                    "    return profile.expired_certifications\n"
+                ),
+                "failed_artifact_content": (
+                    "from dataclasses import dataclass\n\n"
+                    "@dataclass\n"
+                    "class VendorProfile:\n"
+                    "    certifications: list[str]\n"
+                    "    incidents: list[str]\n\n"
+                    "def score(profile):\n"
+                    "    return profile.expired_certifications\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "If pytest reports AttributeError that 'VendorProfile' has no attribute 'expired_certifications'" in agent_input.task_description
+    assert "align the model fields and member accesses so every referenced attribute is actually declared or derived on that object" in agent_input.task_description
+    assert "VendorProfile currently defines certifications and incidents" in agent_input.task_description
+    assert "If you keep .expired_certifications in the rewritten module, add expired_certifications to VendorProfile" in agent_input.task_description
+    assert "remove every remaining read of .expired_certifications" in agent_input.task_description
+    assert "The closest declared field is certifications" in agent_input.task_description
+    assert "Prefer replacing .expired_certifications with .certifications" in agent_input.task_description
+
+
+def test_build_agent_input_adds_specific_dataclass_field_order_example_from_failed_artifact(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated code validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Module import: FAIL\n"
+                    "- Import summary: TypeError: non-default argument 'details' follows default argument\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": (
+                    "from dataclasses import dataclass, field\n"
+                    "from datetime import datetime\n\n"
+                    "@dataclass\n"
+                    "class ReviewAction:\n"
+                    "    action_id: str\n"
+                    "    action_type: str\n"
+                    "    timestamp: datetime = field(default_factory=datetime.now)\n"
+                    "    details: dict\n"
+                ),
+                "failed_artifact_content": (
+                    "from dataclasses import dataclass, field\n"
+                    "from datetime import datetime\n\n"
+                    "@dataclass\n"
+                    "class ReviewAction:\n"
+                    "    action_id: str\n"
+                    "    action_type: str\n"
+                    "    timestamp: datetime = field(default_factory=datetime.now)\n"
+                    "    details: dict\n"
+                ),
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "The current failed artifact still has this ordering bug in ReviewAction" in agent_input.task_description
+    assert "ReviewAction(action_id, action_type, details, timestamp=field(default_factory=datetime.now))" in agent_input.task_description
 
 
 def test_build_agent_input_adds_dataclass_field_import_code_repair_priority(tmp_path):
@@ -12390,8 +15549,112 @@ def test_build_agent_input_adds_datetime_import_consistency_code_repair_priority
 
     agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
 
-    assert "If the module calls datetime.datetime.now() or datetime.date.today(), import datetime" in agent_input.task_description
-    assert "call datetime.now() instead of datetime.datetime.now()" in agent_input.task_description
+    assert "If the module calls datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime" in agent_input.task_description
+    assert "call datetime.now(), timedelta(...), or timezone.utc instead of datetime.datetime.now()" in agent_input.task_description
+
+
+def test_build_agent_input_adds_datetime_helper_import_consistency_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_request - NameError: name 'timedelta' is not defined\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "return datetime.now() - timedelta(days=1)",
+                "failed_artifact_content": "from datetime import datetime\n\ndef expires_at():\n    return datetime.now() - timedelta(days=1)",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc" in agent_input.task_description
+    assert "call datetime.now(), timedelta(...), or timezone.utc" in agent_input.task_description
+
+
+def test_build_agent_input_adds_wrong_type_validation_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - assert True is False\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def validate_request(request):\n    required_fields = {'policy_id', 'claim_type', 'amount'}\n    return required_fields.issubset(request.details)",
+                "failed_artifact_content": "def validate_request(request):\n    required_fields = {'policy_id', 'claim_type', 'amount'}\n    return required_fields.issubset(request.details)",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "If pytest reports `assert not True` or `assert True is False` for validate_request or another validator" in agent_input.task_description
+    assert "Do not leave the validator as a presence-only required-key check" in agent_input.task_description
+    assert "Implement concrete reject conditions for clearly invalid required-field values or types" in agent_input.task_description
+
+
+def test_build_agent_input_adds_nested_payload_wrapper_field_code_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_happy_path - ValueError: Invalid claim request | ValueError: Invalid claim request; FAILED tests_tests.py::test_batch_processing - ValueError: Invalid claim request | ValueError: Invalid claim request\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def validate_request(request):\n    required_fields = {'request_id', 'request_type', 'details'}\n    return required_fields.issubset(request.details)",
+                "failed_artifact_content": "def validate_request(request):\n    required_fields = {'request_id', 'request_type', 'details'}\n    return required_fields.issubset(request.details)",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "If happy-path or batch pytest cases now raise `ValueError(...)` after a validator repair" in agent_input.task_description
+    assert "Keep top-level request fields such as request_id and request_type on the request object" in agent_input.task_description
+    assert "Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details" in agent_input.task_description
 
 
 def test_build_agent_input_adds_code_truncation_repair_priority(tmp_path):
@@ -12826,9 +16089,19 @@ def test_execute_workflow_resume_failed_repairs_code_before_rerunning_valid_test
     assert code_repair_task.status == TaskStatus.DONE.value
     assert tests_repair_task.status == TaskStatus.DONE.value
     assert "code__repair_1" in tests_repair_task.dependencies
+    assert engineer.last_context["repair_context"] == {
+        "cycle": 1,
+        "failure_category": FailureCategory.CODE_VALIDATION.value,
+        "repair_owner": "code_engineer",
+        "original_assigned_to": "code_engineer",
+        "source_failure_task_id": "tests",
+        "source_failure_category": FailureCategory.TEST_VALIDATION.value,
+    }
     assert engineer.last_context["existing_code"] == "def risky() -> int:\n    raise AttributeError('boom')"
     assert engineer.last_context["existing_tests"] == "from code_implementation import risky\n\ndef test_risky():\n    assert risky() == 1"
     assert "Pytest failure details" in engineer.last_context["repair_validation_summary"]
+    assert "Source failure task: tests" in engineer.last_description
+    assert "Source failure category: test_validation" in engineer.last_description
     assert tester.last_context["code"] == "def risky() -> int:\n    return 1"
 
 
@@ -12917,6 +16190,56 @@ def test_repair_helper_fallbacks_cover_missing_validation_payload(tmp_path):
     assert orchestrator._build_repair_validation_summary(task, FailureCategory.UNKNOWN.value) == "provider timeout"
     assert orchestrator._repair_owner_for_category(task, FailureCategory.UNKNOWN.value) == "architect"
     assert "repair" in orchestrator._build_repair_instruction(task, "custom_failure")
+
+
+def test_build_repair_instruction_specializes_repeated_dataclass_field_order_failures(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output="Generated code validation failed",
+        last_error="Generated code validation failed: module import failed: TypeError: non-default argument 'details' follows default argument",
+        output_payload={
+            "summary": "from dataclasses import dataclass, field",
+            "raw_content": (
+                "from dataclasses import dataclass, field\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ReviewAction:\n"
+                "    action_id: str\n"
+                "    action_type: str\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n"
+                "    details: dict\n"
+            ),
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": (
+                        "from dataclasses import dataclass, field\n"
+                        "from datetime import datetime\n\n"
+                        "@dataclass\n"
+                        "class ReviewAction:\n"
+                        "    action_id: str\n"
+                        "    action_type: str\n"
+                        "    timestamp: datetime = field(default_factory=datetime.now)\n"
+                        "    details: dict\n"
+                    ),
+                }
+            ],
+            "metadata": {},
+        },
+    )
+
+    instruction = orchestrator._build_repair_instruction(task, FailureCategory.CODE_VALIDATION.value)
+
+    assert "Repair the generated Python module by reordering any dataclass fields" in instruction
+    assert "Inspect every dataclass in the module" in instruction
+    assert "The current failed artifact still has this ordering bug in ReviewAction" in instruction
+    assert "ReviewAction(action_id, action_type, details, timestamp=field(default_factory=datetime.now))" in instruction
 
 
 def test_build_repair_validation_summary_uses_dependency_validation_payload(tmp_path):

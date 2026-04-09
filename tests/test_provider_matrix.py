@@ -1632,7 +1632,6 @@ def test_provider_matrix_example_limits_public_report_paths_and_base_url(tmp_pat
             "summary": {
                 "phase": "completed",
                 "terminal_outcome": "completed",
-                "repair_cycle_count": 0,
             },
         },
     )

@@ -284,6 +284,57 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "Do not split validation, scoring, audit logging, or batch handling into separate Logger, Scorer, Processor, Manager, or interface classes" in agent.last_system_prompt
 
 
+def test_code_engineer_prioritizes_repair_directives_over_buggy_baseline(tmp_path):
+    agent = CaptureCodeEngineerAgent(build_config(tmp_path))
+    agent_input = AgentInput(
+        task_id="code__repair_1",
+        task_title="Repair implementation",
+        task_description=(
+            "Implement the vendor onboarding workflow.\n\n"
+            "Repair objective:\n"
+            "Repair the generated Python module so valid happy-path and batch requests do not fail on missing internal attributes. "
+            "The current failed artifact reads VendorProfile.expired_certifications even though VendorProfile only defines certifications and incidents. "
+            "Prefer replacing VendorProfile.expired_certifications with VendorProfile.certifications unless you explicitly add and populate expired_certifications.\n\n"
+            "Repair priorities:\n"
+            "- Prefer replacing .expired_certifications with .certifications."
+        ),
+        project_name="Demo",
+        project_goal="Build demo",
+        context={
+            "architecture": "Layered design that still discusses expired certifications.",
+            "existing_code": "if vendor_profile.expired_certifications:\n    score += 1.0",
+            "existing_tests": "def test_happy_path():\n    assert service.handle_request(request) is not None",
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Pytest failure details: AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'"
+            ),
+            "repair_context": {
+                "cycle": 1,
+                "failure_category": "code_validation",
+                "repair_owner": "code_engineer",
+            },
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+        },
+    )
+
+    result = agent.run_with_input(agent_input)
+
+    assert result == "ok"
+    assert "Highest-priority repair directives:" in agent.last_user_message
+    assert "Literal repair cue: replace VendorProfile.expired_certifications with VendorProfile.certifications" in agent.last_user_message
+    assert "Buggy existing code context (edit this broken baseline rather than preserving it unchanged):" in agent.last_user_message
+    assert "Secondary architecture guidance:" in agent.last_user_message
+    assert agent.last_user_message.index("Highest-priority repair directives:") < agent.last_user_message.index(
+        "Buggy existing code context (edit this broken baseline rather than preserving it unchanged):"
+    )
+    assert agent.last_user_message.index(
+        "Buggy existing code context (edit this broken baseline rather than preserving it unchanged):"
+    ) < agent.last_user_message.index("Secondary architecture guidance:")
+    assert "Treat the existing code context as a buggy baseline to edit, not as a template to preserve unchanged." in agent.last_system_prompt
+    assert "ensure the broken reference no longer appears anywhere in the final module" in agent.last_system_prompt
+
+
 def test_code_engineer_includes_budget_decomposition_brief(tmp_path):
     agent = CaptureCodeEngineerAgent(build_config(tmp_path))
 
@@ -309,22 +360,44 @@ def test_code_engineer_includes_budget_decomposition_brief(tmp_path):
     assert "read the field's actual truth value instead of treating mere key presence as a positive signal" in agent.last_system_prompt
     assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_system_prompt
     assert "Do not mix object-style APIs with dict membership tests or subscripting" in agent.last_system_prompt
+    assert "If the public request model separates wrapper fields from a nested payload container such as details, data, metadata, or payload" in agent.last_system_prompt
+    assert "Do not make internal helper dataclasses or typed record models stricter than the documented valid request shape." in agent.last_system_prompt
+    assert "If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping" in agent.last_system_prompt
+    assert "Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently." in agent.last_system_prompt
+    assert "If repair context cites AttributeError that an object has no attribute X, the rewritten module must either declare and populate X on that object's model or remove every read of .X." in agent.last_system_prompt
     assert "If you define dataclasses or typed record models with defaults, keep every required non-default field before every defaulted field so the module imports cleanly" in agent.last_system_prompt
     assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_system_prompt
+    assert "If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types" in agent.last_system_prompt
     assert "If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses" in agent.last_system_prompt
-    assert "Keep imports consistent with the names you reference. If you call datetime.datetime.now() or datetime.date.today(), import datetime." in agent.last_system_prompt
+    assert "Keep imports consistent with the names you reference. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime." in agent.last_system_prompt
+    assert "If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type" in agent.last_system_prompt
+    assert "If validate_request(...) accepts a happy-path or batch input, derive internal-only fields from existing request data or give them safe defaults" in agent.last_system_prompt
     assert "your validator rejects at least one clearly invalid input shape" in agent.last_user_message
     assert "the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds" in agent.last_user_message
     assert "you used the field's truth value rather than mere key presence" in agent.last_user_message
     assert "Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence" in agent.last_user_message
     assert "you kept service state in memory instead of adding sqlite or filesystem-backed storage" in agent.last_user_message
     assert "you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting" in agent.last_user_message
+    assert "If the request model exposes top-level wrapper fields plus a nested payload container such as details, data, metadata, or payload" in agent.last_user_message
+    assert "you validated wrapper fields on the request object and only required true payload keys inside the nested mapping" in agent.last_user_message
+    assert "If validate_request(...) accepts the happy-path or batch input shown in the repair context, do not let an internal helper model or dataclass later raise TypeError for extra missing fields." in agent.last_user_message
+    assert "if validate_request(...) accepts a happy-path or batch input, no internal helper model or dataclass later raises TypeError for extra missing fields" in agent.last_user_message
+    assert "If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, do not also pass the same field positionally or as a repeated keyword." in agent.last_user_message
+    assert "if you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, you did not also pass the same field positionally or as a repeated keyword" in agent.last_user_message
+    assert "Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently." in agent.last_user_message
+    assert "every attribute read from a dataclass or typed internal model is declared on that model or derived there consistently" in agent.last_user_message
+    assert "If the repair summary cites AttributeError that an object has no attribute X, either declare and populate X on that object's model or remove every read of .X before you finalize." in agent.last_user_message
+    assert "if the repair summary cited AttributeError that an object has no attribute X, you either declared and populated X on that model or removed every read of .X from the rewritten module" in agent.last_user_message
     assert "If you define dataclasses or typed record models with defaults, keep every required field before any defaulted field so the module imports cleanly and does not fail at import time." in agent.last_user_message
     assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_user_message
+    assert "If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types" in agent.last_user_message
     assert "if you used dataclasses or typed record models with defaults, every required field appears before any field with a default so the module imports cleanly" in agent.last_user_message
+    assert "if import validation cited a 'non-default argument ... follows default argument' error, you inspected every dataclass in the module and reordered each offending class" in agent.last_user_message
     assert "If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly." in agent.last_user_message
     assert "if you used dataclasses.field(...) or field(default_factory=...) anywhere in the module, you imported field explicitly from dataclasses so the module imports cleanly" in agent.last_user_message
-    assert "Keep imports consistent with how you reference names. If you call datetime.datetime.now() or datetime.date.today(), import datetime." in agent.last_user_message
+    assert "Keep imports consistent with how you reference names. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime." in agent.last_user_message
+    assert "If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type" in agent.last_user_message
+    assert "if you reference datetime helpers such as timedelta or timezone, you either imported those exact symbols directly or qualified them through datetime.* consistently" in agent.last_user_message
 
 
 def test_code_engineer_includes_task_public_contract_anchor(tmp_path):
@@ -476,6 +549,7 @@ def test_qa_tester_includes_task_public_contract_anchor(tmp_path):
     assert "import pytest" in agent.last_user_message
     assert "from service_module import ComplianceIntakeService, ComplianceRequest" in agent.last_user_message
     assert "def test_happy_path():" in agent.last_user_message
+    assert "def test_validation_failure():" in agent.last_user_message
     assert 'request = ComplianceRequest(request_id="request_id-1", request_type="screening", details={"source": "web"}, timestamp=1.0)' in agent.last_user_message
     assert "result = service.handle_request(request)" in agent.last_user_message
     assert "def test_batch_processing():" in agent.last_user_message
@@ -489,11 +563,13 @@ def test_qa_tester_includes_task_public_contract_anchor(tmp_path):
     assert "If the suite uses `datetime.now()` or any other bare `datetime` reference, you must add a matching datetime import at the top before finalizing." in agent.last_user_message
     assert "Do not add duplicate-detection, risk-tier, audit-only, or helper-only tests unless the exact contract or behavior contract explicitly requires them." in agent.last_user_message
     assert "Avoid guessed exact response.status labels and guessed exact risk-summary bucket totals for batch items" in agent.last_user_message
+    assert "Avoid guessed exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests" in agent.last_user_message
     assert "For that batch loop, prefer assertions on response count, request identity, validation shape, or monotonic service state." in agent.last_user_message
     assert "Keep mutable service instances and request objects local to each test or a local helper; do not share a module-level service or request object across tests." in agent.last_user_message
     assert "Concrete class, function, and field names that appear later in generic examples are placeholders only." not in agent.last_user_message
     assert "When a task-level public contract anchor block is provided, treat it as higher priority than generic examples" in agent.last_system_prompt
     assert "Do not copy placeholder example names or invent alternate helpers." in agent.last_system_prompt
+    assert "Never use `assert True`, `assert False`, or placeholder comments such as `Assuming ...` to stand in for a real expectation." in agent.last_system_prompt
     assert "default to exactly three top-level tests named test_happy_path, test_validation_failure, and test_batch_processing" in agent.last_system_prompt
     assert "For compact anchored workflow tasks with a hard line cap such as 150 lines, treat that trio as the effective maximum unless the exact contract or behavior contract explicitly requires more coverage." in agent.last_system_prompt
     assert "Do not use per-test docstrings in this compact mode." in agent.last_system_prompt
@@ -1066,6 +1142,7 @@ def test_qa_tester_run_uses_context_module_contract(tmp_path):
     assert "do not invent a guessed exact total such as 6.0 or a derived level such as medium" in agent.last_user_message
     assert "never use prose sample text for that assertion" in agent.last_user_message
     assert "Do not hard-code exact response.status labels such as accepted, rejected, pending_review, or flagged" in agent.last_user_message
+    assert "Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests" in agent.last_user_message
     assert "Never define a custom fixture named `request`" in agent.last_user_message
     assert "Do not use `.call_count`, `.assert_called_once()`, or similar mock-style assertions" in agent.last_user_message
     assert "risk_factor=2 and compliance_history=0.1 yield 1.45, not 1.25" in agent.last_user_message
@@ -1088,7 +1165,12 @@ def test_qa_tester_run_uses_context_module_contract(tmp_path):
     assert "do not invent a guessed exact total such as 6.0 or a derived level such as medium" in agent.last_system_prompt
     assert "risk_factor=\"invalid\" does not raise TypeError" in agent.last_system_prompt
     assert "use xxxxxxxxxx rather than \"\"" in agent.last_system_prompt
+    assert "every happy-path or valid batch item must include the full required set named by that validator" in agent.last_system_prompt
+    assert "copy that full list verbatim into every valid happy-path or valid batch payload instead of shrinking it to a representative subset" in agent.last_system_prompt
+    assert "Do not require a strictly positive score, non-empty risk list, or similar nonzero scoring side effect from a generic happy-path input" in agent.last_system_prompt
+    assert "When the suite already contains a dedicated validation-failure test, do not reuse that invalid payload inside test_batch_processing" in agent.last_system_prompt
     assert "Do not hard-code exact response.status labels such as accepted, rejected, pending_review, or flagged" in agent.last_system_prompt
+    assert "Do not hard-code exact outcome or action labels such as blocked, escalated, straight-through, manual investigation, fraud escalation, or time-boxed approval in happy-path or valid batch tests" in agent.last_system_prompt
     assert "request_id=\"\" or another same-type placeholder can still pass" in agent.last_system_prompt
     assert "empty dict is still a same-type placeholder and may pass when validation only checks dict type" in agent.last_system_prompt
     assert "do not shorten them to submit(...) or submit_batch(...)" in agent.last_system_prompt
@@ -1178,6 +1260,1232 @@ def test_qa_tester_omits_invalid_prior_suite_when_exact_contract_exists(tmp_path
     assert "Unknown symbols from the previous validation are forbidden in the rewritten file: ComplianceService" in agent.last_user_message
     assert "No batch helper is documented in the exact contract. For any batch scenario, loop over ComplianceIntakeService.intake_request for multiple valid inputs instead of inventing batch helpers or renamed methods." in agent.last_user_message
     assert "Any import, method, or constructor field not listed in the Exact test contract is forbidden in the rewritten file." in agent.last_user_message
+
+
+def test_qa_tester_omits_prior_suite_when_validation_flags_bare_datetime_without_import(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def handle_request(self, request):\n"
+                "        return request.request_id\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request)\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request accepts a ComplianceRequest instance",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import ComplianceIntakeService, ComplianceRequest\n\n"
+                "def test_happy_path():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    request = ComplianceRequest(request_id='req-1', request_type='screening', details={'source': 'web'}, timestamp=datetime.now())\n"
+                "    assert service.handle_request(request) == 'req-1'\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Undefined local names: datetime (line 5)\n"
+                "- Pytest execution: FAIL\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous invalid pytest file omitted because the validation summary already reported bare `datetime` references without a matching import." in agent.last_user_message
+    assert "timestamp=datetime.now()" not in agent.last_user_message
+    assert "from datetime import datetime" in agent.last_user_message
+    assert "fixed_time = datetime(2024, 1, 1, 0, 0, 0)" in agent.last_user_message
+    assert "timestamp=fixed_time" in agent.last_user_message
+
+
+def test_qa_tester_omits_prior_suite_when_valid_payload_uses_incomplete_required_evidence(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime\n\n"
+                "@dataclass\n"
+                "class RiskScore:\n"
+                "    request_id: str\n"
+                "    score: float\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.risk_scores = []\n\n"
+                "    def handle_request(self, request):\n"
+                "        if not self.validate_request(request):\n"
+                "            return\n"
+                "        self.risk_scores.append(RiskScore(request.request_id, 0.0))\n\n"
+                "    def validate_request(self, request):\n"
+                "        required_evidence = ['ID', 'Address', 'Proof of Income']\n"
+                "        return all(item in request.details.get('documents', []) for item in required_evidence)\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- RiskScore(request_id, score)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest, RiskScore\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request), ComplianceIntakeService.validate_request(request)\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp), RiskScore(request_id, score)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request appends to risk_scores only for valid requests",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Supporting validation surface: ComplianceIntakeService.validate_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from datetime import datetime\n"
+                "from service_module import ComplianceIntakeService, ComplianceRequest, RiskScore\n\n"
+                "def test_happy_path():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    request = ComplianceRequest(request_id='req-1', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time)\n"
+                "    service.handle_request(request)\n"
+                "    assert len(service.risk_scores) == 1\n\n"
+                "def test_validation_failure():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    request = ComplianceRequest(request_id='req-2', request_type='individual', details={'documents': []}, timestamp=fixed_time)\n"
+                "    service.handle_request(request)\n"
+                "    assert len(service.risk_scores) == 0\n\n"
+                "def test_batch_processing():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    requests = [\n"
+                "        ComplianceRequest(request_id='req-3', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time),\n"
+                "        ComplianceRequest(request_id='req-4', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time),\n"
+                "    ]\n"
+                "    for request in requests:\n"
+                "        service.handle_request(request)\n"
+                "    assert len(service.risk_scores) == 2\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_happy_path - AssertionError: assert 0 == 1; FAILED tests_tests.py::test_batch_processing - AssertionError: assert 0 == 2\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous invalid pytest file omitted because the current runtime failure shows that supposed happy-path or batch payloads still omit required evidence named by the implementation validator." in agent.last_user_message
+    assert "details={'documents': ['ID']}, timestamp=fixed_time" not in agent.last_user_message
+    assert "The implementation validator names the full required evidence list as ['ID', 'Address', 'Proof of Income']." in agent.last_user_message
+    assert "details={'documents': ['ID', 'Address', 'Proof of Income']}, timestamp=fixed_time" in agent.last_user_message
+    assert "Do not reuse reduced or empty document subsets like ['ID'] or [] inside happy-path or batch tests." in agent.last_user_message
+
+
+def test_qa_tester_omits_prior_suite_when_batch_keeps_invalid_missing_document_item(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime\n\n"
+                "@dataclass\n"
+                "class RiskScore:\n"
+                "    request_id: str\n"
+                "    score: float\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.risk_scores = []\n\n"
+                "    def handle_request(self, request):\n"
+                "        if not self.validate_request(request):\n"
+                "            return\n"
+                "        self.risk_scores.append(RiskScore(request.request_id, 0.0))\n\n"
+                "    def validate_request(self, request):\n"
+                "        required_evidence = ['ID', 'Address', 'Proof of Income']\n"
+                "        return all(item in request.details.get('documents', []) for item in required_evidence)\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- RiskScore(request_id, score)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest, RiskScore\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request), ComplianceIntakeService.validate_request(request)\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp), RiskScore(request_id, score)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request appends to risk_scores only for valid requests",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Supporting validation surface: ComplianceIntakeService.validate_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from datetime import datetime\n"
+                "from service_module import ComplianceIntakeService, ComplianceRequest, RiskScore\n\n"
+                "def test_happy_path():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    request = ComplianceRequest(request_id='req-1', request_type='individual', details={'documents': ['ID', 'Address', 'Proof of Income']}, timestamp=fixed_time)\n"
+                "    service.handle_request(request)\n"
+                "    assert len(service.risk_scores) == 1\n\n"
+                "def test_validation_failure():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    request = ComplianceRequest(request_id='req-2', request_type='individual', details={'documents': ['ID']}, timestamp=fixed_time)\n"
+                "    service.handle_request(request)\n"
+                "    assert len(service.risk_scores) == 0\n\n"
+                "def test_batch_processing():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    requests = [\n"
+                "        ComplianceRequest(request_id='req-3', request_type='individual', details={'documents': ['ID', 'Address', 'Proof of Income']}, timestamp=fixed_time),\n"
+                "        ComplianceRequest(request_id='req-4', request_type='corporate', details={'documents': []}, timestamp=fixed_time),\n"
+                "    ]\n"
+                "    for request in requests:\n"
+                "        service.handle_request(request)\n"
+                "    assert len(service.risk_scores) == 2\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_batch_processing - AssertionError: assert 1 == 2\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous invalid pytest file omitted because the current runtime failure shows that supposed happy-path or batch payloads still omit required evidence named by the implementation validator." in agent.last_user_message
+    assert "details={'documents': []}, timestamp=fixed_time" not in agent.last_user_message
+    assert "Do not reuse reduced or empty document subsets like ['ID'] or [] inside happy-path or batch tests." in agent.last_user_message
+    assert "details={'documents': ['ID', 'Address', 'Proof of Income']}, timestamp=fixed_time" in agent.last_user_message
+
+
+def test_qa_tester_omits_prior_suite_when_valid_paths_omit_required_payload_keys(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass, field\n"
+                "from datetime import datetime\n"
+                "from typing import List\n\n"
+                "@dataclass\n"
+                "class ClaimRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+                "@dataclass\n"
+                "class ClaimResult:\n"
+                "    request_id: str\n"
+                "    status: str\n"
+                "    risk_score: float\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+                "class ClaimTriageService:\n"
+                "    def validate_request(self, request: ClaimRequest) -> bool:\n"
+                "        required_fields = {'policy_id', 'claim_type', 'amount', 'timestamp'}\n"
+                "        return required_fields.issubset(request.details) and isinstance(request.details.get('amount'), (int, float))\n\n"
+                "    def handle_request(self, request: ClaimRequest) -> ClaimResult:\n"
+                "        if not self.validate_request(request):\n"
+                "            raise ValueError('Invalid claim request')\n"
+                "        return ClaimResult(request.request_id, 'straight-through', 0.0, request.timestamp)\n\n"
+                "    def batch_handle_requests(self, requests: List[ClaimRequest]) -> List[ClaimResult]:\n"
+                "        return [self.handle_request(request) for request in requests]\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Claim triage workflow",
+            "code_outline": "class ClaimTriageService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ClaimRequest(request_id, request_type, details, timestamp)\n- ClaimResult(request_id, status, risk_score, timestamp)\n- ClaimTriageService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ClaimRequest, ClaimResult, ClaimTriageService\n"
+                "- Preferred service or workflow facades: ClaimTriageService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ClaimTriageService.handle_request(request), ClaimTriageService.validate_request(request), ClaimTriageService.batch_handle_requests(requests)\n"
+                "- Exact constructor fields: ClaimRequest(request_id, request_type, details, timestamp), ClaimResult(request_id, status, risk_score, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ClaimTriageService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- validate_request rejects requests when required payload fields are missing\n- handle_request raises ValueError for invalid requests",
+            "task_public_contract_anchor": (
+                "- Public facade: ClaimTriageService\n"
+                "- Primary request model: ClaimRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ClaimTriageService.handle_request(request)\n"
+                "- Supporting validation surface: ClaimTriageService.validate_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "import pytest\n"
+                "from datetime import datetime\n"
+                "from service_module import ClaimTriageService, ClaimRequest, ClaimResult\n\n"
+                "def test_happy_path():\n"
+                "    service = ClaimTriageService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    request = ClaimRequest(request_id='request_id-1', request_type='car', details={'policy_id': 'policy123', 'amount': 5000, 'timestamp': fixed_time}, timestamp=fixed_time)\n"
+                "    result = service.handle_request(request)\n"
+                "    assert result.status == 'straight-through'\n\n"
+                "def test_validation_failure():\n"
+                "    service = ClaimTriageService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    request = ClaimRequest(request_id='request_id-1', request_type='car', details={'policy_id': 'value', 'claim_type': 'value', 'amount': 'value'}, timestamp=fixed_time)\n"
+                "    is_valid = service.validate_request(request)\n"
+                "    assert is_valid is False\n"
+                "    with pytest.raises(ValueError):\n"
+                "        service.handle_request(request)\n\n"
+                "def test_batch_processing():\n"
+                "    service = ClaimTriageService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    requests = [\n"
+                "        ClaimRequest(request_id='request_id-1', request_type='car', details={'policy_id': 'policy123', 'amount': 5000, 'timestamp': fixed_time}, timestamp=fixed_time),\n"
+                "    ]\n"
+                "    results = service.batch_handle_requests(requests)\n"
+                "    assert len(results) == 1\n"
+                "    assert results[0].status == 'straight-through'\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_happy_path - ValueError: Invalid claim request | ValueError: Invalid claim request; FAILED tests_tests.py::test_batch_processing - ValueError: Invalid claim request | ValueError: Invalid claim request\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous invalid pytest file omitted because the current runtime failure shows that supposed happy-path or batch payloads still omit required payload fields named by the implementation validator." in agent.last_user_message
+    assert "details={'policy_id': 'policy123', 'amount': 5000, 'timestamp': fixed_time}, timestamp=fixed_time" not in agent.last_user_message
+    assert "The current validator only checks for the presence of ['policy_id', 'claim_type', 'amount', 'timestamp']." in agent.last_user_message
+    assert 'details={"policy_id": "policy123", "claim_type": "collision", "amount": 5000, "timestamp": fixed_time}, timestamp=fixed_time' in agent.last_user_message
+    assert "Do not reuse partial payloads that omit required keys inside happy-path or batch tests." in agent.last_user_message
+
+
+def test_qa_tester_omits_hollow_prior_suite_when_validation_flags_call_only_tests(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp=None):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def handle_request(self, request):\n"
+                "        return {'request_id': request.request_id}\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request)\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request accepts a ComplianceRequest instance",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import ComplianceIntakeService, ComplianceRequest\n\n"
+                "def test_happy_path():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    request = ComplianceRequest(request_id=\"1\", request_type=\"screening\", details={\"source\": \"web\"}, timestamp=1.0)\n"
+                "    service.handle_request(request)\n\n"
+                "def test_batch_processing():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    for request_id in [\"1\", \"2\"]:\n"
+                "        service.handle_request(ComplianceRequest(request_id=request_id, request_type=\"screening\", details={\"source\": \"web\"}, timestamp=1.0))\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Tests without assertion-like checks: test_happy_path (line 3), test_batch_processing (line 8)\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Existing tests context:" in agent.last_user_message
+    assert "Previous hollow pytest file omitted because the validation summary already reported top-level tests without assertion-like checks." in agent.last_user_message
+    assert "Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only the minimum contract-backed scenarios" in agent.last_user_message
+    assert 'for request_id in ["1", "2"]:' not in agent.last_user_message
+    assert "If repair feedback reports tests without assertion-like checks, discard the prior hollow test bodies and rebuild the minimum contract-backed suite with explicit assertions instead of patching the old file in place." in agent.last_system_prompt
+
+
+def test_qa_tester_omits_overreaching_prior_suite_when_validation_flags_contract_overreach(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp=None):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.audit_log = []\n\n"
+                "    def handle_request(self, request):\n"
+                "        self.audit_log.append({'request_id': request.request_id, 'status': 'approved'})\n"
+                "        return {'request_id': request.request_id, 'status': 'approved'}\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request)\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request accepts a ComplianceRequest instance",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import ComplianceIntakeService, ComplianceRequest\n\n"
+                "def test_batch_processing():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    requests = [\n"
+                "        ComplianceRequest(request_id='1', request_type='screening', details={'source': 'web'}, timestamp=1.0),\n"
+                "        ComplianceRequest(request_id='2', request_type='screening', details={'source': 'web'}, timestamp=1.0),\n"
+                "    ]\n"
+                "    for request in requests:\n"
+                "        result = service.handle_request(request)\n"
+                "    assert len(service.audit_log) == 3\n"
+                "    assert result['status'] == 'blocked'\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Contract overreach signals: exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 10), exact status/action label mismatch ('escalated' vs 'blocked') suggests an unsupported threshold assumption\n"
+                "- Pytest execution: FAIL\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Existing tests context:" in agent.last_user_message
+    assert "Previous overreaching pytest file omitted because the validation summary already reported contract-overreach assertions." in agent.last_user_message
+    assert "Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only contract-backed scenarios" in agent.last_user_message
+    assert "assert len(service.audit_log) == 3" not in agent.last_user_message
+    assert "assert result['status'] == 'blocked'" not in agent.last_user_message
+    assert "Exact rebuild surface:" in agent.last_user_message
+    assert "Allowed imports only: ComplianceIntakeService, ComplianceRequest" in agent.last_user_message
+    assert "Any import, method, or constructor field not listed in the Exact test contract is forbidden in the rewritten file." in agent.last_user_message
+    assert "The previous suite overreached by expecting more batch audit entries than the visible number of processed items." in agent.last_user_message
+    assert "The previous runtime failure came from a brittle exact status or action label guess." in agent.last_user_message
+    assert "In happy-path or valid batch scenarios, do not assert exact outcome strings such as `straight-through` or `manual investigation` unless the contract explicitly defines that input-to-label mapping" in agent.last_user_message
+    assert "Apply the same rule to return-review labels such as `auto-approve`, `manual inspection`, and `abuse escalation`" in agent.last_user_message
+    assert "If the previous validation summary reports contract overreach signals, that prior suite guessed behavior beyond the documented contract." in agent.last_system_prompt
+
+
+def test_qa_tester_omits_overreaching_prior_suite_when_validation_flags_return_shape_assumption(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "class AccessReviewRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp=None):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class AccessReviewService:\n"
+                "    def handle_request(self, request):\n"
+                "        return 'approved'\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Access review workflow",
+            "code_outline": "class AccessReviewService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- AccessReviewRequest(request_id, request_type, details, timestamp)\n- AccessReviewService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: AccessReviewRequest, AccessReviewService\n"
+                "- Preferred service or workflow facades: AccessReviewService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: AccessReviewService.handle_request(request)\n"
+                "- Exact constructor fields: AccessReviewRequest(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: AccessReviewService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request accepts an AccessReviewRequest instance",
+            "task_public_contract_anchor": (
+                "- Public facade: AccessReviewService\n"
+                "- Primary request model: AccessReviewRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: AccessReviewService.handle_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import AccessReviewRequest, AccessReviewService\n\n"
+                "def test_happy_path():\n"
+                "    service = AccessReviewService()\n"
+                "    request = AccessReviewRequest(request_id='1', request_type='review', details={'role': 'admin'}, timestamp=1.0)\n"
+                "    outcome = service.handle_request(request)\n"
+                "    assert outcome.request_id == '1'\n"
+                "    assert outcome.outcome == 'approved'\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Contract overreach signals: exact return-shape attribute assumption ('.request_id' on 'str') suggests an unsupported wrapper expectation\n"
+                "- Pytest execution: FAIL\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous overreaching pytest file omitted because the validation summary already reported contract-overreach assertions." in agent.last_user_message
+    assert "assert outcome.request_id == '1'" not in agent.last_user_message
+    assert "assert outcome.outcome == 'approved'" not in agent.last_user_message
+    assert "The previous runtime failure came from assuming a wrapped object return shape that the current runtime did not provide." in agent.last_user_message
+    assert "Delete every `.request_id`, `.outcome`, or similar attribute read on the workflow return value in happy-path and batch tests." in agent.last_user_message
+    assert "assert isinstance(result, str)" in agent.last_user_message
+    assert "Exact rebuild surface:" in agent.last_user_message
+
+
+def test_qa_tester_omits_overreaching_prior_suite_when_validation_flags_action_map_key_assumption(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass, field\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class VendorSubmission:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime\n\n"
+                "@dataclass\n"
+                "class ReviewAction:\n"
+                "    action_id: str\n"
+                "    action_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+                "class VendorRiskReviewService:\n"
+                "    def __init__(self):\n"
+                "        self.review_actions = {}\n\n"
+                "    def handle_request(self, request):\n"
+                "        action = ReviewAction(action_id='generated-action-id', action_type='approve', details={})\n"
+                "        self.review_actions[action.action_id] = action\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Vendor review workflow",
+            "code_outline": "class VendorRiskReviewService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- VendorSubmission(request_id, request_type, details, timestamp)\n- ReviewAction(action_id, action_type, details, timestamp)\n- VendorRiskReviewService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ReviewAction, VendorRiskReviewService, VendorSubmission\n"
+                "- Preferred service or workflow facades: VendorRiskReviewService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: VendorRiskReviewService.handle_request(request)\n"
+                "- Exact constructor fields: VendorSubmission(request_id, request_type, details, timestamp), ReviewAction(action_id, action_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: VendorRiskReviewService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request stores one ReviewAction for a valid request",
+            "task_public_contract_anchor": (
+                "- Public facade: VendorRiskReviewService\n"
+                "- Primary request model: VendorSubmission(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: VendorRiskReviewService.handle_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import VendorRiskReviewService, VendorSubmission\n\n"
+                "def test_happy_path():\n"
+                "    service = VendorRiskReviewService()\n"
+                "    vendor_submission = VendorSubmission(request_id='request_id-1', request_type='onboarding', details={'service_category': 'IT'}, timestamp=1.0)\n"
+                "    service.handle_request(vendor_submission)\n"
+                "    assert vendor_submission.request_id in service.review_actions\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Contract overreach signals: exact internal action-map key assumption for 'review_actions' suggests an unsupported storage-key contract\n"
+                "- Pytest execution: FAIL\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous overreaching pytest file omitted because the validation summary already reported contract-overreach assertions." in agent.last_user_message
+    assert "assert vendor_submission.request_id in service.review_actions" not in agent.last_user_message
+    assert "The previous runtime failure came from assuming an internal action or review map used request identity as its key." in agent.last_user_message
+    assert "Do not assert membership like `request.request_id in service.review_actions` unless the contract explicitly defines that storage key." in agent.last_user_message
+    assert "If the implementation stores `ReviewAction(action_id, ...)` or another action record with its own generated identifier" in agent.last_user_message
+
+
+def test_qa_tester_combines_return_shape_and_did_not_raise_repair_guidance(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "class AccessReviewRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp=None):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class AccessReviewService:\n"
+                "    def validate_request(self, request):\n"
+                "        return request.request_type in {'role assignment', 'system access'} and 'role' in request.details\n\n"
+                "    def handle_request(self, request):\n"
+                "        if not self.validate_request(request):\n"
+                "            raise ValueError('Invalid request')\n"
+                "        return 'approved'\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Access review workflow",
+            "code_outline": "class AccessReviewService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- AccessReviewRequest(request_id, request_type, details, timestamp)\n- AccessReviewService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: AccessReviewRequest, AccessReviewService\n"
+                "- Preferred service or workflow facades: AccessReviewService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: AccessReviewService.handle_request(request), AccessReviewService.validate_request(request)\n"
+                "- Exact constructor fields: AccessReviewRequest(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: AccessReviewService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request raises ValueError for invalid requests",
+            "task_public_contract_anchor": (
+                "- Public facade: AccessReviewService\n"
+                "- Primary request model: AccessReviewRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: AccessReviewService.handle_request(request)\n"
+                "- Supporting validation surface: AccessReviewService.validate_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import AccessReviewRequest, AccessReviewService\n\n"
+                "def test_happy_path():\n"
+                "    service = AccessReviewService()\n"
+                "    request = AccessReviewRequest(request_id='1', request_type='role assignment', details={'role': 'admin'}, timestamp=1.0)\n"
+                "    outcome = service.handle_request(request)\n"
+                "    assert outcome.request_id == '1'\n"
+                "    assert outcome.outcome == 'approved'\n\n"
+                "def test_validation_failure():\n"
+                "    service = AccessReviewService()\n"
+                "    request = AccessReviewRequest(request_id='2', request_type='role assignment', details={'role': 'user'}, timestamp=1.0)\n"
+                "    with pytest.raises(ValueError):\n"
+                "        service.handle_request(request)\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Contract overreach signals: exact return-shape attribute assumption ('.request_id' on 'str') suggests an unsupported wrapper expectation\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - Failed: DID NOT RAISE <class 'ValueError'>\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "A previous validation-failure test expected an exception that the current input did not trigger." in agent.last_user_message
+    assert "The failed suite mixed a guessed return wrapper with a guessed exception path." in agent.last_user_message
+    assert "make the validation-failure test use an input that the current validator actually rejects instead of a same-type business variation" in agent.last_user_message
+    assert "assert isinstance(result, str)" in agent.last_user_message
+    assert "assert is_valid is False" in agent.last_user_message
+    assert "with pytest.raises(ValueError):" in agent.last_user_message
+
+
+def test_qa_tester_omits_overreaching_prior_suite_when_validation_flags_score_state_emptiness_assumption(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: float\n\n"
+                "@dataclass\n"
+                "class RiskScore:\n"
+                "    request_id: str\n"
+                "    score: float\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self._risk_scores = {}\n\n"
+                "    def handle_request(self, request):\n"
+                "        return 'rejected'\n\n"
+                "    def get_risk_scores(self):\n"
+                "        return dict(self._risk_scores)\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...\n    def get_risk_scores(self): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- RiskScore(request_id, score)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest, RiskScore\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request), ComplianceIntakeService.get_risk_scores()\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp), RiskScore(request_id, score)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request returns a rejected outcome for invalid requests",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Supporting validation surface: ComplianceIntakeService.get_risk_scores()\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import ComplianceIntakeService, ComplianceRequest\n\n"
+                "def test_validation_failure():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    request = ComplianceRequest(request_id='1', request_type='screening', details={}, timestamp=1.0)\n"
+                "    service.handle_request(request)\n"
+                "    assert len(service.get_risk_scores()) == 0\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Contract overreach signals: exact validation-failure score-state emptiness assertion on 'service.get_risk_scores()' in test_validation_failure (line 5) assumes rejected input leaves internal score state empty\n"
+                "- Pytest execution: FAIL\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous overreaching pytest file omitted because the validation summary already reported contract-overreach assertions." in agent.last_user_message
+    assert "request = ComplianceRequest(request_id='1', request_type='screening', details={}, timestamp=1.0)" not in agent.last_user_message
+    assert "The previous runtime failure came from assuming a rejected or invalid request leaves internal score state empty." in agent.last_user_message
+    assert "observable contract-backed effect" in agent.last_user_message
+    assert "remove direct reads of `service.get_risk_scores()` or similar internal score state" in agent.last_user_message
+    assert "def test_validation_failure():" in agent.last_user_message
+
+
+def test_qa_tester_replaces_placeholder_boolean_assertions(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp=None):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def validate_request(self, request):\n"
+                "        return 'documents' in request.details\n\n"
+                "    def handle_request(self, request):\n"
+                "        return None\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request), ComplianceIntakeService.validate_request(request)\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- validate_request returns False when documents are missing",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Supporting validation surface: ComplianceIntakeService.validate_request(request)"
+            ),
+            "existing_tests": (
+                "from service_module import ComplianceIntakeService, ComplianceRequest\n\n"
+                "def test_validation_failure():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    request = ComplianceRequest(request_id='1', request_type='individual', details={}, timestamp=1.0)\n"
+                "    service.handle_request(request)\n"
+                "    assert False  # Assuming handle_request rejects the request\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - assert False | assert False\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous hollow pytest file omitted because the validation summary already reported placeholder boolean assertions instead of real expectations." in agent.last_user_message
+    assert "Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only the minimum contract-backed scenarios" in agent.last_user_message
+    assert "assert False  # Assuming handle_request rejects the request" not in agent.last_user_message
+    assert "Exact rebuild surface:" in agent.last_user_message
+    assert "The previous suite used a placeholder boolean failure such as `assert False` instead of a real contract-backed expectation." in agent.last_user_message
+    assert "Delete that placeholder and replace it with an explicit validation result, raised exception, or observable side effect." in agent.last_user_message
+    assert "assert is_valid is False" in agent.last_user_message
+    assert "service.handle_request(request)(request)" not in agent.last_user_message
+    assert "service.validate_request(request)(request)" not in agent.last_user_message
+    assert "assert result is None" in agent.last_user_message
+
+
+def test_qa_tester_omits_validation_side_effect_suite_without_workflow_call(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "class AuditRecord:\n"
+                "    def __init__(self, request_id, action, details):\n"
+                "        self.request_id = request_id\n"
+                "        self.action = action\n"
+                "        self.details = details\n\n"
+                "class ComplianceRequest:\n"
+                "    def __init__(self, request_id, request_type, details, timestamp=None):\n"
+                "        self.request_id = request_id\n"
+                "        self.request_type = request_type\n"
+                "        self.details = details\n"
+                "        self.timestamp = timestamp\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self):\n"
+                "        self.audit_log = []\n\n"
+                "    def validate_request(self, request):\n"
+                "        return 'documents' in request.details\n\n"
+                "    def handle_request(self, request):\n"
+                "        if not self.validate_request(request):\n"
+                "            self.audit_log.append(AuditRecord(request.request_id, 'blocked', 'Validation failed'))\n"
+                "            return None\n"
+                "        self.audit_log.append(AuditRecord(request.request_id, 'approved', 'Accepted'))\n"
+                "        return None\n\n"
+                "    def get_audit_log(self):\n"
+                "        return self.audit_log\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- AuditRecord(request_id, action, details)\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: AuditRecord, ComplianceIntakeService, ComplianceRequest\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request), ComplianceIntakeService.validate_request(request), ComplianceIntakeService.get_audit_log()\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request appends a blocked audit record when validation fails",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Supporting validation surface: ComplianceIntakeService.validate_request(request)"
+            ),
+            "existing_tests": (
+                "from service_module import AuditRecord, ComplianceIntakeService, ComplianceRequest\n\n"
+                "def test_validation_failure():\n"
+                "    service = ComplianceIntakeService()\n"
+                "    request = ComplianceRequest(request_id='1', request_type='individual', details={}, timestamp=1.0)\n"
+                "    is_valid = service.validate_request(request)\n"
+                "    assert is_valid is False\n"
+                "    audit_log = service.get_audit_log()\n"
+                "    assert len(audit_log) == 1\n"
+                "    assert audit_log[0].action == 'blocked'\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - assert 0 == 1 | assert 0 == 1\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous invalid pytest file omitted because the validation-failure test asserted audit or service side effects after calling only `validate_request(...)` without executing the workflow." in agent.last_user_message
+    assert "Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch" in agent.last_user_message
+    assert "assert len(audit_log) == 1" not in agent.last_user_message
+    assert "result = service.handle_request(request)" in agent.last_user_message
+    assert "assert result is None" in agent.last_user_message
+    assert "If `test_validation_failure` later asserts audit records, risk-score state, or another workflow side effect, keep the documented workflow call in that test." in agent.last_user_message
+
+
+def test_qa_tester_omits_presence_only_validation_suite_with_same_shape_placeholder_payload(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass, field\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ClaimRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+                "@dataclass\n"
+                "class ClaimResult:\n"
+                "    request_id: str\n"
+                "    result: str\n"
+                "    risk_score: float\n\n"
+                "class ClaimTriageService:\n"
+                "    def validate_request(self, request: ClaimRequest) -> bool:\n"
+                "        required_fields = {'policy_id', 'claim_type', 'loss_amount'}\n"
+                "        if not required_fields.issubset(request.details):\n"
+                "            return False\n"
+                "        return True\n\n"
+                "    def handle_request(self, request: ClaimRequest) -> ClaimResult:\n"
+                "        if not self.validate_request(request):\n"
+                "            raise ValueError('Invalid claim request')\n"
+                "        return ClaimResult(request.request_id, 'straight-through', 0.0)\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Claim triage workflow",
+            "code_outline": "class ClaimTriageService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ClaimRequest(request_id, request_type, details, timestamp)\n- ClaimResult(request_id, result, risk_score)\n- ClaimTriageService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ClaimRequest, ClaimResult, ClaimTriageService\n"
+                "- Preferred service or workflow facades: ClaimTriageService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ClaimTriageService.handle_request(request), ClaimTriageService.validate_request(request)\n"
+                "- Exact constructor fields: ClaimRequest(request_id, request_type, details, timestamp), ClaimResult(request_id, result, risk_score)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ClaimTriageService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- validate_request returns False only when required fields are missing",
+            "task_public_contract_anchor": (
+                "- Public facade: ClaimTriageService\n"
+                "- Primary request model: ClaimRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ClaimTriageService.handle_request(request)\n"
+                "- Supporting validation surface: ClaimTriageService.validate_request(request)"
+            ),
+            "existing_tests": (
+                "import pytest\n"
+                "from datetime import datetime\n"
+                "from service_module import ClaimTriageService, ClaimRequest, ClaimResult\n\n"
+                "def test_validation_failure():\n"
+                "    service = ClaimTriageService()\n"
+                "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+                "    request = ClaimRequest(request_id=\"request_id-1\", request_type=\"screening\", details={\"policy_id\": \"value\", \"claim_type\": \"value\", \"loss_amount\": \"value\"}, timestamp=fixed_time)\n"
+                "    is_valid = service.validate_request(request)\n"
+                "    assert is_valid is False\n"
+                "    with pytest.raises(ValueError):\n"
+                "        service.handle_request(request)\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Pytest execution: FAIL\n"
+                "- Pytest failure details: FAILED tests_tests.py::test_validation_failure - assert True is False | assert True is False\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Previous invalid pytest file omitted because the validation-failure payload still keeps every required field that the current validator only checks for presence." in agent.last_user_message
+    assert "Do not preserve or patch the previous pytest file in place." in agent.last_user_message
+    assert 'details={"policy_id": "value", "claim_type": "value", "loss_amount": "value"}, timestamp=fixed_time' not in agent.last_user_message
+    assert 'details={"policy_id": "policy123", "claim_type": "collision"}, timestamp=fixed_time' in agent.last_user_message
+    assert "The previous validation-failure test still kept every required payload field that the current validator only checks for presence." in agent.last_user_message
+    assert "omit one of those required fields instead of keeping all of them with placeholder values" in agent.last_user_message
+
+
+def test_qa_tester_omits_prior_suite_when_validation_flags_undefined_helper_alias(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: float\n\n"
+                "@dataclass\n"
+                "class AuditLog:\n"
+                "    request_id: str\n"
+                "    action: str\n"
+                "    details: dict\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def handle_request(self, request):\n"
+                "        return AuditLog(request.request_id, 'accepted', request.details)\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": "Functions:\n- none\nClasses:\n- ComplianceRequest(request_id, request_type, details, timestamp)\n- AuditLog(request_id, action, details)\n- ComplianceIntakeService()",
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ComplianceIntakeService, ComplianceRequest, AuditLog\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request)\n"
+                "- Exact constructor fields: ComplianceRequest(request_id, request_type, details, timestamp), AuditLog(request_id, action, details)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request accepts a ComplianceRequest instance and returns an AuditLog record",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)"
+            ),
+            "existing_tests": (
+                "from service_module import AuditLog, ComplianceIntakeService, ComplianceRequest\n\n"
+                "def test_happy_path():\n"
+                "    service = ComplianceIntakeService(AuditLogger())\n"
+                "    request = ComplianceRequest(request_id='1', request_type='screening', details={'source': 'web'}, timestamp=1.0)\n"
+                "    result = service.handle_request(request)\n"
+                "    assert result.request_id == '1'\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Imported module symbols: AuditLog, ComplianceIntakeService, ComplianceRequest\n"
+                "- Undefined local names: AuditLogger (line 4)\n"
+                "- Pytest execution: FAIL\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "Existing tests context:" in agent.last_user_message
+    assert "Previous invalid pytest file omitted because the validation summary reported undefined helper or collaborator aliases outside the Exact test contract: AuditLogger." in agent.last_user_message
+    assert "Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and do not replace those guessed helpers with near-match record or dataclass imports." in agent.last_user_message
+    assert "service = ComplianceIntakeService(AuditLogger())" not in agent.last_user_message
+    assert "The previous file referenced undefined helper or collaborator aliases such as `AuditLogger`." in agent.last_user_message
+    assert "Do not repair those names by swapping to a similarly named record or dataclass like `AuditLog()`" in agent.last_user_message
+    assert "Record-shaped value models such as AuditLog, RiskScore, ResultRecord, or similar typed data holders are not service collaborators unless the exact contract explicitly says so." in agent.last_system_prompt
+
+
+def test_qa_tester_keeps_real_module_symbol_suite_and_focuses_missing_imports(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ComplianceRequest:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime\n\n"
+                "@dataclass\n"
+                "class AuditLog:\n"
+                "    request_id: str\n"
+                "    action: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime\n\n"
+                "@dataclass\n"
+                "class RiskScore:\n"
+                "    request_id: str\n"
+                "    jurisdiction: str\n"
+                "    customer_type: str\n"
+                "    adverse_indicators: bool\n"
+                "    missing_document_severity: str\n"
+                "    score: float\n\n"
+                "class RiskScorer:\n"
+                "    def score_request(self, request: ComplianceRequest) -> RiskScore:\n"
+                "        return RiskScore(request.request_id, '', '', False, '', 1.0)\n\n"
+                "class AuditLogger:\n"
+                "    def log_action(self, audit_log: AuditLog) -> None:\n"
+                "        pass\n\n"
+                "class ComplianceIntakeService:\n"
+                "    def __init__(self, risk_scorer: RiskScorer, audit_logger: AuditLogger):\n"
+                "        self.risk_scorer = risk_scorer\n"
+                "        self.audit_logger = audit_logger\n\n"
+                "    def handle_request(self, request: ComplianceRequest) -> None:\n"
+                "        pass\n\n"
+                "    def validate_request(self, request: ComplianceRequest) -> bool:\n"
+                "        return True\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Compliance intake workflow",
+            "code_outline": "class ComplianceIntakeService:\n    def handle_request(self, request): ...",
+            "code_public_api": (
+                "Functions:\n- none\n"
+                "Classes:\n"
+                "- ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- AuditLog(request_id, action, details, timestamp)\n"
+                "- RiskScore(request_id, jurisdiction, customer_type, adverse_indicators, missing_document_severity, score)\n"
+                "- RiskScorer()\n"
+                "- AuditLogger()\n"
+                "- ComplianceIntakeService(risk_scorer, audit_logger)"
+            ),
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: AuditLogger, AuditLog, ComplianceIntakeService, ComplianceRequest, RiskScore, RiskScorer\n"
+                "- Preferred service or workflow facades: ComplianceIntakeService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ComplianceIntakeService.handle_request(request), ComplianceIntakeService.validate_request(request)\n"
+                "- Exact constructor fields: ComplianceIntakeService(risk_scorer, audit_logger), ComplianceRequest(request_id, request_type, details, timestamp), AuditLog(request_id, action, details, timestamp), RiskScore(request_id, jurisdiction, customer_type, adverse_indicators, missing_document_severity, score)\n"
+                "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+            ),
+            "code_test_targets": "Test targets:\n- Functions to test: none\n- Classes to test: ComplianceIntakeService\n- Entry points to avoid in tests: none",
+            "code_behavior_contract": "Behavior contract:\n- handle_request accepts a ComplianceRequest instance",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)\n"
+                "- Supporting validation surface: ComplianceIntakeService.validate_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "existing_tests": (
+                "from service_module import AuditLog, ComplianceIntakeService, ComplianceRequest, RiskScore, RiskScorer\n\n"
+                "def test_happy_path():\n"
+                "    risk_scorer = RiskScorer()\n"
+                "    audit_logger = AuditLogger()\n"
+                "    service = ComplianceIntakeService(risk_scorer, audit_logger)\n"
+                "    request = ComplianceRequest(request_id='1', request_type='screening', details={'source': 'web'}, timestamp=datetime.now())\n"
+                "    service.handle_request(request)\n"
+            ),
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Syntax OK: yes\n"
+                "- Imported module symbols: AuditLog, ComplianceIntakeService, ComplianceRequest, RiskScore, RiskScorer\n"
+                "- Undefined local names: AuditLogger (line 6), datetime (line 7)\n"
+                "- Pytest execution: FAIL\n"
+                "- Verdict: FAIL"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert "audit_logger = AuditLogger()" in agent.last_user_message
+    assert "The previous file referenced real production symbols that exist in the module but were never imported, such as `AuditLogger`." in agent.last_user_message
+    assert "Add each one to the import list at the top of the file before use instead of deleting, renaming, or leaving it as an undefined local." in agent.last_user_message
+    assert "The previous file referenced undefined helper or collaborator aliases such as `AuditLogger`." not in agent.last_user_message
+    assert "from datetime import datetime" in agent.last_user_message
+    assert "from service_module import ComplianceIntakeService, ComplianceRequest, AuditLogger, AuditLog, RiskScore, RiskScorer" in agent.last_user_message
+    assert "Before finalizing, verify that every non-local name used anywhere in the suite is either imported from the target module" in agent.last_system_prompt
 
 
 def test_qa_tester_contract_first_repair_focuses_pytest_import_and_shared_state(tmp_path):
@@ -1327,6 +2635,7 @@ def test_qa_tester_contract_first_repair_focuses_datetime_import_and_timeout_min
     assert "The previous file referenced `datetime` without importing it. If any rewritten test keeps `datetime.now()` or another bare `datetime` reference, add a matching import such as `from datetime import datetime` or `import datetime` at the top before finalizing." in agent.last_user_message
     assert "Otherwise remove every bare `datetime` reference and switch those timestamp values to a self-contained literal or previously defined local" in agent.last_user_message
     assert "The previous suite hung at runtime. Rewrite to the minimal contract-required trio only: happy path, validation failure, and batch processing. Remove duplicate-detection, risk-tier, audit-only, and other speculative extras unless the exact contract or behavior contract explicitly requires them." in agent.last_user_message
+    assert "When the suite already contains a dedicated validation-failure test, do not reuse that invalid payload inside test_batch_processing or any other supposedly valid batch scenario." in agent.last_user_message
 
 
 def test_qa_tester_contract_first_repair_focuses_line_budget_trimming(tmp_path):

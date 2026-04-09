@@ -222,7 +222,7 @@ def main() -> None:
             summary = result["summary"]
             print(f"phase={summary['phase']}")
             print(f"terminal_outcome={summary['terminal_outcome']}")
-            print(f"repair_cycles_present={_presence_label(summary['repair_cycle_count'])}")
+            print(f"repair_cycles_present={_presence_label(summary.get('repair_cycle_count'))}")
 
 
 if __name__ == "__main__":

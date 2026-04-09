@@ -1137,6 +1137,7 @@ class Orchestrator:
             code_analysis["line_budget"] = line_budget
         if self._task_requires_cli_entrypoint(task):
             code_analysis["main_guard_required"] = True
+        task_public_contract_preflight = self._task_public_contract_preflight(task, code_analysis)
         completion_diagnostics = self._completion_diagnostics_from_output(
             output,
             raw_content=code_content,
@@ -1153,6 +1154,8 @@ class Orchestrator:
             )
             import_validation = self._execute_generated_module_import(module_filename, code_content)
         self._record_output_validation(output, "code_analysis", code_analysis)
+        if task_public_contract_preflight is not None:
+            self._record_output_validation(output, "task_public_contract_preflight", task_public_contract_preflight)
         if import_validation is not None:
             self._record_output_validation(output, "import_validation", import_validation)
         self._record_output_validation(output, "completion_diagnostics", completion_diagnostics)
@@ -1170,10 +1173,108 @@ class Orchestrator:
         ):
             import_summary = import_validation.get("summary") or "generated module failed to import"
             validation_issues.append(f"module import failed: {import_summary}")
+        if isinstance(task_public_contract_preflight, dict):
+            contract_issues = task_public_contract_preflight.get("issues") or []
+            if contract_issues:
+                validation_issues.append(f"task public contract mismatch: {', '.join(contract_issues)}")
         if completion_diagnostics.get("likely_truncated"):
             validation_issues.append(self._completion_validation_issue(completion_diagnostics))
         if validation_issues:
             raise AgentExecutionError(f"Generated code validation failed: {'; '.join(validation_issues)}")
+
+    def _task_public_contract_preflight(
+        self,
+        task: Optional[Task],
+        code_analysis: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if task is None or not code_analysis.get("syntax_ok", True):
+            return None
+
+        task_public_contract_anchor = self._task_public_contract_anchor(task.description)
+        if not task_public_contract_anchor:
+            return None
+
+        class_map = code_analysis.get("classes") or {}
+        function_names = {item["name"] for item in code_analysis.get("functions") or []}
+        issues: list[str] = []
+        public_facade = ""
+        primary_request_model = ""
+        required_surfaces: list[str] = []
+
+        for line in task_public_contract_anchor.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("- "):
+                continue
+
+            label, separator, surface = stripped[2:].partition(":")
+            if not separator:
+                continue
+
+            normalized_label = label.strip().lower()
+            normalized_surface = surface.strip()
+            if not normalized_surface:
+                continue
+
+            if normalized_label == "public facade":
+                public_facade = normalized_surface
+                if normalized_surface not in class_map:
+                    issues.append(f"missing public facade {normalized_surface}")
+                continue
+
+            if normalized_label == "primary request model":
+                primary_request_model = normalized_surface
+                _, model_name, expected_params = self._parse_task_public_contract_surface(normalized_surface)
+                class_info = class_map.get(model_name)
+                if not isinstance(class_info, dict):
+                    issues.append(f"missing primary request model {model_name}")
+                    continue
+
+                actual_params = list(class_info.get("constructor_params") or [])
+                min_required_params = class_info.get("constructor_min_args")
+                expected_prefix = actual_params[: len(expected_params)]
+                if expected_params and expected_prefix != expected_params:
+                    issues.append(
+                        f"primary request model {model_name} must start with constructor fields ({', '.join(expected_params)})"
+                    )
+                    continue
+                if isinstance(min_required_params, int) and min_required_params > len(expected_params):
+                    issues.append(
+                        f"primary request model {model_name} requires additional constructor fields beyond ({', '.join(expected_params)})"
+                    )
+                continue
+
+            required_surfaces.append(normalized_surface)
+            owner_name, callable_name, _ = self._parse_task_public_contract_surface(normalized_surface)
+            if owner_name:
+                class_info = class_map.get(owner_name)
+                exposed_method_names = set((class_info or {}).get("method_signatures") or {})
+                if not isinstance(class_info, dict) or callable_name not in exposed_method_names:
+                    issues.append(f"missing required surface {owner_name}.{callable_name}")
+                continue
+            if callable_name not in function_names:
+                issues.append(f"missing required surface {callable_name}")
+
+        return {
+            "anchor_present": True,
+            "anchor": task_public_contract_anchor,
+            "public_facade": public_facade,
+            "primary_request_model": primary_request_model,
+            "required_surfaces": required_surfaces,
+            "issues": issues,
+            "passed": not issues,
+        }
+
+    def _parse_task_public_contract_surface(self, surface: str) -> tuple[Optional[str], str, list[str]]:
+        match = re.match(
+            r"^(?:(?P<owner>[A-Za-z_][A-Za-z0-9_]*)\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>.*)\)$",
+            surface.strip(),
+        )
+        if not match:
+            return None, surface.strip(), []
+
+        args_text = match.group("args").strip()
+        args = [part.strip() for part in args_text.split(",") if part.strip()] if args_text else []
+        return match.group("owner"), match.group("name"), args
 
     def _execute_generated_module_import(self, module_filename: str, code_content: str) -> Dict[str, Any]:
         result: Dict[str, Any] = {
@@ -1324,6 +1425,16 @@ class Orchestrator:
             validation_issues.append(
                 f"fixture count {test_analysis.get('fixture_count')} exceeds maximum {fixture_budget}"
             )
+        tests_without_assertions = test_analysis.get("tests_without_assertions") or []
+        if tests_without_assertions:
+            validation_issues.append(
+                f"tests without assertion-like checks: {', '.join(tests_without_assertions)}"
+            )
+        contract_overreach_signals = test_analysis.get("contract_overreach_signals") or []
+        if contract_overreach_signals:
+            validation_issues.append(
+                f"contract overreach signals: {', '.join(contract_overreach_signals)}"
+            )
         if test_analysis.get("helper_surface_usages") and (
             isinstance(line_budget, int) or isinstance(max_test_count, int) or isinstance(fixture_budget, int)
         ):
@@ -1386,12 +1497,15 @@ class Orchestrator:
         execution_agent_name = self._execution_agent_name(task)
         if AgentRegistry.normalize_key(execution_agent_name) != "code_engineer":
             return False
+        if isinstance(task.repair_context, dict) and bool(task.repair_context):
+            return True
         max_tokens = self.config.max_tokens
         return isinstance(max_tokens, int) and 0 < max_tokens <= 1200
 
     def _compact_architecture_context(self, task: Task, task_public_contract_anchor: str) -> str:
+        repair_focused = isinstance(task.repair_context, dict) and bool(task.repair_context)
         compact_lines = [
-            "Low-budget architecture summary:",
+            "Repair-focused architecture summary:" if repair_focused else "Low-budget architecture summary:",
             "- Keep one main facade plus the exact anchored request model and method names.",
             "- Public contract anchor:",
         ]
@@ -1400,6 +1514,13 @@ class Orchestrator:
             for line in task_public_contract_anchor.splitlines()
             if isinstance(line, str) and line.strip()
         )
+        if repair_focused:
+            compact_lines.append(
+                "- Treat prior architecture snippets as behavioral guidance only. Do not copy illustrative code blocks over the failing implementation, validation summary, or cited pytest failures."
+            )
+            compact_lines.append(
+                "- During repair, prefer the existing failing module, the validation summary, and the cited pytest details over any stale field names or helper flows shown in the architecture sketch."
+            )
         compact_lines.append(
             "- Keep validation, scoring, audit logging, and batch behavior on that same facade unless the task explicitly requires another public collaborator."
         )
@@ -1896,6 +2017,8 @@ class Orchestrator:
             "failure_category",
             "repair_owner",
             "original_assigned_to",
+            "source_failure_task_id",
+            "source_failure_category",
         )
         return {
             key: repair_context[key]
@@ -1929,11 +2052,13 @@ class Orchestrator:
             "decisions": agent_view.decisions,
             "artifacts": agent_view.artifacts,
         }
-        ctx.update(self._planned_module_context(project, visible_task_ids))
-        default_module_name = self._default_module_name_for_task(task)
-        if default_module_name:
-            ctx["module_name"] = default_module_name
-            ctx["module_filename"] = f"{default_module_name}.py"
+        ctx.update(self._planned_module_context(project, visible_task_ids, current_task=task))
+        planned_module_name = ctx.get("planned_module_name")
+        planned_module_filename = ctx.get("planned_module_filename")
+        if isinstance(planned_module_name, str) and planned_module_name.strip():
+            ctx["module_name"] = planned_module_name
+        if isinstance(planned_module_filename, str) and planned_module_filename.strip():
+            ctx["module_filename"] = planned_module_filename
         task_public_contract_anchor = self._task_public_contract_anchor(task.description)
         compact_architecture_context: Optional[str] = None
         if task_public_contract_anchor:
@@ -1943,21 +2068,22 @@ class Orchestrator:
         for prev_task in project.tasks:
             if prev_task.id not in visible_task_ids:
                 continue
-            if prev_task.status == TaskStatus.DONE.value and prev_task.output:
-                ctx[prev_task.id] = prev_task.output
-                ctx["completed_tasks"][prev_task.id] = prev_task.output
+            visible_output = self._task_context_output(prev_task)
+            if prev_task.status == TaskStatus.DONE.value and visible_output:
+                ctx[prev_task.id] = visible_output
+                ctx["completed_tasks"][prev_task.id] = visible_output
                 if budget_decomposition_plan_task_id == prev_task.id:
-                    ctx["budget_decomposition_brief"] = prev_task.output
+                    ctx["budget_decomposition_brief"] = visible_output
                 if self._is_budget_decomposition_planner(prev_task):
                     continue
                 semantic_key = self._semantic_output_key(prev_task)
                 if semantic_key:
-                    semantic_output = prev_task.output
+                    semantic_output = visible_output
                     if semantic_key == "architecture" and compact_architecture_context:
                         semantic_output = compact_architecture_context
                     ctx[semantic_key] = semantic_output
                 if AgentRegistry.normalize_key(prev_task.assigned_to) == "code_engineer":
-                    ctx.update(self._code_artifact_context(prev_task))
+                    ctx.update(self._code_artifact_context(prev_task, project))
                 if AgentRegistry.normalize_key(prev_task.assigned_to) == "dependency_manager":
                     ctx.update(self._dependency_artifact_context(prev_task, ctx))
                 if AgentRegistry.normalize_key(prev_task.assigned_to) == "qa_tester":
@@ -1987,7 +2113,15 @@ class Orchestrator:
             if normalized_execution_agent == "code_engineer" and isinstance(existing_tests, str) and existing_tests.strip():
                 ctx["existing_tests"] = existing_tests
             if normalized_execution_agent == "qa_tester":
-                if isinstance(repair_content, str) and repair_content.strip():
+                if (
+                    isinstance(repair_content, str)
+                    and repair_content.strip()
+                    and self._qa_repair_should_reuse_failed_test_artifact(
+                        validation_summary,
+                        ctx.get("code", ""),
+                        repair_content,
+                    )
+                ):
                     ctx["existing_tests"] = repair_content
                 if "test_validation_summary" not in ctx and isinstance(validation_summary, str) and validation_summary.strip():
                     ctx["test_validation_summary"] = validation_summary
@@ -2150,6 +2284,20 @@ class Orchestrator:
         return filtered_artifacts
 
     def _build_repair_instruction(self, task: Task, failure_category: str) -> str:
+        if failure_category == FailureCategory.CODE_VALIDATION.value:
+            last_error = task.last_error if isinstance(task.last_error, str) else ""
+            if "follows default argument" in last_error.lower():
+                instruction = (
+                    "Repair the generated Python module by reordering any dataclass fields that currently place a defaulted field before a required field. "
+                    "Inspect every dataclass in the module, preserve the documented public names, and avoid unrelated behavior changes."
+                )
+                dataclass_examples = self._dataclass_default_order_repair_examples(
+                    self._failed_artifact_content(task, ArtifactType.CODE)
+                )
+                if dataclass_examples:
+                    instruction = f"{instruction} {dataclass_examples[0]}"
+                return instruction
+
         instructions = {
             FailureCategory.CODE_VALIDATION.value: "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
             FailureCategory.TEST_VALIDATION.value: "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
@@ -2192,6 +2340,15 @@ class Orchestrator:
                 return content
         raw_content = task.output_payload.get("raw_content")
         return raw_content if isinstance(raw_content, str) else (task.output or "")
+
+    def _task_context_output(self, task: Task) -> str:
+        if isinstance(task.output, str) and task.output.strip():
+            return task.output
+        if isinstance(task.output_payload, dict):
+            raw_content = task.output_payload.get("raw_content")
+            if isinstance(raw_content, str) and raw_content.strip():
+                return raw_content
+        return task.output or ""
 
     def _completion_diagnostics_from_output(
         self,
@@ -2429,6 +2586,135 @@ class Orchestrator:
 
         return "AssertionError" in joined_details or " - assert " in joined_details
 
+    def _pytest_contract_overreach_signals(
+        self,
+        test_execution: Optional[Dict[str, Any]],
+    ) -> list[str]:
+        failure_details = self._pytest_failure_details(test_execution, limit=10)
+        if not failure_details:
+            return []
+        output_chunks: list[str] = []
+        if isinstance(test_execution, dict):
+            for field_name in ("stdout", "stderr"):
+                value = test_execution.get(field_name)
+                if isinstance(value, str) and value.strip():
+                    output_chunks.append(value)
+        output_text = "\n".join(output_chunks)
+
+        status_like_aliases = {
+            "accepted": "accepted",
+            "abuse escalation": "abuse_escalation",
+            "abuse_escalation": "abuse_escalation",
+            "approved": "approved",
+            "auto approve": "auto_approve",
+            "auto-approve": "auto_approve",
+            "auto_approve": "auto_approve",
+            "blocked": "blocked",
+            "conditional approval": "conditional_approval",
+            "conditional_approval": "conditional_approval",
+            "enhanced due diligence": "enhanced_due_diligence",
+            "enhanced_due_diligence": "enhanced_due_diligence",
+            "escalated": "escalated",
+            "flagged": "flagged",
+            "fraud": "fraud",
+            "fraud escalation": "fraud_escalation",
+            "fraud_escalation": "fraud_escalation",
+            "invalid": "invalid",
+            "manual inspection": "manual_inspection",
+            "manual_inspection": "manual_inspection",
+            "manual review": "manual_review",
+            "manual_review": "manual_review",
+            "manual investigation": "manual_investigation",
+            "manual_investigation": "manual_investigation",
+            "pending": "pending",
+            "pending review": "pending_review",
+            "pending_review": "pending_review",
+            "rejected": "rejected",
+            "security escalation": "security_escalation",
+            "security_escalation": "security_escalation",
+            "straight through": "straight_through_review",
+            "straight through review": "straight_through_review",
+            "straight-through": "straight_through_review",
+            "straight-through review": "straight_through_review",
+            "straight_through_review": "straight_through_review",
+            "time boxed approval": "time_boxed_approval",
+            "time-boxed approval": "time_boxed_approval",
+            "time_boxed_approval": "time_boxed_approval",
+        }
+        status_like_pattern = re.compile(
+            r"(?<![A-Za-z0-9_])(" + "|".join(
+                sorted((re.escape(label) for label in status_like_aliases), key=len, reverse=True)
+            ) + r")(?![A-Za-z0-9_])",
+            re.IGNORECASE,
+        )
+        primitive_runtime_types = {"NoneType", "bool", "dict", "float", "int", "list", "str", "tuple"}
+
+        def extract_status_like_label(assertion_text: str) -> Optional[str]:
+            matches = [
+                status_like_aliases[match.lower()]
+                for match in status_like_pattern.findall(assertion_text)
+            ]
+            unique_matches = list(dict.fromkeys(matches))
+            if len(unique_matches) != 1:
+                return None
+            return unique_matches[0]
+
+        signals: list[str] = []
+        seen: set[str] = set()
+        for detail in failure_details:
+            for pattern in (
+                r"AssertionError: assert ['\"]([^'\"]+)['\"] == ['\"]([^'\"]+)['\"]",
+                r"AssertionError: assert ['\"]([^'\"]+)['\"] in ['\"]([^'\"]+)['\"]",
+            ):
+                for match in re.finditer(pattern, detail):
+                    left = extract_status_like_label(match.group(1).strip())
+                    right = extract_status_like_label(match.group(2).strip())
+                    if left is None or right is None or left == right:
+                        continue
+                    signal = (
+                        f"exact status/action label mismatch ('{left}' vs '{right}') suggests an unsupported threshold assumption"
+                    )
+                    if signal in seen:
+                        continue
+                    seen.add(signal)
+                    signals.append(signal)
+            for match in re.finditer(
+                r"AttributeError: ['\"]([A-Za-z_][A-Za-z0-9_]*)['\"] object has no attribute ['\"]([^'\"]+)['\"]",
+                detail,
+            ):
+                runtime_type = match.group(1)
+                attribute = match.group(2).strip()
+                if runtime_type not in primitive_runtime_types or not attribute:
+                    continue
+                signal = (
+                    f"exact return-shape attribute assumption ('.{attribute}' on '{runtime_type}') suggests an unsupported wrapper expectation"
+                )
+                if signal in seen:
+                    continue
+                seen.add(signal)
+                signals.append(signal)
+        if output_text:
+            for match in re.finditer(
+                r"AssertionError:\s+assert ['\"](?P<asserted_key>[^'\"]+)['\"] in \{.*?\baction_id=['\"](?P<action_id>[^'\"]+)['\"].*?=\s*<[^>]+>\.(?P<collection>[A-Za-z_][A-Za-z0-9_]*)",
+                output_text,
+                re.IGNORECASE | re.DOTALL,
+            ):
+                collection_name = match.group("collection").strip()
+                asserted_key = match.group("asserted_key").strip()
+                action_id = match.group("action_id").strip()
+                if "action" not in collection_name.lower() or not asserted_key or not action_id:
+                    continue
+                if asserted_key == action_id:
+                    continue
+                signal = (
+                    f"exact internal action-map key assumption for '{collection_name}' suggests an unsupported storage-key contract"
+                )
+                if signal in seen:
+                    continue
+                seen.add(signal)
+                signals.append(signal)
+        return signals
+
     def _test_validation_has_static_issues(self, validation: Dict[str, Any]) -> bool:
         test_analysis = validation.get("test_analysis")
         if not isinstance(test_analysis, dict):
@@ -2469,6 +2755,7 @@ class Orchestrator:
             "invalid_member_references",
             "call_arity_mismatches",
             "constructor_arity_mismatches",
+            "contract_overreach_signals",
             "payload_contract_violations",
             "non_batch_sequence_calls",
             "undefined_fixtures",
@@ -2487,6 +2774,7 @@ class Orchestrator:
         fallback_message: str,
         completion_diagnostics: Optional[Dict[str, Any]] = None,
         import_validation: Optional[Dict[str, Any]] = None,
+        task_public_contract_preflight: Optional[Dict[str, Any]] = None,
     ) -> str:
         lines = ["Generated code validation:"]
         lines.append(f"- Syntax OK: {'yes' if code_analysis.get('syntax_ok', True) else 'no'}")
@@ -2515,6 +2803,23 @@ class Orchestrator:
             import_summary = import_validation.get("summary")
             if isinstance(import_summary, str) and import_summary:
                 lines.append(f"- Import summary: {import_summary}")
+        if isinstance(task_public_contract_preflight, dict) and task_public_contract_preflight.get("anchor_present"):
+            lines.append("- Task public contract anchor: present")
+            lines.append(
+                f"- Task public contract: {'PASS' if task_public_contract_preflight.get('passed', True) else 'FAIL'}"
+            )
+            public_facade = task_public_contract_preflight.get("public_facade")
+            if isinstance(public_facade, str) and public_facade:
+                lines.append(f"- Public facade anchor: {public_facade}")
+            primary_request_model = task_public_contract_preflight.get("primary_request_model")
+            if isinstance(primary_request_model, str) and primary_request_model:
+                lines.append(f"- Primary request model anchor: {primary_request_model}")
+            required_surfaces = task_public_contract_preflight.get("required_surfaces") or []
+            if required_surfaces:
+                lines.append(f"- Required public surfaces: {', '.join(required_surfaces)}")
+            contract_issues = task_public_contract_preflight.get("issues") or []
+            if contract_issues:
+                lines.append(f"- Task public contract mismatches: {', '.join(contract_issues)}")
         third_party_imports = code_analysis.get('third_party_imports') or []
         lines.append(f"- Third-party imports: {', '.join(third_party_imports or ['none'])}")
         if fallback_message:
@@ -2529,11 +2834,13 @@ class Orchestrator:
             if isinstance(code_analysis, dict):
                 completion_diagnostics = validation.get("completion_diagnostics")
                 import_validation = validation.get("import_validation")
+                task_public_contract_preflight = validation.get("task_public_contract_preflight")
                 return self._build_code_validation_summary(
                     code_analysis,
                     fallback_message,
                     completion_diagnostics if isinstance(completion_diagnostics, dict) else None,
                     import_validation if isinstance(import_validation, dict) else None,
+                    task_public_contract_preflight if isinstance(task_public_contract_preflight, dict) else None,
                 )
         if failure_category == FailureCategory.TEST_VALIDATION.value:
             test_analysis = validation.get("test_analysis")
@@ -2575,6 +2882,9 @@ class Orchestrator:
                 validation.get("test_filename") if isinstance(validation.get("test_filename"), str) else None,
             )
 
+        if failure_origin == "tests" and self._pytest_contract_overreach_signals(test_execution):
+            return False
+
         if failure_origin == "code_under_test":
             return True
 
@@ -2587,13 +2897,64 @@ class Orchestrator:
         )
 
     def _upstream_code_task_for_test_failure(self, project: ProjectState, task: Task) -> Optional[Task]:
-        for dependency_id in task.dependencies:
+        imported_code_task = self._imported_code_task_for_failed_test(project, task)
+        preferred_dependency: Optional[Task] = None
+        for dependency_id in reversed(task.dependencies):
             dependency = project.get_task(dependency_id)
             if dependency is None:
                 continue
             if AgentRegistry.normalize_key(dependency.assigned_to) == "code_engineer":
-                return dependency
-        return None
+                if dependency.repair_origin_task_id:
+                    return dependency
+                if preferred_dependency is None:
+                    preferred_dependency = dependency
+        return imported_code_task or preferred_dependency
+
+    @staticmethod
+    def _python_import_roots(raw_content: object) -> set[str]:
+        if not isinstance(raw_content, str) or not raw_content.strip():
+            return set()
+
+        try:
+            tree = ast.parse(raw_content)
+        except SyntaxError:
+            return set()
+
+        import_roots: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root_name = alias.name.split(".", 1)[0]
+                    if root_name:
+                        import_roots.add(root_name)
+                continue
+            if isinstance(node, ast.ImportFrom):
+                if node.level:
+                    continue
+                module_name = (node.module or "").split(".", 1)[0]
+                if module_name:
+                    import_roots.add(module_name)
+        return import_roots
+
+    def _imported_code_task_for_failed_test(self, project: ProjectState, task: Task) -> Optional[Task]:
+        import_roots = self._python_import_roots(
+            self._failed_artifact_content(task, ArtifactType.TEST)
+        )
+        if not import_roots:
+            return None
+
+        preferred_task: Optional[Task] = None
+        for existing_task in reversed(project.tasks):
+            if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
+                continue
+            module_name = self._default_module_name_for_task(existing_task)
+            if not module_name or module_name not in import_roots:
+                continue
+            if existing_task.repair_origin_task_id:
+                return existing_task
+            if preferred_task is None:
+                preferred_task = existing_task
+        return preferred_task
 
     def _build_code_repair_context_from_test_failure(
         self,
@@ -2601,24 +2962,114 @@ class Orchestrator:
         test_task: Task,
         cycle: Dict[str, Any],
     ) -> Dict[str, Any]:
-        return {
+        validation_summary = self._build_repair_validation_summary(
+            test_task,
+            FailureCategory.TEST_VALIDATION.value,
+        )
+        repair_context = {
             "cycle": cycle.get("cycle"),
             "failure_category": FailureCategory.CODE_VALIDATION.value,
             "failure_message": test_task.last_error or test_task.output or "",
             "failure_error_type": test_task.last_error_type,
             "repair_owner": "code_engineer",
             "original_assigned_to": code_task.assigned_to,
-            "instruction": "Repair the generated Python module so it satisfies the existing valid pytest suite and the documented contract without shifting the failure onto the tests.",
-            "validation_summary": self._build_repair_validation_summary(
-                test_task,
-                FailureCategory.TEST_VALIDATION.value,
+            "source_failure_task_id": test_task.id,
+            "source_failure_category": test_task.last_error_category or FailureCategory.TEST_VALIDATION.value,
+            "instruction": self._build_code_repair_instruction_from_test_failure(
+                code_task,
+                validation_summary,
             ),
+            "validation_summary": validation_summary,
             "existing_tests": self._failed_artifact_content(test_task, ArtifactType.TEST),
             "failed_output": code_task.output or "",
             "failed_artifact_content": self._failed_artifact_content(code_task, ArtifactType.CODE),
             "provider_call": code_task.last_provider_call,
-            "source_failure_task_id": test_task.id,
         }
+        self._merge_prior_repair_context(code_task, repair_context)
+        return repair_context
+
+    def _build_code_repair_instruction_from_test_failure(
+        self,
+        code_task: Task,
+        validation_summary: str,
+    ) -> str:
+        failed_artifact_content = self._failed_artifact_content(code_task, ArtifactType.CODE)
+        duplicate_argument_details = self._duplicate_constructor_argument_details(validation_summary)
+        if duplicate_argument_details is not None:
+            class_name, field_name = duplicate_argument_details
+            return (
+                "Repair the generated Python module so valid happy-path and batch requests do not fail because the same constructor field is bound twice. "
+                "Keep internal constructor calls unambiguous and preserve the documented contract. "
+                f"The current failed artifact still passes {field_name} twice to {class_name}(...). "
+                f"Do not pass {field_name} both positionally and through **request.details or another expanded mapping. "
+                "Remove the duplicate from the expanded payload or switch to explicit keyword construction so each constructor field is bound exactly once."
+            )
+        missing_attribute_details = self._missing_object_attribute_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        if missing_attribute_details is not None:
+            class_name, attribute_name, class_fields = missing_attribute_details
+            replacement_field = self._suggest_declared_attribute_replacement(attribute_name, class_fields)
+            instruction = (
+                "Repair the generated Python module so valid happy-path and batch requests do not fail on missing internal attributes. "
+                "Keep dataclass fields, helper-return objects, and member accesses internally consistent."
+            )
+            if class_fields:
+                instruction = (
+                    f"{instruction} The current failed artifact reads {class_name}.{attribute_name} even though "
+                    f"{class_name} only defines {self._render_name_list(class_fields)}."
+                )
+            else:
+                instruction = (
+                    f"{instruction} The current failed artifact reads {class_name}.{attribute_name} even though "
+                    "that attribute is not defined on the returned object."
+                )
+            return (
+                f"{instruction} Rename the access to an existing field or define and derive that attribute consistently "
+                f"on the model. If the rewritten module keeps .{attribute_name} anywhere, {class_name} must declare "
+                f"{attribute_name} and populate or derive it where {class_name} instances are built. Otherwise replace "
+                f"that access with one of the existing fields and remove every undeclared read of .{attribute_name}; "
+                + (
+                    f"the closest declared field here is {replacement_field}, so prefer replacing {class_name}.{attribute_name} with {class_name}.{replacement_field} unless the task explicitly requires a separate {attribute_name} field. "
+                    if replacement_field
+                    else ""
+                )
+                + "do not leave near-match field names split across construction and scoring paths."
+            )
+        strictness_details = self._internal_constructor_strictness_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        if strictness_details is None:
+            return (
+                "Repair the generated Python module so it satisfies the existing valid pytest suite "
+                "and the documented contract without shifting the failure onto the tests."
+            )
+
+        class_name, missing_fields, required_fields = strictness_details
+        instruction = (
+            "Repair the generated Python module so valid happy-path and batch requests do not fail "
+            "while constructing internal models. Align internal constructor requirements with the "
+            "documented contract, validate_request(...), and the existing valid pytest inputs. "
+            "Do not shift new required payload fields onto the tests."
+        )
+        rendered_missing_fields = self._render_name_list(missing_fields)
+        if required_fields:
+            instruction = (
+                f"{instruction} The current validator only requires "
+                f"{self._render_name_list(required_fields)}, but {class_name}(...) still requires "
+                f"{rendered_missing_fields}."
+            )
+        else:
+            instruction = (
+                f"{instruction} The current failed artifact still makes {class_name}(...) require "
+                f"{rendered_missing_fields} during the cited valid pytest cases."
+            )
+        return (
+            f"{instruction} Derive those internal values or give them safe defaults instead of "
+            "demanding new input fields."
+        )
 
     def _is_budget_decomposition_planner(self, task: Task) -> bool:
         repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
@@ -2739,7 +3190,44 @@ class Orchestrator:
             repair_context["helper_surface_symbols"] = self._normalized_helper_surface_symbols(
                 helper_surface_usages
             )
+        self._merge_prior_repair_context(task, repair_context)
         return repair_context
+
+    def _merge_prior_repair_context(self, task: Task, repair_context: Dict[str, Any]) -> None:
+        if not isinstance(repair_context, dict) or not task.repair_origin_task_id:
+            return
+
+        prior_repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+        if not prior_repair_context:
+            return
+
+        current_instruction = str(repair_context.get("instruction") or "").strip()
+        prior_instruction = str(prior_repair_context.get("instruction") or "").strip()
+        if prior_instruction and prior_instruction not in current_instruction:
+            merged_instruction_parts = [current_instruction] if current_instruction else []
+            merged_instruction_parts.append(
+                f"Also preserve and fully satisfy the prior unresolved repair objective from {task.repair_origin_task_id}: {prior_instruction}"
+            )
+            repair_context["instruction"] = " ".join(merged_instruction_parts).strip()
+
+        current_validation_summary = str(repair_context.get("validation_summary") or "").strip()
+        prior_validation_summary = str(prior_repair_context.get("validation_summary") or "").strip()
+        if prior_validation_summary and prior_validation_summary not in current_validation_summary:
+            merged_validation_parts = [current_validation_summary] if current_validation_summary else []
+            merged_validation_parts.extend(
+                [
+                    "",
+                    "Prior unresolved repair context:",
+                    f"- Prior failure category: {prior_repair_context.get('failure_category') or FailureCategory.UNKNOWN.value}",
+                ]
+            )
+            if prior_instruction:
+                merged_validation_parts.append(f"- Prior repair objective: {prior_instruction}")
+            merged_validation_parts.extend([
+                "- Prior validation summary:",
+                prior_validation_summary,
+            ])
+            repair_context["validation_summary"] = "\n".join(merged_validation_parts).strip()
 
     def _test_repair_helper_surface_usages(self, task: Task, failure_category: str) -> list[str]:
         if failure_category != FailureCategory.TEST_VALIDATION.value:
@@ -2785,10 +3273,521 @@ class Orchestrator:
         return []
 
     @staticmethod
+    def _module_defined_symbol_names(implementation_code: object) -> list[str]:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return []
+        try:
+            tree = ast.parse(implementation_code)
+        except SyntaxError:
+            return []
+
+        names: list[str] = []
+        seen: set[str] = set()
+        for node in tree.body:
+            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name in seen:
+                continue
+            seen.add(node.name)
+            names.append(node.name)
+        return names
+
+    @staticmethod
+    def _is_helper_alias_like_name(name: str) -> bool:
+        normalized = name.strip().lower()
+        if not normalized:
+            return False
+        return normalized.endswith((
+            "logger",
+            "scorer",
+            "processor",
+            "manager",
+            "repository",
+            "validator",
+            "engine",
+            "service",
+        ))
+
+    def _validation_summary_helper_alias_names(
+        self,
+        validation_summary: object,
+        implementation_code: object = "",
+    ) -> list[str]:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return []
+        module_defined_symbols = {
+            name.lower() for name in self._module_defined_symbol_names(implementation_code)
+        }
+        undefined_names = self._normalized_helper_surface_symbols(
+            self._validation_summary_symbols(validation_summary, "Undefined local names")
+        )
+        return [
+            name
+            for name in undefined_names
+            if name.lower() not in module_defined_symbols and self._is_helper_alias_like_name(name)
+        ]
+
+    @staticmethod
+    def _content_has_matching_datetime_import(content: object) -> bool:
+        if not isinstance(content, str) or not content.strip():
+            return False
+        return bool(
+            re.search(
+                r"^\s*(?:from\s+datetime\s+import\s+[^\n]*\bdatetime\b|import\s+datetime\b)",
+                content,
+                flags=re.MULTILINE,
+            )
+        )
+
+    @staticmethod
+    def _content_has_bare_datetime_reference(content: object) -> bool:
+        if not isinstance(content, str) or not content.strip():
+            return False
+        return bool(
+            re.search(
+                r"(?<![A-Za-z0-9_\.])datetime(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(",
+                content,
+            )
+        )
+
+    def _validation_summary_has_missing_datetime_import_issue(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object = "",
+    ) -> bool:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return False
+        summary_lower = validation_summary.lower()
+        if (
+            "undefined local names: datetime" not in summary_lower
+            and "name 'datetime' is not defined" not in summary_lower
+        ):
+            return False
+        if isinstance(failed_artifact_content, str) and failed_artifact_content.strip():
+            return (
+                self._content_has_bare_datetime_reference(failed_artifact_content)
+                and not self._content_has_matching_datetime_import(failed_artifact_content)
+            )
+        return True
+
+    @staticmethod
+    def _implementation_prefers_direct_datetime_import(implementation_code: object) -> bool:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return False
+        return bool(
+            re.search(
+                r"^\s*from\s+datetime\s+import\s+[^\n]*\bdatetime\b",
+                implementation_code,
+                flags=re.MULTILINE,
+            )
+        )
+
+    @staticmethod
+    def _string_literal_sequence(node: ast.AST | None) -> list[str]:
+        if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return []
+
+        values: list[str] = []
+        for element in node.elts:
+            if not isinstance(element, ast.Constant) or not isinstance(element.value, str):
+                return []
+            values.append(element.value)
+        return values
+
+    def _implementation_required_evidence_items(self, implementation_code: object) -> list[str]:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return []
+
+        try:
+            tree = ast.parse(implementation_code)
+        except SyntaxError:
+            return []
+
+        for node in ast.walk(tree):
+            target_names: list[str] = []
+            value_node: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                value_node = node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                target_names = [node.target.id]
+                value_node = node.value
+            if not any(name in {"required_evidence", "required_documents"} for name in target_names):
+                continue
+            items = self._string_literal_sequence(value_node)
+            if items:
+                unique_items: list[str] = []
+                seen: set[str] = set()
+                for item in items:
+                    if item in seen:
+                        continue
+                    seen.add(item)
+                    unique_items.append(item)
+                return unique_items
+        return []
+
+    def _content_has_incomplete_required_evidence_payload(
+        self,
+        content: object,
+        implementation_code: object,
+    ) -> bool:
+        required_evidence_items = self._implementation_required_evidence_items(implementation_code)
+        if len(required_evidence_items) <= 1:
+            return False
+        if not isinstance(content, str) or not content.strip():
+            return False
+
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return False
+
+        required_evidence_set = set(required_evidence_items)
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            function_name = node.name.lower()
+            if any(token in function_name for token in ("validation", "invalid", "reject", "error", "failure")):
+                continue
+            if not (
+                any(token in function_name for token in ("happy", "batch"))
+                or any(
+                    (isinstance(child, ast.Attribute) and child.attr == "risk_scores")
+                    or (isinstance(child, ast.Name) and child.id == "risk_scores")
+                    for child in ast.walk(node)
+                )
+            ):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Dict):
+                    continue
+                document_items: list[str] | None = None
+                for key, value in zip(child.keys, child.values):
+                    if isinstance(key, ast.Constant) and key.value == "documents":
+                        document_items = self._string_literal_sequence(value)
+                        break
+                if document_items is None:
+                    continue
+                if not required_evidence_set.issubset(set(document_items)):
+                    return True
+        return False
+
+    def _validation_summary_has_required_evidence_runtime_issue(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object = "",
+        implementation_code: object = "",
+    ) -> bool:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return False
+
+        summary_lower = validation_summary.lower()
+        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+            return False
+        if not any(
+            int(actual_count) < int(expected_count)
+            for actual_count, expected_count in re.findall(r"assert\s+(\d+)\s*==\s*(\d+)", summary_lower)
+        ):
+            return False
+        if (
+            isinstance(failed_artifact_content, str)
+            and failed_artifact_content.strip()
+            and "risk_scores" not in failed_artifact_content.lower()
+        ):
+            return False
+        return self._content_has_incomplete_required_evidence_payload(
+            failed_artifact_content,
+            implementation_code,
+        )
+
+    def _qa_repair_should_reuse_failed_test_artifact(
+        self,
+        validation_summary: object,
+        implementation_code: object = "",
+        failed_artifact_content: object = "",
+    ) -> bool:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return True
+        available_module_symbols = {
+            name.lower(): name for name in self._module_defined_symbol_names(implementation_code)
+        }
+        undefined_local_names = self._normalized_helper_surface_symbols(
+            self._validation_summary_symbols(validation_summary, "Undefined local names")
+        )
+        has_reusable_missing_imports = any(
+            name.lower() not in {"datetime", "pytest"}
+            and name.lower() in available_module_symbols
+            for name in undefined_local_names
+        )
+        has_required_evidence_runtime_issue = self._validation_summary_has_required_evidence_runtime_issue(
+            validation_summary,
+            failed_artifact_content,
+            implementation_code,
+        )
+        if self._validation_summary_helper_alias_names(validation_summary, implementation_code):
+            return False
+        if has_required_evidence_runtime_issue and not has_reusable_missing_imports:
+            return False
+        if self._validation_summary_has_missing_datetime_import_issue(
+            validation_summary,
+            failed_artifact_content,
+        ) and not has_reusable_missing_imports:
+            return False
+        return not any(
+            self._validation_summary_symbols(validation_summary, label)
+            for label in (
+                "Tests without assertion-like checks",
+                "Contract overreach signals",
+            )
+        )
+
+    @staticmethod
     def _append_unique_mapping_value(mapping: dict[str, list[str]], key: str, value: str) -> None:
         values = mapping.setdefault(key, [])
         if value not in values:
             values.append(value)
+
+    @staticmethod
+    def _has_dataclass_decorator(node: ast.ClassDef) -> bool:
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            if isinstance(target, ast.Name) and target.id == "dataclass":
+                return True
+            if isinstance(target, ast.Attribute) and target.attr == "dataclass":
+                return True
+        return False
+
+    def _dataclass_default_order_repair_examples(
+        self,
+        failed_artifact_content: object,
+    ) -> list[str]:
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return []
+
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return []
+
+        lines: list[str] = []
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef) or not self._has_dataclass_decorator(node):
+                continue
+
+            field_entries: list[tuple[str, ast.AST | None]] = []
+            for statement in node.body:
+                if not isinstance(statement, ast.AnnAssign):
+                    continue
+                if not isinstance(statement.target, ast.Name):
+                    continue
+                field_entries.append((statement.target.id, statement.value))
+
+            if not field_entries:
+                continue
+
+            required_fields: list[str] = []
+            default_fields: list[tuple[str, ast.AST]] = []
+            offending_required_fields: list[str] = []
+            seen_default = False
+            for field_name, default_value in field_entries:
+                if default_value is None:
+                    required_fields.append(field_name)
+                    if seen_default:
+                        offending_required_fields.append(field_name)
+                    continue
+                seen_default = True
+                default_fields.append((field_name, default_value))
+
+            if not offending_required_fields or not default_fields:
+                continue
+
+            rendered_signature = ", ".join(
+                [
+                    *required_fields,
+                    *[
+                        f"{field_name}={ast.unparse(default_value)}"
+                        for field_name, default_value in default_fields
+                    ],
+                ]
+            )
+            offending_fields = ", ".join(offending_required_fields)
+            lines.append(
+                "The current failed artifact still has this ordering bug in "
+                f"{node.name}: move required field(s) {offending_fields} ahead of every defaulted field and implement {node.name}({rendered_signature})."
+            )
+            if len(lines) >= 2:
+                break
+
+        return lines
+
+    @staticmethod
+    def _render_name_list(names: list[str]) -> str:
+        cleaned = [name for name in names if isinstance(name, str) and name]
+        if not cleaned:
+            return ""
+        if len(cleaned) == 1:
+            return cleaned[0]
+        if len(cleaned) == 2:
+            return f"{cleaned[0]} and {cleaned[1]}"
+        return f"{', '.join(cleaned[:-1])}, and {cleaned[-1]}"
+
+    @staticmethod
+    def _missing_required_constructor_details(
+        validation_summary: object,
+    ) -> Optional[tuple[str, list[str]]]:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return None
+
+        match = re.search(
+            r"TypeError:\s+([A-Za-z_][A-Za-z0-9_]*)\.__init__\(\).*?missing\s+\d+\s+required positional arguments?:\s*([^\n;|]+)",
+            validation_summary,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+
+        missing_fields = list(dict.fromkeys(re.findall(r"'([^']+)'", match.group(2))))
+        if not missing_fields:
+            return None
+        return match.group(1), missing_fields
+
+    @staticmethod
+    def _required_field_list_from_failed_artifact(
+        failed_artifact_content: object,
+    ) -> list[str]:
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return []
+
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return []
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(
+                isinstance(target, ast.Name) and target.id == "required_fields"
+                for target in node.targets
+            ):
+                continue
+            try:
+                value = ast.literal_eval(node.value)
+            except (ValueError, SyntaxError):
+                continue
+            if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+                return list(value)
+
+        return []
+
+    def _internal_constructor_strictness_details(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object,
+    ) -> Optional[tuple[str, list[str], list[str]]]:
+        constructor_details = self._missing_required_constructor_details(validation_summary)
+        if constructor_details is None:
+            return None
+        class_name, missing_fields = constructor_details
+        required_fields = self._required_field_list_from_failed_artifact(failed_artifact_content)
+        return class_name, missing_fields, required_fields
+
+    @staticmethod
+    def _duplicate_constructor_argument_details(
+        validation_summary: object,
+    ) -> Optional[tuple[str, str]]:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return None
+
+        match = re.search(
+            r"TypeError:\s+([A-Za-z_][A-Za-z0-9_]*)\.__init__\(\).*?got multiple values for argument '([^']+)'",
+            validation_summary,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        return match.group(1), match.group(2)
+
+    @staticmethod
+    def _class_field_names_from_failed_artifact(
+        failed_artifact_content: object,
+        class_name: str,
+    ) -> list[str]:
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return []
+
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return []
+
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef) or node.name != class_name:
+                continue
+            fields: list[str] = []
+            for statement in node.body:
+                if not isinstance(statement, ast.AnnAssign):
+                    continue
+                if isinstance(statement.target, ast.Name):
+                    fields.append(statement.target.id)
+            return fields
+        return []
+
+    def _missing_object_attribute_details(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object,
+    ) -> Optional[tuple[str, str, list[str]]]:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return None
+
+        match = re.search(
+            r"AttributeError:\s+['\"]([A-Za-z_][A-Za-z0-9_]*)['\"] object has no attribute ['\"]([^'\"]+)['\"]",
+            validation_summary,
+        )
+        if match is None:
+            return None
+
+        class_name = match.group(1)
+        attribute_name = match.group(2).strip()
+        if not attribute_name:
+            return None
+        class_fields = self._class_field_names_from_failed_artifact(
+            failed_artifact_content,
+            class_name,
+        )
+        return class_name, attribute_name, class_fields
+
+    @staticmethod
+    def _suggest_declared_attribute_replacement(attribute_name: str, class_fields: list[str]) -> Optional[str]:
+        if not attribute_name or not class_fields:
+            return None
+
+        normalized_attribute = attribute_name.lower()
+        attribute_tokens = {token for token in normalized_attribute.split("_") if token}
+        best_match: Optional[str] = None
+        best_score = (-1, -1)
+
+        for field_name in class_fields:
+            normalized_field = field_name.lower()
+            if normalized_field == normalized_attribute:
+                return field_name
+
+            field_tokens = {token for token in normalized_field.split("_") if token}
+            overlap = len(field_tokens & attribute_tokens)
+            prefix_suffix_bonus = 1 if (
+                normalized_attribute.endswith(normalized_field)
+                or normalized_field.endswith(normalized_attribute)
+            ) else 0
+            if overlap <= 0 and prefix_suffix_bonus == 0:
+                continue
+
+            score = (prefix_suffix_bonus, overlap)
+            if score > best_score:
+                best_score = score
+                best_match = field_name
+
+        return best_match
 
     def _previous_valid_test_surface(
         self, failed_artifact_content: object, imported_module_symbols: list[str]
@@ -2971,6 +3970,8 @@ class Orchestrator:
                     code_repair_owner = self._execution_agent_name(code_task)
                     code_repair_task = project._create_repair_task(code_task.id, code_repair_owner, code_repair_context)
                     if code_repair_task is not None:
+                        if code_repair_task.id not in task.dependencies:
+                            task.dependencies.append(code_repair_task.id)
                         if code_decomposition_task is not None:
                             if code_decomposition_task.id not in code_repair_task.dependencies:
                                 code_repair_task.dependencies.append(code_decomposition_task.id)
@@ -3011,25 +4012,75 @@ class Orchestrator:
             and task.id not in active_repair_origins
         ]
 
-    def _planned_module_context(self, project: ProjectState, visible_task_ids: Optional[set[str]] = None) -> Dict[str, Any]:
+    def _planned_module_context(
+        self,
+        project: ProjectState,
+        visible_task_ids: Optional[set[str]] = None,
+        current_task: Optional[Task] = None,
+    ) -> Dict[str, Any]:
+        module_task = self._context_module_task(project, current_task, visible_task_ids)
+        if module_task is not None:
+            module_name = self._default_module_name_for_task(module_task)
+            if module_name:
+                return {
+                    "planned_module_name": module_name,
+                    "planned_module_filename": f"{module_name}.py",
+                }
+        return {}
+
+    def _context_module_task(
+        self,
+        project: ProjectState,
+        current_task: Optional[Task],
+        visible_task_ids: Optional[set[str]] = None,
+    ) -> Optional[Task]:
+        if current_task is not None and current_task.repair_origin_task_id:
+            origin_task = project.get_task(current_task.repair_origin_task_id)
+            if (
+                origin_task is not None
+                and AgentRegistry.normalize_key(origin_task.assigned_to) == "code_engineer"
+                and (visible_task_ids is None or origin_task.id in visible_task_ids)
+                and self._default_module_name_for_task(origin_task)
+            ):
+                return origin_task
+
         for existing_task in project.tasks:
             if visible_task_ids is not None and existing_task.id not in visible_task_ids:
                 continue
             if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
                 continue
-            module_name = self._default_module_name_for_task(existing_task)
-            if not module_name:
+            if existing_task.repair_origin_task_id:
                 continue
-            return {
-                "planned_module_name": module_name,
-                "planned_module_filename": f"{module_name}.py",
-            }
-        return {}
+            if self._default_module_name_for_task(existing_task):
+                return existing_task
+
+        if current_task is not None and self._default_module_name_for_task(current_task):
+            return current_task
+
+        for existing_task in project.tasks:
+            if visible_task_ids is not None and existing_task.id not in visible_task_ids:
+                continue
+            if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
+                continue
+            if self._default_module_name_for_task(existing_task):
+                return existing_task
+
+        return None
 
     def _default_module_name_for_task(self, task: Task) -> Optional[str]:
         if AgentRegistry.normalize_key(task.assigned_to) != "code_engineer":
             return None
         return f"{task.id}_implementation"
+
+    def _context_code_module_name(self, task: Task, project: Optional[ProjectState] = None) -> Optional[str]:
+        if project is not None and task.repair_origin_task_id:
+            origin_task = project.get_task(task.repair_origin_task_id)
+            if (
+                origin_task is not None
+                and AgentRegistry.normalize_key(origin_task.assigned_to) == "code_engineer"
+            ):
+                return self._default_module_name_for_task(origin_task)
+        return self._default_module_name_for_task(task)
 
     def _task_public_contract_anchor(self, task_description: str) -> str:
         if not isinstance(task_description, str) or not task_description.strip():
@@ -3055,36 +4106,57 @@ class Orchestrator:
             break
         return "\n".join(anchor_lines)
 
-    def _code_artifact_context(self, task: Task) -> Dict[str, Any]:
-        if not isinstance(task.output_payload, dict):
+    def _code_artifact_context(
+        self,
+        task: Task,
+        project: Optional[ProjectState] = None,
+    ) -> Dict[str, Any]:
+        module_name = self._context_code_module_name(task, project)
+        if not module_name:
             return {}
-        artifacts = task.output_payload.get("artifacts")
-        if not isinstance(artifacts, list):
+
+        artifact_path = f"artifacts/{module_name}.py"
+        code_content = task.output or ""
+        task_module_name = self._default_module_name_for_task(task)
+        allow_artifact_path_override = task_module_name == module_name
+
+        if isinstance(task.output_payload, dict):
+            artifacts = task.output_payload.get("artifacts")
+            if isinstance(artifacts, list):
+                for artifact in artifacts:
+                    if not isinstance(artifact, dict):
+                        continue
+                    if artifact.get("artifact_type") != ArtifactType.CODE.value:
+                        continue
+                    candidate_path = artifact.get("path")
+                    if allow_artifact_path_override and isinstance(candidate_path, str) and candidate_path.strip():
+                        artifact_path = candidate_path
+                    candidate_content = artifact.get("content")
+                    if isinstance(candidate_content, str) and candidate_content.strip():
+                        code_content = candidate_content
+                    break
+            raw_content = task.output_payload.get("raw_content")
+            if (not isinstance(code_content, str) or not code_content.strip()) and isinstance(raw_content, str):
+                code_content = raw_content
+
+        if not isinstance(code_content, str) or not code_content.strip():
             return {}
-        for artifact in artifacts:
-            if not isinstance(artifact, dict):
-                continue
-            if artifact.get("artifact_type") != ArtifactType.CODE.value:
-                continue
-            artifact_path = artifact.get("path")
-            if not isinstance(artifact_path, str) or not artifact_path.strip():
-                continue
-            path_obj = Path(artifact_path)
-            module_name = path_obj.stem
-            code_analysis = self._analyze_python_module(task.output or "")
-            return {
-                "code_artifact_path": artifact_path,
-                "module_name": module_name,
-                "module_filename": path_obj.name,
-                "code_summary": self._summarize_output(task.output or ""),
-                "code_outline": self._build_code_outline(task.output or ""),
-                "code_analysis": code_analysis,
-                "code_public_api": self._build_code_public_api(code_analysis),
-                "code_exact_test_contract": self._build_code_exact_test_contract(code_analysis),
-                "code_test_targets": self._build_code_test_targets(code_analysis),
-                "code_behavior_contract": self._build_code_behavior_contract(task.output or ""),
-                "module_run_command": self._build_module_run_command(path_obj.name, code_analysis),
-            }
+
+        path_obj = Path(artifact_path)
+        code_analysis = self._analyze_python_module(code_content)
+        return {
+            "code_artifact_path": artifact_path,
+            "module_name": path_obj.stem,
+            "module_filename": path_obj.name,
+            "code_summary": self._summarize_output(code_content),
+            "code_outline": self._build_code_outline(code_content),
+            "code_analysis": code_analysis,
+            "code_public_api": self._build_code_public_api(code_analysis),
+            "code_exact_test_contract": self._build_code_exact_test_contract(code_analysis),
+            "code_test_targets": self._build_code_test_targets(code_analysis),
+            "code_behavior_contract": self._build_code_behavior_contract(code_content),
+            "module_run_command": self._build_module_run_command(path_obj.name, code_analysis),
+        }
         return {}
 
     def _test_artifact_context(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -4103,6 +5175,9 @@ class Orchestrator:
             "unsupported_mock_assertions": [],
             "top_level_test_count": 0,
             "fixture_count": 0,
+            "assertion_like_count": 0,
+            "tests_without_assertions": [],
+            "contract_overreach_signals": [],
         }
         if not raw_content.strip():
             return analysis
@@ -4144,6 +5219,8 @@ class Orchestrator:
         referenced_fixtures: list[tuple[str, int]] = []
         undefined_local_names: set[str] = set()
         unsafe_entrypoint_calls: list[str] = []
+        assertion_like_count = 0
+        tests_without_assertions: list[str] = []
 
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == module_name:
@@ -4158,6 +5235,10 @@ class Orchestrator:
                     if node.name in _RESERVED_FIXTURE_NAMES:
                         reserved_fixture_names.append(f"{node.name} (line {node.lineno})")
                 if node.name.startswith("test_"):
+                    test_assertion_like_count = self._count_test_assertion_like_checks(node)
+                    assertion_like_count += test_assertion_like_count
+                    if test_assertion_like_count == 0:
+                        tests_without_assertions.append(f"{node.name} (line {node.lineno})")
                     parametrized_arguments = self._collect_parametrized_argument_names(node)
                     for arg_name in self._function_argument_names(node):
                         if arg_name not in parametrized_arguments:
@@ -4188,6 +5269,7 @@ class Orchestrator:
 
         invalid_member_refs: list[str] = []
         unsupported_mock_assertions: list[str] = []
+        contract_overreach_signals: list[str] = []
         for owner, member, lineno in attribute_refs:
             if owner not in imported_symbols or owner not in class_map:
                 continue
@@ -4202,6 +5284,7 @@ class Orchestrator:
         for node in tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
                 continue
+            bindings = self._collect_local_bindings(node)
             local_types = self._collect_test_local_types(node, class_map, function_map)
             typed_invalid_refs, typed_arity_mismatches = self._analyze_typed_test_member_usage(
                 node,
@@ -4213,6 +5296,13 @@ class Orchestrator:
             call_arity_mismatches.extend(typed_arity_mismatches)
             unsupported_mock_assertions.extend(
                 self._find_unsupported_mock_assertions(node, local_types, class_map)
+            )
+            contract_overreach_signals.extend(
+                self._find_contract_overreach_signals(
+                    node,
+                    bindings,
+                    code_behavior_contract if isinstance(code_behavior_contract, str) else "",
+                )
             )
 
         arity_mismatches: list[str] = []
@@ -4276,6 +5366,9 @@ class Orchestrator:
         analysis["imported_entrypoint_symbols"] = imported_entrypoint_symbols
         analysis["unsafe_entrypoint_calls"] = sorted(set(unsafe_entrypoint_calls))
         analysis["unsupported_mock_assertions"] = sorted(set(unsupported_mock_assertions))
+        analysis["assertion_like_count"] = assertion_like_count
+        analysis["tests_without_assertions"] = sorted(set(tests_without_assertions))
+        analysis["contract_overreach_signals"] = sorted(set(contract_overreach_signals))
         return analysis
 
     def _parse_behavior_contract(
@@ -4619,6 +5712,156 @@ class Orchestrator:
             return compared_value < batch_size
         return False
 
+    @staticmethod
+    def _test_name_suggests_validation_failure(test_name: str) -> bool:
+        normalized_test_name = test_name.lower()
+        return any(
+            token in normalized_test_name
+            for token in ("validation", "invalid", "reject", "failure", "error")
+        )
+
+    @staticmethod
+    def _is_internal_score_state_target(rendered_target: str) -> bool:
+        normalized_target = rendered_target.replace(" ", "").lower()
+        if "score" not in normalized_target:
+            return False
+        if not ("." in normalized_target or "get_" in normalized_target):
+            return False
+        return bool(
+            re.search(r"\.(?:get_)?(?:risk_)?scores?\b", normalized_target)
+            or any(
+                token in normalized_target
+                for token in (
+                    "score_record",
+                    "score_records",
+                    "score_cache",
+                    "score_map",
+                )
+            )
+        )
+
+    @staticmethod
+    def _behavior_contract_explicitly_limits_score_state_to_valid_requests(
+        code_behavior_contract: str,
+        rendered_target: str,
+    ) -> bool:
+        normalized_target = rendered_target.replace(" ", "").lower()
+        if "risk_score" not in normalized_target:
+            return False
+
+        normalized_contract = code_behavior_contract.lower()
+        if not re.search(r"risk[_ ]scores?", normalized_contract):
+            return False
+
+        return bool(
+            re.search(r"risk[_ ]scores?.*\bonly\b.*\bvalid\b", normalized_contract)
+            or re.search(r"appends?.*risk[_ ]scores?.*\bonly\b.*\bvalid\b", normalized_contract)
+            or re.search(r"only\s+valid\s+requests?.*risk[_ ]scores?", normalized_contract)
+            or re.search(r"valid\s+requests?.*append.*risk[_ ]scores?", normalized_contract)
+        )
+
+    def _find_contract_overreach_signals(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        bindings: Dict[str, ast.AST],
+        code_behavior_contract: str = "",
+    ) -> list[str]:
+        visible_batch_sizes = self._visible_repeated_single_call_batch_sizes(node, bindings)
+        signals: set[str] = set()
+        largest_batch_size = max(visible_batch_sizes) if visible_batch_sizes else None
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Assert):
+                continue
+            exact_len_assertion = self._exact_len_assertion(child.test)
+            if exact_len_assertion is None:
+                continue
+            asserted_target, compared_value = exact_len_assertion
+            normalized_target = asserted_target.replace(" ", "").lower()
+            if largest_batch_size is not None and (
+                "audit_log" in normalized_target or "audit_logs" in normalized_target
+            ):
+                if compared_value > largest_batch_size:
+                    signals.add(
+                        f"exact batch audit length {compared_value} exceeds visible batch size {largest_batch_size} in {node.name} (line {child.lineno})"
+                    )
+
+            if not self._test_name_suggests_validation_failure(node.name):
+                continue
+            if compared_value != 0:
+                continue
+            if not self._is_internal_score_state_target(asserted_target):
+                continue
+            if self._behavior_contract_explicitly_limits_score_state_to_valid_requests(
+                code_behavior_contract,
+                asserted_target,
+            ):
+                continue
+            signals.add(
+                "exact validation-failure score-state emptiness assertion on "
+                f"'{asserted_target}' in {node.name} (line {child.lineno}) assumes rejected input leaves internal score state empty"
+            )
+        return sorted(signals)
+
+    def _visible_repeated_single_call_batch_sizes(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        bindings: Dict[str, ast.AST],
+    ) -> list[int]:
+        batch_sizes: list[int] = []
+        for child in ast.walk(node):
+            if not isinstance(child, (ast.For, ast.AsyncFor)):
+                continue
+            batch_items = self._extract_literal_list_items(child.iter, bindings)
+            if batch_items is None or len(batch_items) <= 1:
+                continue
+            if not self._loop_contains_non_batch_call(child):
+                continue
+            batch_sizes.append(len(batch_items))
+        return batch_sizes
+
+    def _loop_contains_non_batch_call(self, node: ast.AST) -> bool:
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
+                continue
+            callable_name = self._callable_name(child)
+            if not callable_name or callable_name == "len":
+                continue
+            if "batch" in callable_name.lower():
+                continue
+            return True
+        return False
+
+    def _exact_len_assertion(self, node: ast.AST) -> Optional[tuple[str, int]]:
+        if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+            return None
+        if not isinstance(node.ops[0], ast.Eq):
+            return None
+
+        left = node.left
+        right = node.comparators[0]
+        if self._is_len_call(left):
+            compared_value = self._int_constant_value(right)
+            if compared_value is None:
+                return None
+            left_call = cast(ast.Call, left)
+            return self._render_expression(left_call.args[0]), compared_value
+        if self._is_len_call(right):
+            compared_value = self._int_constant_value(left)
+            if compared_value is None:
+                return None
+            right_call = cast(ast.Call, right)
+            return self._render_expression(right_call.args[0]), compared_value
+        return None
+
+    def _is_len_call(self, node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "len"
+            and len(node.args) == 1
+            and not node.keywords
+        )
+
     def _assert_expects_false(self, node: ast.Assert, call_node: ast.Call) -> bool:
         test = node.test
         if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
@@ -4646,6 +5889,45 @@ class Orchestrator:
             if callable_name == "raises":
                 return True
         return False
+
+    def _with_uses_pytest_assertion_context(self, node: ast.With | ast.AsyncWith) -> bool:
+        for item in node.items:
+            context_expr = item.context_expr
+            if not isinstance(context_expr, ast.Call):
+                continue
+            callable_name = self._callable_name(context_expr)
+            if callable_name in {"raises", "warns", "deprecated_call"}:
+                return True
+        return False
+
+    def _count_test_assertion_like_checks(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+        assertion_like_count = 0
+        mock_bindings, patched_targets = self._collect_mock_support(node)
+
+        for child in ast.walk(node):
+            if isinstance(child, ast.Assert):
+                assertion_like_count += 1
+                continue
+            if isinstance(child, (ast.With, ast.AsyncWith)) and self._with_uses_pytest_assertion_context(child):
+                assertion_like_count += 1
+                continue
+
+            target_node: Optional[ast.AST] = None
+            if isinstance(child, ast.Attribute) and child.attr in _MOCK_ASSERTION_ATTRIBUTES:
+                target_node = child.value
+            elif (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr in _MOCK_ASSERTION_METHODS
+            ):
+                target_node = child.func.value
+
+            if target_node is None:
+                continue
+            if self._supports_mock_assertion_target(target_node, mock_bindings, patched_targets):
+                assertion_like_count += 1
+
+        return assertion_like_count
 
     def _ast_contains_node(self, root: ast.AST, target: ast.AST) -> bool:
         return any(candidate is target for candidate in ast.walk(root))
@@ -5376,6 +6658,11 @@ class Orchestrator:
     ) -> str:
         lines = ["Generated test validation:"]
         syntax_ok = test_analysis.get("syntax_ok", True)
+        static_contract_overreach_signals = test_analysis.get("contract_overreach_signals") or []
+        runtime_contract_overreach_signals = self._pytest_contract_overreach_signals(test_execution)
+        contract_overreach_signals = sorted(
+            set(static_contract_overreach_signals) | set(runtime_contract_overreach_signals)
+        )
         lines.append(f"- Syntax OK: {'yes' if syntax_ok else 'no'}")
         syntax_error = test_analysis.get("syntax_error")
         if syntax_error:
@@ -5404,6 +6691,9 @@ class Orchestrator:
                 lines.append(f"- Fixture count: {fixture_count}/{fixture_budget}")
             else:
                 lines.append(f"- Fixture count: {fixture_count}")
+        assertion_like_count = test_analysis.get("assertion_like_count")
+        if isinstance(assertion_like_count, int):
+            lines.append(f"- Assertion-like checks: {assertion_like_count}")
         if syntax_ok:
             lines.append(
                 f"- Imported module symbols: {', '.join(test_analysis.get('imported_module_symbols') or ['none'])}"
@@ -5440,6 +6730,12 @@ class Orchestrator:
             )
             lines.append(
                 f"- Undefined local names: {', '.join(test_analysis.get('undefined_local_names') or ['none'])}"
+            )
+            lines.append(
+                f"- Tests without assertion-like checks: {', '.join(test_analysis.get('tests_without_assertions') or ['none'])}"
+            )
+            lines.append(
+                f"- Contract overreach signals: {', '.join(contract_overreach_signals or ['none'])}"
             )
         if isinstance(completion_diagnostics, dict):
             lines.append(
@@ -5491,11 +6787,13 @@ class Orchestrator:
                 "invalid_member_references",
                 "call_arity_mismatches",
                 "constructor_arity_mismatches",
+                "contract_overreach_signals",
                 "payload_contract_violations",
                 "non_batch_sequence_calls",
                 "reserved_fixture_names",
                 "undefined_fixtures",
                 "undefined_local_names",
+                "tests_without_assertions",
                 "imported_entrypoint_symbols",
                 "unsafe_entrypoint_calls",
                 "unsupported_mock_assertions",
@@ -5528,6 +6826,12 @@ class Orchestrator:
         task_description = task.description
         if repair_context:
             repair_lines = [task.description, "", "Repair objective:", str(repair_context.get("instruction") or "Repair the previous failure."), "", f"Previous failure category: {repair_context.get('failure_category') or FailureCategory.UNKNOWN.value}"]
+            source_failure_task_id = repair_context.get("source_failure_task_id")
+            if isinstance(source_failure_task_id, str) and source_failure_task_id.strip():
+                repair_lines.append(f"Source failure task: {source_failure_task_id}")
+            source_failure_category = repair_context.get("source_failure_category")
+            if isinstance(source_failure_category, str) and source_failure_category.strip():
+                repair_lines.append(f"Source failure category: {source_failure_category}")
             failure_message = repair_context.get("failure_message")
             if isinstance(failure_message, str) and failure_message.strip():
                 repair_lines.append(f"Previous failure message: {failure_message}")
@@ -5537,7 +6841,7 @@ class Orchestrator:
             budget_decomposition_brief = context.get("budget_decomposition_brief")
             if isinstance(budget_decomposition_brief, str) and budget_decomposition_brief.strip():
                 repair_lines.extend(["", "Budget decomposition brief:", budget_decomposition_brief])
-            repair_focus_lines = self._repair_focus_lines(repair_context)
+            repair_focus_lines = self._repair_focus_lines(repair_context, context)
             if repair_focus_lines:
                 repair_lines.extend(["", "Repair priorities:"])
                 repair_lines.extend(f"- {line}" for line in repair_focus_lines)
@@ -5551,7 +6855,11 @@ class Orchestrator:
             context=context,
         )
 
-    def _repair_focus_lines(self, repair_context: Dict[str, Any]) -> list[str]:
+    def _repair_focus_lines(
+        self,
+        repair_context: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> list[str]:
         failure_category = repair_context.get("failure_category")
         validation_summary = repair_context.get("validation_summary")
         if not isinstance(validation_summary, str) or not validation_summary.strip():
@@ -5563,10 +6871,43 @@ class Orchestrator:
             if isinstance(failed_artifact_content, str)
             else ""
         )
+        missing_datetime_import_issue = self._validation_summary_has_missing_datetime_import_issue(
+            validation_summary,
+            failed_artifact_content,
+        )
+        required_evidence_runtime_issue = self._validation_summary_has_required_evidence_runtime_issue(
+            validation_summary,
+            failed_artifact_content,
+            context.get("code", "") if isinstance(context, dict) else "",
+        )
+        dataclass_order_examples = self._dataclass_default_order_repair_examples(
+            failed_artifact_content,
+        )
+        duplicate_constructor_argument_details = self._duplicate_constructor_argument_details(
+            validation_summary,
+        )
+        missing_attribute_details = self._missing_object_attribute_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        constructor_strictness_details = self._internal_constructor_strictness_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        required_evidence_items = self._implementation_required_evidence_items(
+            context.get("code", "") if isinstance(context, dict) else ""
+        )
 
         summary_lower = validation_summary.lower()
         lines: list[str] = []
         if failure_category == FailureCategory.CODE_VALIDATION.value:
+            if "task public contract: fail" in summary_lower:
+                lines.append(
+                    "Treat the task public contract anchor as exact. Restore the named public facade, request model, and required workflow or validation methods before making secondary refactors."
+                )
+                lines.append(
+                    "Do not rename the public facade, request model, or required workflow surface to guessed aliases. Match the anchor-defined surface first, then repair behavior under that same surface."
+                )
             if "pytest failure details:" in summary_lower:
                 lines.append(
                     "Treat the listed pytest failures as exact behavior requirements for the implementation. Fix the module so each cited assertion passes without changing the valid test surface."
@@ -5585,13 +6926,57 @@ class Orchestrator:
                 lines.append(
                     "If the task requires a CLI or demo entrypoint, preserve or restore a minimal main() plus a literal if __name__ == \"__main__\": block while fixing the cited behavior. Do not drop the entrypoint just to save lines."
                 )
+            if duplicate_constructor_argument_details is not None:
+                class_name, field_name = duplicate_constructor_argument_details
+                lines.append(
+                    f"If pytest reports TypeError from {class_name}.__init__() saying it got multiple values for argument '{field_name}', do not pass {field_name} both positionally and through **request.details, **request.data, **payload, or a duplicated keyword."
+                )
+                lines.append(
+                    f"When {field_name} is extracted separately before constructing {class_name}(...), remove it from any expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once."
+                )
+            if missing_attribute_details is not None:
+                class_name, attribute_name, class_fields = missing_attribute_details
+                replacement_field = self._suggest_declared_attribute_replacement(attribute_name, class_fields)
+                lines.append(
+                    f"If pytest reports AttributeError that '{class_name}' has no attribute '{attribute_name}', align the model fields and member accesses so every referenced attribute is actually declared or derived on that object."
+                )
+                if class_fields:
+                    lines.append(
+                        f"{class_name} currently defines {self._render_name_list(class_fields)}. If you keep .{attribute_name} in the rewritten module, add {attribute_name} to {class_name} and populate or derive it where {class_name} objects are created. Otherwise replace that access with one of the declared fields and remove every remaining read of .{attribute_name}."
+                    )
+                    if replacement_field:
+                        lines.append(
+                            f"The closest declared field is {replacement_field}. Prefer replacing .{attribute_name} with .{replacement_field} rather than preserving an undeclared near-match attribute."
+                        )
+                else:
+                    lines.append(
+                        f"If you keep .{attribute_name} in the rewritten module, declare it on {class_name} and populate or derive it where {class_name} objects are created. Otherwise remove every read of .{attribute_name} and use an existing declared field instead."
+                    )
+            if constructor_strictness_details is not None:
+                class_name, missing_fields, required_fields = constructor_strictness_details
+                rendered_missing_fields = self._render_name_list(missing_fields)
+                lines.append(
+                    f"If valid happy-path or batch pytest cases fail with TypeError from {class_name}.__init__(), the implementation is stricter than the documented contract. Align that internal model with validate_request(...) and the cited valid inputs instead of pushing new required payload keys onto the tests."
+                )
+                if required_fields:
+                    lines.append(
+                        f"The current validator only requires {self._render_name_list(required_fields)}, so do not make {class_name}(...) additionally require {rendered_missing_fields}. Derive those internal values or give them safe defaults when building the internal record."
+                    )
+                else:
+                    lines.append(
+                        f"Do not make {class_name}(...) additionally require {rendered_missing_fields} when those fields are not part of the documented valid input contract. Derive them or give them safe defaults when building the internal record."
+                    )
             if "follows default argument" in summary_lower:
                 lines.append(
                     "If a dataclass or typed record model fails with a 'non-default argument ... follows default argument' error, reorder the fields so every required non-default field appears before any field with a default while preserving the documented constructor contract."
                 )
                 lines.append(
+                    "Inspect every dataclass declaration in the failed module, including audit, review, and result record types. This import error can come from a helper record class even when the anchored request model already matches the public contract."
+                )
+                lines.append(
                     "Example: declare AuditLog(action, details, timestamp=field(default_factory=...)) rather than placing timestamp before the required details field."
                 )
+                lines.extend(dataclass_order_examples)
             if "name 'field' is not defined" in summary_lower:
                 lines.append(
                     "If a dataclass uses field(...) or default_factory anywhere in the module, import field explicitly from dataclasses. Do not leave field referenced without that import."
@@ -5599,10 +6984,38 @@ class Orchestrator:
             if (
                 "name 'datetime' is not defined" in summary_lower
                 or "name 'date' is not defined" in summary_lower
-                or ("nameerror" in summary_lower and "datetime." in failed_content_lower)
+                or "name 'timedelta' is not defined" in summary_lower
+                or "name 'timezone' is not defined" in summary_lower
+                or (
+                    "nameerror" in summary_lower
+                    and any(
+                        token in failed_content_lower
+                        for token in ("datetime.", "timedelta(", "timezone.")
+                    )
+                )
             ):
                 lines.append(
-                    "Keep imports consistent with referenced names. If the module calls datetime.datetime.now() or datetime.date.today(), import datetime; if it imports datetime directly with `from datetime import datetime`, call datetime.now() instead of datetime.datetime.now(). Do not leave module-qualified references pointing at names that were never imported."
+                    "Keep imports consistent with referenced names. If the module calls datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime; if it imports symbols directly with `from datetime import datetime, timedelta, timezone`, call datetime.now(), timedelta(...), or timezone.utc instead of datetime.datetime.now(), bare missing helpers, or mismatched module-qualified references. Do not leave module-qualified or bare references pointing at names that were never imported."
+                )
+            if "assert not true" in summary_lower or "assert true is false" in summary_lower:
+                lines.append(
+                    "If pytest reports `assert not True` or `assert True is False` for validate_request or another validator, repair the implementation so that the cited invalid sample is actually rejected. Do not leave the validator as a presence-only required-key check when the failing sample already uses a clearly wrong required-field value or type."
+                )
+                lines.append(
+                    "Implement concrete reject conditions for clearly invalid required-field values or types instead of only checking whether every required key is present."
+                )
+            if (
+                "valueerror" in summary_lower
+                and "invalid" in summary_lower
+                and any(token in summary_lower for token in ("test_happy_path", "test_batch", "test_batch_processing"))
+                and "required_fields" in failed_content_lower
+                and any(token in failed_content_lower for token in ("request.details", "request.data", "request.metadata", "request.payload"))
+            ):
+                lines.append(
+                    "If happy-path or batch pytest cases now raise `ValueError(...)` after a validator repair, inspect whether the validator started checking wrapper fields on the nested payload container. Keep top-level request fields such as request_id and request_type on the request object, and reserve request.details, request.data, request.metadata, or request.payload checks for actual payload keys only."
+                )
+                lines.append(
+                    "Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details, request.data, request.metadata, or request.payload unless the contract explicitly duplicates them there."
                 )
             if "likely truncated" in summary_lower:
                 lines.append(
@@ -5624,9 +7037,31 @@ class Orchestrator:
         if failure_category != FailureCategory.TEST_VALIDATION.value:
             return lines
 
+        implementation_code = context.get("code", "") if isinstance(context, dict) else ""
+        available_module_symbol_map = {
+            name.lower(): name for name in self._module_defined_symbol_names(implementation_code)
+        }
         imported_module_symbols = self._validation_summary_symbols(
             validation_summary, "Imported module symbols"
         )
+        undefined_local_names = self._normalized_helper_surface_symbols(
+            self._validation_summary_symbols(validation_summary, "Undefined local names")
+        )
+        undefined_available_module_symbols: list[str] = []
+        for name in undefined_local_names:
+            normalized_name = name.lower()
+            if normalized_name in {"pytest", "datetime"}:
+                continue
+            actual_name = available_module_symbol_map.get(normalized_name)
+            if actual_name and actual_name not in imported_module_symbols and actual_name not in undefined_available_module_symbols:
+                undefined_available_module_symbols.append(actual_name)
+        helper_alias_names = [
+            name
+            for name in undefined_local_names
+            if name not in imported_module_symbols
+            and name.lower() not in available_module_symbol_map
+            and self._is_helper_alias_like_name(name)
+        ]
         unknown_module_symbols = self._validation_summary_symbols(
             validation_summary, "Unknown module symbols"
         )
@@ -5692,6 +7127,26 @@ class Orchestrator:
             lines.append(
                 "If the validation summary reports too many top-level tests, delete or merge the lowest-value extra scenarios until the rewritten file is back under the stated maximum before addressing optional cleanup. A suite over the hard cap is invalid even when pytest passes."
             )
+        assertionless_tests = self._validation_summary_symbols(
+            validation_summary,
+            "Tests without assertion-like checks",
+        )
+        if "tests without assertion-like checks:" in summary_lower and "tests without assertion-like checks: none" not in summary_lower:
+            lines.append(
+                "Every top-level test must contain at least one explicit assertion-like check such as assert ..., with pytest.raises(...), or another direct contract-backed expectation. Rewrite any hollow smoke test that only calls production code without verifying the outcome."
+            )
+            if assertionless_tests:
+                lines.append(
+                    "The validation summary already flagged these hollow top-level tests: "
+                    f"{', '.join(assertionless_tests)}. Rewrite each named test so it contains at least one direct contract-backed expectation, or delete the test if you cannot assert a stable observable outcome without guessing internals."
+                )
+                lines.append(
+                    "Do not keep a call-only happy-path or batch test. For every named hollow test, assert returned values, raised exceptions, mutated state, audit record growth, or another externally observable outcome instead of only calling production code."
+                )
+                if len(assertionless_tests) > 1:
+                    lines.append(
+                        "When more than one top-level test is hollow, discard the current pytest skeleton and rewrite the entire suite from scratch around only the minimum required scenarios instead of patching the previous file in place. Preserve only the valid import surface and constructor shapes from the old suite."
+                    )
         if any(marker in summary_lower for marker in ("unknown module symbols:", "missing function imports:", "undefined local names:")):
             lines.append(
                 "Use only documented module symbols and explicitly import every production class or function you reference in tests or fixtures."
@@ -5705,6 +7160,36 @@ class Orchestrator:
             if "request.timestamp" in failed_content_lower or "timestamp=request." in failed_content_lower:
                 lines.append(
                     "Do not satisfy explicit constructor fields by reading attributes from the object you are still constructing or any other undefined local. Define a self-contained value first and pass it directly, for example timestamp=fixed_time instead of timestamp=request.timestamp."
+                )
+            if undefined_available_module_symbols:
+                lines.append(
+                    "The previous file referenced real module symbols without importing them: "
+                    f"{', '.join(undefined_available_module_symbols)}. Add those names to the import list from the target module before use instead of deleting, renaming, or leaving them as undefined locals."
+                )
+            if helper_alias_names:
+                rendered_names = ", ".join(helper_alias_names)
+                lines.append(
+                    "The previous file referenced undefined helper or collaborator aliases outside the documented import surface: "
+                    f"{rendered_names}. Delete that guessed helper wiring instead of preserving or patching those aliases in place."
+                )
+                near_match_pairs: list[str] = []
+                for helper_name in helper_alias_names:
+                    normalized_helper = helper_name.lower()
+                    for symbol in imported_module_symbols:
+                        normalized_symbol = symbol.lower()
+                        if normalized_symbol == normalized_helper:
+                            continue
+                        if normalized_symbol in normalized_helper or normalized_helper in normalized_symbol:
+                            pair = f"{helper_name} -> {symbol}"
+                            if pair not in near_match_pairs:
+                                near_match_pairs.append(pair)
+                if near_match_pairs:
+                    lines.append(
+                        "Do not repair those names by swapping to a near-match imported symbol with a different role or constructor contract, such as "
+                        f"{', '.join(near_match_pairs)}."
+                    )
+                lines.append(
+                    "Record or value classes such as audit logs, score records, and result objects are not service collaborators unless the contract explicitly says so. Assert on the outputs they produce instead of constructing them as service wiring."
                 )
         if "invalid member references:" in summary_lower and "invalid member references: none" not in summary_lower:
             lines.append(
@@ -5725,6 +7210,17 @@ class Orchestrator:
             lines.append(
                 "If the rewritten suite keeps any `datetime.now()` call or other bare `datetime` reference, add `from datetime import datetime` or `import datetime` explicitly at the top of the file before finalizing. Otherwise remove every bare datetime reference and use a self-contained timestamp value that still matches the implementation contract."
             )
+            lines.append(
+                "The current failed suite still contains bare `datetime` constructor arguments without a valid import. Before finalizing, either add the import or remove every bare `datetime.now()` reference; no unresolved bare `datetime` token should remain anywhere in the rewritten file."
+            )
+            if missing_datetime_import_issue:
+                lines.append(
+                    "Do not copy the current failed suite forward unchanged. It already contains bare `datetime` references without a matching import, so rebuild the file from the documented contract and deterministic scaffold instead of preserving that invalid import surface."
+                )
+                if self._implementation_prefers_direct_datetime_import(implementation_code):
+                    lines.append(
+                        "The current implementation already imports `from datetime import datetime`. Match that style in tests and prefer a local fixed timestamp such as `fixed_time = datetime(2024, 1, 1, 0, 0, 0)` for constructor arguments instead of repeating bare `datetime.now()` calls."
+                    )
         if "likely truncated" in summary_lower:
             lines.append(
                 "If completion diagnostics say the previous pytest output was likely truncated, discard the partial tail and rewrite the complete pytest module from the top before reintroducing any optional assertions or fixtures."
@@ -5837,6 +7333,35 @@ class Orchestrator:
                     lines.append(
                         "If a required string field participates in a length- or modulo-based score, an empty string is invalid once the implementation validates that field before scoring. Use a non-empty repeated-character literal with the needed length instead; for len(details) % 10 == 0, use \"xxxxxxxxxx\" rather than \"\"."
                     )
+            if "documents" in failed_content_lower and "risk_scores" in failed_content_lower:
+                lines.append(
+                    "When the implementation validates a required document or evidence list before scoring, every happy-path or valid batch item must include the full required set named by that validator. Do not keep a single placeholder document such as ['ID'] if the implementation names additional required evidence items."
+                )
+                lines.append(
+                    "If the implementation shows a named required_evidence or required_documents list, copy that full list verbatim into every valid happy-path or valid batch payload instead of shrinking it to a representative subset."
+                )
+                lines.append(
+                    "Keep the missing-document scenario isolated to the explicit validation-failure test, and make every supposedly valid happy-path or batch item fully valid before asserting scored outcomes or approved audit entries."
+                )
+                if "test_validation_failure" in failed_content_lower or '"documents": []' in failed_content_lower or "'documents': []" in failed_content_lower:
+                    lines.append(
+                        "When the suite already contains a dedicated validation-failure case, do not reuse that invalid missing-document payload inside test_batch_processing or any other supposedly valid batch scenario. Keep every batch item fully valid unless the contract explicitly documents partial batch failure handling."
+                    )
+            if required_evidence_runtime_issue:
+                lines.append(
+                    "Do not copy the current failed suite forward unchanged. The supposed happy-path or batch payloads still omit required evidence named by the implementation validator, so rebuild those valid request payloads from the current validator contract before returning the rewritten file."
+                )
+                if required_evidence_items:
+                    lines.append(
+                        f"The implementation names the full required evidence list as {required_evidence_items!r}. Copy that exact list into every valid happy-path or valid batch payload, and keep missing-document coverage isolated to the explicit validation-failure test."
+                    )
+                lines.append(
+                    "If test_batch_processing asserts the full batch size on len(service.risk_scores) or another success-path count, every batch item in that scenario must be fully valid. Do not keep a second batch request with reduced or empty documents such as ['ID'] or [] unless the contract explicitly documents partial batch failure handling."
+                )
+            if "risk_scores" in failed_content_lower and ".score > 0" in failed_content_lower:
+                lines.append(
+                    "Do not require a strictly positive score or non-empty risk list from a generic happy-path input unless the chosen payload actually exercises a documented risk factor. For a plain valid request, prefer asserting that scoring completed, a risk record exists, or the score is non-negative."
+                )
             if ".data ==" in failed_content_lower:
                 lines.append(
                     "If a returned request object's `.data` field stores the full input payload, do not assert that it equals only a guessed inner sub-dict. Assert the full stored payload shape or direct nested keys instead."
@@ -5878,6 +7403,47 @@ class Orchestrator:
                         lines.append(
                             "If process_batch internally performs more than one logged success step per valid item, count each of those inner success-path logs before any batch-level or failure logs. Example: a two-item valid batch can emit 5 audit logs, not 3, and a batch that fails on the second item can still already emit 2 logs, not 1, from the first valid item."
                         )
+            if "exact batch audit length" in summary_lower:
+                lines.append(
+                    "The previous suite overreached by asserting a batch audit length larger than the visible number of processed items. Delete that guessed extra-count assertion and rebuild the batch scenario around result count, request identity, or monotonic audit growth unless the contract explicitly defines extra summary entries."
+                )
+            if "exact status/action label mismatch" in summary_lower:
+                lines.append(
+                    "The previous runtime failure came from a brittle exact status or action label guess. Unless the contract explicitly defines the trigger, replace blocked, escalated, or approved label guesses with stable invariants or with clearly non-borderline inputs whose outcome is documented."
+                )
+                lines.append(
+                    "If you keep an exact status or action assertion, anchor it to a validation-failure path or another trigger that the implementation summary or behavior contract defines directly."
+                )
+                lines.append(
+                    "For happy-path or valid batch scenarios, do not assert exact outcome strings such as straight-through, manual review, manual investigation, fraud, fraud escalation, or time-boxed approval unless the contract explicitly defines that input-to-label mapping. Prefer request identity, audit growth, or another documented invariant instead."
+                )
+                lines.append(
+                    "Apply the same rule to return-review labels such as auto-approve, manual inspection, and abuse escalation. Do not hard-code those happy-path or batch outcomes unless the contract explicitly defines that mapping."
+                )
+            if "exact internal action-map key assumption" in summary_lower:
+                lines.append(
+                    "The previous runtime failure came from assuming an internal action or review map used request identity as its key. Do not assert request.request_id in service.review_actions or a similar membership check unless the contract explicitly defines that storage key."
+                )
+                lines.append(
+                    "If the implementation stores ReviewAction(action_id, ...) or another action record with its own generated identifier, assert the collection size, inspect stored action values, or check a documented action_type instead of assuming the map key equals request_id, vendor_id, or another request-identity field."
+                )
+            if "exact validation-failure score-state emptiness assertion" in summary_lower:
+                lines.append(
+                    "The previous runtime failure came from assuming a rejected or invalid request leaves internal score state empty. Do not assert len(service.get_risk_scores()) == 0 or a similar exact zero-length check on internal score maps, caches, or derived-state collections unless the behavior contract explicitly guarantees that post-validation state."
+                )
+                lines.append(
+                    "For validation-failure coverage, prefer the rejected return value, documented audit or action evidence, or another observable contract-backed effect over a guessed exact internal score-state size."
+                )
+                lines.append(
+                    "In a validation-failure test, remove direct reads of service.get_risk_scores() or similar internal score state unless that post-failure state is itself the documented contract. Assert the rejected return value, blocked audit entry, or another documented effect instead."
+                )
+            if "exact return-shape attribute assumption" in summary_lower:
+                lines.append(
+                    "The previous runtime failure came from assuming a wrapped object return shape that the current runtime did not provide. Delete `.request_id`, `.outcome`, and similar attribute reads on the workflow return value unless the contract explicitly exposes that wrapper type."
+                )
+                lines.append(
+                    "If the workflow currently returns a direct string or other primitive, keep happy-path and batch assertions on that direct value or on documented side effects instead of inventing a wrapper object."
+                )
             if all(name in summary_lower for name in ("validate_request", "score_request", "log_audit")):
                 lines.append(
                     "For a helper-only trio such as validate_request(request), score_request(request), and log_audit(request_id, action, result), collapse the suite to exactly three tests: one happy-path test that validates and scores a valid request and may check audit file creation or required substring presence, one validation-failure test using an invalid document_type or wrong-type document_data, and one batch-style loop over two valid requests. Delete standalone score_request, log_audit, and extra invalid-case tests."
@@ -5914,19 +7480,33 @@ class Orchestrator:
             lines.append(
                 "For process_request or other validation-gated workflow tests, choose an input that validate_request rejects before scoring runs. Do not use nested None values or same-type empty containers that can slip past validation and then fail later inside score_risk, calculate_risk_score, or similar scoring helpers with a different exception."
             )
+            if "exact return-shape attribute assumption" in summary_lower:
+                lines.append(
+                    "If the same failed suite also overreached on return shape, rebuild happy-path and batch checks around the direct primitive returned by the workflow, and reserve pytest.raises only for an input that the current validator demonstrably rejects."
+                )
             if any(token in failed_content_lower for token in ("risk_factor", "compliance_history", "request_data")):
                 lines.append(
                     "Do not expect a wrong nested field type to raise just because that field participates in scoring. When the implementation guards a nested field with isinstance(...) before using it, a wrong nested field type is ignored rather than raising; use a wrong top-level type or missing required field for failure coverage instead."
                 )
-        if "assert not true" in summary_lower:
+        if "assert false" in summary_lower or "assert true" in failed_content_lower or "assuming " in failed_content_lower:
             lines.append(
-                "If pytest reports `assert not True` or another failed falsy expectation from validate_request, process_request, or a similar validator, the supposed invalid sample likely still satisfies the current contract. Replace it with a clearly wrong top-level type or a truly missing required field instead of an empty-string or same-type placeholder."
+                "Do not leave placeholder assertions such as assert True, assert False, or comments like 'Assuming ...' in the rewritten suite. Replace them with a concrete contract-backed expectation."
+            )
+            lines.append(
+                "For validation-failure coverage, prefer an explicit validation result, a documented raised exception, or another observable side effect over a placeholder boolean assertion."
+            )
+        if "assert not true" in summary_lower or "assert true is false" in summary_lower:
+            lines.append(
+                "If pytest reports `assert not True` or another failed falsy expectation from validate_request, process_request, or a similar validator, the supposed invalid sample likely still satisfies the current contract. Apply the same rule to `assert True is False`. Replace it with a clearly wrong top-level type or a truly missing required field instead of an empty-string or same-type placeholder."
             )
             lines.append(
                 "Apply the same rule to request_id, entity_id, document_id, and similar identifiers: unless the contract explicitly says empty strings are invalid, do not use request_id='' or another same-type placeholder as the failing input."
             )
             lines.append(
                 "If the field under test is a dict payload such as data, details, metadata, request_data, or document_data, do not use an empty dict or nested None values to fake a validation failure. Use a wrong top-level type or another input that validate_request actually rejects before scoring runs."
+            )
+            lines.append(
+                "If the current validator only checks for the presence of required payload fields, do not keep every named key with same-type placeholder values like \"value\" in the rejection case. Omit one required field or use another clearly invalid top-level type instead."
             )
         if "assert false" in summary_lower:
             lines.append(

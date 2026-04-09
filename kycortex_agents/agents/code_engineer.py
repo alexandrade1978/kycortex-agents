@@ -44,6 +44,54 @@ def _budget_decomposition_block(brief: object) -> str:
         return ""
     return f"Budget decomposition brief:\n{brief}\n\n"
 
+
+def _split_repair_task_description(task_description: str) -> tuple[str, str]:
+    if not isinstance(task_description, str) or not task_description.strip():
+        return "", ""
+    marker = "Repair objective:"
+    marker_index = task_description.find(marker)
+    if marker_index == -1:
+        return task_description, ""
+    return task_description[:marker_index].rstrip(), task_description[marker_index:].strip()
+
+
+def _repair_literal_replacement_hint(repair_focus: str) -> tuple[str, str] | None:
+    if not isinstance(repair_focus, str) or not repair_focus.strip():
+        return None
+    match = re.search(
+        r"prefer replacing ([A-Za-z_][\w.]*) with ([A-Za-z_][\w.]*)",
+        repair_focus,
+        re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
+
+
+def _repair_directives_block(task_description: str) -> str:
+    _, repair_focus = _split_repair_task_description(task_description)
+    if not repair_focus:
+        return ""
+
+    lines = [
+        "Highest-priority repair directives:",
+        repair_focus,
+        "",
+    ]
+    replacement_hint = _repair_literal_replacement_hint(repair_focus)
+    if replacement_hint is not None:
+        broken_reference, replacement_reference = replacement_hint
+        lines.append(
+            f"Literal repair cue: replace {broken_reference} with {replacement_reference} unless you explicitly add and populate the original attribute or field first."
+        )
+    lines.extend(
+        [
+            "Treat the existing code below as the buggy baseline to edit, not as a template to preserve unchanged.",
+            "During repair, architecture is secondary guidance. If it conflicts with the repair objective, repair priorities, or cited validation failures, follow the repair directions and the cited failures.",
+        ]
+    )
+    return "\n".join(lines) + "\n\n"
+
 SYSTEM_PROMPT = """You are a Senior Python Engineer at KYCortex AI Software House.
 You write clean, production-quality Python code.
 Use accurate type hints throughout.
@@ -71,14 +119,21 @@ If an architecture sketch names optional collaborators such as RiskScorer, Audit
 Keep constructor signatures, helper function parameters, and internal call sites mutually consistent.
 If you define a helper to accept a domain object, every caller must pass that domain object; if you need a scalar helper, define it that way explicitly.
 If you model requests or records as dataclasses or other typed objects, access them consistently through attributes. Do not mix object-style APIs with dict membership tests or subscripting unless you explicitly convert them to mappings first.
+If the public request model separates wrapper fields from a nested payload container such as details, data, metadata, or payload, keep wrapper fields on the request object and validate only true payload keys inside that nested mapping. Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details or similar nested containers unless the contract explicitly duplicates them there.
+Do not make internal helper dataclasses or typed record models stricter than the documented valid request shape. If validate_request(...) accepts a happy-path or batch input, derive internal-only fields from existing request data or give them safe defaults instead of requiring new payload keys just to satisfy an internal constructor.
+If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, do not also pass the same field positionally or as a repeated keyword. Each constructor field must be bound exactly once.
+Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently. Do not invent near-match attribute names in scoring, audit, or routing helpers.
+If repair context cites AttributeError that an object has no attribute X, the rewritten module must either declare and populate X on that object's model or remove every read of .X. Do not leave the same undeclared attribute access anywhere in the rewritten file.
 If you define dataclasses or typed record models with defaults, keep every required non-default field before every defaulted field so the module imports cleanly. Never place a non-default dataclass field after a defaulted field.
 Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...).
 If the architecture or task description lists entity fields in a conflicting order, treat that list as descriptive only and reorder the actual dataclass fields so required fields still come first.
 Example: even if the architecture says AuditLog(action, timestamp, details), implement AuditLog(action, details, timestamp=field(default_factory=...)).
+If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types, and reorder each offending class instead of checking only the anchored request model.
 If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly.
-Keep imports consistent with the names you reference. If you call datetime.datetime.now() or datetime.date.today(), import datetime. If you import a symbol such as from datetime import datetime, call datetime.now() instead of datetime.datetime.now(). Do not leave module-qualified references pointing at names you never imported.
+Keep imports consistent with the names you reference. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime. If you import symbols directly such as from datetime import datetime, timedelta, or timezone, call datetime.now(), timedelta(...), or timezone.utc instead of leaving module-qualified or bare references pointing at names you never imported.
 Avoid placeholder demo logic that contradicts your own type hints or public API.
 If the task includes validation, implement concrete reject conditions for clearly invalid input rather than returning a constant success placeholder.
+If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type, repair the validator so that exact sample is rejected instead of keeping a presence-only required-key check.
 If the task includes scoring or other numeric derivation, use a transparent deterministic formula and avoid hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them.
 If a boolean or toggle-like field influences validation, scoring, or routing, read the field's actual truth value instead of treating mere key presence as a positive signal unless the task explicitly defines presence-only semantics.
 If repair context suggests truncation or incomplete output, remove non-essential docstrings, comments, blank lines, and optional helper layers before dropping any required behavior.
@@ -89,6 +144,8 @@ If repair context includes an existing pytest module, use its concrete fixtures,
 Treat existing tests and repair summaries as behavioral evidence only. Do not copy pytest test functions, bare assert statements, or test-only scaffolding into the implementation module.
 If you are repairing a previously invalid or truncated file, rewrite the complete module from the top instead of continuing from a partial tail.
 If the task requires a CLI or demo entrypoint, preserve or restore a minimal main() plus a literal if __name__ == "__main__": block during repair. Do not drop the entrypoint just to save lines or mirror a failing test snippet.
+When the user message includes a Highest-priority repair directives block, satisfy it before following later architecture guidance or reusing any existing code. Treat the existing code context as a buggy baseline to edit, not as a template to preserve unchanged.
+If those repair directives name a concrete broken reference and replacement, ensure the broken reference no longer appears anywhere in the final module unless you explicitly implement and populate it.
 When a task-level public contract anchor is provided, treat it as the highest-priority public API contract unless the validation summary explicitly says that API shape is wrong. Preserve listed facade, model, method, and constructor-field names exactly and do not invent alternate aliases or competing entrypoints."""
 
 class CodeEngineerAgent(BaseAgent):
@@ -114,27 +171,51 @@ class CodeEngineerAgent(BaseAgent):
         public_contract_section = ""
         if isinstance(task_public_contract_anchor, str) and task_public_contract_anchor.strip():
             public_contract_section = f"Task-level public contract anchor:\n{task_public_contract_anchor}\n\n"
-        task_block = f"Task: {agent_input.task_description}"
+        repair_directives_block = _repair_directives_block(agent_input.task_description)
+        repair_mode = bool(repair_directives_block)
+        task_context_source, _ = _split_repair_task_description(agent_input.task_description)
+        if not repair_mode or not task_context_source.strip():
+            task_context_source = agent_input.task_description
+        task_block = f"Task context:\n{task_context_source}" if repair_mode else f"Task: {task_context_source}"
         if low_budget_section and isinstance(task_public_contract_anchor, str) and task_public_contract_anchor.strip():
-            compact_task_block = _compact_task_constraints_block(agent_input.task_description)
+            compact_task_block = _compact_task_constraints_block(task_context_source)
             if compact_task_block:
                 task_block = compact_task_block
+        repair_validation_section = ""
+        if (
+            repair_mode
+            and isinstance(repair_validation_summary, str)
+            and repair_validation_summary.strip()
+            and "Validation summary:" not in repair_directives_block
+        ):
+            repair_validation_section = f"Previous validation summary:\n{repair_validation_summary}\n\n"
+        if repair_mode:
+            context_sections = (
+                f"{repair_directives_block}"
+                f"{repair_validation_section}"
+                "Buggy existing code context (edit this broken baseline rather than preserving it unchanged):\n"
+                f"{existing_code}\n\n"
+                "Existing tests context:\n"
+                f"{existing_tests}\n\n"
+                "Secondary architecture guidance:\n"
+                f"{architecture}\n\n"
+            )
+        else:
+            context_sections = (
+                "Architecture:\n"
+                f"{architecture}\n\n"
+                "Existing code context:\n"
+                f"{existing_code}\n\n"
+                "Existing tests context:\n"
+                f"{existing_tests}\n\n"
+                "Previous validation summary:\n"
+                f"{repair_validation_summary}\n\n"
+            )
         user_msg = f"""Project: {agent_input.project_name}
 Goal: {agent_input.project_goal}
 Target module: {module_filename}
 
-    {low_budget_section}{public_contract_section}Architecture:
-{architecture}
-
-Existing code context:
-{existing_code}
-
-Existing tests context:
-{existing_tests}
-
-Previous validation summary:
-{repair_validation_summary}
-
+{low_budget_section}{public_contract_section}{context_sections}
 {budget_decomposition_block}If a budget decomposition brief is provided, treat it as the compact execution plan for this rewrite. Preserve the required public surface it names, follow its write order, and omit the optional structures it explicitly says to cut unless the task, anchor, or validation summary requires them.
 
 If the previous validation summary lists any failures, treat every listed issue as a hard blocker and fix each one in this new file.
@@ -162,8 +243,15 @@ If you define dataclasses or typed record models with defaults, keep every requi
 Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...).
 If the architecture or task description lists entity fields in a conflicting order, treat that list as descriptive only and reorder the actual dataclass fields so required fields still come first.
 Example: even if the architecture says AuditLog(action, timestamp, details), implement AuditLog(action, details, timestamp=field(default_factory=...)).
+If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types, and reorder each offending class instead of checking only the anchored request model.
 If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly.
-Keep imports consistent with how you reference names. If you call datetime.datetime.now() or datetime.date.today(), import datetime. If you import datetime directly with from datetime import datetime, call datetime.now() instead of datetime.datetime.now(). Do not leave module-qualified references pointing at names you never imported.
+Keep imports consistent with how you reference names. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime. If you import symbols directly with from datetime import datetime, timedelta, or timezone, call datetime.now(), timedelta(...), or timezone.utc instead of leaving module-qualified or bare references pointing at names you never imported.
+If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type, repair the validator so that exact sample is rejected instead of keeping a presence-only required-key check.
+If the request model exposes top-level wrapper fields plus a nested payload container such as details, data, metadata, or payload, validate wrapper fields on the request object and reserve nested required-key checks for actual payload keys. Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details unless the contract explicitly duplicates them there.
+If validate_request(...) accepts the happy-path or batch input shown in the repair context, do not let an internal helper model or dataclass later raise TypeError for extra missing fields. Derive internal-only fields from existing request data or give them safe defaults instead of demanding new payload keys from the input contract.
+If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, do not also pass the same field positionally or as a repeated keyword. Remove duplicated fields from the expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once.
+Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently. Do not leave near-match field names split across model construction and later scoring, audit, or routing helpers.
+If the repair summary cites AttributeError that an object has no attribute X, either declare and populate X on that object's model or remove every read of .X before you finalize.
 Before you finalize, verify this checklist against your own output:
 - the file starts with valid imports or declarations and ends cleanly with no truncated block
 - every opened string, bracket, parenthesis, and docstring is closed
@@ -179,9 +267,17 @@ Before you finalize, verify this checklist against your own output:
 - if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
 - if boolean or toggle-like fields influence behavior, you used the field's truth value rather than mere key presence unless the contract explicitly defines presence-only semantics
 - if you modeled requests or records as dataclasses or typed objects, you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting
+- if the request model separates top-level wrapper fields from a nested payload container, you validated wrapper fields on the request object and only required true payload keys inside the nested mapping instead of demanding request_id/request_type/details inside request.details
+- if validate_request(...) accepts a happy-path or batch input, no internal helper model or dataclass later raises TypeError for extra missing fields; internal-only fields are derived or defaulted instead of demanding new payload keys
+- if you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, you did not also pass the same field positionally or as a repeated keyword; each constructor field is bound exactly once
+- every attribute read from a dataclass or typed internal model is declared on that model or derived there consistently; there are no near-match field names split across construction and later helpers
+- if the repair summary cited AttributeError that an object has no attribute X, you either declared and populated X on that model or removed every read of .X from the rewritten module
 - if you used dataclasses or typed record models with defaults, every required field appears before any field with a default so the module imports cleanly
+- if import validation cited a 'non-default argument ... follows default argument' error, you inspected every dataclass in the module and reordered each offending class, including non-request record types such as audit, review, or result logs
 - if you used dataclasses.field(...) or field(default_factory=...) anywhere in the module, you imported field explicitly from dataclasses so the module imports cleanly
 - every referenced module or symbol is imported consistently; if you call datetime.datetime.now() you imported datetime, and if you imported datetime directly you call datetime.now()
+- if you reference datetime helpers such as timedelta or timezone, you either imported those exact symbols directly or qualified them through datetime.* consistently
+- if you reference datetime helpers such as timedelta or timezone, you either imported those exact symbols directly or qualified them through datetime.* consistently
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - the file stays implementation code rather than turning into a pytest module, copied test function, or bare assertion snippet from the tests context
@@ -205,24 +301,54 @@ Before you finalize, verify this checklist against your own output:
         public_contract_section = ""
         if isinstance(task_public_contract_anchor, str) and task_public_contract_anchor.strip():
             public_contract_section = f"Task-level public contract anchor:\n{task_public_contract_anchor}\n\n"
-        task_block = f"Task: {task_description}"
+        repair_directives_block = _repair_directives_block(task_description)
+        repair_mode = bool(repair_directives_block)
+        task_context_source, _ = _split_repair_task_description(task_description)
+        if not repair_mode or not task_context_source.strip():
+            task_context_source = task_description
+        task_block = f"Task context:\n{task_context_source}" if repair_mode else f"Task: {task_context_source}"
         if low_budget_section and isinstance(task_public_contract_anchor, str) and task_public_contract_anchor.strip():
-            compact_task_block = _compact_task_constraints_block(task_description)
+            compact_task_block = _compact_task_constraints_block(task_context_source)
             if compact_task_block:
                 task_block = compact_task_block
-        user_msg = f"""Architecture:
-{architecture}
-Target module: {module_filename}
-
-    {low_budget_section}{public_contract_section}Existing code context:
-{existing_code}
-
-Existing tests context:
-{existing_tests}
-
-    Previous validation summary:
-    {repair_validation_summary}
-
+        repair_validation_section = ""
+        if (
+            repair_mode
+            and isinstance(repair_validation_summary, str)
+            and repair_validation_summary.strip()
+            and "Validation summary:" not in repair_directives_block
+        ):
+            repair_validation_section = f"Previous validation summary:\n{repair_validation_summary}\n\n"
+        if repair_mode:
+            context_sections = (
+                f"{repair_directives_block}"
+                f"{repair_validation_section}"
+                "Buggy existing code context (edit this broken baseline rather than preserving it unchanged):\n"
+                f"{existing_code}\n\n"
+                "Existing tests context:\n"
+                f"{existing_tests}\n\n"
+                "Secondary architecture guidance:\n"
+                f"{architecture}\n\n"
+            )
+        else:
+            context_sections = (
+                "Architecture:\n"
+                f"{architecture}\n"
+                f"Target module: {module_filename}\n\n"
+                f"{low_budget_section}{public_contract_section}"
+                "Existing code context:\n"
+                f"{existing_code}\n\n"
+                "Existing tests context:\n"
+                f"{existing_tests}\n\n"
+                "    Previous validation summary:\n"
+                f"    {repair_validation_summary}\n\n"
+            )
+        if repair_mode:
+            context_sections = (
+                f"Target module: {module_filename}\n\n"
+                f"{low_budget_section}{public_contract_section}{context_sections}"
+            )
+        user_msg = f"""{context_sections}
 {budget_decomposition_block}If a budget decomposition brief is provided, treat it as the compact execution plan for this rewrite. Preserve the required public surface it names, follow its write order, and omit the optional structures it explicitly says to cut unless the task, anchor, or validation summary requires them.
 
 If the previous validation summary lists any failures, treat every listed issue as a hard blocker and fix each one in this new file.
@@ -249,8 +375,15 @@ If you define dataclasses or typed record models with defaults, keep every requi
 Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...).
 If the architecture or task description lists entity fields in a conflicting order, treat that list as descriptive only and reorder the actual dataclass fields so required fields still come first.
 Example: even if the architecture says AuditLog(action, timestamp, details), implement AuditLog(action, details, timestamp=field(default_factory=...)).
+If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types, and reorder each offending class instead of checking only the anchored request model.
 If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly.
-Keep imports consistent with how you reference names. If you call datetime.datetime.now() or datetime.date.today(), import datetime. If you import datetime directly with from datetime import datetime, call datetime.now() instead of datetime.datetime.now(). Do not leave module-qualified references pointing at names you never imported.
+Keep imports consistent with how you reference names. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime. If you import symbols directly with from datetime import datetime, timedelta, or timezone, call datetime.now(), timedelta(...), or timezone.utc instead of leaving module-qualified or bare references pointing at names you never imported.
+If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type, repair the validator so that exact sample is rejected instead of keeping a presence-only required-key check.
+If the request model exposes top-level wrapper fields plus a nested payload container such as details, data, metadata, or payload, validate wrapper fields on the request object and reserve nested required-key checks for actual payload keys. Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details unless the contract explicitly duplicates them there.
+If validate_request(...) accepts the happy-path or batch input shown in the repair context, do not let an internal helper model or dataclass later raise TypeError for extra missing fields. Derive internal-only fields from existing request data or give them safe defaults instead of demanding new payload keys from the input contract.
+If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, do not also pass the same field positionally or as a repeated keyword. Remove duplicated fields from the expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once.
+Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently. Do not leave near-match field names split across model construction and later scoring, audit, or routing helpers.
+If the repair summary cites AttributeError that an object has no attribute X, either declare and populate X on that object's model or remove every read of .X before you finalize.
 Before you finalize, verify this checklist against your own output:
 - the file starts with valid imports or declarations and ends cleanly with no truncated block
 - every opened string, bracket, parenthesis, and docstring is closed
@@ -266,9 +399,16 @@ Before you finalize, verify this checklist against your own output:
 - if the task includes numeric scoring, the formula is transparent and avoids hidden caps, clamps, or arbitrary thresholds unless the task explicitly requires them
 - if boolean or toggle-like fields influence behavior, you used the field's truth value rather than mere key presence unless the contract explicitly defines presence-only semantics
 - if you modeled requests or records as dataclasses or typed objects, you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting
+- if the request model separates top-level wrapper fields from a nested payload container, you validated wrapper fields on the request object and only required true payload keys inside the nested mapping instead of demanding request_id/request_type/details inside request.details
+- if validate_request(...) accepts a happy-path or batch input, no internal helper model or dataclass later raises TypeError for extra missing fields; internal-only fields are derived or defaulted instead of demanding new payload keys
+- if you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, you did not also pass the same field positionally or as a repeated keyword; each constructor field is bound exactly once
+- every attribute read from a dataclass or typed internal model is declared on that model or derived there consistently; there are no near-match field names split across construction and later helpers
+- if the repair summary cited AttributeError that an object has no attribute X, you either declared and populated X on that model or removed every read of .X from the rewritten module
 - if you used dataclasses or typed record models with defaults, every required field appears before any field with a default so the module imports cleanly
+- if import validation cited a 'non-default argument ... follows default argument' error, you inspected every dataclass in the module and reordered each offending class, including non-request record types such as audit, review, or result logs
 - if you used dataclasses.field(...) or field(default_factory=...) anywhere in the module, you imported field explicitly from dataclasses so the module imports cleanly
 - every referenced module or symbol is imported consistently; if you call datetime.datetime.now() you imported datetime, and if you imported datetime directly you call datetime.now()
+- if you reference datetime helpers such as timedelta or timezone, you either imported those exact symbols directly or qualified them through datetime.* consistently
 - if the task requires a CLI or demo entrypoint, you included it in this same module with a working main guard or equivalent entry function
 - if the task requires a CLI or demo entrypoint, prefer a minimal `main()` plus a literal `if __name__ == "__main__":` block at the end of the file
 - the file stays implementation code rather than turning into a pytest module, copied test function, or bare assertion snippet from the tests context

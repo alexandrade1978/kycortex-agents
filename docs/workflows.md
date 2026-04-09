@@ -236,3 +236,17 @@ When a workflow does not progress as expected, inspect these areas first:
 The persisted `ProjectState`, execution events, and workflow summary usually provide enough information to diagnose the cause.
 
 For empirical full-workflow validation across providers, use `examples/example_provider_matrix_validation.py` with `workflow_failure_policy="continue"`, `workflow_resume_policy="resume_failed"`, and a bounded repair budget. That is the canonical repository-owned path for comparing provider behavior against the same task graph.
+
+## Production Service Objectives
+
+The workflow runtime is acceptance-first: a workflow only counts as successful when its declared acceptance criteria pass end to end.
+
+For production-readiness decisions, treat these as separate questions:
+
+- Did the package release validate and publish correctly?
+- Did the workflow runtime stay inside the repository-owned SLO and error-budget policy?
+- Did the candidate satisfy the staged canary or go-live gates for the deployment claim being made?
+
+Use `RELEASE.md` for package-release validation.
+
+Use `docs/go-live-policy.md` for the operational SLOs, error budgets, and staged gates that govern canary and production deployment decisions.

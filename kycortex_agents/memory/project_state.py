@@ -555,10 +555,17 @@ class ProjectState:
         resumed_at = datetime.now(timezone.utc).isoformat()
         resumed_task_ids: List[str] = []
         resumable_dependency_ids = set(failed_task_ids)
+        explicitly_requested_task_ids = {
+            task_id for task_id in additional_task_ids or [] if isinstance(task_id, str) and task_id
+        }
 
         while True:
             changed = False
             for task in self.tasks:
+                explicitly_requested = (
+                    task.id in explicitly_requested_task_ids
+                    and task.status in {TaskStatus.DONE.value, TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
+                )
                 should_resume = (
                     include_failed_tasks
                     and task.status == TaskStatus.FAILED.value
@@ -567,7 +574,7 @@ class ProjectState:
                     task.status == TaskStatus.SKIPPED.value
                     and self._is_dependency_failed_skip(task)
                     and any(dep in resumable_dependency_ids for dep in task.dependencies)
-                )
+                ) or explicitly_requested
                 if not should_resume or task.id in resumed_task_ids:
                     continue
                 was_failed_task = task.status == TaskStatus.FAILED.value
@@ -575,8 +582,11 @@ class ProjectState:
                 task.last_error = "Task resumed after failed workflow execution"
                 task.last_error_type = None
                 task.last_error_category = None
-                if not was_failed_task:
+                if not was_failed_task and not explicitly_requested:
                     task.repair_context = {}
+                if explicitly_requested:
+                    task.started_at = None
+                    task.last_attempt_started_at = None
                 task.output = None
                 task.output_payload = None
                 task.skip_reason_type = None
@@ -677,6 +687,8 @@ class ProjectState:
         repair_task_id = f"{task_id}__repair_{repair_attempt}"
         existing = self.get_task(repair_task_id)
         if existing is not None:
+            existing.assigned_to = repair_owner
+            existing.repair_context = dict(repair_context)
             return existing
         created_at = datetime.now(timezone.utc).isoformat()
         repair_task = Task(

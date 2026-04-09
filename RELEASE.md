@@ -2,6 +2,14 @@
 
 This document describes the repository-owned release procedure for KYCortex 1.0.0 and later maintenance releases, including alpha-style pre-releases.
 
+## Release Versus Go-Live
+
+This guide is about package publication.
+
+- Passing the release procedure means the repository is ready to publish a versioned artifact.
+- It does not, by itself, mean the framework is ready for production customer traffic.
+- Production deployment claims must also satisfy the repository-owned SLO, error-budget, and staged go-live gates in `docs/go-live-policy.md`.
+
 ## Preconditions
 
 - Work from a clean checkout of `main`.
@@ -78,3 +86,5 @@ Do not tag a release until all of the following are true:
 - the coverage gate is passing
 - plan and release-checklist mirrors are current
 - changelog and migration notes are ready for the version being tagged
+
+If the release is also intended to support a canary or production go-live claim, the candidate must separately satisfy `docs/go-live-policy.md` before that claim is made.

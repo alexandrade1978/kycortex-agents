@@ -354,6 +354,25 @@ class QATesterAgent(BaseAgent):
         normalized = repair_validation_summary.lower()
         focus_lines: list[str] = []
         required_payload_keys = QATesterAgent._implementation_required_payload_keys(implementation_code) or []
+        validation_omitted_payload_key = QATesterAgent._validation_failure_omitted_payload_key(implementation_code)
+        required_evidence_items = QATesterAgent._implementation_required_evidence_items(implementation_code) or []
+        required_request_fields = QATesterAgent._implementation_required_request_fields(implementation_code) or []
+        non_validation_payload_keys = QATesterAgent._implementation_non_validation_payload_keys(implementation_code) or []
+        validation_missing_request_field = QATesterAgent._validation_failure_missing_request_field(implementation_code)
+        _, validation_request_like_line = QATesterAgent._validation_failure_request_like_object_scaffold_line(
+            implementation_code,
+        )
+        requires_recent_request_timestamp = QATesterAgent._implementation_requires_recent_request_timestamp(
+            implementation_code,
+        )
+        exact_numeric_score_issue = QATesterAgent._summary_has_exact_numeric_score_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        positive_numeric_score_issue = QATesterAgent._summary_has_positive_numeric_score_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
         presence_only_validation_sample_issue = (
             QATesterAgent._summary_has_presence_only_validation_sample_issue(
                 repair_validation_summary,
@@ -361,10 +380,27 @@ class QATesterAgent(BaseAgent):
                 implementation_code,
             )
         )
+        required_evidence_runtime_issue = QATesterAgent._summary_has_required_evidence_runtime_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
         required_payload_runtime_issue = QATesterAgent._summary_has_required_payload_runtime_issue(
             repair_validation_summary,
             existing_tests,
             implementation_code,
+        )
+        exact_status_action_label_issue = QATesterAgent._summary_has_exact_status_action_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        exact_band_label_issue = QATesterAgent._summary_has_exact_band_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        exact_temporal_value_issue = QATesterAgent._summary_has_exact_temporal_value_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
         )
         undefined_local_entries = [
             item.split(" (line ", 1)[0].strip()
@@ -428,6 +464,49 @@ class QATesterAgent(BaseAgent):
                 f"`{rendered_names}`. Do not repair those names by swapping to a similarly named record or dataclass like `AuditLog()`; delete that guessed collaborator wiring and rebuild around the documented service facade or directly exchanged request or result models only."
             )
 
+        if required_request_fields and not required_payload_keys:
+            rendered_fields = ", ".join(required_request_fields)
+            focus_lines.append(
+                "- The current validator checks top-level request field presence on the request object rather than nested payload keys. "
+                f"The required top-level field set here is {rendered_fields}. A fully populated request-model constructor that still supplies all of those fields remains valid even when nested business values are `False`, empty, or low-risk."
+            )
+            if validation_missing_request_field:
+                focus_lines.append(
+                    "- In `test_validation_failure`, do not replace the scaffolded request-like object with a fully populated request-model constructor such as `ReturnCase(...)`. "
+                    f"Keep the request-like object missing `{validation_missing_request_field}` exactly as shown so `validate_request(...)` actually returns `False` before the workflow raises `ValueError`."
+                )
+                if validation_request_like_line:
+                    focus_lines.append(
+                        "- Keep the constructor-free invalid object line exactly as scaffolded: "
+                        f"`{validation_request_like_line}`. Reuse that same `invalid_request` object in both `validate_request(...)` and the workflow call, and do not replace it with a request-model constructor or a placeholder case such as `details={{}}`."
+                    )
+                focus_lines.append(
+                    f"- Do not fake a missing top-level field with `{validation_missing_request_field}=None`, an empty string, or another placeholder value. For this validator the field must be absent from the object entirely, not merely present with a falsey value."
+                )
+
+        if requires_recent_request_timestamp:
+            recent_fixed_time_expr = f"`fixed_time = {QATesterAgent._fixed_time_expression(implementation_code)}`"
+            focus_lines.append(
+                "- The implementation validates request timestamp recency before happy-path scoring or workflow execution. "
+                f"Do not keep a stale historical calendar literal in supposedly valid or risk-scoring tests. Use a recent local value such as {recent_fixed_time_expr} so valid requests pass validation first, and only age secondary fields like approval-chain timestamps when the scenario explicitly needs that branch."
+            )
+            focus_lines.append(
+                "- Delete stale constructor literals such as `datetime(2024, 1, 1, ...)` from valid workflow tests when the validator compares request time to `datetime.now(...)`. A stale fixed timestamp will force the request down the validation-failure path and zero out downstream scoring expectations."
+            )
+
+        if exact_numeric_score_issue:
+            focus_lines.append(
+                "- The previous runtime failure came from a brittle exact numeric score or total guess. Recompute that expectation from only the branches exercised by the chosen input if the formula is explicit; otherwise replace the equality with stable invariants such as non-negative score, relative ordering, or the documented workflow outcome."
+            )
+
+        if positive_numeric_score_issue:
+            focus_lines.append(
+                "- The previous runtime failure came from assuming a positive non-zero score where the current implementation returned 0.0. Do not assert `result.risk_score > 0.0`, `result.score > 0.0`, or a similar positive-threshold check unless the implementation or contract explicitly guarantees that increase for the chosen input."
+            )
+            focus_lines.append(
+                "- Prefer stable score invariants such as `>= 0.0`, `<= 1.0`, type checks, relative ordering, or documented decision and audit evidence over speculative positive-score thresholds in risk-scoring or emergency-path tests."
+            )
+
         other_undefined_names = sorted(
             name for name in undefined_local_names if name not in {"pytest", "datetime", "line"}
         )
@@ -446,7 +525,7 @@ class QATesterAgent(BaseAgent):
                 "- The previous suite overreached by expecting more batch audit entries than the visible number of processed items. Remove that guessed extra-count assertion and prefer result count, request identity, or monotonic audit growth unless the contract explicitly defines extra summary entries."
             )
 
-        if "exact status/action label mismatch" in normalized:
+        if "exact status/action label mismatch" in normalized or exact_status_action_label_issue:
             focus_lines.append(
                 "- The previous runtime failure came from a brittle exact status or action label guess. Unless the contract explicitly defines the trigger, replace blocked, escalated, approved, conditional approval, straight-through, straight-through review, manual investigation, fraud escalation, time-boxed approval, or similar label guesses with stable invariants or with clearly non-borderline inputs whose outcome is documented."
             )
@@ -454,7 +533,29 @@ class QATesterAgent(BaseAgent):
                 "- In happy-path or valid batch scenarios, do not assert exact outcome strings such as `straight-through` or `manual investigation` unless the contract explicitly defines that input-to-label mapping; prefer request identity, audit growth, or another documented invariant instead."
             )
             focus_lines.append(
+                "- Delete exact equality checks on `.action_type`, `.outcome`, `.status`, `['action_type']`, `['outcome']`, or `['status']` in happy-path and valid batch tests unless the contract explicitly defines that label mapping. Replace them with type, identity, count, or other contract-backed invariants."
+            )
+            focus_lines.append(
                 "- Apply the same rule to return-review labels such as `auto-approve`, `manual inspection`, and `abuse escalation`; do not hard-code them in happy-path or valid batch tests unless the contract explicitly defines that mapping."
+            )
+            focus_lines.append(
+                "- Treat audit-log message text the same way: do not hard-code label substrings such as `Approved`, `Escalated`, `Blocked`, or `Rejected` inside audit-log assertions unless the contract explicitly defines that text. Prefer request identity, entry count, or another contract-backed invariant."
+            )
+
+        if exact_band_label_issue:
+            focus_lines.append(
+                "- The previous runtime failure came from a brittle exact risk-tier or severity-band threshold guess. Unless the contract explicitly defines that score-to-band mapping, do not assert exact `risk_level`, `severity`, `priority`, `classification`, or similar tier labels such as `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL` in happy-path, risk-scoring, audit-trail, or batch tests."
+            )
+            focus_lines.append(
+                "- Delete exact equality checks like `== 'HIGH'` and narrow subset checks like `in ['HIGH', 'CRITICAL']` on `.risk_level`, `.severity`, `.priority`, `['risk_level']`, or similar band fields. Replace them with score bounds, audit evidence, request identity, or a simple string-type assertion unless the contract explicitly documents the threshold map."
+            )
+
+        if exact_temporal_value_issue:
+            focus_lines.append(
+                "- The previous runtime failure came from a brittle exact timestamp or generated-time equality guess. Do not assert that emitted `timestamp`, `created_at`, `updated_at`, or similar generated values exactly equal `fixed_time`, `request.timestamp`, `str(fixed_time)`, or another local time surrogate unless the contract explicitly documents that echo."
+            )
+            focus_lines.append(
+                "- Prefer stable checks such as timestamp presence, request identity, collection growth, or type/format assertions over exact equality to a locally fixed time when the implementation may create its own action record time or identifier."
             )
 
         if "exact internal action-map key assumption" in normalized:
@@ -474,6 +575,22 @@ class QATesterAgent(BaseAgent):
                     "- The current validator only requires the presence of "
                     f"{', '.join(required_payload_keys)} inside the payload. Keep the rest of the rejection case valid and omit one of those required fields instead of keeping all of them with placeholder values."
                 )
+            if validation_omitted_payload_key:
+                focus_lines.append(
+                    "- In `test_validation_failure`, keep the scaffolded omission on the validator-required key "
+                    f"`{validation_omitted_payload_key}` exactly as shown. Do not replace that omission with a different downstream business key."
+                )
+            if non_validation_payload_keys:
+                rendered_keys = ", ".join(non_validation_payload_keys[:3])
+                focus_lines.append(
+                    "- Do not swap that missing-field case to optional downstream business keys such as "
+                    f"{rendered_keys}. Those keys are only read after validation in scoring or review logic here, so omitting them may change risk but should not be used as the `validate_request(...)` rejection case."
+                )
+                if required_payload_keys:
+                    focus_lines.append(
+                        "- A payload that still includes every validator-required field "
+                        f"{', '.join(required_payload_keys)} but only omits downstream keys such as {rendered_keys} remains validation-valid here. Delete that shape from `test_validation_failure` and omit a real validator-required key instead."
+                    )
 
         if required_payload_runtime_issue:
             focus_lines.append(
@@ -483,6 +600,16 @@ class QATesterAgent(BaseAgent):
                 focus_lines.append(
                     "- Every valid happy-path or batch payload must include all required payload keys named by the current validator: "
                     f"{', '.join(required_payload_keys)}. Keep missing-field coverage isolated to the explicit validation-failure test."
+                )
+
+        if required_evidence_runtime_issue:
+            focus_lines.append(
+                "- The previous non-validation suite still used incomplete required-evidence payloads inside processing assertions. Keep risk-scoring, audit-trail, happy-path, and batch scenarios fully valid, and isolate missing-document coverage to the explicit validation-failure test."
+            )
+            if required_evidence_items:
+                focus_lines.append(
+                    "- The current validator requires the full evidence set "
+                    f"{required_evidence_items!r} before processing. Copy that full list into every non-validation scenario that calls the workflow or scoring path."
                 )
 
         if "exact validation-failure score-state emptiness assertion" in normalized:
@@ -499,6 +626,9 @@ class QATesterAgent(BaseAgent):
             )
             focus_lines.append(
                 "- Delete every `.request_id`, `.outcome`, or similar attribute read on the workflow return value in happy-path and batch tests. If the workflow currently returns a direct string or other primitive, compare that direct value or assert a documented side effect instead of inventing a wrapper object."
+            )
+            focus_lines.append(
+                "- Remove guessed wrapper-result imports such as `AccessReviewOutcome`, `ReviewOutcome`, or similar result classes when they are only used for those invalid return-shape assertions. Import only the documented facade and request model unless the implementation explicitly returns that wrapper type."
             )
 
         if "did not raise" in normalized:
@@ -599,6 +729,479 @@ class QATesterAgent(BaseAgent):
         if not match:
             return ""
         return match.group(0)
+
+    @staticmethod
+    def _pytest_failed_test_names(repair_validation_summary: object) -> list[str]:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return []
+
+        names: list[str] = []
+        seen: set[str] = set()
+        for match in re.finditer(r"FAILED\s+\S+::([A-Za-z_][A-Za-z0-9_]*)", repair_validation_summary):
+            name = match.group(1)
+            if name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        return names
+
+    @staticmethod
+    def _is_validation_failure_test_name(test_name: str) -> bool:
+        lowered = test_name.strip().lower()
+        if not lowered:
+            return False
+        return any(token in lowered for token in ("validation", "invalid", "reject", "error", "failure"))
+
+    @classmethod
+    def _failed_test_function_nodes(
+        cls,
+        repair_validation_summary: object,
+        content: object,
+    ) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+        tree = cls._parse_implementation_tree(content)
+        if tree is None:
+            return []
+
+        nodes = [
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test_")
+        ]
+        failed_names = cls._pytest_failed_test_names(repair_validation_summary)
+        if not failed_names:
+            return nodes
+
+        failed_name_set = set(failed_names)
+        return [node for node in nodes if node.name in failed_name_set]
+
+    @classmethod
+    def _test_function_targets_valid_processing(
+        cls,
+        function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> bool:
+        function_name = function_node.name.lower()
+        if any(token in function_name for token in ("validation", "invalid", "reject", "error", "failure")):
+            return False
+        if any(token in function_name for token in ("happy", "batch", "risk", "score", "audit")):
+            return True
+
+        workflow_call_names = {
+            "batch_process",
+            "calculate_risk_score",
+            "handle_request",
+            "intake_request",
+            "process_request",
+            "score_request",
+            "score_risk",
+            "submit_intake",
+            "submit_request",
+        }
+        return any(
+            isinstance(child, ast.Call)
+            and cls._call_expression_name(child) in workflow_call_names
+            for child in ast.walk(function_node)
+        )
+
+    @staticmethod
+    def _canonical_status_like_label(value: str) -> str | None:
+        normalized = re.sub(r"[\s\-]+", "_", value.strip().lower())
+        if not normalized:
+            return None
+
+        aliases = {
+            "accepted": "accepted",
+            "abuse_escalation": "abuse_escalation",
+            "approve": "approve",
+            "approved": "approved",
+            "auto_approve": "auto_approve",
+            "blocked": "blocked",
+            "conditional_approval": "conditional_approval",
+            "conditional_approve": "conditional_approve",
+            "enhanced_due_diligence": "enhanced_due_diligence",
+            "escalated": "escalated",
+            "flagged": "flagged",
+            "fraud": "fraud",
+            "fraud_escalation": "fraud_escalation",
+            "invalid": "invalid",
+            "manual_inspection": "manual_inspection",
+            "manual_investigation": "manual_investigation",
+            "manual_review": "manual_review",
+            "pending": "pending",
+            "pending_review": "pending_review",
+            "rejected": "rejected",
+            "security_escalation": "security_escalation",
+            "straight_through": "straight_through_review",
+            "straight_through_review": "straight_through_review",
+            "time_boxed_approval": "time_boxed_approval",
+        }
+        return aliases.get(normalized)
+
+    @classmethod
+    def _status_like_literal_values(cls, expression: ast.AST) -> list[str]:
+        if isinstance(expression, ast.Constant) and isinstance(expression.value, str):
+            canonical = cls._canonical_status_like_label(expression.value)
+            return [canonical] if canonical else []
+
+        values = cls._string_literal_sequence(expression)
+        if not values:
+            return []
+
+        canonical_values = [cls._canonical_status_like_label(value) for value in values]
+        if any(value is None for value in canonical_values):
+            return []
+        return [value for value in canonical_values if value is not None]
+
+    @staticmethod
+    def _canonical_band_like_label(value: str) -> str | None:
+        normalized = re.sub(r"[\s\-]+", "_", value.strip().lower())
+        if not normalized:
+            return None
+
+        aliases = {
+            "critical": "critical",
+            "high": "high",
+            "low": "low",
+            "medium": "medium",
+        }
+        return aliases.get(normalized)
+
+    @classmethod
+    def _band_like_literal_values(cls, expression: ast.AST) -> list[str]:
+        if isinstance(expression, ast.Constant) and isinstance(expression.value, str):
+            canonical = cls._canonical_band_like_label(expression.value)
+            return [canonical] if canonical else []
+
+        values = cls._string_literal_sequence(expression)
+        if not values:
+            return []
+
+        canonical_values = [cls._canonical_band_like_label(value) for value in values]
+        if any(value is None for value in canonical_values):
+            return []
+        return [value for value in canonical_values if value is not None]
+
+    @classmethod
+    def _numeric_literal_value(cls, expression: ast.AST) -> int | float | None:
+        if isinstance(expression, ast.Constant) and isinstance(expression.value, (int, float)):
+            return expression.value
+        if isinstance(expression, ast.UnaryOp) and isinstance(expression.op, ast.USub):
+            operand = cls._numeric_literal_value(expression.operand)
+            if operand is not None:
+                return -operand
+        return None
+
+    @staticmethod
+    def _expression_text(expression: ast.AST) -> str:
+        try:
+            return ast.unparse(expression).lower()
+        except Exception:
+            return ""
+
+    @classmethod
+    def _summary_has_exact_status_action_label_assertion_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+            return False
+
+        for node in cls._failed_test_function_nodes(repair_validation_summary, content):
+            if cls._is_validation_failure_test_name(node.name):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Assert):
+                    continue
+                if not isinstance(child.test, ast.Compare) or len(child.test.ops) != 1 or len(child.test.comparators) != 1:
+                    continue
+                if not isinstance(child.test.ops[0], (ast.Eq, ast.In)):
+                    continue
+
+                if isinstance(child.test.ops[0], ast.In):
+                    comparator_text = cls._expression_text(child.test.comparators[0])
+                    if (
+                        isinstance(child.test.left, ast.Constant)
+                        and isinstance(child.test.left.value, str)
+                        and ("audit_log" in comparator_text or "audit_logs" in comparator_text)
+                    ):
+                        left_text = child.test.left.value.lower()
+                        if any(
+                            token in left_text
+                            for token in (
+                                "approved",
+                                "blocked",
+                                "escalated",
+                                "rejected",
+                                "manual review",
+                                "manual investigation",
+                                "fraud escalation",
+                                "straight-through",
+                            )
+                        ):
+                            return True
+                        if re.search(r"score:\s*\d+(?:\.\d+)?", left_text):
+                            return True
+
+                left_labels = cls._status_like_literal_values(child.test.left)
+                right_labels = cls._status_like_literal_values(child.test.comparators[0])
+                if left_labels and not right_labels:
+                    return True
+                if right_labels and not left_labels:
+                    return True
+        return False
+
+    @classmethod
+    def _summary_has_exact_band_label_assertion_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+            return False
+
+        full_band_set = {"low", "medium", "high", "critical"}
+
+        def band_values_from_summary_list(raw_values: str) -> list[str]:
+            values = re.findall(r"['\"]([^'\"]+)['\"]", raw_values)
+            if not values:
+                return []
+            canonical_values = [cls._canonical_band_like_label(value) for value in values]
+            if any(value is None for value in canonical_values):
+                return []
+            return [value for value in canonical_values if value is not None]
+
+        for actual_value, expected_values in re.findall(
+            r"assert\s+['\"]([^'\"]+)['\"]\s+in\s+\[([^\]]+)\]",
+            repair_validation_summary,
+            flags=re.IGNORECASE,
+        ):
+            actual_band = cls._canonical_band_like_label(actual_value)
+            expected_bands = band_values_from_summary_list(expected_values)
+            if actual_band and expected_bands and actual_band not in expected_bands and set(expected_bands) != full_band_set:
+                return True
+
+        for left_value, right_value in re.findall(
+            r"assert\s+['\"]([^'\"]+)['\"]\s*==\s*['\"]([^'\"]+)['\"]",
+            repair_validation_summary,
+            flags=re.IGNORECASE,
+        ):
+            left_band = cls._canonical_band_like_label(left_value)
+            right_band = cls._canonical_band_like_label(right_value)
+            if left_band and right_band and left_band != right_band:
+                return True
+
+        field_tokens = ("risk_level", "severity", "priority", "classification", "tier", "band")
+        for node in cls._failed_test_function_nodes(repair_validation_summary, content):
+            if cls._is_validation_failure_test_name(node.name):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Assert):
+                    continue
+                if not isinstance(child.test, ast.Compare) or len(child.test.ops) != 1 or len(child.test.comparators) != 1:
+                    continue
+
+                left_text = cls._expression_text(child.test.left)
+                right_text = cls._expression_text(child.test.comparators[0])
+                if not any(token in left_text or token in right_text for token in field_tokens):
+                    continue
+
+                comparator = child.test.comparators[0]
+                if isinstance(child.test.ops[0], ast.In):
+                    expected_bands = cls._band_like_literal_values(comparator)
+                    if expected_bands and set(expected_bands) != full_band_set:
+                        return True
+                    continue
+
+                if not isinstance(child.test.ops[0], ast.Eq):
+                    continue
+
+                left_bands = cls._band_like_literal_values(child.test.left)
+                right_bands = cls._band_like_literal_values(comparator)
+                if left_bands and not right_bands:
+                    return True
+                if right_bands and not left_bands:
+                    return True
+                if left_bands and right_bands and set(left_bands) != set(right_bands):
+                    return True
+        return False
+
+    @classmethod
+    def _summary_has_exact_temporal_value_assertion_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if not re.search(r"assert\s+['\"]?20\d{2}-\d{2}-\d{2}", summary_lower):
+            return False
+
+        temporal_tokens = (
+            "timestamp",
+            "created_at",
+            "updated_at",
+            "fixed_time",
+            "fixed_timestamp",
+            "request.timestamp",
+            "isoformat(",
+            "str(fixed_time)",
+            "str(fixed_timestamp)",
+        )
+        for node in cls._failed_test_function_nodes(repair_validation_summary, content):
+            if cls._is_validation_failure_test_name(node.name):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Assert):
+                    continue
+                if not isinstance(child.test, ast.Compare) or len(child.test.ops) != 1 or len(child.test.comparators) != 1:
+                    continue
+                if not isinstance(child.test.ops[0], ast.Eq):
+                    continue
+
+                left_text = cls._expression_text(child.test.left)
+                right_text = cls._expression_text(child.test.comparators[0])
+                if any(token in left_text for token in temporal_tokens) or any(token in right_text for token in temporal_tokens):
+                    return True
+        return False
+
+    @classmethod
+    def _summary_has_exact_numeric_score_assertion_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        if re.search(r"assert\s+-?\d+(?:\.\d+)?\s*==\s*-?\d+(?:\.\d+)?", repair_validation_summary) is None:
+            return False
+
+        for node in cls._failed_test_function_nodes(repair_validation_summary, content):
+            if cls._is_validation_failure_test_name(node.name):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Assert):
+                    continue
+                if not isinstance(child.test, ast.Compare) or len(child.test.ops) != 1 or len(child.test.comparators) != 1:
+                    continue
+                if not isinstance(child.test.ops[0], ast.Eq):
+                    continue
+
+                left_text = cls._expression_text(child.test.left)
+                right_text = cls._expression_text(child.test.comparators[0])
+                if not any(token in left_text or token in right_text for token in ("risk_score", "score")):
+                    continue
+                if (
+                    cls._numeric_literal_value(child.test.left) is not None
+                    or cls._numeric_literal_value(child.test.comparators[0]) is not None
+                ):
+                    return True
+        return False
+
+    @classmethod
+    def _summary_has_positive_numeric_score_assertion_issue(
+        cls,
+        repair_validation_summary: object,
+        content: object = "",
+    ) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+            return False
+
+        score_tokens = ("risk_score", "score")
+        for node in cls._failed_test_function_nodes(repair_validation_summary, content):
+            if cls._is_validation_failure_test_name(node.name):
+                continue
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Assert):
+                    continue
+                if not isinstance(child.test, ast.Compare) or len(child.test.ops) != 1 or len(child.test.comparators) != 1:
+                    continue
+
+                left_text = cls._expression_text(child.test.left)
+                right_text = cls._expression_text(child.test.comparators[0])
+                if not any(token in left_text or token in right_text for token in score_tokens):
+                    continue
+
+                left_numeric = cls._numeric_literal_value(child.test.left)
+                right_numeric = cls._numeric_literal_value(child.test.comparators[0])
+                op = child.test.ops[0]
+
+                if isinstance(op, ast.Gt):
+                    if right_numeric is not None and right_numeric >= 0.0 and any(token in left_text for token in score_tokens):
+                        return True
+                    if left_numeric is not None and left_numeric >= 0.0 and any(token in right_text for token in score_tokens):
+                        return True
+
+                if isinstance(op, ast.Lt):
+                    if left_numeric is not None and left_numeric >= 0.0 and any(token in right_text for token in score_tokens):
+                        return True
+                    if right_numeric is not None and right_numeric >= 0.0 and any(token in left_text for token in score_tokens):
+                        return True
+
+        return False
+
+    @staticmethod
+    def _implementation_prefers_timezone_aware_now(implementation_code: object) -> bool:
+        return isinstance(implementation_code, str) and "timezone.utc" in implementation_code
+
+    @classmethod
+    def _implementation_requires_recent_request_timestamp(cls, implementation_code: object) -> bool:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return False
+
+        lowered = implementation_code.lower()
+        if "request timestamp is stale" in lowered or "timestamp cannot be in the future" in lowered:
+            return True
+        if re.search(r"request\.(?:timestamp|created_at|updated_at)\s*<\s*int\(", implementation_code):
+            return True
+        if (
+            "datetime.now" in implementation_code
+            and "timestamp" in lowered
+            and (
+                "return policy" in lowered
+                or re.search(r"\.days\s*[<>]=?\s*(?:30|60|90|120|180|365)", implementation_code)
+                or re.search(
+                    r"datetime(?:\.datetime)?\.now\s*\([^\n]*\)\s*-\s*(?:request\.)?timestamp",
+                    implementation_code,
+                )
+            )
+        ):
+            return True
+        if (
+            "datetime.now" in implementation_code
+            and re.search(r"request(?:_ts|_timestamp|\.timestamp)", implementation_code)
+            and (
+                "86400" in implementation_code
+                or re.search(
+                    r"timedelta\s*\(\s*(?:days\s*=\s*1|hours\s*=\s*24|minutes\s*=\s*1440)\s*\)",
+                    lowered,
+                )
+                or re.search(
+                    r"total_seconds\s*\(\)\s*[<>]=?\s*(?:86400|24\s*\*\s*60\s*\*\s*60)",
+                    implementation_code,
+                )
+            )
+        ):
+            return True
+        return bool(
+            re.search(r"request(?:_ts|_timestamp|\.timestamp)", implementation_code)
+            and re.search(r"timedelta\s*\(\s*days\s*=\s*(?:30|60|90|120|180|365)\s*\)", implementation_code)
+        )
 
     @classmethod
     def _summary_has_validation_side_effect_without_workflow_call_issue(
@@ -778,6 +1381,18 @@ class QATesterAgent(BaseAgent):
         )
 
     @classmethod
+    def _implementation_prefers_datetime_module_import(cls, implementation_code: object) -> bool:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return False
+        if cls._implementation_prefers_direct_datetime_import(implementation_code):
+            return False
+        return bool(
+            re.search(r"^\s*import\s+datetime\b", implementation_code, flags=re.MULTILINE)
+            or "datetime.datetime" in implementation_code
+            or "datetime.timezone" in implementation_code
+        )
+
+    @classmethod
     def _datetime_like_parameter_names(cls, signature: str) -> list[str]:
         _, parameters = cls._signature_name_and_params(signature)
         names: list[str] = []
@@ -803,6 +1418,236 @@ class QATesterAgent(BaseAgent):
                 return []
             values.append(element.value)
         return values
+
+    @classmethod
+    def _all_membership_required_names(
+        cls,
+        node: ast.AST,
+        required_field_names: dict[str, list[str]],
+    ) -> tuple[list[str], ast.AST | None]:
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "all"
+            and len(node.args) == 1
+            and isinstance(node.args[0], ast.GeneratorExp)
+        ):
+            return [], None
+
+        generator = node.args[0]
+        if len(generator.generators) != 1:
+            return [], None
+
+        comprehension = generator.generators[0]
+        if not isinstance(comprehension.target, ast.Name) or not isinstance(comprehension.iter, ast.Name):
+            return [], None
+
+        field_names = required_field_names.get(comprehension.iter.id, [])
+        if not field_names:
+            return [], None
+
+        if not (
+            isinstance(generator.elt, ast.Compare)
+            and len(generator.elt.ops) == 1
+            and isinstance(generator.elt.ops[0], ast.In)
+            and len(generator.elt.comparators) == 1
+            and isinstance(generator.elt.left, ast.Name)
+            and generator.elt.left.id == comprehension.target.id
+        ):
+            return [], None
+
+        return field_names, generator.elt.comparators[0]
+
+    @staticmethod
+    def _is_required_field_collection_name(name: str) -> bool:
+        normalized = name.strip().lower()
+        if not normalized:
+            return False
+        if normalized in {"required_fields", "required_keys"}:
+            return True
+        if not normalized.startswith("required_"):
+            return False
+        return any(
+            token in normalized
+            for token in (
+                "field",
+                "fields",
+                "key",
+                "keys",
+                "payload",
+                "detail",
+                "details",
+                "request",
+            )
+        )
+
+    @staticmethod
+    def _is_required_evidence_collection_name(name: str) -> bool:
+        normalized = name.strip().lower()
+        return normalized in {"required_documents", "required_evidence"}
+
+    @staticmethod
+    def _ast_parent_map(root: ast.AST) -> dict[ast.AST, ast.AST]:
+        parents: dict[ast.AST, ast.AST] = {}
+        for parent in ast.walk(root):
+            for child in ast.iter_child_nodes(parent):
+                parents[child] = parent
+        return parents
+
+    @staticmethod
+    def _validation_result_call_is_invalid(node: ast.Call) -> bool:
+        for keyword in node.keywords:
+            if keyword.arg != "is_valid":
+                continue
+            return isinstance(keyword.value, ast.Constant) and keyword.value.value is False
+        return False
+
+    @staticmethod
+    def _body_affects_validation_result(body: list[ast.stmt]) -> bool:
+        for statement in body:
+            for child in ast.walk(statement):
+                if isinstance(child, ast.Raise):
+                    return True
+                if isinstance(child, ast.Return):
+                    value = child.value
+                    if isinstance(value, ast.Constant) and value.value is False:
+                        return True
+                    if isinstance(value, ast.Call) and QATesterAgent._validation_result_call_is_invalid(value):
+                        return True
+                if isinstance(child, ast.Assign):
+                    if len(child.targets) != 1 or not isinstance(child.targets[0], ast.Name):
+                        continue
+                    if "valid" not in child.targets[0].id.lower():
+                        continue
+                    if isinstance(child.value, ast.Constant) and child.value.value is False:
+                        return True
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+                    if child.func.attr not in {"append", "extend"}:
+                        continue
+                    if not isinstance(child.func.value, ast.Name):
+                        continue
+                    collection_name = child.func.value.id.lower()
+                    if "error" in collection_name and "warning" not in collection_name:
+                        return True
+        return False
+
+    @classmethod
+    def _is_payload_key_set_expression(
+        cls,
+        node: ast.AST | None,
+        payload_alias_names: set[str],
+    ) -> bool:
+        if node is None:
+            return False
+        if cls._is_payload_container_expression(node, payload_alias_names):
+            return True
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "set" and len(node.args) == 1:
+            return cls._is_payload_key_set_expression(node.args[0], payload_alias_names)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "keys":
+            return cls._is_payload_container_expression(node.func.value, payload_alias_names)
+        return False
+
+    @classmethod
+    def _is_direct_payload_container_expression(
+        cls,
+        node: ast.AST | None,
+        payload_alias_names: set[str],
+    ) -> bool:
+        if node is None:
+            return False
+        if isinstance(node, ast.Name) and node.id.lower() in payload_alias_names:
+            return True
+        return isinstance(node, ast.Attribute) and cls._is_payload_container_expression(node, payload_alias_names)
+
+    @classmethod
+    def _expression_references_payload_value(
+        cls,
+        node: ast.AST | None,
+        payload_alias_names: set[str],
+    ) -> bool:
+        if node is None:
+            return False
+
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+                if child.func.attr == "get" and cls._is_payload_container_expression(
+                    child.func.value,
+                    payload_alias_names,
+                ):
+                    return True
+            if isinstance(child, ast.Subscript) and cls._is_payload_container_expression(
+                child.value,
+                payload_alias_names,
+            ):
+                return True
+            if (
+                isinstance(child, ast.Compare)
+                and len(child.ops) == 1
+                and len(child.comparators) == 1
+                and isinstance(child.left, ast.Constant)
+                and isinstance(child.left.value, str)
+                and isinstance(child.ops[0], (ast.In, ast.NotIn))
+                and cls._is_payload_container_expression(child.comparators[0], payload_alias_names)
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _node_is_conditionally_guarded_by_payload_value(
+        cls,
+        node: ast.AST,
+        parent_map: dict[ast.AST, ast.AST],
+        payload_alias_names: set[str],
+    ) -> bool:
+        current = node
+        skip_first_if = not isinstance(node, ast.If)
+        while current in parent_map:
+            current = parent_map[current]
+            if not isinstance(current, ast.If):
+                continue
+            if skip_first_if:
+                skip_first_if = False
+                continue
+            if cls._expression_references_payload_value(current.test, payload_alias_names):
+                return True
+        return False
+
+    @classmethod
+    def _loop_iterated_required_names(
+        cls,
+        node: ast.AST,
+        parent_map: dict[ast.AST, ast.AST],
+        required_field_names: dict[str, list[str]],
+    ) -> list[str]:
+        if not isinstance(node, ast.Compare) or not isinstance(node.left, ast.Name):
+            return []
+
+        current: ast.AST = node
+        while current in parent_map:
+            current = parent_map[current]
+            if isinstance(current, ast.For):
+                if (
+                    isinstance(current.target, ast.Name)
+                    and current.target.id == node.left.id
+                    and isinstance(current.iter, ast.Name)
+                ):
+                    return required_field_names.get(current.iter.id, [])
+            if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                break
+        return []
+
+    @classmethod
+    def _presence_check_branch_affects_validation(
+        cls,
+        node: ast.AST,
+        parent_map: dict[ast.AST, ast.AST],
+    ) -> bool:
+        current = node
+        while current in parent_map:
+            current = parent_map[current]
+            if isinstance(current, ast.If):
+                return cls._body_affects_validation_result(current.body)
+        return False
 
     @classmethod
     def _implementation_required_evidence_items(cls, implementation_code: object) -> list[str]:
@@ -835,13 +1680,22 @@ class QATesterAgent(BaseAgent):
         if not isinstance(implementation_code, str) or not implementation_code.strip():
             return []
 
-        try:
-            tree = ast.parse(implementation_code)
-        except SyntaxError:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None:
             return []
 
         keys: list[str] = []
         seen: set[str] = set()
+        payload_alias_names = cls._implementation_validate_payload_alias_names(implementation_code)
+        validate_nodes: list[ast.AST] = []
+
+        for module_node in tree.body:
+            if isinstance(module_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and module_node.name.startswith("validate"):
+                validate_nodes.append(module_node)
+            elif isinstance(module_node, ast.ClassDef):
+                for class_child in module_node.body:
+                    if isinstance(class_child, (ast.FunctionDef, ast.AsyncFunctionDef)) and class_child.name.startswith("validate"):
+                        validate_nodes.append(class_child)
 
         def append_key(value: str) -> None:
             normalized = value.strip()
@@ -850,46 +1704,1165 @@ class QATesterAgent(BaseAgent):
             seen.add(normalized)
             keys.append(normalized)
 
-        for node in ast.walk(tree):
-            target_names: list[str] = []
-            value_node: ast.AST | None = None
-            if isinstance(node, ast.Assign):
-                target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
-                value_node = node.value
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                target_names = [node.target.id]
-                value_node = node.value
-            if any(name in {"required_fields", "required_keys"} for name in target_names):
-                for item in cls._string_literal_sequence(value_node):
-                    append_key(item)
+        for validate_node in validate_nodes:
+            parent_map = cls._ast_parent_map(validate_node)
+            required_field_names: dict[str, list[str]] = {}
+            required_evidence_field_names: dict[str, list[str]] = {}
+            missing_field_names: dict[str, list[str]] = {}
+            for node in ast.walk(validate_node):
+                target_names: list[str] = []
+                value_node: ast.AST | None = None
+                if isinstance(node, ast.Assign):
+                    target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                    value_node = node.value
+                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    target_names = [node.target.id]
+                    value_node = node.value
+                string_items = cls._string_literal_sequence(value_node)
+                if string_items:
+                    for name in target_names:
+                        if cls._is_required_field_collection_name(name):
+                            required_field_names[name] = string_items
+                        if cls._is_required_evidence_collection_name(name):
+                            required_evidence_field_names[name] = string_items
 
-            if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
-                continue
-            if not isinstance(node.ops[0], ast.NotIn):
-                continue
-            if not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
-                continue
-            comparator_text = ast.unparse(node.comparators[0]).lower()
-            if any(token in comparator_text for token in (".details", ".data", ".metadata", "['details']", "['data']", "['metadata']")):
-                append_key(node.left.value)
+                if (
+                    len(target_names) == 1
+                    and isinstance(value_node, ast.BinOp)
+                    and isinstance(value_node.op, ast.Sub)
+                    and isinstance(value_node.left, ast.Name)
+                ):
+                    field_names = required_field_names.get(value_node.left.id, [])
+                    if field_names and cls._is_payload_key_set_expression(
+                        value_node.right,
+                        payload_alias_names,
+                    ):
+                        missing_field_names[target_names[0]] = field_names
+
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                    if (
+                        node.func.attr == "issubset"
+                        and isinstance(node.func.value, ast.Name)
+                        and len(node.args) == 1
+                    ):
+                        field_names = required_field_names.get(node.func.value.id, [])
+                        if field_names and cls._is_payload_container_expression(
+                            node.args[0],
+                            payload_alias_names,
+                        ) and not cls._node_is_conditionally_guarded_by_payload_value(
+                            node,
+                            parent_map,
+                            payload_alias_names,
+                        ):
+                            for item in field_names:
+                                append_key(item)
+
+                field_names, container_node = cls._all_membership_required_names(node, required_field_names)
+                if field_names and cls._is_payload_container_expression(
+                    container_node,
+                    payload_alias_names,
+                ) and not cls._node_is_conditionally_guarded_by_payload_value(
+                    node,
+                    parent_map,
+                    payload_alias_names,
+                ):
+                    for item in field_names:
+                        append_key(item)
+
+                if isinstance(node, ast.If) and isinstance(node.test, ast.Name):
+                    field_names = missing_field_names.get(node.test.id, [])
+                    if field_names and cls._body_affects_validation_result(
+                        node.body,
+                    ) and not cls._node_is_conditionally_guarded_by_payload_value(
+                        node,
+                        parent_map,
+                        payload_alias_names,
+                    ):
+                        for item in field_names:
+                            append_key(item)
+
+                if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+                    continue
+                if not isinstance(node.ops[0], ast.NotIn):
+                    continue
+                comparator = node.comparators[0]
+                loop_field_names = cls._loop_iterated_required_names(
+                    node,
+                    parent_map,
+                    required_field_names | required_evidence_field_names,
+                )
+                if loop_field_names and cls._is_direct_payload_container_expression(
+                    comparator,
+                    payload_alias_names,
+                ) and cls._presence_check_branch_affects_validation(
+                    node,
+                    parent_map,
+                ) and not cls._node_is_conditionally_guarded_by_payload_value(
+                    node,
+                    parent_map,
+                    payload_alias_names,
+                ):
+                    for item in loop_field_names:
+                        append_key(item)
+                    continue
+                if not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
+                    continue
+                if cls._is_payload_container_expression(
+                    comparator,
+                    payload_alias_names,
+                ) and cls._presence_check_branch_affects_validation(
+                    node,
+                    parent_map,
+                ) and not cls._node_is_conditionally_guarded_by_payload_value(
+                    node,
+                    parent_map,
+                    payload_alias_names,
+                ):
+                    append_key(node.left.value)
 
         return keys
 
     @staticmethod
+    def _is_payload_container_expression(node: ast.AST | None, payload_alias_names: set[str]) -> bool:
+        if node is None:
+            return False
+        if isinstance(node, ast.Name) and node.id.lower() in payload_alias_names:
+            return True
+        comparator_text = ast.unparse(node).lower()
+        return any(
+            token in comparator_text
+            for token in (
+                ".details",
+                ".data",
+                ".metadata",
+                ".payload",
+                ".request_data",
+                ".document_data",
+                ".attributes",
+                ".context",
+                "['details']",
+                "['data']",
+                "['metadata']",
+                "['payload']",
+                "['request_data']",
+                "['document_data']",
+                "['attributes']",
+                "['context']",
+            )
+        )
+
+    @staticmethod
+    def _is_request_field_container_expression(node: ast.AST | None) -> bool:
+        if node is None:
+            return False
+        if isinstance(node, ast.Attribute) and node.attr == "__dict__":
+            return True
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "vars":
+            return len(node.args) == 1
+        comparator_text = ast.unparse(node).lower()
+        return "__dict__" in comparator_text or comparator_text.startswith("vars(")
+
+    @classmethod
+    def _implementation_required_request_fields(cls, implementation_code: object) -> list[str]:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return []
+
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None:
+            return []
+
+        fields: list[str] = []
+        seen: set[str] = set()
+        validate_nodes: list[ast.AST] = []
+
+        for module_node in tree.body:
+            if isinstance(module_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and module_node.name.startswith("validate"):
+                validate_nodes.append(module_node)
+            elif isinstance(module_node, ast.ClassDef):
+                for class_child in module_node.body:
+                    if isinstance(class_child, (ast.FunctionDef, ast.AsyncFunctionDef)) and class_child.name.startswith("validate"):
+                        validate_nodes.append(class_child)
+
+        def append_field(value: str) -> None:
+            normalized = value.strip()
+            if not normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            fields.append(normalized)
+
+        for validate_node in validate_nodes:
+            parent_map = cls._ast_parent_map(validate_node)
+            required_field_names: dict[str, list[str]] = {}
+            for node in ast.walk(validate_node):
+                target_names: list[str] = []
+                value_node: ast.AST | None = None
+                if isinstance(node, ast.Assign):
+                    target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                    value_node = node.value
+                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    target_names = [node.target.id]
+                    value_node = node.value
+
+                string_items = cls._string_literal_sequence(value_node)
+                if string_items:
+                    for name in target_names:
+                        if cls._is_required_field_collection_name(name):
+                            required_field_names[name] = string_items
+
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                    if (
+                        node.func.attr == "issubset"
+                        and isinstance(node.func.value, ast.Name)
+                        and len(node.args) == 1
+                    ):
+                        field_names = required_field_names.get(node.func.value.id, [])
+                        if field_names and cls._is_request_field_container_expression(node.args[0]):
+                            for item in field_names:
+                                append_field(item)
+
+                field_names, container_node = cls._all_membership_required_names(node, required_field_names)
+                if field_names and cls._is_request_field_container_expression(container_node):
+                    for item in field_names:
+                        append_field(item)
+
+                if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+                    continue
+                if not isinstance(node.ops[0], ast.NotIn):
+                    continue
+                if not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
+                    continue
+                if cls._is_request_field_container_expression(
+                    node.comparators[0],
+                ) and cls._presence_check_branch_affects_validation(node, parent_map):
+                    append_field(node.left.value)
+
+        return fields
+
+    @staticmethod
+    def _parse_implementation_tree(implementation_code: object) -> ast.Module | None:
+        if not isinstance(implementation_code, str) or not implementation_code.strip():
+            return None
+        try:
+            return ast.parse(implementation_code)
+        except SyntaxError:
+            return None
+
+    @classmethod
+    def _implementation_validate_payload_alias_names(cls, implementation_code: object) -> set[str]:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None:
+            return set()
+
+        payload_aliases: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if "validate" not in node.name.lower():
+                continue
+            payload_aliases.update(cls._function_payload_alias_names(node))
+        return payload_aliases
+
+    @staticmethod
+    def _function_payload_alias_names(function_node: ast.AST) -> set[str]:
+        if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return set()
+
+        payload_aliases: set[str] = set()
+        payload_attrs = {
+            "details",
+            "data",
+            "metadata",
+            "request_data",
+            "document_data",
+            "attributes",
+            "context",
+            "payload",
+        }
+        parameter_names = [
+            arg.arg
+            for arg in [
+                *function_node.args.posonlyargs,
+                *function_node.args.args,
+                *function_node.args.kwonlyargs,
+            ]
+        ]
+        if function_node.args.vararg is not None:
+            parameter_names.append(function_node.args.vararg.arg)
+        if function_node.args.kwarg is not None:
+            parameter_names.append(function_node.args.kwarg.arg)
+
+        for parameter_name in parameter_names:
+            if parameter_name.lower() in payload_attrs:
+                payload_aliases.add(parameter_name.lower())
+
+        for child in ast.walk(function_node):
+            target_names: list[str] = []
+            value_node: ast.AST | None = None
+            if isinstance(child, ast.Assign):
+                target_names = [target.id for target in child.targets if isinstance(target, ast.Name)]
+                value_node = child.value
+            elif isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+                target_names = [child.target.id]
+                value_node = child.value
+
+            if not target_names:
+                continue
+            if isinstance(value_node, ast.Attribute):
+                if isinstance(value_node.value, ast.Name) and value_node.attr in payload_attrs:
+                    payload_aliases.update(name.lower() for name in target_names if name)
+                continue
+
+            if not isinstance(value_node, ast.Subscript):
+                continue
+            if not isinstance(value_node.value, ast.Name):
+                continue
+            slice_value = value_node.slice
+            if not isinstance(slice_value, ast.Constant) or not isinstance(slice_value.value, str):
+                continue
+            if slice_value.value not in payload_attrs:
+                continue
+            payload_aliases.update(name.lower() for name in target_names if name)
+
+        return payload_aliases
+
+    @classmethod
+    def _implementation_non_validation_payload_keys(cls, implementation_code: object) -> list[str]:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None:
+            return []
+
+        required_payload_keys = {key.lower() for key in cls._implementation_required_payload_keys(implementation_code)}
+        required_evidence_items = {item.lower() for item in cls._implementation_required_evidence_items(implementation_code)}
+        keys: list[str] = []
+        seen: set[str] = set()
+
+        def append_key(value: str) -> None:
+            normalized = value.strip()
+            lowered = normalized.lower()
+            if not normalized or lowered in seen:
+                return
+            if lowered in required_payload_keys or lowered in required_evidence_items:
+                return
+            seen.add(lowered)
+            keys.append(normalized)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            payload_alias_names = cls._function_payload_alias_names(node)
+            for child in ast.walk(node):
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+                    if (
+                        child.func.attr == "get"
+                        and child.args
+                        and isinstance(child.args[0], ast.Constant)
+                        and isinstance(child.args[0].value, str)
+                        and cls._is_payload_container_expression(child.func.value, payload_alias_names)
+                    ):
+                        append_key(child.args[0].value)
+                    continue
+
+                if not isinstance(child, ast.Compare) or len(child.ops) != 1 or len(child.comparators) != 1:
+                    continue
+                if not isinstance(child.left, ast.Constant) or not isinstance(child.left.value, str):
+                    continue
+                if not isinstance(child.ops[0], (ast.In, ast.NotIn)):
+                    continue
+                if cls._is_payload_container_expression(child.comparators[0], payload_alias_names):
+                    append_key(child.left.value)
+
+        return keys
+
+    @staticmethod
+    def _annotation_name(node: ast.AST | None) -> str:
+        if node is None:
+            return ""
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        if isinstance(node, ast.Subscript):
+            slice_name = QATesterAgent._annotation_name(node.slice)
+            if slice_name:
+                return slice_name
+            return QATesterAgent._annotation_name(node.value)
+        if isinstance(node, ast.Tuple):
+            for element in node.elts:
+                name = QATesterAgent._annotation_name(element)
+                if name:
+                    return name
+        return ""
+
+    @staticmethod
+    def _call_expression_name(node: ast.Call) -> str:
+        if isinstance(node.func, ast.Name):
+            return node.func.id
+        if isinstance(node.func, ast.Attribute):
+            return node.func.attr
+        return ""
+
+    @classmethod
+    def _normalized_callable_ref(cls, callable_ref: str) -> str:
+        normalized_ref, _ = cls._signature_name_and_params(callable_ref)
+        return normalized_ref or callable_ref.strip()
+
+    @classmethod
+    def _nested_callable_ref(cls, current_callable_ref: str, call_name: str) -> str:
+        normalized_ref = cls._normalized_callable_ref(current_callable_ref)
+        if not normalized_ref or not call_name:
+            return ""
+        if "." not in normalized_ref:
+            return call_name
+        class_name, _ = normalized_ref.split(".", 1)
+        if not class_name:
+            return call_name
+        return f"{class_name}.{call_name}"
+
+    @classmethod
+    def _implementation_callable_node(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None or not callable_ref:
+            return None
+
+        normalized_ref, _ = cls._signature_name_and_params(callable_ref)
+        normalized_ref = normalized_ref or callable_ref.strip()
+        if not normalized_ref:
+            return None
+
+        target_class = ""
+        target_name = normalized_ref
+        if "." in normalized_ref:
+            target_class, target_name = normalized_ref.split(".", 1)
+
+        if target_class:
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef) or node.name != target_class:
+                    continue
+                for child in node.body:
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == target_name:
+                        return child
+            return None
+
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == target_name:
+                return node
+        return None
+
+    @staticmethod
+    def _callable_local_assignment_values(
+        function_node: ast.AST,
+        target_name: str,
+    ) -> list[ast.AST]:
+        values: list[ast.AST] = []
+        for child in ast.walk(function_node):
+            if isinstance(child, ast.Assign):
+                if any(isinstance(target, ast.Name) and target.id == target_name for target in child.targets):
+                    values.append(child.value)
+                continue
+            if (
+                isinstance(child, ast.AnnAssign)
+                and isinstance(child.target, ast.Name)
+                and child.target.id == target_name
+                and child.value is not None
+            ):
+                values.append(child.value)
+        return values
+
+    @classmethod
+    def _resolve_return_expression_shape(
+        cls,
+        implementation_code: object,
+        current_callable_ref: str,
+        function_node: ast.AST,
+        expression: ast.AST | None,
+        *,
+        seen_callable_refs: set[str],
+        seen_names: set[str] | None = None,
+    ) -> tuple[str, str]:
+        primitive_kind = cls._expression_primitive_kind(expression)
+        if primitive_kind:
+            return primitive_kind, ""
+        if expression is None:
+            return "", ""
+
+        if isinstance(expression, ast.Name):
+            current_seen_names = set(seen_names or set())
+            if expression.id in current_seen_names:
+                return "", ""
+            current_seen_names.add(expression.id)
+            resolved_shapes = [
+                cls._resolve_return_expression_shape(
+                    implementation_code,
+                    current_callable_ref,
+                    function_node,
+                    value,
+                    seen_callable_refs=seen_callable_refs,
+                    seen_names=current_seen_names,
+                )
+                for value in cls._callable_local_assignment_values(function_node, expression.id)
+            ]
+            primitive_kinds = list(dict.fromkeys(kind for kind, _ in resolved_shapes if kind))
+            class_names = list(dict.fromkeys(name for _, name in resolved_shapes if name))
+            if len(primitive_kinds) == 1 and not class_names:
+                return primitive_kinds[0], ""
+            if len(class_names) == 1 and not primitive_kinds:
+                return "", class_names[0]
+            return "", ""
+
+        if isinstance(expression, ast.Call):
+            call_name = cls._call_expression_name(expression)
+            if not call_name:
+                return "", ""
+            if call_name in {"bool", "dict", "list", "str", "tuple"}:
+                return call_name, ""
+
+            nested_ref = cls._nested_callable_ref(current_callable_ref, call_name)
+            primitive_kinds, class_names = cls._resolved_callable_return_shapes(
+                implementation_code,
+                nested_ref,
+                seen_callable_refs=seen_callable_refs,
+            )
+            if len(primitive_kinds) == 1 and not class_names:
+                return primitive_kinds[0], ""
+            if len(class_names) == 1 and not primitive_kinds:
+                return "", class_names[0]
+
+            if cls._implementation_class_field_names(implementation_code, call_name):
+                return "", call_name
+
+        return "", ""
+
+    @classmethod
+    def _resolved_callable_return_shapes(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+        *,
+        seen_callable_refs: set[str] | None = None,
+    ) -> tuple[list[str], list[str]]:
+        normalized_ref = cls._normalized_callable_ref(callable_ref)
+        if not normalized_ref:
+            return [], []
+
+        current_seen_refs = set(seen_callable_refs or set())
+        if normalized_ref in current_seen_refs:
+            return [], []
+        current_seen_refs.add(normalized_ref)
+
+        callable_node = cls._implementation_callable_node(implementation_code, normalized_ref)
+        if callable_node is None:
+            return [], []
+
+        resolved_shapes = [
+            cls._resolve_return_expression_shape(
+                implementation_code,
+                normalized_ref,
+                callable_node,
+                child.value,
+                seen_callable_refs=current_seen_refs,
+            )
+            for child in ast.walk(callable_node)
+            if isinstance(child, ast.Return) and child.value is not None
+        ]
+        primitive_kinds = list(dict.fromkeys(kind for kind, _ in resolved_shapes if kind))
+        class_names = list(dict.fromkeys(name for _, name in resolved_shapes if name))
+        return primitive_kinds, class_names
+
+    @classmethod
+    def _implementation_class_field_names(cls, implementation_code: object, class_name: str) -> list[str]:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None or not class_name:
+            return []
+
+        class_node: ast.ClassDef | None = None
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                class_node = node
+                break
+        if class_node is None:
+            return []
+
+        field_names: list[str] = []
+        seen: set[str] = set()
+
+        def append_field(name: str) -> None:
+            normalized = name.strip()
+            if not normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            field_names.append(normalized)
+
+        for child in class_node.body:
+            if isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+                append_field(child.target.id)
+            elif isinstance(child, ast.Assign):
+                for target in child.targets:
+                    if isinstance(target, ast.Name):
+                        append_field(target.id)
+
+        if field_names:
+            return field_names
+
+        for child in class_node.body:
+            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) or child.name != "__init__":
+                continue
+            for statement in ast.walk(child):
+                if not isinstance(statement, ast.Assign):
+                    continue
+                for target in statement.targets:
+                    if (
+                        isinstance(target, ast.Attribute)
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id == "self"
+                    ):
+                        append_field(target.attr)
+        return field_names
+
+    @classmethod
+    def _implementation_validation_result_shape(
+        cls,
+        implementation_code: object,
+        validation_method: str,
+    ) -> tuple[str, list[str]]:
+        callable_node = cls._implementation_callable_node(implementation_code, validation_method)
+        if callable_node is None:
+            return "bool", []
+
+        candidate_names: list[str] = []
+        annotation_name = cls._annotation_name(callable_node.returns)
+        if annotation_name:
+            candidate_names.append(annotation_name)
+        for child in ast.walk(callable_node):
+            if not isinstance(child, ast.Return) or not isinstance(child.value, ast.Call):
+                continue
+            call_name = cls._call_expression_name(child.value)
+            if call_name:
+                candidate_names.append(call_name)
+
+        seen: set[str] = set()
+        for candidate_name in candidate_names:
+            if candidate_name in seen:
+                continue
+            seen.add(candidate_name)
+            if candidate_name == "bool":
+                return "bool", []
+            field_names = cls._implementation_class_field_names(implementation_code, candidate_name)
+            if "is_valid" in field_names:
+                return "object_is_valid", field_names
+        return "bool", []
+
+    @classmethod
+    def _implementation_call_return_class_name(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+    ) -> str:
+        callable_node = cls._implementation_callable_node(implementation_code, callable_ref)
+        if callable_node is None:
+            return ""
+
+        primitive_kinds, class_names = cls._resolved_callable_return_shapes(
+            implementation_code,
+            callable_ref,
+        )
+        if len(class_names) == 1 and not primitive_kinds:
+            return class_names[0]
+        if primitive_kinds:
+            return ""
+
+        annotation_name = cls._annotation_name(callable_node.returns)
+        if annotation_name and cls._implementation_class_field_names(implementation_code, annotation_name):
+            return annotation_name
+
+        for child in ast.walk(callable_node):
+            if not isinstance(child, ast.Return) or not isinstance(child.value, ast.Call):
+                continue
+            call_name = cls._call_expression_name(child.value)
+            if call_name and cls._implementation_class_field_names(implementation_code, call_name):
+                return call_name
+        return ""
+
+    @staticmethod
+    def _expression_primitive_kind(node: ast.AST | None) -> str:
+        if isinstance(node, ast.Constant):
+            value = node.value
+            if isinstance(value, bool):
+                return "bool"
+            if isinstance(value, int) and not isinstance(value, bool):
+                return "int"
+            if isinstance(value, float):
+                return "float"
+            if isinstance(value, str):
+                return "str"
+            if isinstance(value, dict):
+                return "dict"
+            if isinstance(value, list):
+                return "list"
+            if isinstance(value, tuple):
+                return "tuple"
+        if isinstance(node, ast.Dict):
+            return "dict"
+        if isinstance(node, ast.List):
+            return "list"
+        if isinstance(node, ast.Tuple):
+            return "tuple"
+        if isinstance(node, ast.IfExp):
+            body_kind = QATesterAgent._expression_primitive_kind(node.body)
+            orelse_kind = QATesterAgent._expression_primitive_kind(node.orelse)
+            if body_kind and body_kind == orelse_kind:
+                return body_kind
+        return ""
+
+    @classmethod
+    def _implementation_call_return_primitive_kind(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+    ) -> str:
+        callable_node = cls._implementation_callable_node(implementation_code, callable_ref)
+        if callable_node is None:
+            return ""
+
+        primitive_kinds, class_names = cls._resolved_callable_return_shapes(
+            implementation_code,
+            callable_ref,
+        )
+        if len(primitive_kinds) == 1 and not class_names:
+            return primitive_kinds[0]
+
+        annotation_name = cls._annotation_name(callable_node.returns)
+        if annotation_name in {"bool", "dict", "float", "int", "list", "str", "tuple"}:
+            return annotation_name
+
+        inferred_kinds: list[str] = []
+        for child in ast.walk(callable_node):
+            if not isinstance(child, ast.Return) or child.value is None:
+                continue
+            kind = cls._expression_primitive_kind(child.value)
+            if kind:
+                inferred_kinds.append(kind)
+
+        unique_kinds = list(dict.fromkeys(inferred_kinds))
+        if len(unique_kinds) == 1:
+            return unique_kinds[0]
+        return ""
+
+    @classmethod
+    def _service_audit_collection_info(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+    ) -> tuple[str, str]:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None or not callable_ref:
+            return "", ""
+
+        normalized_ref, _ = cls._signature_name_and_params(callable_ref)
+        normalized_ref = normalized_ref or callable_ref.strip()
+        if "." not in normalized_ref:
+            return "", ""
+        class_name, _ = normalized_ref.split(".", 1)
+
+        class_node: ast.ClassDef | None = None
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                class_node = node
+                break
+        if class_node is None:
+            return "", ""
+
+        for child in class_node.body:
+            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) or child.name != "__init__":
+                continue
+            for statement in child.body:
+                if not isinstance(statement, ast.Assign):
+                    continue
+                for target in statement.targets:
+                    if (
+                        not isinstance(target, ast.Attribute)
+                        or not isinstance(target.value, ast.Name)
+                        or target.value.id != "self"
+                        or "audit" not in target.attr.lower()
+                    ):
+                        continue
+                    if isinstance(statement.value, ast.List):
+                        return target.attr, "list"
+                    if isinstance(statement.value, ast.Dict):
+                        return target.attr, "dict"
+        return "", ""
+
+    @classmethod
+    def _implementation_has_audit_record_request_id(cls, implementation_code: object) -> bool:
+        for class_name in cls._module_defined_symbol_names(implementation_code):
+            if "audit" not in class_name.lower():
+                continue
+            if "request_id" in cls._implementation_class_field_names(implementation_code, class_name):
+                return True
+        return False
+
+    @classmethod
+    def _implementation_result_mapping_field_keys(
+        cls,
+        implementation_code: object,
+        class_name: str,
+        field_name: str,
+    ) -> list[str]:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None or not class_name or not field_name:
+            return []
+
+        keys: list[str] = []
+        seen: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            call_name = cls._call_expression_name(node)
+            if call_name != class_name:
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != field_name or not isinstance(keyword.value, ast.Dict):
+                    continue
+                for key_node in keyword.value.keys:
+                    if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                        continue
+                    normalized = key_node.value.strip()
+                    if not normalized or normalized in seen:
+                        continue
+                    seen.add(normalized)
+                    keys.append(normalized)
+        return keys
+
+    @classmethod
+    def _implementation_direct_mapping_return_keys(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+    ) -> list[str]:
+        callable_node = cls._implementation_callable_node(implementation_code, callable_ref)
+        if callable_node is None:
+            return []
+
+        common_key_set: set[str] | None = None
+        ordered_keys: list[str] = []
+        for child in ast.walk(callable_node):
+            if not isinstance(child, ast.Return) or not isinstance(child.value, ast.Dict):
+                continue
+
+            current_keys: list[str] = []
+            for key_node in child.value.keys:
+                if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                    continue
+                normalized = key_node.value.strip()
+                if normalized:
+                    current_keys.append(normalized)
+            if not current_keys:
+                continue
+
+            current_key_set = set(current_keys)
+            if common_key_set is None:
+                common_key_set = current_key_set
+                ordered_keys = current_keys
+            else:
+                common_key_set &= current_key_set
+
+        if not common_key_set:
+            return []
+        return [key for key in ordered_keys if key in common_key_set]
+
+    @classmethod
+    def _stable_direct_mapping_assertion_lines(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+        *,
+        result_name: str,
+        request_name: str,
+    ) -> list[str]:
+        if cls._implementation_call_return_primitive_kind(implementation_code, callable_ref) != "dict":
+            return []
+
+        mapping_keys = cls._implementation_direct_mapping_return_keys(implementation_code, callable_ref)
+        lines = [f"assert isinstance({result_name}, dict)"]
+        if "request_id" in mapping_keys and request_name:
+            lines.append(f"assert {result_name}['request_id'] == {request_name}.request_id")
+        for score_key in ("risk_score", "score"):
+            if score_key in mapping_keys:
+                lines.append(f"assert '{score_key}' in {result_name}")
+                lines.append(f"assert {result_name}['{score_key}'] >= 0.0")
+        for text_key in (
+            "action",
+            "action_type",
+            "classification",
+            "decision",
+            "outcome",
+            "priority",
+            "result",
+            "risk_level",
+            "severity",
+            "status",
+        ):
+            if text_key in mapping_keys:
+                lines.append(f"assert '{text_key}' in {result_name}")
+                lines.append(f"assert isinstance({result_name}['{text_key}'], str)")
+        return list(dict.fromkeys(lines))
+
+    @classmethod
+    def _stable_direct_mapping_batch_assertion_lines(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+    ) -> list[str]:
+        if cls._implementation_call_return_primitive_kind(implementation_code, callable_ref) != "dict":
+            return []
+
+        mapping_keys = cls._implementation_direct_mapping_return_keys(implementation_code, callable_ref)
+        lines = [
+            "assert len(results) == len(requests)",
+            "assert all(isinstance(item, dict) for item in results)",
+        ]
+        if "request_id" in mapping_keys:
+            lines.append("assert results[0]['request_id'] == requests[0].request_id")
+            lines.append("assert results[-1]['request_id'] == requests[-1].request_id")
+        for score_key in ("risk_score", "score"):
+            if score_key in mapping_keys:
+                lines.append(f"assert all('{score_key}' in item for item in results)")
+                lines.append(f"assert all(item['{score_key}'] >= 0.0 for item in results)")
+        for text_key in (
+            "action",
+            "action_type",
+            "classification",
+            "decision",
+            "outcome",
+            "priority",
+            "result",
+            "risk_level",
+            "severity",
+            "status",
+        ):
+            if text_key in mapping_keys:
+                lines.append(
+                    f"assert all('{text_key}' in item and isinstance(item['{text_key}'], str) for item in results)"
+                )
+        return list(dict.fromkeys(lines))
+
+    @classmethod
+    def _stable_result_assertion_lines(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+        *,
+        result_name: str,
+        request_name: str,
+    ) -> list[str]:
+        return_class_name = cls._implementation_call_return_class_name(implementation_code, callable_ref)
+        if not return_class_name:
+            return []
+
+        field_names = cls._implementation_class_field_names(implementation_code, return_class_name)
+        lines: list[str] = []
+        if "request_id" in field_names and request_name:
+            lines.append(f"assert {result_name}.request_id == {request_name}.request_id")
+        if "risk_score" in field_names:
+            lines.append(f"assert {result_name}.risk_score >= 0.0")
+        elif "score" in field_names:
+            lines.append(f"assert {result_name}.score >= 0.0")
+        for text_field in ("action", "status", "result", "outcome", "decision"):
+            if text_field in field_names:
+                lines.append(f"assert isinstance({result_name}.{text_field}, str)")
+        for mapping_field in ("details", "data", "metadata", "payload"):
+            if mapping_field not in field_names:
+                continue
+            lines.append(f"assert isinstance({result_name}.{mapping_field}, dict)")
+            mapping_keys = cls._implementation_result_mapping_field_keys(
+                implementation_code,
+                return_class_name,
+                mapping_field,
+            )
+            if "risk_score" in mapping_keys:
+                lines.append(f"assert 'risk_score' in {result_name}.{mapping_field}")
+                lines.append(f"assert {result_name}.{mapping_field}['risk_score'] >= 0.0")
+        if "audit_log" in field_names:
+            lines.append(f"assert len({result_name}.audit_log) > 0")
+        elif "audit_logs" in field_names:
+            lines.append(f"assert len({result_name}.audit_logs) > 0")
+        if "remediation_notes" in field_names:
+            lines.append(f"assert {result_name}.remediation_notes is not None")
+        return lines
+
+    @classmethod
+    def _stable_audit_assertion_lines(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+        *,
+        service_name: str,
+        request_name: str,
+        batch: bool = False,
+    ) -> list[str]:
+        collection_name, collection_kind = cls._service_audit_collection_info(implementation_code, callable_ref)
+        if not collection_name or not service_name:
+            return []
+
+        if batch:
+            if collection_kind == "dict":
+                return [f"assert all(request.request_id in {service_name}.{collection_name} for request in requests)"]
+
+            lines = [f"assert len({service_name}.{collection_name}) >= len(requests)"]
+            if cls._implementation_has_audit_record_request_id(implementation_code):
+                lines.append(f"assert {service_name}.{collection_name}[0].request_id == requests[0].request_id")
+                lines.append(f"assert {service_name}.{collection_name}[-1].request_id == requests[-1].request_id")
+            return lines
+
+        if collection_kind == "dict":
+            return [f"assert {request_name}.request_id in {service_name}.{collection_name}"]
+
+        lines = [f"assert len({service_name}.{collection_name}) == 1"]
+        if cls._implementation_has_audit_record_request_id(implementation_code):
+            lines.append(f"assert {service_name}.{collection_name}[-1].request_id == {request_name}.request_id")
+        return lines
+
+    @classmethod
+    def _stable_call_assertion_lines(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+        *,
+        result_name: str,
+        request_name: str,
+        service_name: str,
+    ) -> list[str]:
+        result_lines = cls._stable_result_assertion_lines(
+            implementation_code,
+            callable_ref,
+            result_name=result_name,
+            request_name=request_name,
+        )
+        if result_lines:
+            return result_lines
+
+        direct_mapping_lines = cls._stable_direct_mapping_assertion_lines(
+            implementation_code,
+            callable_ref,
+            result_name=result_name,
+            request_name=request_name,
+        )
+        if direct_mapping_lines:
+            return direct_mapping_lines
+
+        audit_lines = cls._stable_audit_assertion_lines(
+            implementation_code,
+            callable_ref,
+            service_name=service_name,
+            request_name=request_name,
+        )
+
+        primitive_return_kind = cls._implementation_call_return_primitive_kind(
+            implementation_code,
+            callable_ref,
+        )
+        if primitive_return_kind:
+            return [f"assert isinstance({result_name}, {primitive_return_kind})", *audit_lines]
+
+        if cls._implementation_call_returns_none(implementation_code, callable_ref):
+            return ["assert result is None", *audit_lines]
+        return audit_lines
+
+    @classmethod
+    def _stable_batch_result_assertion_lines(
+        cls,
+        implementation_code: object,
+        callable_ref: str,
+        *,
+        runtime_return_kind: str = "",
+    ) -> list[str]:
+        if runtime_return_kind:
+            return [
+                "assert len(results) == len(requests)",
+                f"assert all(isinstance(item, {runtime_return_kind}) for item in results)",
+            ]
+
+        direct_mapping_lines = cls._stable_direct_mapping_batch_assertion_lines(
+            implementation_code,
+            callable_ref,
+        )
+        if direct_mapping_lines:
+            return direct_mapping_lines
+
+        primitive_return_kind = cls._implementation_call_return_primitive_kind(
+            implementation_code,
+            callable_ref,
+        )
+        if primitive_return_kind:
+            return [
+                "assert len(results) == len(requests)",
+                f"assert all(isinstance(item, {primitive_return_kind}) for item in results)",
+            ]
+
+        return_class_name = cls._implementation_call_return_class_name(implementation_code, callable_ref)
+        if not return_class_name:
+            return []
+
+        field_names = cls._implementation_class_field_names(implementation_code, return_class_name)
+        lines = ["assert len(results) == len(requests)"]
+        if "request_id" in field_names:
+            lines.append("assert results[0].request_id == requests[0].request_id")
+            lines.append("assert results[-1].request_id == requests[-1].request_id")
+        if "risk_score" in field_names:
+            lines.append("assert all(item.risk_score >= 0.0 for item in results)")
+        elif "score" in field_names:
+            lines.append("assert all(item.score >= 0.0 for item in results)")
+        for text_field in ("action", "status", "result", "outcome", "decision"):
+            if text_field in field_names:
+                lines.append(f"assert all(isinstance(item.{text_field}, str) for item in results)")
+        for mapping_field in ("details", "data", "metadata", "payload"):
+            if mapping_field not in field_names:
+                continue
+            lines.append(f"assert all(isinstance(item.{mapping_field}, dict) for item in results)")
+            mapping_keys = cls._implementation_result_mapping_field_keys(
+                implementation_code,
+                return_class_name,
+                mapping_field,
+            )
+            if "risk_score" in mapping_keys:
+                lines.append(f"assert all('risk_score' in item.{mapping_field} for item in results)")
+                lines.append(f"assert all(item.{mapping_field}['risk_score'] >= 0.0 for item in results)")
+        if "audit_log" in field_names:
+            lines.append("assert all(len(item.audit_log) > 0 for item in results)")
+        return lines
+
+    @staticmethod
     def _sample_literal_for_required_key(key: str) -> str:
         mapping = {
+            "adverse_indicators": "1",
             "policy_id": '"policy123"',
             "claim_type": '"collision"',
             "amount": "5000",
+            "customer_type": '"individual"',
+            "evidence": '"photo"',
+            "identity_evidence": "True",
+            "jurisdiction": '"high-risk"',
             "loss_amount": "5000",
+            "missing_documents": "0",
             "value": "500",
             "quantity": "1",
             "name": '"John Doe"',
             "documents": '["ID", "Passport"]',
+            "request_id": '"request_id-1"',
+            "details": '{"value": 1}',
+            "data": '{"value": 1}',
+            "metadata": '{"value": 1}',
+            "payload": '{"value": 1}',
+            "region": '"us_east"',
             "role": '"admin"',
             "request_type": '"screening"',
             "requester": '"analyst"',
+            "service_category": '"IT Services"',
             "timestamp": "fixed_time",
+            "vendor_id": '"V-001"',
         }
         return mapping.get(key.lower(), '"value"')
 
@@ -922,10 +2895,16 @@ class QATesterAgent(BaseAgent):
         overrides: dict[str, str] = {}
         payload_parameter_names = cls._payload_like_parameter_names(signature)
         required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        non_validation_payload_keys = cls._implementation_non_validation_payload_keys(implementation_code)
+        omitted_key = cls._validation_failure_omitted_payload_key(implementation_code)
 
         if payload_parameter_names and required_payload_keys:
-            omitted_key = "documents" if "documents" in required_payload_keys else required_payload_keys[-1]
             retained_keys = [key for key in required_payload_keys if key != omitted_key]
+            retained_keys.extend(
+                key
+                for key in non_validation_payload_keys
+                if key not in retained_keys and key != omitted_key
+            )
             if retained_keys:
                 rendered_items = ", ".join(
                     f'"{key}": {cls._sample_literal_for_required_key(key)}'
@@ -941,6 +2920,46 @@ class QATesterAgent(BaseAgent):
                 overrides.setdefault(name, "fixed_time")
 
         return overrides
+
+    @classmethod
+    def _validation_failure_omitted_payload_key(cls, implementation_code: object) -> str:
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        if not required_payload_keys:
+            return ""
+        if "documents" in required_payload_keys:
+            return "documents"
+        return required_payload_keys[-1]
+
+    @classmethod
+    def _validation_failure_missing_request_field(cls, implementation_code: object) -> str:
+        required_request_fields = cls._implementation_required_request_fields(implementation_code)
+        if not required_request_fields:
+            return ""
+        if "timestamp" in required_request_fields:
+            return "timestamp"
+        return required_request_fields[-1]
+
+    @classmethod
+    def _validation_failure_request_like_object_scaffold_line(
+        cls,
+        implementation_code: object,
+    ) -> tuple[str, str]:
+        required_request_fields = cls._implementation_required_request_fields(implementation_code)
+        missing_field = cls._validation_failure_missing_request_field(implementation_code)
+        if not required_request_fields or not missing_field:
+            return "", ""
+
+        rendered_items = ", ".join(
+            f'"{field}": {cls._sample_literal_for_required_key(field)}'
+            for field in required_request_fields
+            if field != missing_field
+        )
+        if not rendered_items:
+            return "", ""
+        return (
+            "invalid_request",
+            f'invalid_request = type("InvalidRequest", (), {{{rendered_items}}})()',
+        )
 
     @staticmethod
     def _implementation_raises_value_error(implementation_code: object) -> bool:
@@ -1015,7 +3034,7 @@ class QATesterAgent(BaseAgent):
         return call_line
 
     @staticmethod
-    def _return_shape_assertion_line(repair_validation_summary: object) -> str:
+    def _runtime_return_kind_from_summary(repair_validation_summary: object) -> str:
         if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
             return ""
         match = re.search(
@@ -1039,7 +3058,14 @@ class QATesterAgent(BaseAgent):
         assertion_type = runtime_assertion_map.get(runtime_type)
         if not assertion_type:
             return ""
-        return f"assert isinstance(result, {assertion_type})"
+        return assertion_type
+
+    @classmethod
+    def _return_shape_assertion_line(cls, repair_validation_summary: object) -> str:
+        runtime_return_kind = cls._runtime_return_kind_from_summary(repair_validation_summary)
+        if not runtime_return_kind:
+            return ""
+        return f"assert isinstance(result, {runtime_return_kind})"
 
     @staticmethod
     def _validation_support_method(exact_methods: list[str], preferred_facades: list[str]) -> str:
@@ -1083,6 +3109,10 @@ class QATesterAgent(BaseAgent):
         if not required_evidence_items:
             return {}
 
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        if set(required_evidence_items).issubset(set(required_payload_keys)):
+            return {}
+
         payload_literal = "{'documents': " + repr(required_evidence_items) + "}"
         return {
             parameter_name: payload_literal
@@ -1107,24 +3137,24 @@ class QATesterAgent(BaseAgent):
             return False
 
         required_evidence_set = set(required_evidence_items)
+        required_payload_keys = set(cls._implementation_required_payload_keys(implementation_code))
+        top_level_required_evidence = required_evidence_set & required_payload_keys
         for node in tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            function_name = node.name.lower()
-            if any(token in function_name for token in ("validation", "invalid", "reject", "error", "failure")):
-                continue
-            if not (
-                any(token in function_name for token in ("happy", "batch"))
-                or any(
-                    (isinstance(child, ast.Attribute) and child.attr == "risk_scores")
-                    or (isinstance(child, ast.Name) and child.id == "risk_scores")
-                    for child in ast.walk(node)
-                )
-            ):
+            if not cls._test_function_targets_valid_processing(node):
                 continue
             for child in ast.walk(node):
                 if not isinstance(child, ast.Dict):
                     continue
+                dict_keys = {
+                    key.value
+                    for key in child.keys
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                }
+                if top_level_required_evidence and dict_keys & top_level_required_evidence:
+                    if not top_level_required_evidence.issubset(dict_keys):
+                        return True
                 document_items: list[str] | None = None
                 for key, value in zip(child.keys, child.values):
                     if isinstance(key, ast.Constant) and key.value == "documents":
@@ -1149,12 +3179,18 @@ class QATesterAgent(BaseAgent):
         summary_lower = repair_validation_summary.lower()
         if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
             return False
-        if not any(
+        has_numeric_audit_mismatch = any(
             int(actual_count) < int(expected_count)
             for actual_count, expected_count in re.findall(r"assert\s+(\d+)\s*==\s*(\d+)", summary_lower)
-        ):
-            return False
-        if isinstance(content, str) and content.strip() and "risk_scores" not in content.lower():
+        )
+        has_required_evidence_failure = any(
+            marker in summary_lower
+            for marker in (
+                "missing required documents",
+                "missing required evidence",
+            )
+        )
+        if not has_numeric_audit_mismatch and not has_required_evidence_failure:
             return False
         return cls._content_has_incomplete_required_evidence_payload(content, implementation_code)
 
@@ -1179,10 +3215,7 @@ class QATesterAgent(BaseAgent):
         for node in tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            function_name = node.name.lower()
-            if any(token in function_name for token in ("validation", "invalid", "reject", "error", "failure")):
-                continue
-            if not any(token in function_name for token in ("happy", "batch")):
+            if not cls._test_function_targets_valid_processing(node):
                 continue
             for child in ast.walk(node):
                 if not isinstance(child, ast.Dict):
@@ -1211,9 +3244,14 @@ class QATesterAgent(BaseAgent):
         summary_lower = repair_validation_summary.lower()
         if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
             return False
-        if "valueerror" not in summary_lower:
-            return False
-        if not any(token in summary_lower for token in ("test_happy_path", "test_batch", "test_batch_processing")):
+        if not any(
+            marker in summary_lower
+            for marker in (
+                "missing required",
+                "validationerror",
+                "valueerror",
+            )
+        ):
             return False
         return cls._content_has_incomplete_required_payload_for_valid_paths(content, implementation_code)
 
@@ -1240,9 +3278,11 @@ class QATesterAgent(BaseAgent):
                         validate_nodes.append(class_child)
 
         for validate_node in validate_nodes:
-            required_field_names = False
+            required_field_names: dict[str, list[str]] = {}
+            has_required_field_names = False
             presence_checks = False
             type_checks = False
+            payload_alias_names = cls._function_payload_alias_names(validate_node)
             for child in ast.walk(validate_node):
                 target_names: list[str] = []
                 value_node: ast.AST | None = None
@@ -1253,25 +3293,40 @@ class QATesterAgent(BaseAgent):
                     target_names = [child.target.id]
                     value_node = child.value
 
-                if any(name in {"required_fields", "required_keys"} for name in target_names):
-                    if cls._string_literal_sequence(value_node):
-                        required_field_names = True
+                if any(cls._is_required_field_collection_name(name) for name in target_names):
+                    string_items = cls._string_literal_sequence(value_node)
+                    if string_items:
+                        has_required_field_names = True
+                        for name in target_names:
+                            if cls._is_required_field_collection_name(name):
+                                required_field_names[name] = string_items
 
                 if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and child.func.attr == "issubset":
-                    call_text = ast.unparse(child).lower()
-                    if any(token in call_text for token in ("request.details", "request.data", "request.metadata")):
+                    if cls._is_request_field_container_expression(child.args[0]) or cls._is_payload_container_expression(
+                        child.args[0],
+                        payload_alias_names,
+                    ):
                         presence_checks = True
+
+                field_names, container_node = cls._all_membership_required_names(child, required_field_names)
+                if field_names and (
+                    cls._is_request_field_container_expression(container_node)
+                    or cls._is_payload_container_expression(container_node, payload_alias_names)
+                ):
+                    presence_checks = True
 
                 if isinstance(child, ast.Compare) and len(child.comparators) == 1:
                     if any(isinstance(op, ast.NotIn) for op in child.ops):
-                        comparator_text = ast.unparse(child.comparators[0]).lower()
-                        if any(token in comparator_text for token in ("request.details", "request.data", "request.metadata")):
+                        if cls._is_request_field_container_expression(child.comparators[0]) or cls._is_payload_container_expression(
+                            child.comparators[0],
+                            payload_alias_names,
+                        ):
                             presence_checks = True
 
                 if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == "isinstance":
                     type_checks = True
 
-            if required_field_names and presence_checks and not type_checks:
+            if has_required_field_names and presence_checks and not type_checks:
                 return True
 
         return False
@@ -1296,9 +3351,12 @@ class QATesterAgent(BaseAgent):
             return False
 
         summary_lower = repair_validation_summary.lower()
-        if "assert true is false" not in summary_lower and "assert not true" not in summary_lower:
-            return False
-        if not cls._implementation_has_presence_only_required_field_validation(implementation_code):
+        has_validation_false_signal = (
+            "assert true is false" in summary_lower
+            or "assert not true" in summary_lower
+            or "did not raise" in summary_lower
+        )
+        if not has_validation_false_signal:
             return False
 
         required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
@@ -1676,6 +3734,7 @@ Return complete raw Python only."""
         primary_method: str,
         preferred_constructor: str,
         argument_overrides: dict[str, str] | None = None,
+        collect_results: bool = False,
     ) -> list[str]:
         if "." not in primary_method or not preferred_constructor:
             return []
@@ -1695,15 +3754,22 @@ Return complete raw Python only."""
         if not first_request_expr or not second_request_expr:
             return []
 
-        return [
+        lines = [
             f"{service_name} = {class_name}()",
             "requests = [",
             f"    {first_request_expr},",
             f"    {second_request_expr},",
             "]",
+        ]
+        if collect_results:
+            lines.append("results = []")
+        lines.extend([
             "for request in requests:",
             f"    result = {service_name}.{method_name}(request)",
-        ]
+        ])
+        if collect_results:
+            lines.append("    results.append(result)")
+        return lines
 
     @classmethod
     def _callable_scaffold_line(cls, signature: str, constructor_variable: str) -> str:
@@ -1747,16 +3813,46 @@ Return complete raw Python only."""
             return service_line, f"result = {service_name}.{method_name}(...)"
         return service_line, f"result = {service_name}.{method_name}()"
 
-    @staticmethod
-    def _prepend_fixed_time_line(lines: list[str]) -> list[str]:
+    @classmethod
+    def _fixed_time_expression(cls, implementation_code: object) -> str:
+        module_style = cls._implementation_prefers_datetime_module_import(implementation_code)
+        if cls._implementation_requires_recent_request_timestamp(implementation_code):
+            if cls._implementation_prefers_timezone_aware_now(implementation_code):
+                if module_style:
+                    return "datetime.datetime.now(datetime.timezone.utc)"
+                return "datetime.now(timezone.utc)"
+            if module_style:
+                return "datetime.datetime.now()"
+            return "datetime.now()"
+        if module_style:
+            return "datetime.datetime(2024, 1, 1, 0, 0, 0)"
+        return "datetime(2024, 1, 1, 0, 0, 0)"
+
+    @classmethod
+    def _fixed_time_import_line(cls, implementation_code: object) -> str:
+        if cls._implementation_prefers_datetime_module_import(implementation_code):
+            return "import datetime"
+        if cls._implementation_requires_recent_request_timestamp(implementation_code) and cls._implementation_prefers_timezone_aware_now(implementation_code):
+            return "from datetime import datetime, timezone"
+        return "from datetime import datetime"
+
+    @classmethod
+    def _fixed_time_assignment_line(cls, implementation_code: object) -> str:
+        return f"fixed_time = {cls._fixed_time_expression(implementation_code)}"
+
+    @classmethod
+    def _prepend_fixed_time_line(cls, lines: list[str], *, implementation_code: object = "") -> list[str]:
         if not any("fixed_time" in line for line in lines):
             return lines
-        if any(line.startswith("fixed_time = datetime(") for line in lines):
+        if any(
+            line.startswith("fixed_time = datetime(") or line.startswith("fixed_time = datetime.now(")
+            for line in lines
+        ):
             return lines
         insert_at = 1 if lines and lines[0].startswith("service =") else 0
         return [
             *lines[:insert_at],
-            "fixed_time = datetime(2024, 1, 1, 0, 0, 0)",
+            cls._fixed_time_assignment_line(implementation_code),
             *lines[insert_at:],
         ]
 
@@ -1806,6 +3902,7 @@ Return complete raw Python only."""
             ) or exact_constructors
 
         preferred_constructor = cls._preferred_constructor_signature(exact_constructors, preferred_facades)
+        preferred_constructor_name, _ = cls._signature_name_and_params(preferred_constructor)
         argument_overrides = cls._required_payload_argument_overrides(
             preferred_constructor,
             implementation_code,
@@ -1846,7 +3943,6 @@ Return complete raw Python only."""
             (item for item in exact_callables if "batch" not in item.lower()),
             exact_callables[0] if exact_callables else "",
         )
-
         service_line = ""
         call_line = ""
         if primary_method and (preferred_facades or not primary_callable):
@@ -1896,26 +3992,56 @@ Return complete raw Python only."""
             primary_surface_ref,
         )
         return_shape_assertion_line = cls._return_shape_assertion_line(repair_validation_summary)
+        runtime_return_kind = cls._runtime_return_kind_from_summary(repair_validation_summary)
+        primary_service_name = ""
+        if primary_method and "." in primary_method:
+            primary_service_name = cls._instance_name_for_class(primary_method.split(".", 1)[0])
+        primary_stable_assertion_lines: list[str] = []
+        if call_line.startswith("result = "):
+            primary_stable_assertion_lines = cls._stable_call_assertion_lines(
+                implementation_code,
+                primary_surface_ref,
+                result_name="result",
+                request_name=constructor_variable,
+                service_name=primary_service_name,
+            )
 
         validation_body_lines: list[str] = []
+        validation_omitted_payload_key = cls._validation_failure_omitted_payload_key(implementation_code)
+        validation_missing_request_field = cls._validation_failure_missing_request_field(implementation_code)
+        non_validation_payload_keys = cls._implementation_non_validation_payload_keys(implementation_code)
         validation_method = cls._validation_support_method(exact_methods, preferred_facades)
+        validation_result_kind = "bool"
+        validation_result_fields: list[str] = []
+        if validation_method:
+            validation_result_kind, validation_result_fields = cls._implementation_validation_result_shape(
+                implementation_code,
+                validation_method,
+            )
         primary_body_lines = [line for line in (service_line, constructor_line) if line]
         if call_line:
             primary_body_lines.append(call_line)
         if return_shape_assertion_line and call_line.startswith("result = "):
             primary_body_lines.append(return_shape_assertion_line)
-        elif primary_returns_none and call_line.startswith("result = "):
-            primary_body_lines.append("assert result is None")
+        elif call_line.startswith("result = "):
+            primary_body_lines.extend(primary_stable_assertion_lines)
 
+        validation_constructor_variable = ""
+        validation_constructor_line = ""
         if preferred_constructor and (primary_method or primary_callable):
-            validation_overrides = cls._validation_failure_argument_overrides(
-                preferred_constructor,
-                implementation_code,
-            )
-            validation_constructor_variable, validation_constructor_line = cls._constructor_scaffold_line_with_overrides(
-                preferred_constructor,
-                argument_overrides=validation_overrides,
-            )
+            if not validation_omitted_payload_key:
+                validation_constructor_variable, validation_constructor_line = cls._validation_failure_request_like_object_scaffold_line(
+                    implementation_code,
+                )
+            if not validation_constructor_variable or not validation_constructor_line:
+                validation_overrides = cls._validation_failure_argument_overrides(
+                    preferred_constructor,
+                    implementation_code,
+                )
+                validation_constructor_variable, validation_constructor_line = cls._constructor_scaffold_line_with_overrides(
+                    preferred_constructor,
+                    argument_overrides=validation_overrides,
+                )
             validation_service_line = service_line
             validation_call_line = ""
             if primary_method:
@@ -1940,19 +4066,36 @@ Return complete raw Python only."""
                     validation_body_lines.insert(0, validation_service_assignment)
                 elif not validation_body_lines:
                     validation_body_lines.append(validation_service_assignment)
-                validation_body_lines.append(
-                    f"is_valid = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
-                )
-                validation_body_lines.append("assert is_valid is False")
+                if validation_result_kind == "object_is_valid":
+                    validation_body_lines.append(
+                        f"validation = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
+                    )
+                    validation_body_lines.append("assert validation.is_valid is False")
+                    if "errors" in validation_result_fields:
+                        validation_body_lines.append("assert len(validation.errors) > 0")
+                else:
+                    validation_body_lines.append(
+                        f"is_valid = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
+                    )
+                    validation_body_lines.append("assert is_valid is False")
 
             validation_call_expression = cls._call_expression_without_assignment(validation_call_line)
+            validation_stable_assertion_lines: list[str] = []
+            if validation_call_line.startswith("result = "):
+                validation_stable_assertion_lines = cls._stable_call_assertion_lines(
+                    implementation_code,
+                    primary_surface_ref,
+                    result_name="result",
+                    request_name=validation_constructor_variable,
+                    service_name=primary_service_name,
+                )
             if validation_call_expression:
                 if cls._implementation_raises_value_error(implementation_code):
                     validation_body_lines.append("with pytest.raises(ValueError):")
                     validation_body_lines.append(f"    {validation_call_expression}")
-                elif primary_returns_none and validation_call_line.startswith("result = "):
+                elif validation_call_line.startswith("result = ") and validation_stable_assertion_lines:
                     validation_body_lines.append(validation_call_line)
-                    validation_body_lines.append("assert result is None")
+                    validation_body_lines.extend(validation_stable_assertion_lines)
                 else:
                     validation_body_lines.append(validation_call_expression)
 
@@ -1964,15 +4107,61 @@ Return complete raw Python only."""
         )
         if batch_returns_none and batch_call_line.startswith("result = "):
             batch_body_lines.append("assert result is None")
+        batch_collects_results = False
         if batch_requested and not batch_call_line and primary_method and preferred_constructor:
+            batch_audit_assertion_lines = cls._stable_audit_assertion_lines(
+                implementation_code,
+                primary_surface_ref,
+                service_name=primary_service_name,
+                request_name="request",
+                batch=True,
+            )
+            batch_collects_results = bool(
+                cls._implementation_call_return_class_name(
+                    implementation_code,
+                    primary_surface_ref,
+                )
+                or cls._implementation_call_return_primitive_kind(
+                    implementation_code,
+                    primary_surface_ref,
+                )
+            )
+            if not batch_collects_results and primary_returns_none and not batch_audit_assertion_lines:
+                batch_collects_results = True
             batch_body_lines = cls._batch_loop_scaffold_lines(
                 primary_method=primary_method,
                 preferred_constructor=preferred_constructor,
                 argument_overrides=argument_overrides,
+                collect_results=batch_collects_results,
             )
-        primary_body_lines = cls._prepend_fixed_time_line(primary_body_lines)
-        validation_body_lines = cls._prepend_fixed_time_line(validation_body_lines)
-        batch_body_lines = cls._prepend_fixed_time_line(batch_body_lines)
+            if batch_collects_results:
+                if primary_returns_none:
+                    batch_body_lines.extend([
+                        "assert len(results) == len(requests)",
+                        "assert all(item is None for item in results)",
+                    ])
+                else:
+                    batch_body_lines.extend(
+                        cls._stable_batch_result_assertion_lines(
+                            implementation_code,
+                            primary_surface_ref,
+                            runtime_return_kind=runtime_return_kind,
+                        )
+                    )
+            else:
+                batch_body_lines.extend(batch_audit_assertion_lines)
+        primary_body_lines = cls._prepend_fixed_time_line(
+            primary_body_lines,
+            implementation_code=implementation_code,
+        )
+        validation_body_lines = cls._prepend_fixed_time_line(
+            validation_body_lines,
+            implementation_code=implementation_code,
+        )
+        batch_body_lines = cls._prepend_fixed_time_line(
+            batch_body_lines,
+            implementation_code=implementation_code,
+        )
         body_lines = [*primary_body_lines, *validation_body_lines, *batch_body_lines]
         if not allowed_imports and not body_lines:
             return ""
@@ -1984,8 +4173,8 @@ Return complete raw Python only."""
             "```python",
             "import pytest",
         ]
-        if any(value == "fixed_time" for value in argument_overrides.values()):
-            lines.append("from datetime import datetime")
+        if any("fixed_time" in line for line in body_lines):
+            lines.append(cls._fixed_time_import_line(implementation_code))
         if allowed_imports:
             lines.append(f"from {module_name} import {', '.join(allowed_imports)}")
         if primary_body_lines or batch_body_lines:
@@ -2025,8 +4214,17 @@ Return complete raw Python only."""
             "- Preserve every import, facade, method name, and constructor field from this scaffold exactly. Do not rename them."
         )
         lines.append(
+            "- Treat the scaffold body above as authoritative. Keep its payload shape and assertion style unless the exact contract explicitly requires a different literal or an extra check."
+        )
+        lines.append(
             "- Keep mutable services and request objects local to each test or a local helper. Do not lift them to module scope."
         )
+        if cls._implementation_requires_recent_request_timestamp(implementation_code):
+            recent_fixed_time_expr = f"`{cls._fixed_time_expression(implementation_code)}`"
+            lines.append(
+                "- The implementation validates request timestamp recency. In happy-path, batch, and risk-scoring scenarios, keep `fixed_time` recent enough to pass validation; "
+                f"prefer {recent_fixed_time_expr} over a stale historical calendar literal."
+            )
         lines.append(
             "- In compact contract-first mode, default to only the required trio: happy path, validation failure, and batch processing. Do not add duplicate-detection, risk-tier, audit-only, or other speculative extras unless the exact contract explicitly requires them."
         )
@@ -2034,9 +4232,51 @@ Return complete raw Python only."""
             lines.append(
                 "- If `test_validation_failure` later asserts audit records, risk-score state, or another workflow side effect, keep the documented workflow call in that test. `validate_request(...)` alone only checks validity; it does not emit workflow side effects by itself."
             )
+            lines.append(
+                "- Do not replace the scaffolded validation-failure payload with an empty dict, an omitted optional scoring field, or another guessed business-rule variation when the scaffold already shows an exact rejection case."
+            )
+            if validation_omitted_payload_key:
+                lines.append(
+                    "- In `test_validation_failure`, keep the scaffolded omission of the required payload key "
+                    f"`{validation_omitted_payload_key}` exactly as shown. Do not swap that missing key to a different field."
+                )
+                if validation_constructor_line:
+                    lines.append(
+                        "- In `test_validation_failure`, keep the scaffolded invalid constructor line exactly as shown: "
+                        f"`{validation_constructor_line}`. Do not reintroduce `{validation_omitted_payload_key}` with a placeholder literal."
+                    )
+                if non_validation_payload_keys:
+                    rendered_keys = ", ".join(f"`{key}`" for key in non_validation_payload_keys[:3])
+                    lines.append(
+                        "- Do not swap that missing-field case to optional downstream business keys such as "
+                        f"{rendered_keys}. Those keys are only read after validation in scoring or review logic here, so omitting them may change risk but should not be used as the `validate_request(...)` rejection case."
+                    )
+            elif validation_missing_request_field:
+                request_model_constructor_hint = (
+                    f"`{preferred_constructor_name}(...)`"
+                    if preferred_constructor_name
+                    else "`the request-model constructor`"
+                )
+                lines.append(
+                    "- The current validator checks top-level request fields on the request object rather than nested payload keys. "
+                    f"In `test_validation_failure`, keep the scaffolded request-like object missing the top-level field `{validation_missing_request_field}` exactly as shown. "
+                    f"Do not instantiate {request_model_constructor_hint} anywhere in that test, including placeholder cases such as `details={{}}` or other fully populated constructor calls, and do not move request wrapper fields such as request_id, request_type, details, or timestamp into the nested payload dict to fabricate that rejection case. A request-model instance that still supplies all top-level fields remains valid here."
+                )
+                if validation_constructor_line:
+                    lines.append(
+                        "- In `test_validation_failure`, keep the scaffolded invalid-object line exactly as shown: "
+                        f"`{validation_constructor_line}`. Reuse that same `invalid_request` object for both `validate_request(...)` and the workflow call."
+                    )
+                lines.append(
+                    f"- Do not rewrite that missing-field case as `{validation_missing_request_field}=None`, an empty string, or another placeholder value. For this validator the field must be absent from the object entirely, not merely present with a falsey value."
+                )
         if preferred_facades:
             lines.append(
                 f"- Keep the suite centered on {', '.join(preferred_facades)} instead of auxiliary helpers."
+            )
+        if any("audit_" in line or ".audit_" in line or "audit_history" in line for line in body_lines):
+            lines.append(
+                "- Keep the scaffold's request-identity and audit-growth checks. Do not swap them for exact blocked, escalated, rejected, approved, or similar label guesses unless the behavior contract explicitly defines that mapping."
             )
 
         if batch_requested and batch_body_lines and anchor_overrides.get("suppress_batch_aliases"):
@@ -2080,6 +4320,27 @@ Return complete raw Python only."""
             existing_tests,
             implementation_code,
         )
+        required_request_fields = cls._implementation_required_request_fields(implementation_code)
+        exact_status_action_label_issue = cls._summary_has_exact_status_action_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        exact_band_label_issue = cls._summary_has_exact_band_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        exact_temporal_value_issue = cls._summary_has_exact_temporal_value_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        exact_numeric_score_issue = cls._summary_has_exact_numeric_score_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        positive_numeric_score_issue = cls._summary_has_positive_numeric_score_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
         presence_only_validation_sample_issue = cls._summary_has_presence_only_validation_sample_issue(
             repair_validation_summary,
             existing_tests,
@@ -2097,6 +4358,8 @@ Return complete raw Python only."""
             return True
         if required_payload_runtime_issue and not available_module_symbol_names:
             return True
+        if required_request_fields and not cls._implementation_required_payload_keys(implementation_code) and not available_module_symbol_names:
+            return True
         if presence_only_validation_sample_issue:
             return True
         if cls._summary_has_placeholder_boolean_assertion_issue(
@@ -2108,6 +4371,16 @@ Return complete raw Python only."""
             repair_validation_summary,
             existing_tests,
         ):
+            return True
+        if exact_status_action_label_issue:
+            return True
+        if exact_band_label_issue:
+            return True
+        if exact_temporal_value_issue:
+            return True
+        if exact_numeric_score_issue:
+            return True
+        if positive_numeric_score_issue:
             return True
         if cls._summary_has_active_issue(
             repair_validation_summary,
@@ -2201,6 +4474,26 @@ Return complete raw Python only."""
             existing_tests,
             implementation_code,
         )
+        has_exact_status_action_label_issue = cls._summary_has_exact_status_action_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        has_exact_band_label_issue = cls._summary_has_exact_band_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        has_exact_temporal_value_issue = cls._summary_has_exact_temporal_value_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        has_exact_numeric_score_issue = cls._summary_has_exact_numeric_score_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        has_positive_numeric_score_issue = cls._summary_has_positive_numeric_score_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
         has_presence_only_validation_sample_issue = cls._summary_has_presence_only_validation_sample_issue(
             repair_validation_summary,
             existing_tests,
@@ -2219,10 +4512,22 @@ Return complete raw Python only."""
             repair_validation_summary,
         )
         required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        non_validation_payload_keys = cls._implementation_non_validation_payload_keys(implementation_code)
+        validation_omitted_payload_key = cls._validation_failure_omitted_payload_key(implementation_code)
+        required_request_fields = cls._implementation_required_request_fields(implementation_code)
+        validation_missing_request_field = cls._validation_failure_missing_request_field(implementation_code)
+        _, validation_request_like_line = cls._validation_failure_request_like_object_scaffold_line(
+            implementation_code,
+        )
         required_payload_suffix = ""
         if required_payload_keys:
             required_payload_suffix = (
                 f" The current validator only checks for the presence of {required_payload_keys!r}."
+            )
+        required_request_suffix = ""
+        if required_request_fields:
+            required_request_suffix = (
+                f" The current validator instead checks the top-level request field set {required_request_fields!r} on the request object."
             )
         required_evidence_items = cls._implementation_required_evidence_items(implementation_code)
         required_evidence_suffix = ""
@@ -2242,6 +4547,24 @@ Return complete raw Python only."""
                 f"{rendered_names}. Rebuild the suite from the Exact test contract and current implementation instead of patching guessed helper wiring in place.",
                 "The previous validation summary reported undefined helper or collaborator aliases outside the Exact test contract: "
                 f"{rendered_names}. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and do not replace those guessed helpers with near-match record or dataclass imports.",
+            )
+
+        all_undefined_local_names = cls._undefined_local_names(repair_validation_summary)
+        available_module_symbol_lowers = {name.lower() for name in available_module_symbol_names}
+        safe_builtins = {"pytest", "datetime"}
+        residual_undefined_names = [
+            name
+            for name in all_undefined_local_names
+            if name.lower() not in available_module_symbol_lowers
+            and name.lower() not in safe_builtins
+        ]
+        if residual_undefined_names:
+            rendered_names = ", ".join(residual_undefined_names)
+            return (
+                "Previous invalid pytest file omitted because the validation summary reported undefined local names that are not available module symbols: "
+                f"{rendered_names}. Rebuild the suite from the Exact test contract and current implementation instead of patching hallucinated references in place.",
+                "The previous validation summary reported undefined local names that are not importable from the module or available as builtins: "
+                f"{rendered_names}. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and do not invent helper variables, callback captures, or intermediate locals that are not defined in the test or imported from the production module.",
             )
 
         stale_generated_module_roots = cls._stale_generated_module_import_roots(
@@ -2279,7 +4602,30 @@ Return complete raw Python only."""
                 "Previous invalid pytest file omitted because the current runtime failure shows that supposed happy-path or batch payloads still omit required payload fields named by the implementation validator. Rebuild the suite from the Exact test contract and current implementation instead of copying the stale partial payload forward."
                 f"{required_payload_suffix}",
                 "The current runtime failure shows that supposed happy-path or batch payloads still omit required payload fields named by the implementation validator. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, copy the full required payload key set into every valid happy-path or batch payload, and isolate missing-field coverage to the explicit validation-failure test."
-                f"{required_payload_suffix}",
+                f"{required_payload_suffix}"
+                + (
+                    f" Keep the scaffolded validation-failure omission on `{validation_omitted_payload_key}` exactly as shown."
+                    if validation_omitted_payload_key
+                    else ""
+                ),
+            )
+
+        if required_request_fields and not required_payload_keys and not available_module_symbol_names:
+            return (
+                "Previous invalid pytest file omitted because the current validator checks top-level request field presence on the request object rather than nested payload keys. Rebuild the suite from the Exact test contract and current implementation instead of preserving a fully populated request-model rejection case."
+                f"{required_request_suffix}",
+                "The current validator checks top-level request field presence on the request object rather than nested payload keys. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, keep valid happy-path and batch coverage on the exact request model, and make `test_validation_failure` use a request-like object missing one of those top-level fields instead of a fully populated request-model constructor."
+                f"{required_request_suffix}"
+                + (
+                    f" Keep the constructor-free invalid object line `{validation_request_like_line}` exactly as shown, reuse that same `invalid_request` object in both `validate_request(...)` and the workflow call, and do not replace it with a request-model constructor or a placeholder case such as `details={{}}`."
+                    if validation_request_like_line
+                    else ""
+                )
+                + (
+                    f" Keep the scaffolded missing-field case on `{validation_missing_request_field}` exactly as shown, and do not turn that into `{validation_missing_request_field}=None` or another placeholder value because the field must be absent entirely."
+                    if validation_missing_request_field
+                    else ""
+                ),
             )
 
         if has_presence_only_validation_sample_issue:
@@ -2287,7 +4633,54 @@ Return complete raw Python only."""
                 "Previous invalid pytest file omitted because the validation-failure payload still keeps every required field that the current validator only checks for presence. Rebuild the suite from the Exact test contract and current implementation instead of preserving same-shape placeholder values that still satisfy validation."
                 f"{required_payload_suffix}",
                 "The current validation-failure payload still keeps every required field that the current validator only checks for presence. Do not preserve or patch the previous pytest file in place. Rebuild the suite from the Exact test contract and current implementation, and make the rejection case omit one required field or use a clearly wrong top-level type instead of keeping all required fields with placeholder values."
-                f"{required_payload_suffix}",
+                f"{required_payload_suffix}"
+                + (
+                    f" Keep the scaffolded missing-field case on `{validation_omitted_payload_key}` exactly as shown."
+                    if validation_omitted_payload_key
+                    else ""
+                )
+                + (
+                    " Do not swap that rejection case to optional downstream business keys such as "
+                    + ", ".join(f"`{key}`" for key in non_validation_payload_keys[:3])
+                    + ". Those keys are only read after validation and do not make `validate_request(...)` return `False` here."
+                    if non_validation_payload_keys
+                    else ""
+                ),
+            )
+
+        if has_positive_numeric_score_issue and not available_module_symbol_names:
+            return (
+                "Previous overreaching pytest file omitted because the current runtime failure still includes a speculative positive score threshold beyond the documented contract. Rebuild the suite from the Exact test contract and current implementation instead of preserving that guessed non-zero expectation.",
+                "The current runtime failure still includes a speculative positive score threshold beyond the documented contract. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around contract-backed scenarios, and replace `risk_score > 0.0`, `score > 0.0`, or similar positive-threshold checks with stable invariants such as non-negative score bounds, type checks, relative ordering, or documented decision and audit evidence.",
+            )
+
+        if has_exact_numeric_score_issue and not available_module_symbol_names:
+            return (
+                "Previous overreaching pytest file omitted because the current runtime failure still includes a brittle exact numeric score or total assertion beyond the documented contract. Rebuild the suite from the Exact test contract and current implementation instead of preserving that guessed exact value.",
+                "The current runtime failure still includes a brittle exact numeric score or total assertion beyond the documented contract. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around contract-backed scenarios, recompute any remaining exact numeric expectation from only the branches exercised by the chosen input when the formula is explicit, and otherwise prefer stable invariants such as non-negative scores, relative ordering, or documented outcomes.",
+            )
+
+        exact_value_issue_parts: list[str] = []
+        if has_exact_status_action_label_issue:
+            exact_value_issue_parts.append("exact outcome/action label assertions")
+        if has_exact_band_label_issue:
+            exact_value_issue_parts.append("exact risk-level or severity-band threshold assertions")
+        if has_exact_temporal_value_issue:
+            exact_value_issue_parts.append("exact timestamp or generated-time equality assertions")
+        if (
+            exact_value_issue_parts
+            and not available_module_symbol_names
+            and not cls._summary_has_active_issue(
+                repair_validation_summary,
+                "contract overreach signals",
+            )
+        ):
+            rendered_issue_parts = " and ".join(exact_value_issue_parts)
+            return (
+                "Previous overreaching pytest file omitted because the current runtime failure still includes brittle "
+                f"{rendered_issue_parts} beyond the documented contract. Rebuild the suite from the Exact test contract and current implementation instead of preserving those guessed exact values.",
+                "The current runtime failure still includes brittle "
+                f"{rendered_issue_parts} beyond the documented contract. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around contract-backed scenarios, replace guessed exact labels with stable invariants unless the mapping is explicit, and avoid exact timestamp or generated-time equality unless the contract explicitly documents that echo.",
             )
 
         if cls._summary_has_active_issue(
@@ -2328,7 +4721,7 @@ Return complete raw Python only."""
         ):
             return (
                 "Previous hollow pytest file omitted because the validation summary already reported top-level tests without assertion-like checks. Rebuild the suite from the current implementation and documented contract instead of preserving call-only tests or the previous suite skeleton.",
-                "The previous validation summary already reported hollow top-level tests without assertion-like checks. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only the minimum contract-backed scenarios, and ensure every retained top-level test contains at least one explicit assertion-like check.",
+                "The previous validation summary already reported hollow top-level tests without assertion-like checks. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only the minimum contract-backed scenarios, and ensure every retained top-level test contains at least one explicit assertion-like check. If the documented workflow is side-effect-only, assign the call to `result` and assert `result is None` or another externally observable side effect instead of leaving a bare call. For repeated batch loops without a dedicated batch return value, collect per-request results and assert batch-visible facts such as `len(results) == len(requests)` and `all(item is None for item in results)` when no stronger observable state exists.",
             )
 
         if isinstance(existing_tests, str):
@@ -2410,8 +4803,28 @@ Return complete raw Python only."""
             existing_tests,
             implementation_code,
         )
+        presence_only_validation_sample_issue = cls._summary_has_presence_only_validation_sample_issue(
+            repair_validation_summary,
+            existing_tests,
+            implementation_code,
+        )
+        positive_numeric_score_issue = cls._summary_has_positive_numeric_score_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        exact_status_action_label_issue = cls._summary_has_exact_status_action_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
+        exact_band_label_issue = cls._summary_has_exact_band_label_assertion_issue(
+            repair_validation_summary,
+            existing_tests,
+        )
         required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        validation_omitted_payload_key = cls._validation_failure_omitted_payload_key(implementation_code)
+        non_validation_payload_keys = cls._implementation_non_validation_payload_keys(implementation_code)
         required_evidence_items = cls._implementation_required_evidence_items(implementation_code)
+        return_shape_assertion_line = cls._return_shape_assertion_line(repair_validation_summary)
 
         exact_surfaces = [*exact_callables, *exact_methods]
         documented_batch_surface = any("batch" in item.lower() for item in exact_surfaces)
@@ -2420,6 +4833,17 @@ Return complete raw Python only."""
             "",
         )
         primary_exact_method = exact_methods[0] if exact_methods else ""
+        primary_runtime_return_kind = cls._implementation_call_return_primitive_kind(
+            implementation_code,
+            documented_single_surface,
+        )
+        primary_stable_assertion_lines = cls._stable_call_assertion_lines(
+            implementation_code,
+            documented_single_surface,
+            result_name="result",
+            request_name="request",
+            service_name="service",
+        ) if documented_single_surface else []
 
         lines = ["", "Exact rebuild surface:"]
         if allowed_imports:
@@ -2441,6 +4865,20 @@ Return complete raw Python only."""
         if invalid_members:
             lines.append(
                 f"- Invalid member references from the previous validation are forbidden in the rewritten file: {invalid_members}"
+            )
+        if return_shape_assertion_line:
+            lines.append(
+                f"- The previous runtime failure already showed the workflow return shape here. Keep the happy-path assertion on that runtime type instead: `{return_shape_assertion_line}`."
+            )
+            lines.append(
+                "- Remove guessed wrapper-result imports or attribute reads from the rewritten file unless the implementation explicitly returns that wrapper type."
+            )
+        elif primary_runtime_return_kind and primary_stable_assertion_lines:
+            lines.append(
+                f"- The current workflow returns a direct `{primary_runtime_return_kind}` at runtime here. Keep happy-path and batch assertions on that direct value instead of inventing a wrapper result object."
+            )
+            lines.append(
+                f"- Use a stable happy-path assertion such as `{primary_stable_assertion_lines[0]}` and do not add `.request_id`, `.outcome`, or guessed wrapper-result imports unless a later runtime failure proves that wrapper type exists."
             )
         if anchor_overrides.get("suppress_batch_aliases") and documented_single_surface:
             lines.append(
@@ -2475,6 +4913,9 @@ Return complete raw Python only."""
             lines.append(
                 "- Keep missing-document coverage isolated to `test_validation_failure` or another explicit validation-rejection case. Do not reuse reduced or empty document subsets like ['ID'] or [] inside happy-path or batch tests."
             )
+            lines.append(
+                "- Apply the same rule to risk-scoring, audit-trail, and other non-validation tests: if they call the workflow or scoring path, keep their request payload fully valid and move missing-document coverage back to the explicit validation-failure test."
+            )
         if required_payload_runtime_issue:
             lines.append(
                 "- The previous failed suite omitted required payload fields inside a supposed happy-path or batch scenario. Do not copy that stale partial payload forward unchanged."
@@ -2483,12 +4924,53 @@ Return complete raw Python only."""
                 lines.append(
                     f"- The implementation validator requires the full payload key set {required_payload_keys!r} for valid processing. Copy that exact key set into every valid happy-path or batch payload."
                 )
+                if validation_omitted_payload_key:
+                    lines.append(
+                        "- In `test_validation_failure`, keep the scaffolded missing-field case on the required payload key "
+                        f"`{validation_omitted_payload_key}`. Do not replace it with a different missing field."
+                    )
             else:
                 lines.append(
                     "- Copy the full required payload key set named by the implementation validator into every valid happy-path or batch payload instead of omitting part of that required set."
                 )
             lines.append(
                 "- Keep missing-field coverage isolated to `test_validation_failure` or another explicit validation-rejection case. Do not reuse partial payloads that omit required keys inside happy-path or batch tests."
+            )
+            lines.append(
+                "- Apply the same rule to risk-scoring, audit-trail, and other non-validation tests: if they call the workflow or scoring path, keep their payload fully valid and move missing-field coverage back to the explicit validation-failure test."
+            )
+        if presence_only_validation_sample_issue:
+            lines.append(
+                "- The previous validation-failure payload still kept every required field that this validator only checks for presence. Rebuild that rejection case around an actually missing validator-required field or a clearly wrong top-level type instead of leaving all required keys present with placeholder values."
+            )
+            if validation_omitted_payload_key:
+                lines.append(
+                    "- In `test_validation_failure`, keep the scaffolded missing-field case on the validator-required key "
+                    f"`{validation_omitted_payload_key}` exactly as shown."
+                )
+            if non_validation_payload_keys:
+                rendered_keys = ", ".join(f"`{key}`" for key in non_validation_payload_keys[:3])
+                lines.append(
+                    "- Do not swap that rejection case to downstream scoring-only keys such as "
+                    f"{rendered_keys}. Those keys are only read after validation and should not drive `validate_request(...)` failure here."
+                )
+        if positive_numeric_score_issue:
+            lines.append(
+                "- The previous failed suite assumed a positive non-zero score for the chosen input. Replace `risk_score > 0.0`, `score > 0.0`, or similar positive-threshold checks with stable invariants such as non-negative bounds, type checks, relative ordering, or documented decision and audit evidence unless the implementation explicitly guarantees a positive increase."
+            )
+        if exact_status_action_label_issue:
+            lines.append(
+                "- The previous failed suite guessed exact status/action labels or audit-log label text. Keep happy-path and batch assertions on request identity, returned type, collection growth, or other contract-backed invariants instead of exact `Approved`, `Escalated`, `Blocked`, or similar label text unless the contract explicitly defines that mapping."
+            )
+            lines.append(
+                "- Treat audit-log message text the same way: do not assert label substrings such as `Approved`, `Escalated`, `Blocked`, or `Rejected` inside audit-log entries unless the contract explicitly defines that text."
+            )
+        if exact_band_label_issue:
+            lines.append(
+                "- The previous failed suite overreached with exact risk-tier or severity-band thresholds. Do not keep narrow subset checks like `in ['HIGH', 'CRITICAL']` unless the contract explicitly defines that mapping."
+            )
+            lines.append(
+                "- Prefer numeric score bounds, audit evidence, request identity, or a simple string-type assertion over exact `risk_level` or `severity` labels in non-validation tests."
             )
         if documented_single_surface and not documented_batch_surface:
             lines.append(

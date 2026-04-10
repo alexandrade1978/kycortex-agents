@@ -3056,6 +3056,26 @@ class Orchestrator:
                 )
                 + "do not leave near-match field names split across construction and scoring paths."
             )
+        nested_payload_wrapper_details = self._nested_payload_wrapper_field_validation_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        if nested_payload_wrapper_details is not None:
+            container_name, offending_fields, validation_line = nested_payload_wrapper_details
+            rendered_fields = self._render_name_list(offending_fields)
+            instruction = (
+                "Repair the generated Python module so valid happy-path and batch requests do not fail because the validator is checking request-wrapper fields inside the nested payload container. "
+                "Preserve the documented split between top-level request fields and nested payload data. "
+                f"The current failed artifact still treats {rendered_fields} as required keys inside request.{container_name}. "
+                f"Keep wrapper fields such as {rendered_fields} on the request object, and reserve request.{container_name} checks for actual payload keys only. "
+                f"Do not require {rendered_fields} as keys inside request.{container_name}; validate them directly on the request object or drop that nested wrapper-field requirement entirely."
+            )
+            if validation_line:
+                instruction = (
+                    f"{instruction} The exact broken validation line `{validation_line}` still appears in the failed artifact. "
+                    "Do not return that line unchanged; replace it with wrapper-field checks on the request object plus only true payload-key validation inside the nested container."
+                )
+            return instruction
         strictness_details = self._internal_constructor_strictness_details(
             validation_summary,
             failed_artifact_content,
@@ -3120,6 +3140,13 @@ class Orchestrator:
             return False
         normalized = validation_summary.lower()
         if "completion diagnostics:" in normalized and "likely truncated" in normalized:
+            return True
+        if (
+            failure_category == FailureCategory.CODE_VALIDATION.value
+            and "completion diagnostics:" in normalized
+            and "completion limit reached" in normalized
+            and "missing required cli entrypoint" in normalized
+        ):
             return True
         if self._summary_limit_exceeded(validation_summary, "Line count"):
             return True
@@ -3683,21 +3710,83 @@ class Orchestrator:
             return []
 
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
+            target_names: list[str] = []
+            value_node: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                value_node = node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                target_names = [node.target.id]
+                value_node = node.value
+            if not any(name in {"required_fields", "required_keys"} for name in target_names):
                 continue
-            if not any(
-                isinstance(target, ast.Name) and target.id == "required_fields"
-                for target in node.targets
-            ):
+            if value_node is None:
                 continue
+
+            items = Orchestrator._string_literal_sequence(value_node)
+            if items:
+                return items
+
             try:
-                value = ast.literal_eval(node.value)
+                value = ast.literal_eval(value_node)
             except (ValueError, SyntaxError):
                 continue
-            if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+            if isinstance(value, (list, tuple, set)) and all(isinstance(item, str) for item in value):
                 return list(value)
 
         return []
+
+    def _nested_payload_wrapper_field_validation_details(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object,
+    ) -> Optional[tuple[str, list[str], str]]:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return None
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return None
+
+        summary_lower = validation_summary.lower()
+        if "valueerror" not in summary_lower or "invalid" not in summary_lower:
+            return None
+        if not any(token in summary_lower for token in ("test_happy_path", "test_batch", "test_batch_processing")):
+            return None
+
+        container_name = next(
+            (
+                name
+                for name in ("details", "data", "metadata", "payload")
+                if f"request.{name}" in failed_artifact_content
+            ),
+            "",
+        )
+        if not container_name:
+            return None
+
+        required_fields = self._required_field_list_from_failed_artifact(failed_artifact_content)
+        if not required_fields:
+            return None
+
+        wrapper_field_names = {"request_id", "request_type", "details", "data", "metadata", "payload"}
+        offending_fields = [
+            field for field in required_fields
+            if field in wrapper_field_names or field == container_name
+        ]
+        if not offending_fields:
+            return None
+
+        validation_line = ""
+        for line in failed_artifact_content.splitlines():
+            stripped = line.strip()
+            if (
+                stripped
+                and f"request.{container_name}" in stripped
+                and ("issubset" in stripped or " in request." in stripped)
+            ):
+                validation_line = stripped
+                break
+
+        return container_name, offending_fields, validation_line
 
     def _internal_constructor_strictness_details(
         self,
@@ -7082,6 +7171,10 @@ class Orchestrator:
             validation_summary,
             failed_artifact_content,
         )
+        nested_payload_wrapper_details = self._nested_payload_wrapper_field_validation_details(
+            validation_summary,
+            failed_artifact_content,
+        )
         constructor_strictness_details = self._internal_constructor_strictness_details(
             validation_summary,
             failed_artifact_content,
@@ -7151,6 +7244,16 @@ class Orchestrator:
                 else:
                     lines.append(
                         f"If you keep .{attribute_name} in the rewritten module, declare it on {class_name} and populate or derive it where {class_name} objects are created. Otherwise remove every read of .{attribute_name} and use an existing declared field instead."
+                    )
+            if nested_payload_wrapper_details is not None:
+                container_name, offending_fields, validation_line = nested_payload_wrapper_details
+                rendered_fields = self._render_name_list(offending_fields)
+                lines.append(
+                    f"The current failed artifact still treats {rendered_fields} as required keys inside request.{container_name}. Keep those wrapper fields on the request object and reserve request.{container_name} checks for actual payload keys only."
+                )
+                if validation_line:
+                    lines.append(
+                        f"Do not return the broken validation line `{validation_line}` unchanged. Replace it with wrapper-field checks on the request object plus only true payload-key validation inside request.{container_name}."
                     )
             if constructor_strictness_details is not None:
                 class_name, missing_fields, required_fields = constructor_strictness_details
@@ -7227,6 +7330,13 @@ class Orchestrator:
             if "typeerror" in summary_lower:
                 lines.append(
                     "Keep data-model semantics consistent: if the module defines dataclasses or typed request objects, validate and read them via attributes instead of mapping membership or subscripting unless the public contract explicitly uses dict inputs."
+                )
+            if "offset-naive and offset-aware datetimes" in summary_lower:
+                lines.append(
+                    "Normalize every datetime comparison to one timezone convention before comparing timestamps. Do not mix parsed timezone-aware datetimes with naive datetime.now() values in certification, incident, cache, scoring, or audit paths."
+                )
+                lines.append(
+                    "If the cited tests construct naive datetimes with datetime(...), keep compared implementation timestamps naive too or convert both sides consistently before comparison. Every compared datetime in the same branch must share the same timezone awareness."
                 )
             if "line count:" in summary_lower:
                 lines.append(

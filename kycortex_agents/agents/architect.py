@@ -22,7 +22,10 @@ def _architecture_request_block(context: object) -> str:
     if repair_context.get("decomposition_mode") == "budget_compaction_planner":
         return """Provide a compact budget decomposition brief for the next repair step.
     Return 4 to 8 short bullets only.
+    Return plain `- ` bullets only. Do not add headings, bold section labels, or markdown emphasis.
     Cover only the minimum public surface or pytest surface to preserve, the required behaviors or scenarios that cannot be dropped, the optional structures or coverage to omit, and the write order that should appear first to avoid another oversized completion.
+    If the failure evidence mentions completion-limit pressure or likely truncation, make the size target materially smaller than the failed output, usually at least 25 to 35 percent below the reported line count unless the task already has a stricter hard cap.
+    Prefer the smallest importable API that still preserves the required facade, request model, validator, handler, and any mandatory CLI entrypoint.
     Do not include file trees, package layouts, headings, markdown tables, or long rationale."""
     return """Provide a detailed architecture document.
     Respect the task scope exactly: if the requested deliverable is a single Python module, the architecture must describe a single-module design.

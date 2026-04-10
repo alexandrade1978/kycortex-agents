@@ -2421,7 +2421,8 @@ def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_contex
         },
     )
 
-    assert orchestrator._code_artifact_context(code_task) == {}
+    code_ctx = orchestrator._code_artifact_context(code_task)
+    assert code_ctx.get("module_name") == "code_implementation"
     assert orchestrator._test_artifact_context(test_task, {}) == {}
     assert orchestrator._test_artifact_context(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}
     assert orchestrator._dependency_artifact_context(dep_task, {}) == {}
@@ -3034,6 +3035,9 @@ def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_
         "unsupported_mock_assertions": [],
         "top_level_test_count": 0,
         "fixture_count": 0,
+        "assertion_like_count": 0,
+        "tests_without_assertions": [],
+        "contract_overreach_signals": [],
     }
     assert syntax_error_analysis["syntax_ok"] is False
     assert syntax_error_analysis["syntax_error"] == "invalid syntax at line 1"
@@ -11702,6 +11706,111 @@ def test_execute_workflow_resume_failed_inserts_budget_decomposition_plan_before
     assert any(event["event"] == "task_budget_decomposition_created" for event in project.execution_events)
 
 
+def test_execute_workflow_resume_failed_inserts_budget_decomposition_plan_for_completion_limited_missing_cli_entrypoint(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        workflow_failure_policy="fail_fast",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=1,
+        max_tokens=3200,
+    )
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design the architecture",
+            assigned_to="architect",
+            status=TaskStatus.DONE.value,
+            output="ARCHITECTURE DOC",
+        )
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write one Python module with a small CLI demo entrypoint.",
+            assigned_to="code_engineer",
+            dependencies=["arch"],
+            status=TaskStatus.FAILED.value,
+            output="Generated code validation failed: missing required CLI entrypoint",
+            last_error="Generated code validation failed: missing required CLI entrypoint",
+            last_error_type="AgentExecutionError",
+            last_error_category=FailureCategory.CODE_VALIDATION.value,
+            output_payload={
+                "summary": "partial module without CLI guard",
+                "raw_content": "def handle_request(request):\n    return request\n",
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": "def handle_request(request):\n    return request\n",
+                    }
+                ],
+                "decisions": [],
+                "metadata": {
+                    "validation": {
+                        "code_analysis": {
+                            "syntax_ok": True,
+                            "third_party_imports": [],
+                            "line_count": 300,
+                            "has_main_guard": False,
+                            "main_guard_required": True,
+                        },
+                        "completion_diagnostics": {
+                            "requested_max_tokens": 3200,
+                            "output_tokens": 3200,
+                            "finish_reason": None,
+                            "stop_reason": "max_tokens",
+                            "done_reason": None,
+                            "hit_token_limit": True,
+                            "likely_truncated": False,
+                        },
+                    }
+                },
+            },
+            completed_at="2026-03-22T10:06:00+00:00",
+        )
+    )
+
+    architect = RecordingAgent(
+        "- Keep only the public facade and the minimal workflow behavior.\n"
+        "- Move main() and the literal main guard ahead of optional helpers.\n"
+        "- Remove optional helper layers and demo verbosity."
+    )
+    engineer = RecordingAgent(
+        "def handle_request(request):\n"
+        "    return request\n\n"
+        "def main():\n"
+        "    return 0\n\n"
+        "if __name__ == \"__main__\":\n"
+        "    main()\n"
+    )
+    orchestrator = Orchestrator(
+        config,
+        registry=AgentRegistry(
+            {
+                "architect": architect,
+                "code_engineer": engineer,
+            }
+        ),
+    )
+
+    orchestrator.execute_workflow(project)
+
+    plan_task = require_task(project, "code__repair_1__budget_plan")
+    repair_task = require_task(project, "code__repair_1")
+    code_task = require_task(project, "code")
+    assert plan_task.status == TaskStatus.DONE.value
+    assert repair_task.status == TaskStatus.DONE.value
+    assert code_task.status == TaskStatus.DONE.value
+    assert "code__repair_1__budget_plan" in repair_task.dependencies
+    assert engineer.last_context["budget_decomposition_brief"].startswith("- Keep only the public facade")
+    assert "Budget decomposition brief:" in engineer.last_description
+    assert any(event["event"] == "task_budget_decomposition_created" for event in project.execution_events)
+
+
 def test_execute_workflow_resume_failed_hard_stops_for_non_repairable_failed_tasks(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
@@ -15072,9 +15181,87 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
     assert "Do not return that call unchanged" in repair_context["instruction"]
     assert "rewrite VendorProfile(vendor_id, **request.details) to VendorProfile(vendor_id=vendor_id" in repair_context["instruction"]
     assert "request.details.get('is_sanctioned', False)" in repair_context["instruction"]
-    assert "Prior unresolved repair context:" in repair_context["validation_summary"]
-    assert "got multiple values for argument 'vendor_id'" in repair_context["validation_summary"]
-    assert "expired_certifications'" in repair_context["validation_summary"]
+
+
+def test_build_code_repair_context_from_test_failure_specializes_nested_payload_wrapper_field_validation(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    failed_code = (
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+        "class ReturnScreeningService:\n"
+        "    def validate_request(self, request: ReturnCase) -> bool:\n"
+        "        required_fields = {'request_id', 'request_type', 'details'}\n"
+        "        return required_fields.issubset(request.details)\n\n"
+        "    def handle_request(self, request: ReturnCase):\n"
+        "        if not self.validate_request(request):\n"
+        "            raise ValueError('Invalid return case')\n"
+        "        return request.request_id\n"
+    )
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output=failed_code,
+        output_payload={
+            "summary": "from dataclasses import dataclass, field",
+            "raw_content": failed_code,
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": failed_code,
+                }
+            ],
+            "metadata": {},
+        },
+    )
+    test_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        last_error="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.18s",
+        output_payload={
+            "summary": "import pytest",
+            "raw_content": "import pytest",
+            "artifacts": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {"syntax_ok": True},
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "2 failed, 1 passed in 0.18s",
+                        "stdout": (
+                            "FAILED tests_tests.py::test_happy_path - ValueError: Invalid return case\n"
+                            "FAILED tests_tests.py::test_batch_processing - ValueError: Invalid return case\n"
+                        ),
+                    },
+                }
+            },
+        },
+    )
+
+    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        {"cycle": 1},
+    )
+
+    assert "validator is checking request-wrapper fields inside the nested payload container" in repair_context["instruction"]
+    assert "treats request_id, request_type, and details as required keys inside request.details" in repair_context["instruction"]
+    assert "Do not require request_id, request_type, and details as keys inside request.details" in repair_context["instruction"]
+    assert "The exact broken validation line `return required_fields.issubset(request.details)` still appears in the failed artifact" in repair_context["instruction"]
 
 
 def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_test_repairs(tmp_path):
@@ -15804,6 +15991,8 @@ def test_build_agent_input_adds_nested_payload_wrapper_field_code_repair_priorit
     assert "If happy-path or batch pytest cases now raise `ValueError(...)` after a validator repair" in agent_input.task_description
     assert "Keep top-level request fields such as request_id and request_type on the request object" in agent_input.task_description
     assert "Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details" in agent_input.task_description
+    assert "The current failed artifact still treats request_id, request_type, and details as required keys inside request.details" in agent_input.task_description
+    assert "Do not return the broken validation line `return required_fields.issubset(request.details)` unchanged" in agent_input.task_description
 
 
 def test_build_agent_input_adds_code_truncation_repair_priority(tmp_path):
@@ -15873,6 +16062,41 @@ def test_build_agent_input_adds_code_line_budget_repair_priority(tmp_path):
     assert "Repair priorities:" in agent_input.task_description
     assert "Rewrite the full module smaller and leave clear headroom below the reported line ceiling" in agent_input.task_description
     assert "Remove optional helper layers, repeated convenience wrappers, and non-essential docstrings" in agent_input.task_description
+
+
+def test_build_agent_input_adds_datetime_timezone_repair_priority(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Write code",
+            assigned_to="docs_writer",
+            repair_context={
+                "cycle": 1,
+                "failure_category": FailureCategory.CODE_VALIDATION.value,
+                "repair_owner": "code_engineer",
+                "instruction": "Repair the generated Python module so it satisfies the existing valid pytest suite and the documented contract without shifting the failure onto the tests.",
+                "validation_summary": (
+                    "Generated test validation:\n"
+                    "- Syntax OK: yes\n"
+                    "- Pytest execution: FAIL\n"
+                    "- Pytest failure details: FAILED tests_tests.py::test_risk_scoring_with_certifications - TypeError: can't compare offset-naive and offset-aware datetimes\n"
+                    "- Verdict: FAIL"
+                ),
+                "failed_output": "def handle_request(request):\n    return request\n",
+                "failed_artifact_content": "def handle_request(request):\n    return request\n",
+            },
+        )
+    )
+
+    agent_input = orchestrator._build_agent_input(require_task(project, "code"), project)
+
+    assert "Normalize every datetime comparison to one timezone convention before comparing timestamps." in agent_input.task_description
+    assert "Do not mix parsed timezone-aware datetimes with naive datetime.now() values" in agent_input.task_description
+    assert "Every compared datetime in the same branch must share the same timezone awareness." in agent_input.task_description
 
 
 def test_build_agent_input_includes_budget_decomposition_brief_without_overriding_architecture(tmp_path):

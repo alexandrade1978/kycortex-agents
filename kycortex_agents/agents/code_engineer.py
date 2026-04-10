@@ -45,6 +45,150 @@ def _budget_decomposition_block(brief: object) -> str:
     return f"Budget decomposition brief:\n{brief}\n\n"
 
 
+def _repair_completion_pressure(validation_summary: object) -> bool:
+    if not isinstance(validation_summary, str) or not validation_summary.strip():
+        return False
+    normalized = validation_summary.lower()
+    if "completion diagnostics:" not in normalized:
+        return False
+    return any(
+        marker in normalized
+        for marker in (
+            "likely truncated",
+            "completion limit reached",
+            "token limit",
+            "max_tokens",
+        )
+    )
+
+
+def _repair_missing_cli_entrypoint(validation_summary: object) -> bool:
+    if not isinstance(validation_summary, str) or not validation_summary.strip():
+        return False
+    normalized = validation_summary.lower()
+    return any(
+        marker in normalized
+        for marker in (
+            "cli entrypoint present: no",
+            "missing required cli entrypoint",
+            "no cli entrypoint detected",
+        )
+    )
+
+
+def _repair_line_count(validation_summary: object) -> int | None:
+    if not isinstance(validation_summary, str) or not validation_summary.strip():
+        return None
+    match = re.search(r"- Line count:\s*(\d+)(?:/\d+)?", validation_summary, re.IGNORECASE)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _source_line_count(source: object) -> int | None:
+    if not isinstance(source, str) or not source.strip():
+        return None
+    return len(source.strip().splitlines())
+
+
+def _budget_compaction_line_target(
+    previous_line_count: int,
+    max_tokens: object,
+    *,
+    completion_pressure: bool = False,
+) -> int:
+    provider_cap = 260
+    if isinstance(max_tokens, int) and max_tokens > 0:
+        if max_tokens <= 1200:
+            provider_cap = 140
+        elif max_tokens <= 2000:
+            provider_cap = 180
+        elif max_tokens <= 3200:
+            provider_cap = 220
+    if completion_pressure and isinstance(max_tokens, int) and 0 < max_tokens <= 3200:
+        provider_cap = min(provider_cap, 180)
+        if previous_line_count >= 300:
+            provider_cap = min(provider_cap, 150)
+
+    if previous_line_count <= 100:
+        reduced_target = max(80, previous_line_count - 10)
+    else:
+        reduced_target = min(previous_line_count - 10, max(90, int(previous_line_count * 0.7)))
+
+    return max(80, min(provider_cap, reduced_target))
+
+
+def _budget_compaction_section(
+    brief: object,
+    validation_summary: object,
+    max_tokens: object,
+    existing_code: object,
+) -> str:
+    has_brief = isinstance(brief, str) and bool(brief.strip())
+    completion_pressure = _repair_completion_pressure(validation_summary)
+    missing_cli_entrypoint = _repair_missing_cli_entrypoint(validation_summary)
+    existing_code_line_count = _source_line_count(existing_code)
+    large_existing_code = (
+        isinstance(max_tokens, int)
+        and 0 < max_tokens <= 3200
+        and isinstance(existing_code_line_count, int)
+        and existing_code_line_count >= 260
+    )
+    if not has_brief and not completion_pressure and not large_existing_code:
+        return ""
+
+    lines = ["Budget-compaction repair mode:"]
+    lines.append(
+        "- Do not mirror the full secondary architecture when it adds optional structure beyond the compact plan. The budget brief and cited validation failures win for optional shape decisions."
+    )
+    if large_existing_code:
+        lines.append(
+            "- The current buggy baseline is already oversized for this provider budget. Do not preserve its structure; rebuild a materially smaller module around the same public contract."
+        )
+    if completion_pressure:
+        lines.append(
+            "- The previous module hit completion pressure. Rewrite materially smaller from the top instead of shortening comments or docstrings around the same oversized structure."
+        )
+    previous_line_count = _repair_line_count(validation_summary)
+    if previous_line_count is None:
+        previous_line_count = existing_code_line_count
+    if completion_pressure and previous_line_count is not None and previous_line_count >= 300:
+        lines.append(
+            "- The failed truncated baseline already exceeded 300 lines. Collapse to one facade, the anchored request model, the smallest required result shape, and a minimal CLI entrypoint before keeping any optional helper collaborators."
+        )
+    if previous_line_count is not None:
+        line_target = _budget_compaction_line_target(
+            previous_line_count,
+            max_tokens,
+            completion_pressure=completion_pressure,
+        )
+        lines.append(
+            f"- Target no more than {line_target} lines for this rewrite unless the task gives a stricter hard cap."
+        )
+    else:
+        lines.append(
+            "- Keep the rewrite materially smaller than the failed module and leave visible completion headroom instead of landing near the budget limit."
+        )
+    if completion_pressure:
+        lines.append(
+            "- Under completion pressure, keep at most the anchored request model plus one required result model. Represent optional audit items, action logs, and auxiliary state with built-in dict/list containers instead of extra dataclasses unless the public contract explicitly requires those named types."
+        )
+    if missing_cli_entrypoint:
+        lines.append(
+            "- The failed module still missed the required CLI entrypoint. Write a minimal `main()` plus a literal `if __name__ == \"__main__\":` block immediately after the service surface before adding any optional demo data or reporting loops."
+        )
+        lines.append(
+            "- Keep the CLI/demo path to one parsed input or one inline sample. Do not spend budget on multi-record demo batches, long sample arrays, or verbose audit-summary printing when the validator is already reporting a missing CLI entrypoint."
+        )
+    lines.append(
+        "- Finish the minimum acceptance-critical surface first: imports, request model, validate_request(...), handle_request(...), and any required CLI entrypoint before adding extra helpers."
+    )
+    lines.append(
+        "- Inline scoring, audit, and batch logic into the main service when possible. Delete optional helper classes, manager layers, verbose demo flows, and non-essential docstrings."
+    )
+    return "\n".join(lines) + "\n\n"
+
+
 def _split_repair_task_description(task_description: str) -> tuple[str, str]:
     if not isinstance(task_description, str) or not task_description.strip():
         return "", ""
@@ -68,6 +212,20 @@ def _repair_literal_replacement_hint(repair_focus: str) -> tuple[str, str] | Non
     return match.group(1), match.group(2)
 
 
+def _repair_quoted_broken_line_hint(repair_focus: str) -> str:
+    if not isinstance(repair_focus, str) or not repair_focus.strip():
+        return ""
+    for pattern in (
+        r"exact broken [^`]*line\s+`([^`]+)`",
+        r"broken [^`]*line\s+`([^`]+)`",
+        r"`([^`]+)` still appears in the failed artifact",
+    ):
+        match = re.search(pattern, repair_focus, re.IGNORECASE)
+        if match is not None:
+            return match.group(1).strip()
+    return ""
+
+
 def _repair_directives_block(task_description: str) -> str:
     _, repair_focus = _split_repair_task_description(task_description)
     if not repair_focus:
@@ -83,6 +241,11 @@ def _repair_directives_block(task_description: str) -> str:
         broken_reference, replacement_reference = replacement_hint
         lines.append(
             f"Literal repair cue: replace {broken_reference} with {replacement_reference} unless you explicitly add and populate the original attribute or field first."
+        )
+    quoted_broken_line = _repair_quoted_broken_line_hint(repair_focus)
+    if quoted_broken_line:
+        lines.append(
+            f"Quoted repair cue: the exact broken line `{quoted_broken_line}` must not appear anywhere in the rewritten module unless you fully replace that surrounding logic with a correct equivalent."
         )
     lines.extend(
         [
@@ -121,6 +284,8 @@ Keep constructor signatures, helper function parameters, and internal call sites
 If you define a helper to accept a domain object, every caller must pass that domain object; if you need a scalar helper, define it that way explicitly.
 If you model requests or records as dataclasses or other typed objects, access them consistently through attributes. Do not mix object-style APIs with dict membership tests or subscripting unless you explicitly convert them to mappings first.
 If the public request model separates wrapper fields from a nested payload container such as details, data, metadata, or payload, keep wrapper fields on the request object and validate only true payload keys inside that nested mapping. Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details or similar nested containers unless the contract explicitly duplicates them there.
+If required_fields or a similar validator set contains wrapper names such as request_id, request_type, details, data, metadata, or payload, do not check that set against request.details with issubset(...) or membership tests. Validate those wrapper fields directly on the request object instead.
+If a broken validator already checks wrapper names on the request object, do not keep a second nested check like all(key in request.details for key in required_fields) or required_fields.issubset(request.details) with that same wrapper-field set. Remove the nested wrapper-field check entirely and reserve request.details membership tests for true payload keys only.
 Do not make internal helper dataclasses or typed record models stricter than the documented valid request shape. If validate_request(...) accepts a happy-path or batch input, derive internal-only fields from existing request data or give them safe defaults instead of requiring new payload keys just to satisfy an internal constructor.
 If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, do not also pass the same field positionally or as a repeated keyword. Each constructor field must be bound exactly once.
 Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently. Do not invent near-match attribute names in scoring, audit, or routing helpers.
@@ -132,6 +297,9 @@ Example: even if the architecture says AuditLog(action, timestamp, details), imp
 If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types, and reorder each offending class instead of checking only the anchored request model.
 If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly.
 Keep imports consistent with the names you reference. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime. If you import symbols directly such as from datetime import datetime, timedelta, or timezone, call datetime.now(), timedelta(...), or timezone.utc instead of leaving module-qualified or bare references pointing at names you never imported.
+If the anchored public request model includes a timestamp field and the task or repair context shows callers constructing it with datetime objects, keep that public timestamp field datetime-compatible. Do not silently narrow it to int or epoch seconds just because internal code later uses time.time() or datetime.timestamp(); convert internally instead.
+If pytest failures or repair context mention "can't compare offset-naive and offset-aware datetimes", normalize both sides of every datetime comparison before ordering them. Do not compare a naive request timestamp directly against datetime.now(timezone.utc); either compare naive-to-naive or convert both values to the same timezone first.
+If you compare a public datetime timestamp against an epoch-second integer, time.time(), or int(datetime.now(...).timestamp()), convert one side so both operands share the same type before ordering them. Do not compare datetime objects directly against ints.
 Avoid placeholder demo logic that contradicts your own type hints or public API.
 If the task includes validation, implement concrete reject conditions for clearly invalid input rather than returning a constant success placeholder.
 If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type, repair the validator so that exact sample is rejected instead of keeping a presence-only required-key check.
@@ -147,7 +315,11 @@ If you are repairing a previously invalid or truncated file, rewrite the complet
 If the task requires a CLI or demo entrypoint, preserve or restore a minimal main() plus a literal if __name__ == "__main__": block during repair. Do not drop the entrypoint just to save lines or mirror a failing test snippet.
 When the user message includes a Highest-priority repair directives block, satisfy it before following later architecture guidance or reusing any existing code. Treat the existing code context as a buggy baseline to edit, not as a template to preserve unchanged.
 If those repair directives name a concrete broken reference and replacement, ensure the broken reference no longer appears anywhere in the final module unless you explicitly implement and populate it.
-When a task-level public contract anchor is provided, treat it as the highest-priority public API contract unless the validation summary explicitly says that API shape is wrong. Preserve listed facade, model, method, and constructor-field names exactly and do not invent alternate aliases or competing entrypoints."""
+When a budget decomposition brief is provided, treat it as the binding compaction plan for optional structure. If it conflicts with secondary architecture detail, follow the budget brief for optional shape decisions and keep only the public surface or behaviors it preserves.
+If prior completion diagnostics mention truncation or completion-limit pressure, the rewrite must be materially smaller than the failed module, not just cosmetically shorter. Cut entire optional helper layers or demo verbosity until the file has visible headroom below the same provider budget.
+When a task-level public contract anchor is provided, treat it as the highest-priority public API contract unless the validation summary explicitly says that API shape is wrong. Preserve listed facade, model, method, and constructor-field names exactly and do not invent alternate aliases or competing entrypoints.
+If a task-level public contract anchor names a primary request model signature like ComplianceRequest(request_id, request_type, details, timestamp), the rewritten dataclass or __init__ parameter list must start with those anchored fields in that exact order before any optional helper-only fields or defaults.
+If repair directives quote an exact broken line, remove or rewrite that line completely. Do not leave the same quoted line anywhere in the final module unless the surrounding logic has been fully repaired and the line is now correct in context."""
 
 class CodeEngineerAgent(BaseAgent):
     required_context_keys = ("architecture",)
@@ -162,8 +334,15 @@ class CodeEngineerAgent(BaseAgent):
         existing_code = agent_input.context.get("existing_code", "")
         existing_tests = agent_input.context.get("existing_tests", "")
         repair_validation_summary = agent_input.context.get("repair_validation_summary", "")
+        budget_decomposition_brief = agent_input.context.get("budget_decomposition_brief")
         budget_decomposition_block = _budget_decomposition_block(
-            agent_input.context.get("budget_decomposition_brief")
+            budget_decomposition_brief
+        )
+        budget_compaction_block = _budget_compaction_section(
+            budget_decomposition_brief,
+            repair_validation_summary,
+            agent_input.context.get("provider_max_tokens"),
+            existing_code,
         )
         module_name = agent_input.context.get("module_name", f"{agent_input.task_id}_implementation")
         module_filename = agent_input.context.get("module_filename", f"{module_name}.py")
@@ -217,7 +396,7 @@ Goal: {agent_input.project_goal}
 Target module: {module_filename}
 
 {low_budget_section}{public_contract_section}{context_sections}
-{budget_decomposition_block}If a budget decomposition brief is provided, treat it as the compact execution plan for this rewrite. Preserve the required public surface it names, follow its write order, and omit the optional structures it explicitly says to cut unless the task, anchor, or validation summary requires them.
+{budget_decomposition_block}{budget_compaction_block}If a budget decomposition brief is provided, treat it as the compact execution plan for this rewrite. Preserve the required public surface it names, follow its write order, and omit the optional structures it explicitly says to cut unless the task, anchor, or validation summary requires them.
 
 If the previous validation summary lists any failures, treat every listed issue as a hard blocker and fix each one in this new file.
 Use the existing tests context, when provided, as the most specific source of concrete inputs, edge cases, and expected outputs for the repair.
@@ -240,6 +419,9 @@ Do not stop at a nearby constant tweak, renamed helper, or signature change if t
 If a task-level public contract anchor is provided, treat it as higher priority than optional architecture wording and preserve every listed facade, model, method, and constructor field name exactly.
 Do not replace anchored names with guessed aliases, shortened variants, or convenience batch wrappers that are not listed in the anchor.
 If the architecture sketch drifts from the task-level public contract anchor, mentally repair that sketch and implement the anchored public surface instead.
+If a task-level public contract anchor names a primary request model signature like ComplianceRequest(request_id, request_type, details, timestamp), start the rewritten dataclass or __init__ field list with those anchored fields in that exact order before any optional helper-only fields or defaults.
+If that anchored signature includes timestamp, keep timestamp as an explicit constructor parameter. Do not hide it behind init=False or auto-populate it instead of accepting the caller-provided timestamp.
+If repair directives quote an exact broken line, remove or rewrite that line completely. Do not leave the same quoted line anywhere in the final module unless the surrounding logic has been fully repaired and the line is now correct in context.
 If you define dataclasses or typed record models with defaults, keep every required field before any defaulted field so the module imports cleanly and does not fail at import time.
 Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...).
 If the architecture or task description lists entity fields in a conflicting order, treat that list as descriptive only and reorder the actual dataclass fields so required fields still come first.
@@ -247,8 +429,11 @@ Example: even if the architecture says AuditLog(action, timestamp, details), imp
 If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types, and reorder each offending class instead of checking only the anchored request model.
 If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly.
 Keep imports consistent with how you reference names. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime. If you import symbols directly with from datetime import datetime, timedelta, or timezone, call datetime.now(), timedelta(...), or timezone.utc instead of leaving module-qualified or bare references pointing at names you never imported.
+If pytest failures or repair context mention "can't compare offset-naive and offset-aware datetimes", normalize both sides of every datetime comparison before ordering them. Do not compare a naive request timestamp directly against datetime.now(timezone.utc); either compare naive-to-naive or convert both values to the same timezone first.
 If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type, repair the validator so that exact sample is rejected instead of keeping a presence-only required-key check.
 If the request model exposes top-level wrapper fields plus a nested payload container such as details, data, metadata, or payload, validate wrapper fields on the request object and reserve nested required-key checks for actual payload keys. Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details unless the contract explicitly duplicates them there.
+If required_fields or a similar validator set contains wrapper names such as request_id, request_type, details, data, metadata, or payload, do not check that set against request.details with issubset(...) or membership tests. Validate those wrapper fields directly on the request object instead.
+If a broken validator already checks wrapper names on the request object, do not keep a second nested check like all(key in request.details for key in required_fields) or required_fields.issubset(request.details) with that same wrapper-field set. Remove the nested wrapper-field check entirely and reserve request.details membership tests for true payload keys only.
 If validate_request(...) accepts the happy-path or batch input shown in the repair context, do not let an internal helper model or dataclass later raise TypeError for extra missing fields. Derive internal-only fields from existing request data or give them safe defaults instead of demanding new payload keys from the input contract.
 If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, do not also pass the same field positionally or as a repeated keyword. Remove duplicated fields from the expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once.
 Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently. Do not leave near-match field names split across model construction and later scoring, audit, or routing helpers.
@@ -292,8 +477,15 @@ Before you finalize, verify this checklist against your own output:
         existing_code = context.get("existing_code", "")
         existing_tests = context.get("existing_tests", "")
         repair_validation_summary = context.get("repair_validation_summary", "")
+        budget_decomposition_brief = context.get("budget_decomposition_brief")
         budget_decomposition_block = _budget_decomposition_block(
-            context.get("budget_decomposition_brief")
+            budget_decomposition_brief
+        )
+        budget_compaction_block = _budget_compaction_section(
+            budget_decomposition_brief,
+            repair_validation_summary,
+            context.get("provider_max_tokens"),
+            existing_code,
         )
         module_name = context.get("module_name", "module")
         module_filename = context.get("module_filename", f"{module_name}.py")
@@ -350,7 +542,7 @@ Before you finalize, verify this checklist against your own output:
                 f"{low_budget_section}{public_contract_section}{context_sections}"
             )
         user_msg = f"""{context_sections}
-{budget_decomposition_block}If a budget decomposition brief is provided, treat it as the compact execution plan for this rewrite. Preserve the required public surface it names, follow its write order, and omit the optional structures it explicitly says to cut unless the task, anchor, or validation summary requires them.
+{budget_decomposition_block}{budget_compaction_block}If a budget decomposition brief is provided, treat it as the compact execution plan for this rewrite. Preserve the required public surface it names, follow its write order, and omit the optional structures it explicitly says to cut unless the task, anchor, or validation summary requires them.
 
 If the previous validation summary lists any failures, treat every listed issue as a hard blocker and fix each one in this new file.
 Use the existing tests context, when provided, as the most specific source of concrete inputs, edge cases, and expected outputs for the repair.
@@ -372,6 +564,9 @@ Do not stop at a nearby constant tweak, renamed helper, or signature change if t
 If a task-level public contract anchor is provided, treat it as higher priority than optional architecture wording and preserve every listed facade, model, method, and constructor field name exactly.
 Do not replace anchored names with guessed aliases, shortened variants, or convenience batch wrappers that are not listed in the anchor.
 If the architecture sketch drifts from the task-level public contract anchor, mentally repair that sketch and implement the anchored public surface instead.
+If a task-level public contract anchor names a primary request model signature like ComplianceRequest(request_id, request_type, details, timestamp), start the rewritten dataclass or __init__ field list with those anchored fields in that exact order before any optional helper-only fields or defaults.
+If that anchored signature includes timestamp, keep timestamp as an explicit constructor parameter. Do not hide it behind init=False or auto-populate it instead of accepting the caller-provided timestamp.
+If repair directives quote an exact broken line, remove or rewrite that line completely. Do not leave the same quoted line anywhere in the final module unless the surrounding logic has been fully repaired and the line is now correct in context.
 If you define dataclasses or typed record models with defaults, keep every required field before any defaulted field so the module imports cleanly and does not fail at import time.
 Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...).
 If the architecture or task description lists entity fields in a conflicting order, treat that list as descriptive only and reorder the actual dataclass fields so required fields still come first.
@@ -379,8 +574,13 @@ Example: even if the architecture says AuditLog(action, timestamp, details), imp
 If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types, and reorder each offending class instead of checking only the anchored request model.
 If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly.
 Keep imports consistent with how you reference names. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime. If you import symbols directly with from datetime import datetime, timedelta, or timezone, call datetime.now(), timedelta(...), or timezone.utc instead of leaving module-qualified or bare references pointing at names you never imported.
+If the anchored public request model includes a timestamp field and the task or repair context shows callers constructing it with datetime objects, keep that public timestamp field datetime-compatible. Do not silently narrow it to int or epoch seconds just because internal code later uses time.time() or datetime.timestamp(); convert internally instead.
+If pytest failures or repair context mention "can't compare offset-naive and offset-aware datetimes", normalize both sides of every datetime comparison before ordering them. Do not compare a naive request timestamp directly against datetime.now(timezone.utc); either compare naive-to-naive or convert both values to the same timezone first.
+If you compare a public datetime timestamp against an epoch-second integer, time.time(), or int(datetime.now(...).timestamp()), convert one side so both operands share the same type before ordering them. Do not compare datetime objects directly against ints.
 If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type, repair the validator so that exact sample is rejected instead of keeping a presence-only required-key check.
 If the request model exposes top-level wrapper fields plus a nested payload container such as details, data, metadata, or payload, validate wrapper fields on the request object and reserve nested required-key checks for actual payload keys. Do not require wrapper fields such as request_id, request_type, details, data, metadata, or payload as keys inside request.details unless the contract explicitly duplicates them there.
+If required_fields or a similar validator set contains wrapper names such as request_id, request_type, details, data, metadata, or payload, do not check that set against request.details with issubset(...) or membership tests. Validate those wrapper fields directly on the request object instead.
+If a broken validator already checks wrapper names on the request object, do not keep a second nested check like all(key in request.details for key in required_fields) or required_fields.issubset(request.details) with that same wrapper-field set. Remove the nested wrapper-field check entirely and reserve request.details membership tests for true payload keys only.
 If validate_request(...) accepts the happy-path or batch input shown in the repair context, do not let an internal helper model or dataclass later raise TypeError for extra missing fields. Derive internal-only fields from existing request data or give them safe defaults instead of demanding new payload keys from the input contract.
 If you construct an internal model from **request.details, **request.data, **payload, or another expanded mapping, do not also pass the same field positionally or as a repeated keyword. Remove duplicated fields from the expanded mapping or switch to explicit keyword construction so each constructor field is bound exactly once.
 Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently. Do not leave near-match field names split across model construction and later scoring, audit, or routing helpers.

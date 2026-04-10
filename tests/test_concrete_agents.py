@@ -446,7 +446,8 @@ def test_code_engineer_agent_prompt_demands_raw_python_output(tmp_path):
     assert "Do not mix object-style APIs with dict membership tests or subscripting" in agent.last_system_prompt
     assert "If you define dataclasses or typed record models with defaults, keep every required non-default field before every defaulted field so the module imports cleanly" in agent.last_system_prompt
     assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_system_prompt
-    assert "Keep imports consistent with the names you reference. If you call datetime.datetime.now() or datetime.date.today(), import datetime." in agent.last_system_prompt
+    assert "Keep imports consistent with the names you reference." in agent.last_system_prompt
+    assert "If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime." in agent.last_system_prompt
     assert "Do not include markdown fences" in agent.last_system_prompt
     assert "Target module: code_implementation.py" in agent.last_user_message
     assert "stay comfortably under that ceiling instead of aiming for the exact limit" in agent.last_user_message
@@ -458,7 +459,8 @@ def test_code_engineer_agent_prompt_demands_raw_python_output(tmp_path):
     assert "you accessed them consistently through attributes instead of mixing in dict membership checks or subscripting" in agent.last_user_message
     assert "If you define dataclasses or typed record models with defaults, keep every required field before any defaulted field so the module imports cleanly and does not fail at import time." in agent.last_user_message
     assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_user_message
-    assert "Keep imports consistent with how you reference names. If you call datetime.datetime.now() or datetime.date.today(), import datetime." in agent.last_user_message
+    assert "Keep imports consistent with how you reference names." in agent.last_user_message
+    assert "If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime." in agent.last_user_message
 
 
 def test_code_reviewer_agent_prompt_includes_tests_and_module_name(tmp_path):

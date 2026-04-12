@@ -385,6 +385,9 @@ def test_qa_tester_agent_execute_uses_default_module_name_and_test_artifact(tmp_
     assert "Do not hand-count prose strings to justify exact numeric assertions" in agent.last_system_prompt
     assert "Do not derive new helper names by adding or removing prefixes or suffixes from documented symbols" in agent.last_system_prompt
     assert "Do not infer derived status transitions, escalation flags, or report counters" in agent.last_system_prompt
+    assert "Do not guess labels such as blocked, escalated, rejected, or conditional_approval from a single suggestive factor" in agent.last_system_prompt
+    assert "omit that argument unless the task explicitly requires collaborator coverage" in agent.last_system_prompt
+    assert "Do not assert validate_request(...) is True and then expect that same sample to fail immediately" in agent.last_system_prompt
     assert "When an API accepts a request, filter, or payload dict with documented required fields" in agent.last_system_prompt
     assert "When a public service or workflow facade exists, limit imports to that facade and directly exchanged domain models" in agent.last_system_prompt
     assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in agent.last_system_prompt

@@ -4,6 +4,11 @@ from kycortex_agents.config import KYCortexConfig, resolve_provider_base_url
 from kycortex_agents.exceptions import ConfigValidationError
 
 
+@pytest.fixture(autouse=True)
+def clear_ollama_host(monkeypatch):
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+
+
 def test_config_accepts_valid_provider_specific_call_budget(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),

@@ -26,6 +26,11 @@ from kycortex_agents.providers import factory as provider_factory
 KYCortexConfig = cast(Any, KYCortexConfig)
 
 
+@pytest.fixture(autouse=True)
+def clear_ollama_host(monkeypatch):
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+
+
 class FakeAPIError(Exception):
     def __init__(self, message: str, status_code: int):
         super().__init__(message)

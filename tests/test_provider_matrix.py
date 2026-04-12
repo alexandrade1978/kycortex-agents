@@ -928,6 +928,8 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "avoid threshold boundary values unless the contract explicitly defines those cutoffs" in tests_task.description
     assert "do not use amount=100 to assert an exact label" in tests_task.description
     assert "do not use borderline counts such as 2 to assert an exact low or medium label" in tests_task.description
+    assert "Do not guess labels such as blocked, escalated, rejected, or conditional_approval from a single suggestive factor" in tests_task.description
+    assert "omit that argument unless the task explicitly requires collaborator coverage" in tests_task.description
     assert "Do not infer `FLAGGED` status, non-zero flagged/report counters" in tests_task.description
     assert "Prefer assertions on directly observable totals, persisted submissions, audit growth, or non-negative scores" in tests_task.description
     assert "do not assume that field was normalized to only an inner sub-dict" in tests_task.description
@@ -939,6 +941,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "should assert 1, not 3" in tests_task.description
     assert "risk_factor=2 and compliance_history=0.1 yield 1.45, not 1.25" in tests_task.description
     assert "Do not assert exact score totals or threshold-triggered boolean flags unless the implementation summary or behavior contract explicitly defines the formula or trigger" in tests_task.description
+    assert "Do not assert validate_request(...) is True and then expect that same sample to fail immediately" in tests_task.description
     assert "If an exact numeric assertion depends on top-level dict size or collection size" in tests_task.description
     assert "do not invent a guessed exact total such as 6.0 or a derived level such as medium" in tests_task.description
     assert "do not pair exact score equality with word-like sample strings such as data, valid_data, or data1" in tests_task.description

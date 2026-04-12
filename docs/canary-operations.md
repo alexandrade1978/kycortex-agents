@@ -40,6 +40,25 @@ Before a canary starts, the operator must have all of the following:
 
 If one person holds multiple roles, that overlap must be recorded in the canary record before traffic starts.
 
+## Current Phase 16 Operating Model
+
+The current repository state is still a maintainer-operated alpha line rather than a staffed multi-team service.
+
+Until a broader operating model is documented in repository-controlled material, the default Phase 16 binding for the current deployment class is:
+
+| Role | Current named owner | Contact path |
+| --- | --- | --- |
+| Release owner | Alexandre Andrade | `alex@kycortex.com` |
+| Canary operator | Alexandre Andrade | `alex@kycortex.com` |
+| Support responder | Alexandre Andrade | `alex@kycortex.com` |
+| Security responder | Alexandre Andrade | `alex@kycortex.com` |
+
+Operational reading:
+
+- this is a single-maintainer operating model
+- any canary record must explicitly note that one person may temporarily hold multiple roles
+- before a broader deployment class is claimed, this section should be updated if responsibility is split across additional operators or support paths
+
 ## Preflight Checklist
 
 Do not begin the canary until every item below is complete:
@@ -81,20 +100,26 @@ Do not treat ad hoc shell history, transient terminal output, or informal chat s
 
 Store the canary packet in a repository-controlled location or release-owned evidence bundle using one directory per candidate.
 
+For the current repository phase, the canonical tracked root is `docs/canary-evidence/`.
+
+Each candidate should use a dedicated directory under that root:
+
+- `docs/canary-evidence/<candidate-sha>/`
+
 Recommended layout:
 
 ```text
-canary-evidence/
-	<candidate-sha>/
-		canary-record.md
-		environment-parity.md
-		provider-health.json
-		workflow-summary.json
-		internal-runtime-telemetry.json
-		validation-artifacts/
-		incident-log.md
-		rollback-log.md
-		completion-review.md
+docs/canary-evidence/
+  <candidate-sha>/
+    canary-record.md
+    environment-parity.md
+    provider-health.json
+    workflow-summary.json
+    internal-runtime-telemetry.json
+    validation-artifacts/
+    incident-log.md
+    rollback-log.md
+    completion-review.md
 ```
 
 Minimum contents:

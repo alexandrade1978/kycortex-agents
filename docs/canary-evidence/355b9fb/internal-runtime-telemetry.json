@@ -1,0 +1,21 @@
+{
+  "candidate_sha": "355b9fb55c7bf2b723927022e87e3edf9c28e63e",
+  "generated_at": "2026-04-12T21:42:54Z",
+  "status": "not-collected",
+  "reason": "canary window not started",
+  "required_source": "ProjectState.internal_runtime_telemetry()",
+  "planned_collection_points": [
+    "before traffic starts",
+    "first accepted workflow",
+    "10 eligible workflows",
+    "25 eligible workflows",
+    "50 eligible workflows",
+    "100 eligible workflows",
+    "canary close"
+  ],
+  "export_status": {
+    "before_traffic": "pending",
+    "checkpoint_exports": [],
+    "final_export": "pending"
+  }
+}

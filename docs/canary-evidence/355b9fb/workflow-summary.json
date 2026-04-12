@@ -1,0 +1,48 @@
+{
+  "candidate_sha": "355b9fb55c7bf2b723927022e87e3edf9c28e63e",
+  "generated_at": "2026-04-12T21:42:54Z",
+  "status": "pre-canary-bootstrap",
+  "release_candidate_baseline": {
+    "phase15_matrix": {
+      "campaign": "full_matrix_validation_2026_04_12_v7",
+      "total_runs": 15,
+      "status_completed": 15,
+      "terminal_outcome_completed": 15,
+      "provider_clean_totals": {
+        "openai": 5,
+        "anthropic": 5,
+        "ollama": 5
+      }
+    },
+    "local_validation_stack": [
+      "ruff",
+      "mypy",
+      "focused regressions",
+      "release metadata check",
+      "release check"
+    ],
+    "github_actions": [
+      {
+        "run": 450,
+        "commit": "cd82118",
+        "conclusion": "success"
+      },
+      {
+        "run": 453,
+        "commit": "355b9fb",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "canary_window": {
+    "status": "not-started",
+    "eligible_workflows_seen": 0,
+    "accepted_workflows": 0,
+    "accepted_workflow_rate": null,
+    "false_success_rate": null,
+    "bounded_termination_rate": null,
+    "autonomous_recovery_rate": null,
+    "resume_integrity_rate": null,
+    "checkpoint_history": []
+  }
+}

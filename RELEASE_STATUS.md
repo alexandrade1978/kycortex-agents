@@ -1,13 +1,13 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.13a2 alpha release.
+This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.13a3 alpha release.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.13a2`
-- Latest released version: `1.0.13a1`
-- Release tag for this version: `v1.0.13a2`
-- Most recent published release tag: `v1.0.13a1`
+- Package version in `pyproject.toml`: `1.0.13a3`
+- Latest released version: `1.0.13a2`
+- Release tag for this version: `v1.0.13a3`
+- Most recent published release tag: `v1.0.13a2`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -35,13 +35,16 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Latest Published Release Verification
 
-- `v1.0.13a1` is the current alpha release tag associated with the latest published repository-owned release state.
-- The immediately preceding published state `v1.0.12` is now the previous maintenance baseline.
-- The next tagged release workflow is expected to attach `kycortex_agents-1.0.13a2-py3-none-any.whl`, `kycortex_agents-1.0.13a2.tar.gz`, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
+- `v1.0.13a2` is the current alpha release tag associated with the latest published repository-owned release state.
+- The immediately preceding published state `v1.0.13a1` is now the previous alpha baseline.
+- The next tagged release workflow is expected to attach `kycortex_agents-1.0.13a3-py3-none-any.whl`, `kycortex_agents-1.0.13a3.tar.gz`, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
 - The same tagged workflow now verifies through the GitHub API that the published release exposes exactly that attached asset set and that the downloaded wheel and source distribution match the attached manifest checksums.
 
 ## Current Release Validation Snapshot
 
+- The clean canonical Phase 15 rerun `full_matrix_validation_2026_04_12_v7` finished with 15 of 15 runs at `status=completed` and 15 of 15 runs at `terminal_outcome=completed` on the current candidate line.
+- The local release-validation line re-cleared after the Phase 15 prompt hardening, including `ruff`, `mypy`, focused regressions, `scripts/release_metadata_check.py`, and `scripts/release_check.py`.
+- GitHub Actions runs `#450`, `#453`, and `#455` all finished green on the current post-`v1.0.13a2` maintenance line.
 - The strongest current full provider-matrix checkpoint `output/provider_matrix_validation_step3o` completed for Anthropic, Ollama, and OpenAI on the current maintenance branch.
 - Dedicated provider reruns `output/provider_matrix_validation_step3n_anthropic` and `output/provider_matrix_validation_step3n_ollama` both completed with `repair_cycle_count=0` after the latest repair-routing hardening.
 - The focused empirical rerun `output/provider_matrix_validation_step3r_openai` completed with `repair_cycle_count=0`, closing the remaining residual OpenAI repair observed after `step3q`.
@@ -51,7 +54,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Release Outcome
 
-The 1.0.13a2 alpha-candidate state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs, while `1.0.13a1` remains the latest released alpha tag.
+The 1.0.13a3 alpha-candidate state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs, while `1.0.13a2` remains the latest released alpha tag.
 
 The repository's public licensing guidance continues to document the AGPL open-source distribution together with a separate commercial licensing path.
 

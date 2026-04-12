@@ -1779,36 +1779,41 @@ class QATesterAgent(BaseAgent):
             }
             missing_field_names: dict[str, list[str]] = {}
             for node in ast.walk(validate_node):
-                target_names: list[str] = []
-                value_node: ast.AST | None = None
+                assignment_target_names: list[str] = []
+                assignment_value_node: ast.AST | None = None
                 if isinstance(node, ast.Assign):
-                    target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
-                    value_node = node.value
+                    assignment_target_names = [
+                        target.id for target in node.targets if isinstance(target, ast.Name)
+                    ]
+                    assignment_value_node = node.value
                 elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                    target_names = [node.target.id]
-                    value_node = node.value
-                string_items = cls._resolved_string_literal_sequence(value_node, literal_collections)
+                    assignment_target_names = [node.target.id]
+                    assignment_value_node = node.value
+                string_items = cls._resolved_string_literal_sequence(
+                    assignment_value_node,
+                    literal_collections,
+                )
                 if string_items:
-                    for name in target_names:
+                    for name in assignment_target_names:
                         if cls._is_required_field_collection_name(name):
                             required_field_names[name] = string_items
                         if cls._is_required_evidence_collection_name(name):
                             required_evidence_field_names[name] = string_items
 
                 if (
-                    len(target_names) == 1
-                    and isinstance(value_node, ast.BinOp)
-                    and isinstance(value_node.op, ast.Sub)
+                    len(assignment_target_names) == 1
+                    and isinstance(assignment_value_node, ast.BinOp)
+                    and isinstance(assignment_value_node.op, ast.Sub)
                 ):
                     field_names = required_field_names.get(
-                        cls._named_reference_identifier(value_node.left),
+                        cls._named_reference_identifier(assignment_value_node.left),
                         [],
                     )
                     if field_names and cls._is_payload_key_set_expression(
-                        value_node.right,
+                        assignment_value_node.right,
                         payload_alias_names,
                     ):
-                        missing_field_names[target_names[0]] = field_names
+                        missing_field_names[assignment_target_names[0]] = field_names
 
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                     if (
@@ -5665,8 +5670,8 @@ Return complete raw Python only."""
         if class_node is None or not dependency_names:
             return {}
 
-        dependency_methods = {name: [] for name in dependency_names}
-        seen_methods = {name: set() for name in dependency_names}
+        dependency_methods: dict[str, list[str]] = {name: [] for name in dependency_names}
+        seen_methods: dict[str, set[str]] = {name: set() for name in dependency_names}
         for node in ast.walk(class_node):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue

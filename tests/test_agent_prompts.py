@@ -1,3 +1,5 @@
+import ast
+
 import pytest
 
 from kycortex_agents.agents.architect import ArchitectAgent
@@ -3130,6 +3132,76 @@ def test_qa_tester_finalizer_adds_matching_datetime_import_for_bare_datetime_ref
     assert "import datetime" in finalized.splitlines()[:3]
 
 
+def test_qa_tester_finalizer_normalizes_direct_datetime_timezone_references():
+    content = (
+        "from datetime import datetime\n"
+        "from service_module import AccessReviewRequest, AccessReviewService\n\n"
+        "def test_happy_path():\n"
+        "    service = AccessReviewService()\n"
+        "    fixed_time = datetime.now(datetime.timezone.utc)\n"
+        "    request = AccessReviewRequest(request_id='req-1', request_type='grant', details={'roles': ['admin']}, timestamp=fixed_time)\n"
+        "    result = service.handle_request(request)\n"
+        "    assert result is None\n"
+    )
+    implementation_code = (
+        "from datetime import datetime, timezone\n\n"
+        "class AccessReviewRequest:\n"
+        "    def __init__(self, request_id, request_type, details, timestamp):\n"
+        "        self.request_id = request_id\n"
+        "        self.request_type = request_type\n"
+        "        self.details = details\n"
+        "        self.timestamp = timestamp\n\n"
+        "class AccessReviewService:\n"
+        "    def handle_request(self, request):\n"
+        "        return None\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="service_module",
+        implementation_code=implementation_code,
+    )
+
+    assert "from datetime import datetime, timezone" in finalized.splitlines()[:3]
+    assert "fixed_time = datetime.now(timezone.utc)" in finalized
+    assert "datetime.timezone" not in finalized
+
+
+def test_qa_tester_finalizer_preserves_module_style_datetime_timezone_references():
+    content = (
+        "import datetime\n"
+        "from service_module import AccessReviewRequest, AccessReviewService\n\n"
+        "def test_happy_path():\n"
+        "    service = AccessReviewService()\n"
+        "    fixed_time = datetime.datetime.now(datetime.timezone.utc)\n"
+        "    request = AccessReviewRequest(request_id='req-1', request_type='grant', details={'roles': ['admin']}, timestamp=fixed_time)\n"
+        "    result = service.handle_request(request)\n"
+        "    assert result is None\n"
+    )
+    implementation_code = (
+        "import datetime\n\n"
+        "class AccessReviewRequest:\n"
+        "    def __init__(self, request_id, request_type, details, timestamp):\n"
+        "        self.request_id = request_id\n"
+        "        self.request_type = request_type\n"
+        "        self.details = details\n"
+        "        self.timestamp = timestamp\n\n"
+        "class AccessReviewService:\n"
+        "    def handle_request(self, request):\n"
+        "        return None\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="service_module",
+        implementation_code=implementation_code,
+    )
+
+    assert "import datetime" in finalized.splitlines()[:3]
+    assert "fixed_time = datetime.datetime.now(datetime.timezone.utc)" in finalized
+    assert "from datetime import datetime, timezone" not in finalized
+
+
 def test_qa_tester_finalizer_rewrites_zero_arg_service_instantiation_with_dependency_stubs():
     implementation_code = (
         "from dataclasses import dataclass, field\n"
@@ -3297,6 +3369,133 @@ def test_qa_tester_finalizer_omits_required_payload_key_for_presence_only_valida
     assert 'approval_metadata' not in finalized
     assert 'requester' in finalized
     assert 'roles' in finalized
+
+
+def test_qa_tester_finalizer_converts_positive_string_payload_fields_from_dict_literals():
+    implementation_code = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n"
+        "from typing import Optional\n\n"
+        "@dataclass\n"
+        "class AccessReviewRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: Optional[str] = None\n"
+        "    timestamp: Optional[datetime] = None\n\n"
+        "class AccessReviewService:\n"
+        "    def validate_request(self, request: AccessReviewRequest) -> bool:\n"
+        "        return isinstance(request.details, str) and bool(request.details.strip())\n"
+    )
+    code_exact_test_contract = (
+        "Exact test contract:\n"
+        "- Allowed production imports: AccessReviewOutcome, AccessReviewRequest, AccessReviewService, RiskScore\n"
+        "- Preferred service or workflow facades: AccessReviewService\n"
+        "- Exact public callables: none\n"
+        "- Exact public class methods: AccessReviewService.handle_request(request), AccessReviewService.validate_request(request)\n"
+        "- Exact constructor fields: AccessReviewOutcome(request_id, outcome, timestamp), AccessReviewRequest(request_id, request_type, details, timestamp), AccessReviewService(), RiskScore(request_id, score, reasons)\n"
+        "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+    )
+    content = (
+        "import pytest\n"
+        "from datetime import datetime\n"
+        "from code_implementation import AccessReviewService, AccessReviewRequest\n\n"
+        "def test_happy_path():\n"
+        "    service = AccessReviewService()\n"
+        "    fixed_time = datetime.now()\n"
+        "    request = AccessReviewRequest(request_id='request_id-1', request_type='grant', details={'privileged_role': True}, timestamp=fixed_time)\n"
+        "    assert service.validate_request(request) is True\n\n"
+        "def test_batch_processing():\n"
+        "    service = AccessReviewService()\n"
+        "    fixed_time = datetime.now()\n"
+        "    requests = [AccessReviewRequest(request_id='request_id-1', request_type='grant', details={'emergency_access': True}, timestamp=fixed_time)]\n"
+        "    for request in requests:\n"
+        "        assert service.validate_request(request) is True\n\n"
+        "def test_validation_failure():\n"
+        "    service = AccessReviewService()\n"
+        "    fixed_time = datetime.now()\n"
+        "    request = AccessReviewRequest(request_id='request_id-2', request_type='grant', details={'source': 'web'}, timestamp=fixed_time)\n"
+        "    assert service.validate_request(request) is False\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="code_implementation",
+        implementation_code=implementation_code,
+        code_exact_test_contract=code_exact_test_contract,
+    )
+
+    assert "details='privileged_role'" in finalized
+    assert "details='emergency_access'" in finalized
+    assert "details={'source': 'web'}" in finalized
+
+
+def test_qa_tester_finalizer_preserves_dict_payloads_when_string_annotation_still_uses_required_keys():
+    implementation_code = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n"
+        "from typing import Optional\n\n"
+        "@dataclass\n"
+        "class ClaimRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: Optional[str] = None\n"
+        "    timestamp: Optional[datetime] = None\n\n"
+        "class ClaimTriageService:\n"
+        "    def validate_request(self, request: ClaimRequest) -> bool:\n"
+        "        required_fields = {'policy_id', 'claim_category', 'claim_amount', 'evidence'}\n"
+        "        return isinstance(request.details, dict) and required_fields.issubset(request.details)\n"
+    )
+    code_exact_test_contract = (
+        "Exact test contract:\n"
+        "- Allowed production imports: ClaimRequest, ClaimTriageService\n"
+        "- Preferred service or workflow facades: ClaimTriageService\n"
+        "- Exact public callables: none\n"
+        "- Exact public class methods: ClaimTriageService.handle_request(request), ClaimTriageService.validate_request(request)\n"
+        "- Exact constructor fields: ClaimRequest(request_id, request_type, details, timestamp)\n"
+        "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+    )
+    content = (
+        "from datetime import datetime\n"
+        "from code_implementation import ClaimTriageService, ClaimRequest\n\n"
+        "def test_happy_path():\n"
+        "    service = ClaimTriageService()\n"
+        "    fixed_time = datetime.now()\n"
+        "    request = ClaimRequest(request_id='request_id-1', request_type='screening', details={'policy_id': 'policy-1'}, timestamp=fixed_time)\n"
+        "    assert service.validate_request(request) is True\n\n"
+        "def test_batch_processing():\n"
+        "    service = ClaimTriageService()\n"
+        "    fixed_time = datetime.now()\n"
+        "    requests = [ClaimRequest(request_id='request_id-1', request_type='screening', details={'claim_amount': 1000}, timestamp=fixed_time)]\n"
+        "    for request in requests:\n"
+        "        assert service.validate_request(request) is True\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="code_implementation",
+        implementation_code=implementation_code,
+        code_exact_test_contract=code_exact_test_contract,
+    )
+
+    assert "details='policy_id claim_category claim_amount evidence'" not in finalized
+    assert "'policy_id': 'policy-1'" in finalized
+    assert "'claim_category': 'value'" in finalized
+    assert "'claim_amount': 1000" in finalized
+    assert "'evidence': 'photo'" in finalized
+
+
+def test_qa_tester_prefers_request_constructor_signature_over_sorted_outcome_constructor():
+    preferred = QATesterAgent._preferred_constructor_signature(
+        [
+            "AccessReviewOutcome(request_id, outcome, timestamp)",
+            "AccessReviewRequest(request_id, request_type, details, timestamp)",
+            "AccessReviewService()",
+            "RiskScore(request_id, score, reasons)",
+        ],
+        ["AccessReviewService"],
+    )
+
+    assert preferred == "AccessReviewRequest(request_id, request_type, details, timestamp)"
 
 
 def test_qa_tester_omits_overreaching_prior_suite_when_runtime_failure_keeps_positive_score_threshold(tmp_path):
@@ -4710,6 +4909,164 @@ def test_qa_tester_detects_non_validation_payload_keys():
     )
 
     assert QATesterAgent._implementation_non_validation_payload_keys(code) == ["evidence", "serial_returns"]
+
+
+def test_qa_tester_extracts_required_payload_keys_from_class_level_constant_reference():
+    code = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n"
+        "from typing import Any\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict[str, Any]\n"
+        "    timestamp: datetime\n\n"
+        "class ReturnScreeningService:\n"
+        "    REQUIRED_DETAIL_KEYS = {'order_id', 'item_sku', 'item_value_usd', 'reason'}\n\n"
+        "    def validate_request(self, request: ReturnCase) -> bool:\n"
+        "        if not isinstance(request.details, dict):\n"
+        "            return False\n"
+        "        missing_keys = self.REQUIRED_DETAIL_KEYS - set(request.details.keys())\n"
+        "        if missing_keys:\n"
+        "            return False\n"
+        "        return True\n"
+    )
+
+    assert QATesterAgent._implementation_required_payload_keys(code) == [
+        "order_id",
+        "item_sku",
+        "item_value_usd",
+        "reason",
+    ]
+
+
+def test_qa_tester_repairs_returns_payload_literals_for_risk_scoring():
+    implementation_code = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n"
+        "from typing import Any\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict[str, Any]\n"
+        "    timestamp: datetime\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    base_score: float\n"
+        "    no_receipt_factor: float\n"
+        "    high_value_factor: float\n"
+        "    condition_mismatch_factor: float\n"
+        "    final_score: float\n\n"
+        "class ReturnScreeningService:\n"
+        "    REQUIRED_DETAIL_KEYS = {'order_id', 'item_sku', 'item_value_usd', 'reason'}\n\n"
+        "    def validate_request(self, request: ReturnCase) -> bool:\n"
+        "        if not isinstance(request.details, dict):\n"
+        "            return False\n"
+        "        missing_keys = self.REQUIRED_DETAIL_KEYS - set(request.details.keys())\n"
+        "        if missing_keys:\n"
+        "            return False\n"
+        "        return True\n\n"
+        "    def _compute_risk_score(self, request: ReturnCase) -> RiskScore:\n"
+        "        score = 0.2\n"
+        "        no_receipt_factor = 0.0\n"
+        "        high_value_factor = 0.0\n"
+        "        condition_mismatch_factor = 0.0\n"
+        "        if request.details.get('receipt_status', 'present') == 'missing':\n"
+        "            no_receipt_factor = 0.2\n"
+        "            score += no_receipt_factor\n"
+        "        item_value = float(request.details.get('item_value_usd', 0))\n"
+        "        if item_value > 500.0 and request.details.get('item_sku', '').startswith('ELEC-'):\n"
+        "            high_value_factor = 0.15\n"
+        "            score += high_value_factor\n"
+        "        reason = request.details.get('reason', '').lower()\n"
+        "        condition_notes = request.details.get('condition_notes', '').lower()\n"
+        "        if 'damage' in reason and 'damage' not in condition_notes:\n"
+        "            condition_mismatch_factor = 0.1\n"
+        "            score += condition_mismatch_factor\n"
+        "        return RiskScore(0.2, no_receipt_factor, high_value_factor, condition_mismatch_factor, score)\n"
+    )
+    content = (
+        "from datetime import datetime, timezone\n"
+        "from service_module import ReturnCase, ReturnScreeningService\n\n"
+        "def test_happy_path():\n"
+        "    service = ReturnScreeningService()\n"
+        "    fixed_time = datetime.now(timezone.utc)\n"
+        "    return_case = ReturnCase(request_id='RET-001', request_type='standard_return', details='order_id item_sku item_value_usd reason customer_history receipt_status condition_notes', timestamp=fixed_time)\n"
+        "    assert service.validate_request(return_case) is True\n\n"
+        "def test_batch_processing():\n"
+        "    service = ReturnScreeningService()\n"
+        "    fixed_time = datetime.now(timezone.utc)\n"
+        "    requests = [\n"
+        "        ReturnCase(request_id='RET-BATCH-001', request_type='standard_return', details='order_id item_sku item_value_usd reason customer_history receipt_status condition_notes', timestamp=fixed_time),\n"
+        "        ReturnCase(request_id='RET-BATCH-002', request_type='damaged_item', details='order_id item_sku item_value_usd reason customer_history receipt_status condition_notes', timestamp=fixed_time),\n"
+        "    ]\n"
+        "    assert len(requests) == 2\n\n"
+        "def test_risk_scoring():\n"
+        "    service = ReturnScreeningService()\n"
+        "    fixed_time = datetime.now(timezone.utc)\n"
+        "    return_case = ReturnCase(request_id='RET-RISK-001', request_type='damaged_item', details={'order_id': 'ORD-RISK-001', 'item_sku': 'ELEC-LAPTOP-001', 'item_value_usd': 1299.99, 'reason': 'damage', 'customer_history': 'cust_risk', 'receipt_status': 'missing', 'condition_notes': 'no visible damage'}, timestamp=fixed_time)\n"
+        "    risk_score = service._compute_risk_score(return_case)\n"
+        "    assert risk_score.final_score > 0.2\n"
+        "    assert risk_score.no_receipt_factor > 0.0\n"
+        "    assert risk_score.condition_mismatch_factor > 0.0\n"
+    )
+    exact_contract = (
+        "Exact test contract:\n"
+        "- Allowed production imports: ReturnCase, ReturnScreeningService\n"
+        "- Preferred service or workflow facades: ReturnScreeningService\n"
+        "- Exact public callables: none\n"
+        "- Exact public class methods: ReturnScreeningService.validate_request(request)\n"
+        "- Exact constructor fields: ReturnCase(request_id, request_type, details, timestamp)\n"
+        "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+    )
+
+    repaired = QATesterAgent._repair_request_payload_literals(
+        content,
+        implementation_code,
+        exact_contract,
+    )
+    repaired_tree = ast.parse(repaired)
+
+    payloads_by_function: dict[str, list[ast.Dict]] = {}
+    for node in repaired_tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        payloads: list[ast.Dict] = []
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
+                continue
+            if not isinstance(child.func, ast.Name) or child.func.id != "ReturnCase":
+                continue
+            detail_value = next((keyword.value for keyword in child.keywords if keyword.arg == "details"), None)
+            if isinstance(detail_value, ast.Dict):
+                payloads.append(detail_value)
+        payloads_by_function[node.name] = payloads
+
+    happy_payload = payloads_by_function["test_happy_path"][0]
+    happy_payload_values = {
+        key.value: ast.literal_eval(value)
+        for key, value in zip(happy_payload.keys, happy_payload.values)
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+    assert happy_payload_values["order_id"] == "ORD-12345"
+    assert happy_payload_values["item_sku"] == "ELEC-LAPTOP-001"
+    assert happy_payload_values["item_value_usd"] == 1299.99
+    assert happy_payload_values["reason"] == "damaged in shipping"
+
+    assert len(payloads_by_function["test_batch_processing"]) == 2
+    assert all(isinstance(payload, ast.Dict) for payload in payloads_by_function["test_batch_processing"])
+
+    risk_payload = payloads_by_function["test_risk_scoring"][0]
+    risk_payload_values = {
+        key.value: ast.literal_eval(value)
+        for key, value in zip(risk_payload.keys, risk_payload.values)
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+    assert risk_payload_values["receipt_status"] == "missing"
+    assert risk_payload_values["reason"] == "damaged in shipping"
+    assert risk_payload_values["condition_notes"] == "sealed box with intact packaging"
 
 
 def test_qa_tester_builds_stable_review_action_assertions_from_result_shape():

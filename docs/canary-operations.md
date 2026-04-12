@@ -52,6 +52,100 @@ Do not begin the canary until every item below is complete:
 - the canary record has an owner, start time, environment description, and eligible workflow-class scope
 - the support path and escalation contacts are current
 
+## Repository-Owned Evidence Collection Path
+
+The canary decision must be reconstructible from repository-owned state and release materials.
+
+Do not treat ad hoc shell history, transient terminal output, or informal chat summaries as the canonical evidence path.
+
+### Evidence Derivation Rules
+
+- derive accepted-outcome and terminal-state claims from persisted workflow state plus repository-owned validation artifacts
+- derive exact runtime, repair, provider, and health telemetry from `ProjectState.internal_runtime_telemetry()` rather than from public snapshots
+- derive public workflow summaries, artifact lists, decisions, and execution-event trails from `ProjectState.snapshot()`
+- use structured summary files such as `run_result.json` and `campaign_summary.json` when a repository-owned empirical runner already emits them
+- if required evidence is missing, stale, or inconsistent across sources, stop promotion and treat the gap as a canary-readiness defect
+
+### Evidence Source Map
+
+| Evidence need | Required source | Why this is the authority |
+| --- | --- | --- |
+| Candidate identity | commit SHA, package version, release materials, and tagged validation output | Binds the canary claim to the exact candidate being reviewed. |
+| Accepted workflow and terminal outcome | persisted `ProjectState` plus `ProjectState.snapshot()` | Snapshot is the normalized public read model for task results, artifacts, decisions, and execution events. |
+| Exact provider/model, latency, repair, and health telemetry | `ProjectState.internal_runtime_telemetry()` | This is the dedicated internal operator surface for exact workflow and task telemetry. |
+| Validation evidence | repository-owned validation artifacts under the configured `output_dir` | Acceptance claims must remain traceable to the same validation artifacts produced during execution. |
+| Broader empirical summaries | `run_result.json`, `campaign_summary.json`, and equivalent structured runner output | These summaries provide compact repository-owned rollups for larger validation sets. |
+| Canary incidents and rollback decisions | canary incident log and rollback decision record | These records preserve operator decisions and customer-impact interpretation in a reviewable form. |
+
+### Canonical Evidence Packet Layout
+
+Store the canary packet in a repository-controlled location or release-owned evidence bundle using one directory per candidate.
+
+Recommended layout:
+
+```text
+canary-evidence/
+	<candidate-sha>/
+		canary-record.md
+		environment-parity.md
+		provider-health.json
+		workflow-summary.json
+		internal-runtime-telemetry.json
+		validation-artifacts/
+		incident-log.md
+		rollback-log.md
+		completion-review.md
+```
+
+Minimum contents:
+
+- `canary-record.md`: owner, scope, candidate, rollback target, environment, and start time
+- `environment-parity.md`: proof that provider, persistence, sandbox, and release settings match the intended deployment class
+- `provider-health.json`: health evidence for every enabled provider at canary start and at each expansion checkpoint
+- `workflow-summary.json`: normalized accepted-outcome and terminal-outcome rollup derived from `snapshot()` or equivalent repository-owned summaries
+- `internal-runtime-telemetry.json`: exact operator telemetry export derived from `internal_runtime_telemetry()`
+- `validation-artifacts/`: retained generated artifacts and validation outputs needed to explain accepted and failed workflows
+- `incident-log.md`: every canary incident, including explicit confirmation that no incident occurred when the log is empty
+- `rollback-log.md`: every rollback or an explicit statement that no rollback was required
+- `completion-review.md`: final canary gate review and decision
+
+### Collection Cadence
+
+Collect evidence at the following points:
+
+- before traffic starts: candidate identity, rollback target, environment parity, initial provider health, and canary record
+- at every expansion checkpoint: updated provider health, workflow summary, internal runtime telemetry, and incident-log review
+- at every rollback decision: rollback record, preserved failing artifacts, and rollback-target smoke validation
+- at canary close: final SLO measurements, incident and rollback summary, and signed completion review
+
+### Minimum Export Procedure
+
+For every review checkpoint, export both the public summary view and the internal telemetry view from the same persisted workflow state.
+
+Example pattern:
+
+```python
+from kycortex_agents import ProjectState
+
+project = ProjectState.load("./state/project_state.sqlite")
+snapshot = project.snapshot()
+internal_runtime_telemetry = project.internal_runtime_telemetry()
+```
+
+Use `snapshot()` for:
+
+- task-result status and accepted-outcome interpretation
+- execution-event trail
+- artifact and decision inventory
+
+Use `internal_runtime_telemetry()` for:
+
+- exact provider and model identities
+- exact duration, latency, attempt, retry, and repair signals
+- exact provider-health rollups used by operators
+
+If these two views disagree materially, stop the canary review and resolve the data-integrity gap before proceeding.
+
 ## Canary Runbook
 
 ### 1. Open the canary record

@@ -1,0 +1,40 @@
+{
+  "candidate_sha": "25633830213afd029418b2a856e097b2403edc4f",
+  "generated_at": "2026-04-12T22:51:27Z",
+  "bundle_status": "pre-canary-bootstrap",
+  "window_started": false,
+  "providers": [
+    {
+      "provider": "openai",
+      "status": "validated-on-published-release-line",
+      "fresh_canary_health_check": "pending",
+      "evidence": {
+        "phase15_matrix_clean_outcomes": "5/5",
+        "supporting_runs": [456, 18],
+        "release_tag": "v1.0.13a3"
+      }
+    },
+    {
+      "provider": "anthropic",
+      "status": "validated-on-published-release-line",
+      "fresh_canary_health_check": "pending",
+      "evidence": {
+        "phase15_matrix_clean_outcomes": "5/5",
+        "supporting_runs": [456, 18],
+        "release_tag": "v1.0.13a3"
+      }
+    },
+    {
+      "provider": "ollama",
+      "status": "validated-on-published-release-line",
+      "fresh_canary_health_check": "pending",
+      "evidence": {
+        "phase15_matrix_clean_outcomes": "5/5",
+        "supporting_runs": [456, 18],
+        "local_baseline_model": "qwen2.5-coder:7b",
+        "release_tag": "v1.0.13a3"
+      }
+    }
+  ],
+  "next_required_update": "Record live canary health before any eligible workflow is admitted."
+}

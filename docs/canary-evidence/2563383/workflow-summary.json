@@ -1,0 +1,59 @@
+{
+  "candidate_sha": "25633830213afd029418b2a856e097b2403edc4f",
+  "generated_at": "2026-04-12T22:51:27Z",
+  "status": "pre-canary-bootstrap",
+  "release_candidate_baseline": {
+    "phase15_matrix": {
+      "campaign": "full_matrix_validation_2026_04_12_v7",
+      "total_runs": 15,
+      "status_completed": 15,
+      "terminal_outcome_completed": 15,
+      "provider_clean_totals": {
+        "openai": 5,
+        "anthropic": 5,
+        "ollama": 5
+      }
+    },
+    "local_validation_stack": [
+      "ruff",
+      "mypy",
+      "focused regressions",
+      "release metadata check",
+      "release check"
+    ],
+    "github_actions": [
+      {
+        "run": 456,
+        "workflow": "CI",
+        "commit": "2563383",
+        "conclusion": "success"
+      },
+      {
+        "run": 18,
+        "workflow": "Release",
+        "ref": "v1.0.13a3",
+        "conclusion": "success"
+      }
+    ],
+    "published_release": {
+      "tag": "v1.0.13a3",
+      "assets": [
+        "kycortex_agents-1.0.13a3-py3-none-any.whl",
+        "kycortex_agents-1.0.13a3.tar.gz",
+        "release-artifact-manifest.json",
+        "release-promotion-summary.json"
+      ]
+    }
+  },
+  "canary_window": {
+    "status": "not-started",
+    "eligible_workflows_seen": 0,
+    "accepted_workflows": 0,
+    "accepted_workflow_rate": null,
+    "false_success_rate": null,
+    "bounded_termination_rate": null,
+    "autonomous_recovery_rate": null,
+    "resume_integrity_rate": null,
+    "checkpoint_history": []
+  }
+}

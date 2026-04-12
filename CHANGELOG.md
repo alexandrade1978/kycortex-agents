@@ -54,8 +54,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Release Readiness Notes
 
-- Current package version is now `1.0.13a3` ahead of the next alpha release.
-- Latest released alpha remains `1.0.13a2` until `v1.0.13a3` is tagged.
+- Current package version is now `1.0.13a4` ahead of the next alpha release.
+- Latest released alpha remains `1.0.13a3` until `v1.0.13a4` is tagged.
 - The unreleased boundary split now contains an explicit breaking public-telemetry removal in the local workspace.
 - The unreleased release-hardening stream now includes repository-owned post-publish GitHub release asset checksum verification.
 

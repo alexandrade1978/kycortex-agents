@@ -22,6 +22,12 @@ Example:
 docs/canary-evidence/be748fa/
 ```
 
+Current released-candidate bundle:
+
+```text
+docs/canary-evidence/2563383/
+```
+
 ## Minimum Contents
 
 Each candidate directory should contain:

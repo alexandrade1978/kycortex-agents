@@ -53,6 +53,13 @@ This file tracks the current repository-owned release state for KYCortex during 
 - Clean-environment GitHub Actions validation is restored after the provider-matrix budget regression test was updated to inject its own fake OpenAI credential instead of depending on ambient developer-shell secrets.
 - The live local smoke run `output/release_user_smoke_ollama_live` completed with `repair_cycle_count=0`, and a clean-install smoke of the released package also generated a valid artifact against the same local Ollama runtime.
 
+## Current Canary Status
+
+- Phase 16 canary traffic for the published `v1.0.13a3` line opened on `2026-04-12T23:13:35.578054Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status.
+- The controlled `release-user-smoke` checkpoint admitted 6 eligible workflows on the live maintainer-operated canary host and externally validated 5 of them successfully.
+- `run_06_ollama` triggered a zero-budget false success: the workflow reached `completed` with `acceptance_criteria_met=true`, but the generated artifact omitted the required `main()` entrypoint.
+- The canary window is therefore aborted and further traffic is frozen until the defect is fixed, the rollback baseline is re-smoke-validated, and a fresh candidate restarts Phase 16.
+
 ## Release Outcome
 
 The 1.0.13a4 alpha-candidate state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs, while `1.0.13a3` remains the latest released alpha tag.

@@ -1,0 +1,164 @@
+{
+  "candidate_sha": "25633830213afd029418b2a856e097b2403edc4f",
+  "window_started_at": "2026-04-12T23:13:35.578054Z",
+  "checkpoint_status": "aborted_zero_budget_false_success",
+  "checkpoint_captured_at": "2026-04-12T23:16:16.292317+00:00",
+  "eligible_workflow_class": "release-user-smoke",
+  "artifact_validation_rule": {
+    "required_functions": [
+      "calculate_budget_balance",
+      "main"
+    ],
+    "sample_balance_expected": 2650.0
+  },
+  "summary": {
+    "eligible_workflows_seen": 6,
+    "accepted_workflows": 5,
+    "accepted_workflow_rate": 83.333,
+    "false_success_count": 1,
+    "false_success_rate": 16.667,
+    "bounded_termination_rate": 100.0,
+    "autonomous_recovery_rate": null,
+    "resume_integrity_rate": null,
+    "provider_success_counts": {
+      "openai": 2,
+      "anthropic": 2,
+      "ollama": 1
+    },
+    "provider_false_success_counts": {
+      "ollama": 1
+    },
+    "first_accepted_state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_openai/project_state.json",
+    "first_accepted_completed_at": "2026-04-12T23:13:58.456333+00:00",
+    "incident_state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_06_ollama/project_state.json",
+    "incident_completed_at": "2026-04-12T23:16:16.292317+00:00"
+  },
+  "runs": [
+    {
+      "ordinal": 1,
+      "provider": "openai",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_openai/project_state.json",
+      "updated_at": "2026-04-12T23:13:58.456333+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_openai/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0
+      }
+    },
+    {
+      "ordinal": 2,
+      "provider": "anthropic",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_anthropic/project_state.json",
+      "updated_at": "2026-04-12T23:14:11.115641+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_anthropic/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0
+      }
+    },
+    {
+      "ordinal": 3,
+      "provider": "ollama",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_ollama/project_state.json",
+      "updated_at": "2026-04-12T23:14:25.678784+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_ollama/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0
+      }
+    },
+    {
+      "ordinal": 4,
+      "provider": "openai",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_04_openai/project_state.json",
+      "updated_at": "2026-04-12T23:15:46.967307+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_04_openai/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0
+      }
+    },
+    {
+      "ordinal": 5,
+      "provider": "anthropic",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_05_anthropic/project_state.json",
+      "updated_at": "2026-04-12T23:16:00.117479+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_05_anthropic/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0
+      }
+    },
+    {
+      "ordinal": 6,
+      "provider": "ollama",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_06_ollama/project_state.json",
+      "updated_at": "2026-04-12T23:16:16.292317+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": false,
+      "false_success": true,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_06_ollama/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": false,
+        "sample_balance": 2650.0
+      }
+    }
+  ]
+}

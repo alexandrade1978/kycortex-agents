@@ -1,0 +1,54 @@
+{
+  "candidate_sha": "25633830213afd029418b2a856e097b2403edc4f",
+  "captured_at": "2026-04-12T23:12:49.569692Z",
+  "host": {
+    "hostname": "alex-kycortex",
+    "platform": "Linux-6.17.0-20-generic-x86_64-with-glibc2.39",
+    "python_version": "3.12.3",
+    "provider_env_file_present": true,
+    "openai_key_present": true,
+    "anthropic_key_present": true
+  },
+  "provider_health": {
+    "anthropic": {
+      "active_check": true,
+      "backend_reachable": true,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0,
+      "latency_ms": 505.799,
+      "model": "claude-haiku-4-5-20251001",
+      "model_ready": true,
+      "provider": "anthropic",
+      "retryable": false,
+      "status": "healthy",
+      "timeout_seconds": 5.0
+    },
+    "ollama": {
+      "active_check": true,
+      "backend_reachable": true,
+      "base_url": "http://127.0.0.1:11434",
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0,
+      "latency_ms": 12.414,
+      "model": "qwen2.5-coder:7b",
+      "model_ready": true,
+      "provider": "ollama",
+      "retryable": false,
+      "status": "healthy",
+      "timeout_seconds": 5.0
+    },
+    "openai": {
+      "active_check": true,
+      "backend_reachable": true,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0,
+      "latency_ms": 935.405,
+      "model": "gpt-4o-mini",
+      "model_ready": true,
+      "provider": "openai",
+      "retryable": false,
+      "status": "healthy",
+      "timeout_seconds": 5.0
+    }
+  }
+}

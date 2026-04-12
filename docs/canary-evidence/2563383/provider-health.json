@@ -1,40 +1,78 @@
 {
   "candidate_sha": "25633830213afd029418b2a856e097b2403edc4f",
-  "generated_at": "2026-04-12T22:51:27Z",
-  "bundle_status": "pre-canary-bootstrap",
-  "window_started": false,
+  "generated_at": "2026-04-12T23:16:16.292317Z",
+  "bundle_status": "aborted_zero_budget_false_success",
+  "window_started": true,
+  "window_started_at": "2026-04-12T23:13:35.578054Z",
+  "preflight_checkpoint": {
+    "captured_at": "2026-04-12T23:12:49.569692Z",
+    "host": "alex-kycortex",
+    "artifact": "validation-artifacts/preflight-provider-health-2026-04-12T23-12-49Z.json",
+    "all_providers_healthy": true
+  },
   "providers": [
     {
       "provider": "openai",
-      "status": "validated-on-published-release-line",
-      "fresh_canary_health_check": "pending",
+      "model": "gpt-4o-mini",
+      "status": "healthy_preflight_and_checkpoint_clean",
+      "fresh_canary_health_check": "healthy",
+      "latency_ms": 935.405,
+      "workflow_outcomes": {
+        "accepted": 2,
+        "false_success": 0
+      },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
         "supporting_runs": [456, 18],
-        "release_tag": "v1.0.13a3"
+        "release_tag": "v1.0.13a3",
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_04_openai/project_state.json"
+        ]
       }
     },
     {
       "provider": "anthropic",
-      "status": "validated-on-published-release-line",
-      "fresh_canary_health_check": "pending",
+      "model": "claude-haiku-4-5-20251001",
+      "status": "healthy_preflight_and_checkpoint_clean",
+      "fresh_canary_health_check": "healthy",
+      "latency_ms": 505.799,
+      "workflow_outcomes": {
+        "accepted": 2,
+        "false_success": 0
+      },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
         "supporting_runs": [456, 18],
-        "release_tag": "v1.0.13a3"
+        "release_tag": "v1.0.13a3",
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_05_anthropic/project_state.json"
+        ]
       }
     },
     {
       "provider": "ollama",
-      "status": "validated-on-published-release-line",
-      "fresh_canary_health_check": "pending",
+      "model": "qwen2.5-coder:7b",
+      "status": "healthy_preflight_then_false_success_during_canary",
+      "fresh_canary_health_check": "healthy",
+      "latency_ms": 12.414,
+      "base_url": "http://127.0.0.1:11434",
+      "workflow_outcomes": {
+        "accepted": 1,
+        "false_success": 1
+      },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
         "supporting_runs": [456, 18],
         "local_baseline_model": "qwen2.5-coder:7b",
-        "release_tag": "v1.0.13a3"
+        "release_tag": "v1.0.13a3",
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/release_user_smoke_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/run_06_ollama/project_state.json"
+        ]
       }
     }
   ],
-  "next_required_update": "Record live canary health before any eligible workflow is admitted."
+  "next_required_update": "Canary aborted after zero-budget false success on run_06_ollama; do not admit more traffic until the defect is fixed and a new candidate is cut."
 }

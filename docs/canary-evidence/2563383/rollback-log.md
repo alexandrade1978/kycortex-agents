@@ -1,6 +1,6 @@
 # Rollback Log - 2563383
 
-Status: no rollback executed
+Status: rollback decision recorded
 
 Planned rollback target:
 
@@ -9,4 +9,4 @@ Planned rollback target:
 
 ## Entries
 
-- 2026-04-12: No rollback executed. The canary window has not started and no eligible workflow traffic has been admitted.
+- 2026-04-12T23:16:16.292317+00:00: Canary aborted after zero-budget false success on `run_06_ollama`. No broader customer-facing traffic remained to drain, so no live environment cutover back to `v1.0.13a2` was required. Further canary admission is frozen and any resumed staging must restart from the rollback baseline after the defect is fixed.

@@ -1,19 +1,22 @@
 # Environment Parity - 2563383
 
-Status: preflight drafted, canary admission blocked until the final live environment values are recorded
+Status: live host pinned and first checkpoint recorded; canary aborted after zero-budget false-success incident on `run_06_ollama`
 
-This document records what is already known for the current single-maintainer canary class and what still must be pinned before traffic starts.
+This document records the concrete live canary environment values that were observed before traffic started and during the first controlled checkpoint.
 
 | Surface | Intended setting | Current evidence | Status |
 | --- | --- | --- | --- |
 | Candidate identity | Commit `25633830213afd029418b2a856e097b2403edc4f`, tag `v1.0.13a3`, package `1.0.13a3` | GitHub verified commit and tag, GitHub Actions CI run `#456` green, GitHub Actions Release run `#18` green | confirmed |
-| Rollback target | Commit `b2dc9931d12c5d31651a97bba8c99e767b582ff8`, tag `v1.0.13a2`, package `1.0.13a2` | Previous published release plus GitHub Actions Release run `#17` green | confirmed |
-| Provider set | OpenAI, Anthropic, and Ollama with the maintainer-operated baseline model | Phase 15 canonical matrix `v7` cleared 5 of 5 per provider on the release-candidate line and CI run `#456` stayed green on commit `2563383` | provisional |
-| Persistence backend | Same persisted `ProjectState` backend and artifact retention used by the live canary class | Final live backend choice is not yet written into this record | pending |
-| Sandbox policy | Same sandbox restrictions as published `v1.0.13a3` | Policy exists in the candidate line, but the live canary host record is still missing | pending |
-| Release settings | Same retry, repair, and release settings as the published `v1.0.13a3` artifact | Published artifact exists, but the live host values are not yet recorded in one place | provisional |
-| Telemetry access | Operator can export both `snapshot()` and `internal_runtime_telemetry()` from the same persisted state | Export procedure is documented in `../canary-operations.md`; live host path is still missing | pending |
+| Rollback target | Commit `b2dc9931d12c5d31651a97bba8c99e767b582ff8`, tag `v1.0.13a2`, package `1.0.13a2` | Previous published release plus GitHub Actions Release run `#17` green; broader traffic never advanced past the controlled canary subset, so no live cutover back to this baseline was required | confirmed baseline / not activated |
+| Canary host | Native maintainer-operated Linux host `alex-kycortex` | Preflight provider health captured on `Linux-6.17.0-20-generic-x86_64-with-glibc2.39`, Python `3.12.3`, with the maintainer provider env file present before traffic | confirmed |
+| Provider set | OpenAI `gpt-4o-mini`, Anthropic `claude-haiku-4-5-20251001`, and Ollama `qwen2.5-coder:7b` at `http://127.0.0.1:11434` | Preflight provider health was healthy for all three providers at `2026-04-12T23:12:49.569692Z`; the first 6 controlled workflows hit the same provider/model set | confirmed |
+| Persistence backend | Same persisted `ProjectState` backend and artifact retention used by the live canary class | File-backed `ProjectState` JSON persisted under `/home/tupira/Dados/experiments/kycortex_agents/canary_2563383_2026_04_13/eligible_workflows/.../project_state.json` | confirmed |
+| Sandbox policy | Same sandbox restrictions as published `v1.0.13a3` | The first checkpoint used the released candidate defaults with no environment-specific sandbox override recorded in the workflow configs | provisional but consistent |
+| Release settings | Same retry, repair, and release settings as the published `v1.0.13a3` artifact | Controlled `release-user-smoke` runs used `workflow_failure_policy=continue`, `workflow_max_repair_cycles=1`, `temperature=0.0`, `max_tokens=700`, `timeout_seconds=180.0`, and Ollama `num_ctx=16384` | confirmed |
+| Telemetry access | Operator can export both `snapshot()` and `internal_runtime_telemetry()` from the same persisted state | The first accepted OpenAI checkpoint and the aborting Ollama incident checkpoint were both exported from repository-owned state files | confirmed |
 
-## Admission Rule
+## Admission Outcome
 
-Do not start the canary until every provisional or pending item above has been converted into a concrete environment record for the actual canary host.
+The canary window opened after the live host, provider set, persistence path, and operator telemetry path were all pinned into repository-owned evidence.
+
+Expansion is now frozen because `run_06_ollama` triggered a zero-budget false-success incident. Any resumed canary must use a fixed candidate and restart from a fresh preflight.

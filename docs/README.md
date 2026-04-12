@@ -18,6 +18,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - [.github/workflows/release.yml](../.github/workflows/release.yml): tagged-release workflow that revalidates the repository, builds distribution artifacts, and publishes GitHub releases for version tags.
 - [architecture.md](architecture.md): runtime layers, workflow execution model, persistence design, and supported extension seams.
 - [go-live-policy.md](go-live-policy.md): repository-owned SLOs, error budgets, and the staged gates that separate package releases from production go-live claims.
+- [canary-operations.md](canary-operations.md): repository-controlled Phase 16 operator runbook, rollback rules, escalation policy, incident templates, and canary evidence checklist.
 - [providers.md](providers.md): provider selection, backend-specific configuration, metadata behavior, and extension guidance.
 - [workflows.md](workflows.md): task definitions, dependency scheduling, retry/resume behavior, and workflow troubleshooting.
 - [persistence.md](persistence.md): state-file backends, save/load semantics, resume behavior, and snapshot inspection.
@@ -64,6 +65,7 @@ This repository keeps its primary user and contributor guidance in a small set o
 - Use [examples/example_release_user_smoke.py](../examples/example_release_user_smoke.py) when you want a realistic local end-to-end creation smoke that also validates the generated Python artifact.
 - Use [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py) when collecting comparable full-workflow evidence with repair cycles enabled across the currently available providers.
 - Use [go-live-policy.md](go-live-policy.md) when deciding whether a successful package release is also ready for canary or production deployment.
+- Use [canary-operations.md](canary-operations.md) when preparing a controlled canary rollout, documenting rollback decisions, or collecting the Phase 16 evidence packet.
 - Use [examples/example_test_mode.py](../examples/example_test_mode.py) when validating workflow behavior locally without calling a live provider.
 - Use [examples/example_complex_workflow.py](../examples/example_complex_workflow.py) when learning how converging DAGs expose merged upstream artifacts and decisions to a downstream agent.
 - Use [examples/example_failure_recovery.py](../examples/example_failure_recovery.py) when learning how persisted failed workflows reload and continue under `workflow_resume_policy="resume_failed"`.

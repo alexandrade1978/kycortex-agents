@@ -1,5 +1,6 @@
 import ast
 import re
+from typing import cast
 
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
@@ -1342,7 +1343,7 @@ class QATesterAgent(BaseAgent):
             return False
         return bool(
             re.search(
-                r"(?<![A-Za-z0-9_\.])datetime(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(",
+                r"(?<![A-Za-z0-9_\.])datetime(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*\(",
                 content,
             )
         )
@@ -1439,10 +1440,14 @@ class QATesterAgent(BaseAgent):
             return [], None
 
         comprehension = generator.generators[0]
-        if not isinstance(comprehension.target, ast.Name) or not isinstance(comprehension.iter, ast.Name):
+        if not isinstance(comprehension.target, ast.Name):
             return [], None
 
-        field_names = required_field_names.get(comprehension.iter.id, [])
+        field_names: list[str] = []
+        if isinstance(comprehension.iter, ast.Name):
+            field_names = required_field_names.get(comprehension.iter.id, [])
+        else:
+            field_names = cls._string_literal_sequence(comprehension.iter)
         if not field_names:
             return [], None
 
@@ -4998,6 +5003,651 @@ Return complete raw Python only."""
         restored_user_message = self._restore_preserved_sections(abstracted_user_message, preserved_sections)
         return abstracted_system_prompt, restored_user_message
 
+    @staticmethod
+    def _content_has_matching_random_import(content: object) -> bool:
+        if not isinstance(content, str) or not content.strip():
+            return False
+        return bool(
+            re.search(
+                r"^\s*(?:from\s+random\s+import\s+[^\n]*\brandom\b|import\s+random\b)",
+                content,
+                flags=re.MULTILINE,
+            )
+        )
+
+    @staticmethod
+    def _content_has_random_reference(content: object) -> bool:
+        if not isinstance(content, str) or not content.strip():
+            return False
+        return bool(
+            re.search(
+                r"(?<![A-Za-z0-9_\.])random(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*\(",
+                content,
+            )
+        )
+
+    @classmethod
+    def _datetime_import_line_for_content(cls, content: object, implementation_code: object = "") -> str:
+        if isinstance(content, str) and content.strip():
+            if "datetime." in content:
+                return "import datetime"
+            if re.search(r"(?<![A-Za-z0-9_])timezone\b", content):
+                return "from datetime import datetime, timezone"
+        return cls._fixed_time_import_line(implementation_code)
+
+    @staticmethod
+    def _random_import_line_for_content(content: object) -> str:
+        if isinstance(content, str) and "random." in content:
+            return "import random"
+        return "from random import random"
+
+    @staticmethod
+    def _ensure_import_line(content: object, import_line: str) -> str:
+        if not isinstance(content, str) or not content.strip() or not import_line:
+            return content if isinstance(content, str) else ""
+
+        existing_lines = content.splitlines()
+        if import_line in existing_lines:
+            return content
+
+        lines = list(existing_lines)
+        insert_at = 0
+        if lines and lines[0].startswith("#!"):
+            insert_at = 1
+
+        while insert_at < len(lines):
+            stripped = lines[insert_at].strip()
+            if not stripped:
+                break
+            if stripped.startswith(("import ", "from ")):
+                insert_at += 1
+                continue
+            break
+
+        lines.insert(insert_at, import_line)
+        return "\n".join(lines)
+
+    @classmethod
+    def _ensure_module_import_symbol(cls, content: object, module_name: str, symbol: str) -> str:
+        if not isinstance(content, str) or not content.strip() or not module_name or not symbol:
+            return content if isinstance(content, str) else ""
+
+        pattern = re.compile(rf"^from\s+{re.escape(module_name)}\s+import\s+(.+)$")
+        lines = content.splitlines()
+        for index, line in enumerate(lines):
+            match = pattern.match(line.strip())
+            if match is None:
+                continue
+            imported_symbols = [item.strip() for item in match.group(1).split(",") if item.strip()]
+            if symbol not in imported_symbols:
+                imported_symbols.append(symbol)
+                lines[index] = f"from {module_name} import {', '.join(imported_symbols)}"
+            return "\n".join(lines)
+
+        return cls._ensure_import_line(content, f"from {module_name} import {symbol}")
+
+    @classmethod
+    def _implementation_class_node(
+        cls,
+        implementation_code: object,
+        class_name: str,
+    ) -> ast.ClassDef | None:
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None or not class_name:
+            return None
+
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                return node
+        return None
+
+    @classmethod
+    def _constructor_signature_by_name(cls, code_exact_test_contract: object, class_name: str) -> str:
+        constructor_refs = cls._comma_separated_items(
+            cls._contract_line_value(code_exact_test_contract, "Exact constructor fields")
+        )
+        for signature in constructor_refs:
+            candidate_name, _ = cls._signature_name_and_params(signature)
+            if candidate_name == class_name:
+                return signature
+        return ""
+
+    @staticmethod
+    def _clone_expression_node(node: ast.AST) -> ast.AST:
+        return ast.parse(ast.unparse(node), mode="eval").body
+
+    @classmethod
+    def _call_argument_nodes_by_parameter(
+        cls,
+        signature: str,
+        call_node: ast.Call,
+    ) -> dict[str, ast.AST]:
+        _, parameters = cls._signature_name_and_params(signature)
+        argument_nodes: dict[str, ast.AST] = {}
+        keyword_nodes = {
+            keyword.arg: keyword.value
+            for keyword in call_node.keywords
+            if isinstance(keyword.arg, str) and keyword.arg
+        }
+        for index, parameter in enumerate(parameters):
+            parameter_name = cls._parameter_name(parameter)
+            if not parameter_name:
+                continue
+            if parameter_name in keyword_nodes:
+                argument_nodes[parameter_name] = keyword_nodes[parameter_name]
+                continue
+            if index < len(call_node.args):
+                argument_nodes[parameter_name] = call_node.args[index]
+        return argument_nodes
+
+    @classmethod
+    def _set_call_argument_value(
+        cls,
+        signature: str,
+        call_node: ast.Call,
+        parameter_name: str,
+        value_node: ast.AST,
+    ) -> None:
+        expression_node = cast(ast.expr, value_node)
+        _, parameters = cls._signature_name_and_params(signature)
+        for keyword in call_node.keywords:
+            if keyword.arg != parameter_name:
+                continue
+            keyword.value = expression_node
+            return
+        for index, parameter in enumerate(parameters):
+            if cls._parameter_name(parameter) != parameter_name:
+                continue
+            if index < len(call_node.args):
+                call_node.args[index] = expression_node
+                return
+            call_node.keywords.append(ast.keyword(arg=parameter_name, value=expression_node))
+            return
+
+    @classmethod
+    def _payload_dict_with_required_keys(
+        cls,
+        payload_node: ast.AST | None,
+        required_payload_keys: list[str],
+        *,
+        request_type_node: ast.AST | None = None,
+        omitted_key: str = "",
+    ) -> ast.Dict:
+        ordered_entries: list[tuple[str, ast.expr]] = []
+        seen_keys: set[str] = set()
+        if isinstance(payload_node, ast.Dict):
+            for key_node, value_node in zip(payload_node.keys, payload_node.values):
+                if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                    continue
+                key_name = key_node.value
+                if key_name == omitted_key:
+                    continue
+                ordered_entries.append((key_name, cast(ast.expr, cls._clone_expression_node(value_node))))
+                seen_keys.add(key_name)
+
+        for required_key in required_payload_keys:
+            if required_key == omitted_key or required_key in seen_keys:
+                continue
+            if required_key == "request_type" and request_type_node is not None:
+                value_node = cast(ast.expr, cls._clone_expression_node(request_type_node))
+            else:
+                value_node = cast(ast.expr, ast.parse(
+                    cls._sample_literal_for_required_key(required_key),
+                    mode="eval",
+                ).body)
+            ordered_entries.append((required_key, value_node))
+            seen_keys.add(required_key)
+
+        return ast.Dict(
+            keys=[ast.Constant(value=key_name) for key_name, _ in ordered_entries],
+            values=[value_node for _, value_node in ordered_entries],
+        )
+
+    @classmethod
+    def _repair_request_payload_literals(
+        cls,
+        content: object,
+        implementation_code: object,
+        code_exact_test_contract: object,
+    ) -> str:
+        if not isinstance(content, str) or not content.strip():
+            return content if isinstance(content, str) else ""
+
+        required_payload_keys = cls._implementation_required_payload_keys(implementation_code)
+        if not required_payload_keys:
+            return content
+
+        preferred_facades = cls._comma_separated_items(
+            cls._contract_line_value(code_exact_test_contract, "Preferred service or workflow facades")
+        )
+        constructor_refs = cls._comma_separated_items(
+            cls._contract_line_value(code_exact_test_contract, "Exact constructor fields")
+        )
+        request_signature = cls._preferred_constructor_signature(constructor_refs, preferred_facades)
+        request_model_name, _ = cls._signature_name_and_params(request_signature)
+        payload_parameter_names = cls._payload_like_parameter_names(request_signature)
+        if not request_signature or not request_model_name or not payload_parameter_names:
+            return content
+
+        omitted_key = cls._validation_failure_omitted_payload_key(implementation_code)
+
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return content
+
+        changed = False
+        payload_parameter_name = payload_parameter_names[0]
+
+        class RequestPayloadFixer(ast.NodeTransformer):
+            def __init__(self) -> None:
+                self.current_function_name = ""
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+                previous_name = self.current_function_name
+                self.current_function_name = node.name
+                self.generic_visit(node)
+                self.current_function_name = previous_name
+                return node
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:
+                previous_name = self.current_function_name
+                self.current_function_name = node.name
+                self.generic_visit(node)
+                self.current_function_name = previous_name
+                return node
+
+            def visit_Call(self, node: ast.Call) -> ast.AST:
+                nonlocal changed
+                self.generic_visit(node)
+                if cls._call_expression_name(node) != request_model_name:
+                    return node
+
+                argument_nodes = cls._call_argument_nodes_by_parameter(request_signature, node)
+                payload_node = argument_nodes.get(payload_parameter_name)
+                request_type_node = argument_nodes.get("request_type")
+                if self.current_function_name == "test_validation_failure":
+                    if isinstance(payload_node, ast.Dict):
+                        payload_keys = {
+                            key.value
+                            for key in payload_node.keys
+                            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                        }
+                        if not set(required_payload_keys).issubset(payload_keys):
+                            return node
+                    replacement = cls._payload_dict_with_required_keys(
+                        payload_node,
+                        required_payload_keys,
+                        request_type_node=request_type_node,
+                        omitted_key=omitted_key,
+                    )
+                    cls._set_call_argument_value(
+                        request_signature,
+                        node,
+                        payload_parameter_name,
+                        replacement,
+                    )
+                    changed = True
+                    return node
+
+                if self.current_function_name not in {"test_happy_path", "test_batch_processing"}:
+                    return node
+
+                replacement = cls._payload_dict_with_required_keys(
+                    payload_node,
+                    required_payload_keys,
+                    request_type_node=request_type_node,
+                )
+                replacement_keys = {
+                    key.value
+                    for key in replacement.keys
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                }
+                existing_keys = set()
+                if isinstance(payload_node, ast.Dict):
+                    existing_keys = {
+                        key.value
+                        for key in payload_node.keys
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    }
+                if replacement_keys != existing_keys:
+                    cls._set_call_argument_value(
+                        request_signature,
+                        node,
+                        payload_parameter_name,
+                        replacement,
+                    )
+                    changed = True
+                return node
+
+        fixer = RequestPayloadFixer()
+        updated_tree = fixer.visit(tree)
+        if not changed:
+            return content
+        ast.fix_missing_locations(updated_tree)
+        return ast.unparse(updated_tree) + "\n"
+
+    @classmethod
+    def _service_dependency_method_map(
+        cls,
+        implementation_code: object,
+        service_class_name: str,
+        dependency_names: list[str],
+    ) -> dict[str, list[str]]:
+        class_node = cls._implementation_class_node(implementation_code, service_class_name)
+        if class_node is None or not dependency_names:
+            return {}
+
+        dependency_methods = {name: [] for name in dependency_names}
+        seen_methods = {name: set() for name in dependency_names}
+        for node in ast.walk(class_node):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            owner = node.func.value
+            if not (
+                isinstance(owner, ast.Attribute)
+                and isinstance(owner.value, ast.Name)
+                and owner.value.id == "self"
+            ):
+                continue
+            dependency_name = owner.attr
+            if dependency_name not in dependency_methods:
+                continue
+            method_name = node.func.attr
+            if method_name in seen_methods[dependency_name]:
+                continue
+            seen_methods[dependency_name].add(method_name)
+            dependency_methods[dependency_name].append(method_name)
+        return dependency_methods
+
+    @classmethod
+    def _inferred_forwarded_argument_annotation(
+        cls,
+        method_node: ast.FunctionDef | ast.AsyncFunctionDef,
+        method_nodes: dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+        variable_name: str,
+    ) -> str:
+        for node in ast.walk(method_node):
+            if not isinstance(node, ast.Call):
+                continue
+            if not (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "self"
+            ):
+                continue
+            target_method = method_nodes.get(node.func.attr)
+            if target_method is None:
+                continue
+            target_parameters = [
+                argument
+                for argument in target_method.args.args
+                if isinstance(argument, ast.arg) and argument.arg != "self"
+            ]
+            for index, argument in enumerate(node.args):
+                if not isinstance(argument, ast.Name) or argument.id != variable_name:
+                    continue
+                if index >= len(target_parameters):
+                    continue
+                annotation_name = cls._annotation_name(target_parameters[index].annotation)
+                if annotation_name:
+                    return annotation_name
+            for keyword in node.keywords:
+                if keyword.arg is None:
+                    continue
+                if not isinstance(keyword.value, ast.Name) or keyword.value.id != variable_name:
+                    continue
+                for parameter in target_parameters:
+                    if parameter.arg != keyword.arg:
+                        continue
+                    annotation_name = cls._annotation_name(parameter.annotation)
+                    if annotation_name:
+                        return annotation_name
+        return ""
+
+    @classmethod
+    def _service_dependency_return_type_map(
+        cls,
+        implementation_code: object,
+        service_class_name: str,
+        dependency_names: list[str],
+    ) -> dict[tuple[str, str], str]:
+        class_node = cls._implementation_class_node(implementation_code, service_class_name)
+        if class_node is None or not dependency_names:
+            return {}
+
+        method_nodes = {
+            child.name: child
+            for child in class_node.body
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        return_types: dict[tuple[str, str], str] = {}
+        for method_node in method_nodes.values():
+            for node in ast.walk(method_node):
+                if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                    continue
+                if not isinstance(node.targets[0], ast.Name):
+                    continue
+                if not isinstance(node.value, ast.Call) or not isinstance(node.value.func, ast.Attribute):
+                    continue
+                owner = node.value.func.value
+                if not (
+                    isinstance(owner, ast.Attribute)
+                    and isinstance(owner.value, ast.Name)
+                    and owner.value.id == "self"
+                ):
+                    continue
+                dependency_name = owner.attr
+                dependency_method = node.value.func.attr
+                if dependency_name not in dependency_names:
+                    continue
+                key = (dependency_name, dependency_method)
+                if key in return_types:
+                    continue
+                annotation_name = cls._inferred_forwarded_argument_annotation(
+                    method_node,
+                    method_nodes,
+                    node.targets[0].id,
+                )
+                if annotation_name:
+                    return_types[key] = annotation_name
+        return return_types
+
+    @classmethod
+    def _stub_return_expression_for_class(
+        cls,
+        class_name: str,
+        code_exact_test_contract: object,
+    ) -> str:
+        signature = cls._constructor_signature_by_name(code_exact_test_contract, class_name)
+        if not signature:
+            return "None"
+
+        _, parameters = cls._signature_name_and_params(signature)
+        argument_overrides: dict[str, str] = {}
+        for index, parameter in enumerate(parameters):
+            parameter_name = cls._parameter_name(parameter)
+            if not parameter_name:
+                continue
+            lowered = parameter_name.lower()
+            if lowered == "request_id" or lowered.endswith("_id"):
+                argument_overrides[parameter_name] = (
+                    "args[0].request_id if args and hasattr(args[0], 'request_id') else 'request_id-1'"
+                )
+            elif lowered == "score" or lowered.endswith("_score"):
+                argument_overrides[parameter_name] = "0.0"
+            elif lowered in {"reasons", "errors", "factors", "items", "results"}:
+                argument_overrides[parameter_name] = "[]"
+            elif lowered in {"outcome", "status", "action", "result"}:
+                argument_overrides[parameter_name] = '"approved"'
+            elif lowered in {"details", "data", "metadata", "payload", "context"}:
+                argument_overrides[parameter_name] = "{}"
+            elif lowered in {"timestamp", "created_at", "updated_at"} or lowered.endswith(
+                ("_timestamp", "_time", "_date", "_at")
+            ):
+                argument_overrides[parameter_name] = "getattr(args[0], 'timestamp', None)"
+            else:
+                argument_overrides[parameter_name] = cls._sample_literal_for_parameter(
+                    parameter_name,
+                    index=index,
+                )
+
+        _, constructor_expression = cls._constructor_call_expression(
+            signature,
+            argument_overrides=argument_overrides,
+        )
+        return constructor_expression or "None"
+
+    @classmethod
+    def _dependency_stub_expression(
+        cls,
+        dependency_name: str,
+        method_names: list[str],
+        return_type_map: dict[tuple[str, str], str],
+        code_exact_test_contract: object,
+    ) -> str:
+        stub_class_name = "_" + "".join(part.capitalize() for part in dependency_name.split("_")) + "Stub"
+        if not method_names:
+            return (
+                f'type("{stub_class_name}", (), '
+                '{"__getattr__": lambda self, _name: (lambda *args, **kwargs: None)})()'
+            )
+
+        stub_entries: list[str] = []
+        for method_name in method_names:
+            return_class_name = return_type_map.get((dependency_name, method_name), "")
+            if return_class_name:
+                return_expression = cls._stub_return_expression_for_class(
+                    return_class_name,
+                    code_exact_test_contract,
+                )
+            else:
+                lowered = method_name.lower()
+                if lowered.startswith(("is_", "has_", "can_", "validate")):
+                    return_expression = "True"
+                elif any(token in lowered for token in ("score", "risk", "count", "total", "size")):
+                    return_expression = "0.0"
+                elif any(token in lowered for token in ("list", "fetch", "find", "load", "collect")):
+                    return_expression = "[]"
+                else:
+                    return_expression = "None"
+            stub_entries.append(
+                f'"{method_name}": lambda self, *args, **kwargs: {return_expression}'
+            )
+
+        return f'type("{stub_class_name}", (), {{{", ".join(stub_entries)}}})()'
+
+    @classmethod
+    def _repair_zero_arg_service_instantiations(
+        cls,
+        content: object,
+        *,
+        module_name: str,
+        implementation_code: object,
+        code_exact_test_contract: object,
+    ) -> str:
+        if not isinstance(content, str) or not content.strip():
+            return content if isinstance(content, str) else ""
+
+        preferred_facades = cls._comma_separated_items(
+            cls._contract_line_value(code_exact_test_contract, "Preferred service or workflow facades")
+        )
+        finalized = content
+        module_symbols = set(cls._module_defined_symbol_names(implementation_code))
+        for facade_name in preferred_facades:
+            service_signature = cls._constructor_signature_by_name(code_exact_test_contract, facade_name)
+            if not service_signature:
+                continue
+            _, service_parameters = cls._signature_name_and_params(service_signature)
+            if not service_parameters:
+                continue
+            zero_arg_pattern = re.compile(rf"\b{re.escape(facade_name)}\(\s*\)")
+            if zero_arg_pattern.search(finalized) is None:
+                continue
+
+            dependency_names = [
+                cls._parameter_name(parameter)
+                for parameter in service_parameters
+                if cls._parameter_name(parameter)
+            ]
+            dependency_methods = cls._service_dependency_method_map(
+                implementation_code,
+                facade_name,
+                dependency_names,
+            )
+            dependency_return_types = cls._service_dependency_return_type_map(
+                implementation_code,
+                facade_name,
+                dependency_names,
+            )
+            argument_overrides = {
+                dependency_name: cls._dependency_stub_expression(
+                    dependency_name,
+                    dependency_methods.get(dependency_name, []),
+                    dependency_return_types,
+                    code_exact_test_contract,
+                )
+                for dependency_name in dependency_names
+            }
+            _, replacement = cls._constructor_call_expression(
+                service_signature,
+                argument_overrides=argument_overrides,
+            )
+            if not replacement:
+                continue
+
+            finalized = zero_arg_pattern.sub(lambda _match: replacement, finalized)
+            needed_symbols = {
+                symbol
+                for symbol in dependency_return_types.values()
+                if symbol and symbol in module_symbols
+            }
+            for symbol in sorted(needed_symbols):
+                finalized = cls._ensure_module_import_symbol(finalized, module_name, symbol)
+
+        return finalized
+
+    @classmethod
+    def _finalize_generated_test_suite(
+        cls,
+        content: object,
+        *,
+        module_name: str,
+        implementation_code: object,
+        code_exact_test_contract: object = "",
+    ) -> str:
+        if not isinstance(content, str) or not content.strip():
+            return content if isinstance(content, str) else ""
+
+        finalized = cls._repair_zero_arg_service_instantiations(
+            content,
+            module_name=module_name,
+            implementation_code=implementation_code,
+            code_exact_test_contract=code_exact_test_contract,
+        )
+        finalized = cls._repair_request_payload_literals(
+            finalized,
+            implementation_code,
+            code_exact_test_contract,
+        )
+        if (
+            cls._content_has_bare_datetime_reference(finalized)
+            and not cls._content_has_matching_datetime_import(finalized)
+        ):
+            finalized = cls._ensure_import_line(
+                finalized,
+                cls._datetime_import_line_for_content(finalized, implementation_code),
+            )
+        if (
+            cls._content_has_random_reference(finalized)
+            and not cls._content_has_matching_random_import(finalized)
+        ):
+            finalized = cls._ensure_import_line(
+                finalized,
+                cls._random_import_line_for_content(finalized),
+            )
+        return finalized
+
     def run_with_input(self, agent_input: AgentInput) -> str:
         implementation_code = self.require_context_value(agent_input, "code")
         existing_tests = agent_input.context.get("existing_tests", "")
@@ -5318,7 +5968,13 @@ Module file: {module_filename}
                 exact_rebuild_surface_block,
             ],
         )
-        return self.chat(system_prompt, user_msg)
+        response = self.chat(system_prompt, user_msg)
+        return self._finalize_generated_test_suite(
+            response,
+            module_name=module_name,
+            implementation_code=implementation_code,
+            code_exact_test_contract=code_exact_test_contract,
+        )
 
     def run(self, task_description: str, context: dict) -> str:
         implementation_code = context.get("code", "")
@@ -5609,4 +6265,10 @@ Module file: {module_filename}
                 exact_rebuild_surface_block,
             ],
         )
-        return self.chat(system_prompt, user_msg)
+        response = self.chat(system_prompt, user_msg)
+        return self._finalize_generated_test_suite(
+            response,
+            module_name=module_name,
+            implementation_code=implementation_code,
+            code_exact_test_contract=code_exact_test_contract,
+        )

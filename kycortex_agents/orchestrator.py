@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
     resource = None  # type: ignore[assignment]
 
 from kycortex_agents.agents.dependency_manager import extract_requirement_name, is_provenance_unsafe_requirement
+from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
@@ -1367,6 +1368,22 @@ class Orchestrator:
 
         test_artifact_content = self._artifact_content(output, ArtifactType.TEST)
         test_content = test_artifact_content or output.raw_content
+        code_exact_test_contract = context.get("code_exact_test_contract", "")
+        finalized_test_content = QATesterAgent._finalize_generated_test_suite(
+            test_content,
+            module_name=module_name,
+            implementation_code=code_content,
+            code_exact_test_contract=code_exact_test_contract if isinstance(code_exact_test_contract, str) else "",
+        )
+        if finalized_test_content != test_content:
+            output.raw_content = finalized_test_content
+            output.summary = self._summarize_output(finalized_test_content)
+            for artifact in output.artifacts:
+                if artifact.artifact_type != ArtifactType.TEST:
+                    continue
+                artifact.content = finalized_test_content
+            test_artifact_content = finalized_test_content if test_artifact_content else test_artifact_content
+            test_content = finalized_test_content
         if not self._should_validate_test_content(test_content, has_typed_artifact=bool(test_artifact_content)):
             return
         test_filename = self._artifact_filename(output, ArtifactType.TEST, default_filename="tests_tests.py")

@@ -3100,6 +3100,205 @@ def test_qa_tester_uses_module_style_datetime_fixed_time_for_timezone_aware_rece
     assert QATesterAgent._fixed_time_assignment_line(module_style_recent_code) == "fixed_time = datetime.datetime(2024, 1, 1, 0, 0, 0)"
 
 
+def test_qa_tester_finalizer_adds_matching_datetime_import_for_bare_datetime_references():
+    content = (
+        "import pytest\n"
+        "from service_module import ComplianceRequest, ComplianceService\n\n"
+        "def test_happy_path():\n"
+        "    fixed_time = datetime.datetime.now()\n"
+        "    request = ComplianceRequest(request_id='req-1', request_type='screening', details={'source': 'web'}, timestamp=fixed_time)\n"
+        "    result = ComplianceService().handle_request(request)\n"
+        "    assert result is not None\n"
+    )
+    implementation_code = (
+        "import datetime\n\n"
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, request_type, details, timestamp):\n"
+        "        self.request_id = request_id\n"
+        "        self.request_type = request_type\n"
+        "        self.details = details\n"
+        "        self.timestamp = timestamp\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="service_module",
+        implementation_code=implementation_code,
+    )
+
+    assert QATesterAgent._content_has_matching_datetime_import(finalized)
+    assert "import datetime" in finalized.splitlines()[:3]
+
+
+def test_qa_tester_finalizer_rewrites_zero_arg_service_instantiation_with_dependency_stubs():
+    implementation_code = (
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n\n"
+        "@dataclass(frozen=True)\n"
+        "class AccessReviewRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "@dataclass(frozen=True)\n"
+        "class RiskScore:\n"
+        "    request_id: str\n"
+        "    score: float\n"
+        "    reasons: list[str] = field(default_factory=list)\n\n"
+        "class AccessReviewService:\n"
+        "    def __init__(self, risk_scorer, audit_logger):\n"
+        "        self.risk_scorer = risk_scorer\n"
+        "        self.audit_logger = audit_logger\n\n"
+        "    def handle_request(self, request: AccessReviewRequest):\n"
+        "        risk_score = self.risk_scorer.calculate_risk(request)\n"
+        "        outcome = self.determine_outcome(risk_score)\n"
+        "        self.audit_logger.log_outcome(outcome)\n"
+        "        return outcome\n\n"
+        "    def determine_outcome(self, risk_score: RiskScore):\n"
+        "        return risk_score\n"
+    )
+    code_exact_test_contract = (
+        "Exact test contract:\n"
+        "- Allowed production imports: AccessReviewRequest, AccessReviewService, RiskScore\n"
+        "- Preferred service or workflow facades: AccessReviewService\n"
+        "- Exact public callables: none\n"
+        "- Exact public class methods: AccessReviewService.handle_request(request)\n"
+        "- Exact constructor fields: AccessReviewRequest(request_id, request_type, details, timestamp), RiskScore(request_id, score, reasons), AccessReviewService(risk_scorer, audit_logger)\n"
+        "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+    )
+    content = (
+        "from service_module import AccessReviewRequest, AccessReviewService\n\n"
+        "def test_happy_path():\n"
+        "    service = AccessReviewService()\n"
+        "    request = AccessReviewRequest(request_id='req-1', request_type='grant', details={'roles': ['admin']}, timestamp=1.0)\n"
+        "    result = service.handle_request(request)\n"
+        "    assert result.request_id == request.request_id\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="service_module",
+        implementation_code=implementation_code,
+        code_exact_test_contract=code_exact_test_contract,
+    )
+
+    assert "AccessReviewService()" not in finalized
+    assert "from service_module import AccessReviewRequest, AccessReviewService, RiskScore" in finalized
+    assert 'risk_scorer=type("_RiskScorerStub"' in finalized
+    assert '"calculate_risk": lambda self, *args, **kwargs: RiskScore(' in finalized
+    assert 'request_id=args[0].request_id if args and hasattr(args[0], \'request_id\') else \'request_id-1\'' in finalized
+    assert 'audit_logger=type("_AuditLoggerStub"' in finalized
+    assert '"log_outcome": lambda self, *args, **kwargs: None' in finalized
+
+
+def test_qa_tester_finalizer_completes_required_payload_keys_for_valid_processing_paths():
+    implementation_code = (
+        "from dataclasses import dataclass, field\n"
+        "import datetime\n\n"
+        "@dataclass\n"
+        "class ClaimRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime.datetime = field(default_factory=datetime.datetime.now)\n\n"
+        "class ClaimTriageService:\n"
+        "    def validate_request(self, request: ClaimRequest) -> bool:\n"
+        "        required_fields = {'request_type', 'details'}\n"
+        "        if not required_fields.issubset(request.details):\n"
+        "            return False\n"
+        "        if request.details['request_type'] not in ['car accident', 'home damage']:\n"
+        "            return False\n"
+        "        if 'loss_amount' not in request.details or not isinstance(request.details['loss_amount'], (int, float)):\n"
+        "            return False\n"
+        "        return True\n"
+    )
+    code_exact_test_contract = (
+        "Exact test contract:\n"
+        "- Allowed production imports: ClaimRequest, ClaimResult, ClaimTriageService\n"
+        "- Preferred service or workflow facades: ClaimTriageService\n"
+        "- Exact public callables: none\n"
+        "- Exact public class methods: ClaimTriageService.handle_request(request), ClaimTriageService.validate_request(request)\n"
+        "- Exact constructor fields: ClaimRequest(request_id, request_type, details, timestamp)\n"
+        "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+    )
+    content = (
+        "import pytest\n"
+        "from code_implementation import ClaimTriageService, ClaimRequest, ClaimResult\n"
+        "import datetime\n\n"
+        "def test_happy_path():\n"
+        "    service = ClaimTriageService()\n"
+        "    request = ClaimRequest(request_id='request_id-1', request_type='car accident', details={'loss_amount': 5000, 'duplicate_claim': False}, timestamp=datetime.datetime.now())\n"
+        "    result = service.handle_request(request)\n"
+        "    assert result.request_id == request.request_id\n\n"
+        "def test_batch_processing():\n"
+        "    service = ClaimTriageService()\n"
+        "    requests = [\n"
+        "        ClaimRequest(request_id='request_id-1', request_type='car accident', details={'loss_amount': 5000}, timestamp=datetime.datetime.now()),\n"
+        "    ]\n"
+        "    for request in requests:\n"
+        "        service.handle_request(request)\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="code_implementation",
+        implementation_code=implementation_code,
+        code_exact_test_contract=code_exact_test_contract,
+    )
+
+    assert "'request_type': 'car accident'" in finalized
+    assert "'details': {'value': 1}" in finalized
+    assert "'loss_amount': 5000" in finalized
+
+
+def test_qa_tester_finalizer_omits_required_payload_key_for_presence_only_validation_failures():
+    implementation_code = (
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n\n"
+        "@dataclass(frozen=True)\n"
+        "class AccessReviewRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+        "class AccessReviewService:\n"
+        "    def validate_request(self, request: AccessReviewRequest) -> None:\n"
+        "        if not all(key in request.details for key in ['requester', 'roles', 'approval_metadata']):\n"
+        "            raise ValueError('Invalid request details')\n"
+    )
+    code_exact_test_contract = (
+        "Exact test contract:\n"
+        "- Allowed production imports: AccessReviewRequest, AccessReviewService\n"
+        "- Preferred service or workflow facades: AccessReviewService\n"
+        "- Exact public callables: none\n"
+        "- Exact public class methods: AccessReviewService.handle_request(request), AccessReviewService.validate_request(request)\n"
+        "- Exact constructor fields: AccessReviewRequest(request_id, request_type, details, timestamp)\n"
+        "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+    )
+    content = (
+        "import pytest\n"
+        "from datetime import datetime\n"
+        "from code_implementation import AccessReviewService, AccessReviewRequest\n\n"
+        "def test_validation_failure():\n"
+        "    service = AccessReviewService()\n"
+        "    fixed_time = datetime.now()\n"
+        "    request = AccessReviewRequest(request_id='request_id-1', request_type='role_assignment', details={'requester': 'user1', 'roles': [], 'approval_metadata': {'approved_by': 'admin'}}, timestamp=fixed_time)\n"
+        "    with pytest.raises(ValueError):\n"
+        "        service.handle_request(request)\n"
+    )
+
+    finalized = QATesterAgent._finalize_generated_test_suite(
+        content,
+        module_name="code_implementation",
+        implementation_code=implementation_code,
+        code_exact_test_contract=code_exact_test_contract,
+    )
+
+    assert 'approval_metadata' not in finalized
+    assert 'requester' in finalized
+    assert 'roles' in finalized
+
+
 def test_qa_tester_omits_overreaching_prior_suite_when_runtime_failure_keeps_positive_score_threshold(tmp_path):
     agent = CaptureQATesterAgent(build_config(tmp_path))
 

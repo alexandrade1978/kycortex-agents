@@ -383,7 +383,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--ollama-base-url",
-        default="http://127.0.0.1:11435",
+        default="http://127.0.0.1:11434",
         help="Ollama base URL used for availability checks, model resolution, and workflow execution.",
     )
     parser.add_argument(

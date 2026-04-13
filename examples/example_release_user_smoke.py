@@ -1,5 +1,6 @@
 import argparse
 import ast
+import inspect
 import importlib.util
 from pathlib import Path
 import py_compile
@@ -15,6 +16,16 @@ DEFAULT_MODELS = {
     "anthropic": "claude-haiku-4-5-20251001",
     "ollama": "qwen2.5-coder:7b",
 }
+
+RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR = (
+    "\n\nPublic contract anchor:\n"
+    "- Primary workflow function: calculate_budget_balance(income: float, expenses: list[float]) -> float\n"
+    "- Supporting helper: format_currency(amount: float) -> str\n"
+    "- Required CLI entrypoint: main() -> None with a literal if __name__ == \"__main__\": block\n"
+    "- Keep these names exact. Do not rename calculate_budget_balance(...), format_currency(...), or main().\n"
+    "- Do not wrap income and expenses in a request object, dataclass, dict, tuple, or alternate signature. Keep calculate_budget_balance(...) callable with exactly two arguments named income and expenses.\n"
+    "- Use only the Python standard library."
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -106,6 +117,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
                 "`calculate_budget_balance(income: float, expenses: list[float]) -> float`, one formatting helper, and a minimal CLI entrypoint. "
                 "Use only the Python standard library and do not introduce third-party runtime dependencies or imports. "
                 "Keep the architecture practical and compact."
+                f"{RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR}"
             ),
             assigned_to="architect",
         )
@@ -118,6 +130,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
                 "Implement the planned single-file Python budget planner using only the standard library. "
                 "Do not add third-party runtime dependencies or imports such as click, typer, requests, rich, or pydantic. "
                 "The module must expose `calculate_budget_balance(income: float, expenses: list[float]) -> float` and a working `main()` CLI entrypoint."
+                f"{RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR}"
             ),
             assigned_to="code_engineer",
             dependencies=["arch"],
@@ -128,7 +141,8 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
             id="review",
             title="Review",
             description=(
-                "Review the generated budget planner for correctness, API clarity, obvious edge cases, and strict compliance with the standard-library-only dependency contract."
+                "Review the generated budget planner for correctness, API clarity, obvious edge cases, strict compliance with the standard-library-only dependency contract, and exact preservation of the anchored public function plus CLI entrypoint."
+                f"{RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR}"
             ),
             assigned_to="code_reviewer",
             dependencies=["code"],
@@ -197,6 +211,26 @@ def _missing_symbols_from_validation_error(validation_error: str) -> list[str]:
     if "main()" in validation_error:
         missing_symbols.append("main")
     return missing_symbols
+
+
+def _has_expected_function_signature(function: object, expected_parameter_names: tuple[str, ...]) -> bool:
+    if not callable(function):
+        return False
+
+    signature = inspect.signature(function)
+    parameters = list(signature.parameters.values())
+    if len(parameters) != len(expected_parameter_names):
+        return False
+
+    for parameter, expected_name in zip(parameters, expected_parameter_names, strict=True):
+        if parameter.name != expected_name:
+            return False
+        if parameter.kind not in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}:
+            return False
+        if parameter.default is not inspect.Parameter.empty:
+            return False
+
+    return True
 
 
 def _public_validation_error_message(error: Exception, artifact_path: Path | None) -> str:
@@ -296,10 +330,17 @@ def _validate_generated_code(task: Task, output_dir: str) -> tuple[float, str]:
     calculate_budget_balance = getattr(module, "calculate_budget_balance", None)
     if not callable(calculate_budget_balance):
         raise RuntimeError("Generated code did not expose calculate_budget_balance().")
+    if not _has_expected_function_signature(calculate_budget_balance, ("income", "expenses")):
+        raise RuntimeError(
+            "Generated code exposed calculate_budget_balance() with an incompatible signature. "
+            "Expected calculate_budget_balance(income: float, expenses: list[float])."
+        )
 
     main = getattr(module, "main", None)
     if not callable(main):
         raise RuntimeError("Generated code did not expose main().")
+    if not _has_expected_function_signature(main, ()):
+        raise RuntimeError("Generated code exposed main() with an incompatible signature. Expected main() -> None.")
 
     sample_balance = calculate_budget_balance(5000.0, [1200.0, 700.0, 450.0])
     if not isinstance(sample_balance, (int, float)):

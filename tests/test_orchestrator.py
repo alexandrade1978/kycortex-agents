@@ -2042,6 +2042,46 @@ def test_build_code_validation_summary_includes_task_public_contract_preflight(t
     assert "Task public contract mismatches: missing public facade ComplianceIntakeService, missing required surface ComplianceIntakeService.handle_request" in summary
 
 
+def test_task_public_contract_preflight_accepts_annotated_function_anchor(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    task = Task(
+        id="code",
+        title="Implementation",
+        description=(
+            "Implement a compact budget planner.\n\n"
+            "Public contract anchor:\n"
+            "- Primary workflow function: calculate_budget_balance(income: float, expenses: list[float]) -> float\n"
+            "- Supporting helper: format_currency(amount: float) -> str\n"
+            "- Required CLI entrypoint: main() -> None with a literal if __name__ == \"__main__\": block"
+        ),
+        assigned_to="code_engineer",
+    )
+
+    code_analysis = orchestrator._analyze_python_module(
+        "import sys\n\n"
+        "def calculate_budget_balance(income: float, expenses: list[float]) -> float:\n"
+        "    return income - sum(expenses)\n\n"
+        "def format_currency(amount: float) -> str:\n"
+        "    return f'${amount:,.2f}'\n\n"
+        "def main():\n"
+        "    print(format_currency(calculate_budget_balance(5000.0, [1200.0, 700.0, 450.0])))\n\n"
+        "if __name__ == \"__main__\":\n"
+        "    main()\n"
+    )
+
+    preflight = orchestrator._task_public_contract_preflight(task, code_analysis)
+
+    assert preflight is not None
+    assert preflight["required_surfaces"] == [
+        "calculate_budget_balance(income: float, expenses: list[float]) -> float",
+        "format_currency(amount: float) -> str",
+        'main() -> None with a literal if __name__ == "__main__": block',
+    ]
+    assert preflight["issues"] == []
+    assert preflight["passed"] is True
+
+
 def test_build_code_public_api_marks_constructor_fields_explicit_for_tests(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

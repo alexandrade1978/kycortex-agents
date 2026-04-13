@@ -1809,6 +1809,64 @@ def test_release_user_smoke_validation_rejects_third_party_imports(tmp_path):
     assert "customer-secret-root" not in str(exc_info.value)
 
 
+def test_release_user_smoke_build_project_includes_public_contract_anchor(tmp_path):
+    module = _load_example_module(
+        "example_release_user_smoke_public_contract_anchor_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    project = module.build_project(str(tmp_path / "release-user-smoke"), "ollama")
+
+    for task in project.tasks:
+        assert "Public contract anchor:" in task.description
+        assert "- Primary workflow function: calculate_budget_balance(income: float, expenses: list[float]) -> float" in task.description
+        assert "- Required CLI entrypoint: main() -> None with a literal if __name__ == \"__main__\": block" in task.description
+        assert "- Do not wrap income and expenses in a request object, dataclass, dict, tuple, or alternate signature." in task.description
+
+
+def test_release_user_smoke_validation_rejects_incompatible_calculate_budget_balance_signature(tmp_path):
+    module = _load_example_module(
+        "example_release_user_smoke_signature_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    output_dir = tmp_path / "customer-secret-root" / "release-user-smoke"
+    artifact_path = output_dir / "artifacts" / "budget_planner.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "from dataclasses import dataclass\n\n"
+        "@dataclass(frozen=True)\n"
+        "class BudgetBalanceRequest:\n"
+        "    income: float\n"
+        "    expenses: list[float]\n\n"
+        "def calculate_budget_balance(request: BudgetBalanceRequest) -> float:\n"
+        "    return request.income - sum(request.expenses)\n\n"
+        "def format_currency(amount: float) -> str:\n"
+        "    return f'${amount:,.2f}'\n\n"
+        "def main() -> None:\n"
+        "    print('ok')\n",
+        encoding="utf-8",
+    )
+
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement the budget planner",
+        assigned_to="code_engineer",
+        status="done",
+    )
+    code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
+
+    with pytest.raises(RuntimeError) as exc_info:
+        module._validate_generated_code(code_task, str(output_dir))
+
+    assert str(exc_info.value) == (
+        "Generated code exposed calculate_budget_balance() with an incompatible signature. "
+        "Expected calculate_budget_balance(income: float, expenses: list[float])."
+    )
+    assert "customer-secret-root" not in str(exc_info.value)
+
+
 def test_release_user_smoke_validation_failure_rewrites_project_state(tmp_path, monkeypatch):
     module = _load_example_module(
         "example_release_user_smoke_state_rewrite_test",

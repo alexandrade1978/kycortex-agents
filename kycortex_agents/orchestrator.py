@@ -1196,7 +1196,11 @@ class Orchestrator:
             return None
 
         class_map = code_analysis.get("classes") or {}
-        function_names = {item["name"] for item in code_analysis.get("functions") or []}
+        function_map = {
+            item["name"]: item
+            for item in code_analysis.get("functions") or []
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
         issues: list[str] = []
         public_facade = ""
         primary_request_model = ""
@@ -1248,12 +1252,24 @@ class Orchestrator:
             owner_name, callable_name, _ = self._parse_task_public_contract_surface(normalized_surface)
             if owner_name:
                 class_info = class_map.get(owner_name)
-                exposed_method_names = set((class_info or {}).get("method_signatures") or {})
-                if not isinstance(class_info, dict) or callable_name not in exposed_method_names:
+                method_signatures = (class_info or {}).get("method_signatures") or {}
+                method_info = method_signatures.get(callable_name) if isinstance(method_signatures, dict) else None
+                if not isinstance(class_info, dict) or not isinstance(method_info, dict):
                     issues.append(f"missing required surface {owner_name}.{callable_name}")
                 continue
-            if callable_name not in function_names:
+            function_info = function_map.get(callable_name)
+            if not isinstance(function_info, dict):
                 issues.append(f"missing required surface {callable_name}")
+                continue
+            _, _, expected_params = self._parse_task_public_contract_surface(normalized_surface)
+            actual_params = list(function_info.get("params") or [])
+            if expected_params and actual_params[: len(expected_params)] != expected_params:
+                issues.append(
+                    f"required surface {callable_name} must expose parameters ({', '.join(expected_params)})"
+                )
+                continue
+            if callable_name == "main" and "__main__" in normalized_surface and not code_analysis.get("has_main_guard", False):
+                issues.append("missing required surface main guard")
 
         return {
             "anchor_present": True,
@@ -1266,15 +1282,26 @@ class Orchestrator:
         }
 
     def _parse_task_public_contract_surface(self, surface: str) -> tuple[Optional[str], str, list[str]]:
+        normalized_surface = surface.strip()
         match = re.match(
-            r"^(?:(?P<owner>[A-Za-z_][A-Za-z0-9_]*)\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>.*)\)$",
-            surface.strip(),
+            r"^(?:(?P<owner>[A-Za-z_][A-Za-z0-9_]*)\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>[^)]*)\)",
+            normalized_surface,
         )
         if not match:
-            return None, surface.strip(), []
+            return None, normalized_surface, []
 
         args_text = match.group("args").strip()
-        args = [part.strip() for part in args_text.split(",") if part.strip()] if args_text else []
+        args: list[str] = []
+        if args_text:
+            for part in args_text.split(","):
+                cleaned = part.strip()
+                if not cleaned:
+                    continue
+                cleaned = cleaned.split("=", 1)[0].strip()
+                cleaned = cleaned.split(":", 1)[0].strip()
+                cleaned = cleaned.lstrip("*")
+                if cleaned and cleaned not in {"/", "*"}:
+                    args.append(cleaned)
         return match.group("owner"), match.group("name"), args
 
     def _execute_generated_module_import(self, module_filename: str, code_content: str) -> Dict[str, Any]:

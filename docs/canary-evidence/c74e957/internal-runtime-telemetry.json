@@ -1,0 +1,240 @@
+{
+  "candidate_sha": "c74e957ae76e9605d21b91ccc6d36bd1f25be16c",
+  "generated_at": "2026-04-13T02:35:04.405847+00:00",
+  "status": "collected_first_checkpoint_window_open",
+  "required_source": "ProjectState.internal_runtime_telemetry()",
+  "planned_collection_points": [
+    "before traffic starts",
+    "first accepted workflow",
+    "10 eligible workflows or first incident",
+    "50 eligible workflows",
+    "100 eligible workflows or 7 consecutive days",
+    "final canary close"
+  ],
+  "checkpoints": {
+    "collected": [
+      {
+        "checkpoint": "first_accepted_workflow_openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+        "collected_at": "2026-04-13T02:35:04.405847+00:00",
+        "workflow": {
+          "acceptance_evaluation": {
+            "accepted": true,
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "pending_task_ids": [],
+            "policy": "all_tasks",
+            "reason": "all_evaluated_tasks_done",
+            "required_task_ids": [],
+            "skipped_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "attempt_count": 3,
+          "duration_ms": {
+            "avg": 5604.818,
+            "count": 3,
+            "max": 5623.344,
+            "min": 5577.26,
+            "total": 16814.454
+          },
+          "error_summary": {
+            "fallback_error_count": 0,
+            "final_error_count": 0
+          },
+          "fallback_summary": {
+            "entry_count": 0,
+            "providers": [],
+            "statuses": [],
+            "task_count": 0
+          },
+          "final_providers": [
+            "openai"
+          ],
+          "observed_providers": [
+            "openai"
+          ],
+          "provider_health_summary": {
+            "openai": {
+              "active_health_check_count": 3,
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "retryable_failure_count": 0,
+              "status_counts": {
+                "healthy": 3
+              }
+            }
+          },
+          "provider_summary": {
+            "openai": {
+              "attempt_count": 3,
+              "duration_ms": {
+                "avg": 5604.818,
+                "count": 3,
+                "max": 5623.344,
+                "min": 5577.26,
+                "total": 16814.454
+              },
+              "failure_count": 0,
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "retry_attempt_count": 0,
+              "success_count": 3,
+              "task_count": 3,
+              "usage": {
+                "input_tokens": 6755,
+                "output_tokens": 598,
+                "total_tokens": 7353
+              }
+            }
+          },
+          "repair_summary": {
+            "budget_remaining": 1,
+            "cycle_count": 0,
+            "failed_task_count": 0,
+            "failure_category_counts": {},
+            "history_count": 0,
+            "max_cycles": 1,
+            "reason_counts": {}
+          },
+          "resume_summary": {
+            "last_resumed_at": null,
+            "reason_counts": {},
+            "resume_event_count": 0,
+            "resumed_task_count": 0,
+            "unique_task_count": 0
+          },
+          "retry_attempt_count": 0,
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "usage": {
+            "input_tokens": 6755,
+            "output_tokens": 598,
+            "total_tokens": 7353
+          }
+        },
+        "tasks": {
+          "arch": {
+            "agent_name": "architect",
+            "attempts_used": 1,
+            "has_provider_call": true,
+            "last_attempt_duration_ms": 5625.945,
+            "model": "gpt-4o-mini",
+            "provider": "openai",
+            "provider_duration_ms": 5623.344,
+            "provider_health": {
+              "openai": {
+                "last_health_check": {
+                  "active_check": true,
+                  "cooldown_cached": false,
+                  "status": "healthy"
+                },
+                "last_outcome": "success",
+                "model": "gpt-4o-mini",
+                "status": "healthy"
+              }
+            },
+            "provider_latency_ms": null,
+            "retry_attempt_count": 0,
+            "status": "done",
+            "success": true,
+            "task_duration_ms": 5625.945,
+            "usage": {
+              "input_tokens": 804,
+              "output_tokens": 201,
+              "total_tokens": 1005
+            }
+          },
+          "code": {
+            "agent_name": "code_engineer",
+            "attempts_used": 1,
+            "has_provider_call": true,
+            "last_attempt_duration_ms": 5669.391,
+            "model": "gpt-4o-mini",
+            "provider": "openai",
+            "provider_duration_ms": 5613.85,
+            "provider_health": {
+              "openai": {
+                "last_health_check": {
+                  "active_check": true,
+                  "cooldown_cached": false,
+                  "status": "healthy"
+                },
+                "last_outcome": "success",
+                "model": "gpt-4o-mini",
+                "status": "healthy"
+              }
+            },
+            "provider_latency_ms": null,
+            "retry_attempt_count": 0,
+            "status": "done",
+            "success": true,
+            "task_duration_ms": 5669.391,
+            "usage": {
+              "input_tokens": 5284,
+              "output_tokens": 200,
+              "total_tokens": 5484
+            }
+          },
+          "review": {
+            "agent_name": "code_reviewer",
+            "attempts_used": 1,
+            "has_provider_call": true,
+            "last_attempt_duration_ms": 5579.171,
+            "model": "gpt-4o-mini",
+            "provider": "openai",
+            "provider_duration_ms": 5577.26,
+            "provider_health": {
+              "openai": {
+                "last_health_check": {
+                  "active_check": true,
+                  "cooldown_cached": false,
+                  "status": "healthy"
+                },
+                "last_outcome": "success",
+                "model": "gpt-4o-mini",
+                "status": "healthy"
+              }
+            },
+            "provider_latency_ms": null,
+            "retry_attempt_count": 0,
+            "status": "done",
+            "success": true,
+            "task_duration_ms": 5579.171,
+            "usage": {
+              "input_tokens": 667,
+              "output_tokens": 197,
+              "total_tokens": 864
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_openai/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      }
+    ],
+    "final_export": "not-collected-window-open-minimum-not-yet-met"
+  }
+}

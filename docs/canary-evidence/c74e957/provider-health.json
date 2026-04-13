@@ -1,0 +1,71 @@
+{
+  "candidate_sha": "c74e957ae76e9605d21b91ccc6d36bd1f25be16c",
+  "generated_at": "2026-04-13T02:35:04.405847+00:00",
+  "bundle_status": "window_open_first_checkpoint_accepted",
+  "window_started": true,
+  "window_started_at": "2026-04-13T02:34:33Z",
+  "preflight_checkpoint": {
+    "captured_at": "2026-04-13T02:34:45.948542+00:00",
+    "host": "alex-kycortex",
+    "artifact": "validation-artifacts/preflight-provider-health-2026-04-13T02-34-45Z.json",
+    "all_providers_healthy": true
+  },
+  "providers": [
+    {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "status": "healthy_preflight_and_first_checkpoint_clean",
+      "fresh_canary_health_check": "healthy",
+      "latency_ms": 883.936,
+      "workflow_outcomes": {
+        "accepted": 1,
+        "false_success": 0
+      },
+      "evidence": {
+        "phase15_matrix_clean_outcomes": "5/5",
+        "supporting_runs": [20],
+        "release_tag": "v1.0.13a5",
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_openai/project_state.json"
+        ]
+      }
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001",
+      "status": "healthy_preflight_pending_live_checkpoint",
+      "fresh_canary_health_check": "healthy",
+      "latency_ms": 504.144,
+      "workflow_outcomes": {
+        "accepted": 0,
+        "false_success": 0
+      },
+      "evidence": {
+        "phase15_matrix_clean_outcomes": "5/5",
+        "supporting_runs": [20],
+        "release_tag": "v1.0.13a5",
+        "checkpoint_state_files": []
+      }
+    },
+    {
+      "provider": "ollama",
+      "model": "qwen2.5-coder:7b",
+      "status": "healthy_preflight_pending_live_checkpoint",
+      "fresh_canary_health_check": "healthy",
+      "latency_ms": 14.188,
+      "base_url": "http://127.0.0.1:11434",
+      "workflow_outcomes": {
+        "accepted": 0,
+        "false_success": 0
+      },
+      "evidence": {
+        "phase15_matrix_clean_outcomes": "5/5",
+        "supporting_runs": [20],
+        "local_baseline_model": "qwen2.5-coder:7b",
+        "release_tag": "v1.0.13a5",
+        "checkpoint_state_files": []
+      }
+    }
+  ],
+  "next_required_update": "Collect the 10-eligible-workflow checkpoint or first incident and refresh provider health before any canary expansion."
+}

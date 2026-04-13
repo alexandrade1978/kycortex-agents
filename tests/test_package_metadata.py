@@ -1061,7 +1061,7 @@ def test_release_status_documents_current_repository_release_readiness_state():
     release_status_path = Path(__file__).resolve().parents[1] / "RELEASE_STATUS.md"
     release_status = release_status_path.read_text(encoding="utf-8")
     version = kycortex_agents.__version__
-    latest_released_version = "1.0.13a4"
+    latest_released_version = "1.0.13a5"
 
     assert "# Release Status" in release_status
     assert "## Current State" in release_status
@@ -1091,8 +1091,8 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
     assert "## Next Maintenance Action" in release_status
-    assert "rerun the repository release gates on `1.0.13a5`, including release metadata validation and the full release check" in release_status
-    assert "cut and publish a fresh `v1.0.13a5` candidate only after the reopened line re-clears the release gates" in release_status
+    assert "continue collecting Phase 16 evidence in `docs/canary-evidence/c74e957/` through the next explicit checkpoint" in release_status
+    assert "refresh provider health, workflow summaries, internal runtime telemetry, and validation artifacts before any canary expansion beyond the first accepted workflow" in release_status
 
 
 def test_migration_notes_document_public_upgrade_path():

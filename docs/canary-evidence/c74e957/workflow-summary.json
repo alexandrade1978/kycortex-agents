@@ -1,0 +1,67 @@
+{
+  "candidate_sha": "c74e957ae76e9605d21b91ccc6d36bd1f25be16c",
+  "generated_at": "2026-04-13T02:35:04.405847+00:00",
+  "status": "window_open_first_checkpoint_accepted",
+  "release_candidate_baseline": {
+    "phase15_matrix": {
+      "campaign": "full_matrix_validation_2026_04_12_v7",
+      "clean_outcomes": "15/15",
+      "terminal_outcomes": "15/15"
+    },
+    "published_release": {
+      "tag": "v1.0.13a5",
+      "commit": "c74e957ae76e9605d21b91ccc6d36bd1f25be16c",
+      "release_workflow_run": 20,
+      "release_workflow_run_id": 24322816456,
+      "published_at": "2026-04-13T02:30:37Z",
+      "released_assets": [
+        "kycortex_agents-1.0.13a5-py3-none-any.whl",
+        "kycortex_agents-1.0.13a5.tar.gz",
+        "release-artifact-manifest.json",
+        "release-promotion-summary.json"
+      ]
+    },
+    "rollback_target": {
+      "tag": "v1.0.13a2",
+      "commit": "b2dc9931d12c5d31651a97bba8c99e767b582ff8",
+      "package_version": "1.0.13a2"
+    }
+  },
+  "canary_window": {
+    "status": "window_open_first_checkpoint_accepted",
+    "window_started_at": "2026-04-13T02:34:33Z",
+    "eligible_workflow_class": "release-user-smoke",
+    "eligible_workflows_seen": 1,
+    "accepted_workflows": 1,
+    "accepted_workflow_rate": 100.0,
+    "false_success_count": 0,
+    "false_success_rate": 0.0,
+    "bounded_termination_rate": 100.0,
+    "autonomous_recovery_rate": null,
+    "resume_integrity_rate": null,
+    "provider_breakdown": {
+      "accepted": {
+        "openai": 1
+      },
+      "false_success": {}
+    },
+    "checkpoint_history": [
+      {
+        "checkpoint": "first_accepted_workflow_openai",
+        "completed_at": "2026-04-13T02:35:04.405705+00:00",
+        "provider": "openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_openai/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        },
+        "result": "accepted"
+      }
+    ],
+    "next_checkpoint": "10 eligible workflows or first incident"
+  }
+}

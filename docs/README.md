@@ -103,11 +103,11 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Current Release State
 
-The latest released alpha is `1.0.13a5`.
+The latest released alpha is `1.0.13a6`.
 
-The most recent Phase 16 canary evidence bundle is tracked at `canary-evidence/c74e957/` for the published tag `v1.0.13a5`, and that window is now recorded as an abort after `release_user_smoke_ollama` failed external artifact validation because the generated module did not expose `main()`.
+The active Phase 16 canary evidence bundle is tracked at `canary-evidence/f99a38d/` for the published tag `v1.0.13a6`. That live window opened on `2026-04-13T03:25:21Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status, and the first controlled `release_user_smoke_openai` checkpoint was externally validated cleanly at `2026-04-13T03:26:22.839835+00:00`.
 
-There is currently no active open canary window for a published candidate.
+The most recent released-candidate abort bundle is now `canary-evidence/c74e957/`, which records the disqualified `v1.0.13a5` window after `release_user_smoke_ollama` failed external artifact validation because the generated module did not expose `main()`.
 
 The previous historical abort for a published candidate remains `canary-evidence/8bfdc29/`, which records the disqualified `v1.0.13a4` window after the `run_04_openai` code-validation incident.
 

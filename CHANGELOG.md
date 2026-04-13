@@ -6,12 +6,29 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-Current package version is now `1.0.13a6` ahead of the next alpha release.
+### Added
+
+- No unreleased additions yet.
+
+### Changed
+
+- No unreleased changes yet.
+
+### Release Readiness Notes
+
+- The next maintenance entry will be recorded here until it is promoted into a versioned release section.
+
+## 1.0.13a6 - 2026-04-13
 
 ### Fixed
 
 - `examples/example_release_user_smoke.py` now injects a task-level public contract anchor so architecture, implementation, and review all preserve the exact `calculate_budget_balance(...)`, `format_currency(...)`, and `main()` surface under low-budget provider runs.
 - Task public contract preflight now normalizes annotated top-level function anchors and literal `__main__` guard requirements semantically instead of treating those anchors as opaque strings, preventing false-negative contract mismatches during generated-code validation.
+
+### Changed
+
+- Version `1.0.13a6` is now the released alpha package baseline.
+- The `1.0.13a6` release publishes repository-owned `release-artifact-manifest.json` and `release-promotion-summary.json` evidence alongside the wheel and source distribution.
 
 ## 1.0.13a5 - 2026-04-13
 

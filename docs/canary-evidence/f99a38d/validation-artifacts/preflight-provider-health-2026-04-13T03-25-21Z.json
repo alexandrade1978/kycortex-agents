@@ -1,0 +1,51 @@
+{
+  "candidate_commit": "f99a38d1a08dceedcd0b520e302e3615f81d60f0",
+  "candidate_tag": "v1.0.13a6",
+  "package_version": "1.0.13a6",
+  "captured_at": "2026-04-13T03:25:21Z",
+  "host": "alex-kycortex",
+  "platform": "Linux-6.17.0-20-generic-x86_64-with-glibc2.39",
+  "python_version": "3.12.3",
+  "providers": {
+    "openai": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "status": "healthy",
+      "active_check": true,
+      "backend_reachable": true,
+      "model_ready": true,
+      "timeout_seconds": 5.0,
+      "latency_ms": 1119.506,
+      "retryable": false,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001",
+      "status": "healthy",
+      "active_check": true,
+      "backend_reachable": true,
+      "model_ready": true,
+      "timeout_seconds": 5.0,
+      "latency_ms": 505.785,
+      "retryable": false,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0
+    },
+    "ollama": {
+      "provider": "ollama",
+      "model": "qwen2.5-coder:7b",
+      "status": "healthy",
+      "active_check": true,
+      "backend_reachable": true,
+      "model_ready": true,
+      "base_url": "http://127.0.0.1:11434",
+      "timeout_seconds": 5.0,
+      "latency_ms": 14.66,
+      "retryable": false,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0
+    }
+  }
+}

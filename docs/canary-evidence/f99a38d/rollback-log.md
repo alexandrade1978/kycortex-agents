@@ -13,3 +13,4 @@ Planned rollback target:
 - 2026-04-13T03:25:21Z: Fresh `v1.0.13a6` canary window opened with rollback target pinned to `v1.0.13a2`. Historical releases `v1.0.13a3`, `v1.0.13a4`, and `v1.0.13a5` remain excluded as continuation candidates because the retained abort evidence lives in `../2563383/`, `../8bfdc29/`, and `../c74e957/`.
 - 2026-04-13T03:26:22.839835+00:00: No rollback executed after the first accepted workflow. The window remains within policy, and expansion stays on the smallest controlled subset pending the next checkpoint.
 - 2026-04-13T03:55:23.377066+00:00: No rollback executed through the 10-eligible-workflow checkpoint. The controlled subset expansion stayed within policy, so rollback remains pinned but inactive.
+- 2026-04-13T04:08:17.863018+00:00: No rollback executed through the 25-eligible-workflow checkpoint. The continued expansion stayed within policy, so rollback remains pinned but inactive.

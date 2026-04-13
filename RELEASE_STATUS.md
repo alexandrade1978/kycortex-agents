@@ -66,9 +66,10 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Historical Phase 16 canary evidence for the published `v1.0.13a4` line remains closed as an abort record at `docs/canary-evidence/8bfdc29/` after `run_04_openai` triggered a code-validation incident.
 - Historical Phase 16 canary evidence for the previously published `v1.0.13a5` line remains closed as an abort record at `docs/canary-evidence/c74e957/` after `release_user_smoke_ollama` triggered a code-validation incident.
 - Fresh Phase 16 canary traffic for the published `v1.0.13a6` line opened on `2026-04-13T03:25:21Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status in the live kickoff bundle.
-- The first controlled workflow `release_user_smoke_openai` was externally validated and accepted at `2026-04-13T03:26:22.839835+00:00`, refreshed expansion provider health at `2026-04-13T03:51:37.043973+00:00` and `2026-04-13T04:03:29.889609+00:00` kept OpenAI, Anthropic, and Ollama healthy before broader admission, and no provider-health incident occurred during expansion.
-- The clean checkpoint through run 25 completed at `2026-04-13T04:08:17.863018+00:00` with 25 eligible workflows seen, 25 accepted workflows, 0 incidents, and 0 rollback actions.
-- The next required checkpoint is 50 eligible workflows or daily review, whichever comes first.
+- The first controlled workflow `release_user_smoke_openai` was externally validated and accepted at `2026-04-13T03:26:22.839835+00:00`, refreshed expansion provider health at `2026-04-13T03:51:37.043973+00:00`, `2026-04-13T04:03:29.889609+00:00`, and `2026-04-13T04:15:41.775710+00:00` kept OpenAI, Anthropic, and Ollama healthy before broader admission, and no provider-health incident occurred during expansion.
+- The clean checkpoint through run 50 completed at `2026-04-13T04:22:59.352947+00:00` with 50 eligible workflows seen, 50 accepted workflows, 0 incidents, 0 rollback actions, and provider breakdown OpenAI 17, Anthropic 17, Ollama 16.
+- The first same-day daily review was recorded at `2026-04-13T04:30:01.447970+00:00` and confirmed the window remains within the current policy envelope.
+- The next required checkpoint is 100 eligible workflows or daily review, whichever comes first.
 - The active Phase 16 canary bundle is tracked at `docs/canary-evidence/f99a38d/` for the published tag `v1.0.13a6`.
 - The rollback baseline `v1.0.13a2` remains the approved safe target, and no live cutover has been required.
 
@@ -78,7 +79,7 @@ The 1.0.13a6 alpha release is now captured directly in the package metadata, cha
 
 The repository's public licensing guidance continues to document the AGPL open-source distribution together with a separate commercial licensing path.
 
-The current alpha branch now documents and validates explicit Ollama runtime overrides, the dedicated local Ollama empirical baseline, stronger QA/test repair constraints, code-repair routing that consumes the failing pytest suite as concrete repair evidence, deterministic clean-environment CI validation for the provider-matrix budget regression surface, a user-style live release smoke path, and the active Phase 16 canary evidence bundle for `f99a38d` through a clean 25-workflow checkpoint.
+The current alpha branch now documents and validates explicit Ollama runtime overrides, the dedicated local Ollama empirical baseline, stronger QA/test repair constraints, code-repair routing that consumes the failing pytest suite as concrete repair evidence, deterministic clean-environment CI validation for the provider-matrix budget regression surface, a user-style live release smoke path, and the active Phase 16 canary evidence bundle for `f99a38d` through a clean 50-workflow checkpoint plus the first same-day daily review.
 
 The current alpha branch now also stages release artifact-promotion evidence through `release-artifact-manifest.json`, generated and verified in the tagged release workflow before publication.
 
@@ -100,6 +101,6 @@ Use the following repository-owned references when validating follow-up maintena
 
 For the active published `1.0.13a6` canary line:
 
-1. continue the active canary to the 50-eligible-workflow checkpoint or daily review, whichever comes first, and preserve the next repository-owned evidence packet
+1. continue the active canary to the 100-eligible-workflow checkpoint or daily review, whichever comes first, and preserve the next repository-owned evidence packet
 2. continue daily and threshold reviews until the 7-day and 100-workflow minimum observation window is complete
 3. keep the rollback target pinned to `v1.0.13a2` and close with incident review, rollback confirmation, and a signed completion review for `docs/canary-evidence/f99a38d/`

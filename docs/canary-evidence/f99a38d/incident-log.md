@@ -1,6 +1,6 @@
 # Incident Log - f99a38d
 
-Status: no incidents recorded in the current window
+Status: no incidents recorded through the current 50-workflow checkpoint and first daily review
 
 The canary window opened on `2026-04-13T03:25:21Z` and remains active.
 
@@ -12,3 +12,6 @@ The canary window opened on `2026-04-13T03:25:21Z` and remains active.
 - 2026-04-13T03:55:23.377066+00:00: No canary incident through the 10-eligible-workflow checkpoint. All 10 controlled `release-user-smoke` workflows remained externally valid, had 0 repair cycles, and stayed within the current canary policy envelope.
 - 2026-04-13T04:03:29.889609+00:00: No provider-health incident before the next expansion step. OpenAI, Anthropic, and Ollama all remained `status=healthy` in the second expansion checkpoint.
 - 2026-04-13T04:08:17.863018+00:00: No canary incident through the 25-eligible-workflow checkpoint. All 25 controlled `release-user-smoke` workflows remained externally valid, had 0 repair cycles, and stayed within the current canary policy envelope.
+- 2026-04-13T04:15:41.775710+00:00: No provider-health incident before the 50-workflow expansion step. OpenAI, Anthropic, and Ollama all remained `status=healthy` in the third expansion checkpoint.
+- 2026-04-13T04:22:59.352947+00:00: No canary incident through the 50-eligible-workflow checkpoint. All 50 controlled `release-user-smoke` workflows remained externally valid, had 0 repair cycles, and stayed within the current canary policy envelope.
+- 2026-04-13T04:30:01.447970+00:00: No canary incident at the first same-day daily review. The 50 accepted workflows, zero incident count, and zero rollback actions remained inside the current policy envelope.

@@ -1091,7 +1091,7 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
     assert "## Next Maintenance Action" in release_status
-    assert "continue the active canary to the 50-eligible-workflow checkpoint or daily review, whichever comes first, and preserve the next repository-owned evidence packet" in release_status
+    assert "continue the active canary to the 100-eligible-workflow checkpoint or daily review, whichever comes first, and preserve the next repository-owned evidence packet" in release_status
     assert "continue daily and threshold reviews until the 7-day and 100-workflow minimum observation window is complete" in release_status
 
 

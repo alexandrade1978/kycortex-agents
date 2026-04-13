@@ -1,6 +1,6 @@
 # Rollback Log - f99a38d
 
-Status: no rollback executed in the current window
+Status: no rollback executed through the current 50-workflow checkpoint and first daily review
 
 Planned rollback target:
 
@@ -14,3 +14,5 @@ Planned rollback target:
 - 2026-04-13T03:26:22.839835+00:00: No rollback executed after the first accepted workflow. The window remains within policy, and expansion stays on the smallest controlled subset pending the next checkpoint.
 - 2026-04-13T03:55:23.377066+00:00: No rollback executed through the 10-eligible-workflow checkpoint. The controlled subset expansion stayed within policy, so rollback remains pinned but inactive.
 - 2026-04-13T04:08:17.863018+00:00: No rollback executed through the 25-eligible-workflow checkpoint. The continued expansion stayed within policy, so rollback remains pinned but inactive.
+- 2026-04-13T04:22:59.352947+00:00: No rollback executed through the 50-eligible-workflow checkpoint. The continued expansion stayed within policy, so rollback remains pinned but inactive.
+- 2026-04-13T04:30:01.447970+00:00: No rollback executed at the first same-day daily review. The window remains inside policy and the rollback target stays pinned but inactive.

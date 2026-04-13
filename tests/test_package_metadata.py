@@ -1061,7 +1061,7 @@ def test_release_status_documents_current_repository_release_readiness_state():
     release_status_path = Path(__file__).resolve().parents[1] / "RELEASE_STATUS.md"
     release_status = release_status_path.read_text(encoding="utf-8")
     version = kycortex_agents.__version__
-    latest_released_version = "1.0.13a3"
+    latest_released_version = "1.0.13a4"
 
     assert "# Release Status" in release_status
     assert "## Current State" in release_status
@@ -1091,7 +1091,7 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
     assert "## Next Maintenance Action" in release_status
-    assert "create and push the matching `v<version>` tag" in release_status
+    assert "continue collecting Phase 16 evidence in `docs/canary-evidence/8bfdc29/`" in release_status
 
 
 def test_migration_notes_document_public_upgrade_path():

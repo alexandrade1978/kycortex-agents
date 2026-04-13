@@ -1,13 +1,13 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex during preparation of the 1.0.13a4 alpha release.
+This file tracks the current repository-owned release state for KYCortex after publication of the 1.0.13a4 alpha release.
 
 ## Current State
 
 - Package version in `pyproject.toml`: `1.0.13a4`
-- Latest released version: `1.0.13a3`
+- Latest released version: `1.0.13a4`
 - Release tag for this version: `v1.0.13a4`
-- Most recent published release tag: `v1.0.13a3`
+- Most recent published release tag: `v1.0.13a4`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -35,11 +35,11 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Latest Published Release Verification
 
-- `v1.0.13a3` is the current alpha release tag associated with the latest published repository-owned release state.
-- The immediately preceding published state `v1.0.13a2` is now the previous alpha baseline.
-- The next tagged release workflow is expected to attach `kycortex_agents-1.0.13a4-py3-none-any.whl`, `kycortex_agents-1.0.13a4.tar.gz`, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
-- The published `v1.0.13a3` GitHub release now exposes the wheel, the source distribution, `release-artifact-manifest.json`, and `release-promotion-summary.json` together with GitHub's auto-generated source archives.
-- The same tagged workflow now verifies through the GitHub API that the published release exposes exactly that attached asset set and that the downloaded wheel and source distribution match the attached manifest checksums.
+- `v1.0.13a4` is the current alpha release tag associated with the latest published repository-owned release state.
+- The immediately preceding published state `v1.0.13a3` remains historical release evidence, but it is permanently disqualified for canary continuation and rollback promotion by the zero-budget false-success incident captured in `docs/canary-evidence/2563383/`.
+- The published `v1.0.13a4` GitHub release now exposes the wheel, the source distribution, `release-artifact-manifest.json`, and `release-promotion-summary.json` together with GitHub's auto-generated source archives.
+- GitHub Actions run `#460` completed successfully on commit `8bfdc29`, and tagged Release workflow `#19` completed successfully for `v1.0.13a4` on the same published candidate line.
+- The published `release-promotion-summary.json` binds `v1.0.13a4` to commit `8bfdc29516df09ccce0488352f5246b1d9be1091` with `manifest_verified=true`, and the published wheel plus source distribution match the attached manifest checksums.
 
 ## Current Release Validation Snapshot
 
@@ -48,7 +48,8 @@ This file tracks the current repository-owned release state for KYCortex during 
 - The current `1.0.13a4` maintenance line now rewrites deterministic `release-user-smoke` artifact-validation failures back into persisted workflow state as `code_validation` workflow failures, closing the false-success path that allowed a generated artifact without `main()` to remain recorded as accepted.
 - Local remediation validation re-cleared on the fix line: `tests/test_provider_matrix.py` passed 54 of 54 tests, and `python scripts/release_check.py` completed successfully with the full 1211-test suite green and the coverage gate still above the required threshold.
 - GitHub Actions CI also re-cleared on remediation commit `e23c1f7`, confirming the false-success fix, regression coverage, and release-status updates on the `1.0.13a4` maintenance line.
-- GitHub Actions run `#456` completed successfully on commit `2563383`, and tagged Release workflow `#18` completed successfully for `v1.0.13a3` on the same published candidate line.
+- GitHub Actions run `#460` completed successfully on commit `8bfdc29`, and tagged Release workflow `#19` completed successfully for `v1.0.13a4` on the same published candidate line.
+- The published `v1.0.13a4` release packet now includes repository-owned artifact provenance through `release-artifact-manifest.json` and `release-promotion-summary.json`, both verified against the published assets.
 - The strongest current full provider-matrix checkpoint `output/provider_matrix_validation_step3o` completed for Anthropic, Ollama, and OpenAI on the current maintenance branch.
 - Dedicated provider reruns `output/provider_matrix_validation_step3n_anthropic` and `output/provider_matrix_validation_step3n_ollama` both completed with `repair_cycle_count=0` after the latest repair-routing hardening.
 - The focused empirical rerun `output/provider_matrix_validation_step3r_openai` completed with `repair_cycle_count=0`, closing the remaining residual OpenAI repair observed after `step3q`.
@@ -58,15 +59,15 @@ This file tracks the current repository-owned release state for KYCortex during 
 
 ## Current Canary Status
 
-- Phase 16 canary traffic for the published `v1.0.13a3` line opened on `2026-04-12T23:13:35.578054Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status.
-- The controlled `release-user-smoke` checkpoint admitted 6 eligible workflows on the live maintainer-operated canary host and externally validated 5 of them successfully.
-- `run_06_ollama` triggered a zero-budget false success: the workflow reached `completed` with `acceptance_criteria_met=true`, but the generated artifact omitted the required `main()` entrypoint.
+- Historical Phase 16 canary evidence for the published `v1.0.13a3` line remains closed as an abort record at `docs/canary-evidence/2563383/` after `run_06_ollama` triggered a zero-budget false success.
+- Fresh Phase 16 canary traffic for the published `v1.0.13a4` line opened on `2026-04-13T00:56:30Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status at `2026-04-13T00:56:52.840533Z`.
+- The first controlled `release-user-smoke` checkpoint admitted 1 eligible workflow on the live maintainer-operated canary host and externally validated it successfully on OpenAI at `2026-04-13T00:57:23.746148+00:00`.
 - The rollback baseline `v1.0.13a2` has now been re-smoke-validated on the live maintainer host with a controlled Ollama `release-user-smoke` run that finished `completed`, kept all 3 tasks at `done`, used `repair_cycle_count=0`, and passed artifact validation with sample balance `2650.00`.
-- The canary window for published `v1.0.13a3` therefore remains historical abort evidence rather than an active rollout: the defect is fixed, the rollback baseline is validated again, and a fresh candidate is still required before Phase 16 can restart from zero.
+- The active canary window now lives under `docs/canary-evidence/8bfdc29/` and remains intentionally frozen at the smallest controlled subset until the next explicit expansion checkpoint.
 
 ## Release Outcome
 
-The 1.0.13a4 alpha-candidate state is now captured directly in the package metadata, changelog, release guide, and release-check workflow inputs, while `1.0.13a3` remains the latest released alpha tag.
+The 1.0.13a4 alpha release is now captured directly in the package metadata, changelog, release guide, release-check workflow inputs, and the published GitHub release evidence.
 
 The repository's public licensing guidance continues to document the AGPL open-source distribution together with a separate commercial licensing path.
 
@@ -90,9 +91,8 @@ Use the following repository-owned references when validating follow-up maintena
 
 ## Next Maintenance Action
 
-For future tagged releases:
+For the active `v1.0.13a4` release line:
 
-1. update the package version for the intended release
-2. rerun `python scripts/release_check.py`
-3. create and push the matching `v<version>` tag
-4. verify the tagged GitHub release workflow, staged artifact smoke validation, attached artifacts, `release-artifact-manifest.json`, `release-promotion-summary.json`, and the published-asset checksum verification step
+1. continue collecting Phase 16 evidence in `docs/canary-evidence/8bfdc29/` through the next explicit checkpoint
+2. refresh provider health, workflow summaries, internal runtime telemetry, and validation artifacts before any canary expansion beyond the first accepted workflow
+3. keep the rollback target pinned to `v1.0.13a2` until the active canary window closes cleanly

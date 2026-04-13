@@ -6,6 +6,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
+## 1.0.13a4 - 2026-04-13
+
 ### Added
 
 - Documented the four-view boundary model for the active runtime/public split: internal persisted workflow state, `ProjectSnapshot`, `AgentView`, and internal runtime telemetry.
@@ -55,10 +57,10 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Release Readiness Notes
 
-- Current package version is now `1.0.13a4` ahead of the next alpha release.
-- Latest released alpha remains `1.0.13a3` until `v1.0.13a4` is tagged.
-- The unreleased boundary split now contains an explicit breaking public-telemetry removal in the local workspace.
-- The unreleased release-hardening stream now includes repository-owned post-publish GitHub release asset checksum verification.
+- Version `1.0.13a4` is now the released alpha package baseline.
+- The `1.0.13a4` release publishes repository-owned `release-artifact-manifest.json` and `release-promotion-summary.json` evidence alongside the wheel and source distribution.
+- The released line contains an explicit breaking public-telemetry removal in the local workspace.
+- The released line includes repository-owned post-publish GitHub release asset checksum verification.
 
 ## 1.0.13a1 - 2026-03-30
 

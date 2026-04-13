@@ -103,9 +103,11 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 ## Current Release State
 
-The next alpha candidate is `1.0.13a4`, while the latest released baseline remains `1.0.13a3`.
+The latest released alpha is `1.0.13a4`.
 
-The active Phase 16 canary evidence bundle is tracked at `canary-evidence/2563383/` for the published tag `v1.0.13a3`.
+The active Phase 16 canary evidence bundle is tracked at `canary-evidence/8bfdc29/` for the published tag `v1.0.13a4`.
+
+Historical abort evidence for the disqualified `v1.0.13a3` release remains at `canary-evidence/2563383/`, which is why `v1.0.13a2` remains the rollback target for the active window.
 
 The current local architecture state reflects the completed runtime/public boundary split: prompt-facing context uses `AgentView`, `snapshot()` remains the public normalized read model, `ProjectState.internal_runtime_telemetry()` provides the dedicated internal operator-facing telemetry read path, and the public snapshot, public execution events, and provider-matrix summaries no longer expose the old exact telemetry mirrors.
 

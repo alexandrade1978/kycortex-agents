@@ -22,7 +22,13 @@ Example:
 docs/canary-evidence/be748fa/
 ```
 
-Current released-candidate bundle:
+Current active released-candidate bundle:
+
+```text
+docs/canary-evidence/8bfdc29/
+```
+
+Historical abort evidence for the disqualified `v1.0.13a3` release remains at:
 
 ```text
 docs/canary-evidence/2563383/

@@ -1,0 +1,131 @@
+{
+  "candidate_sha": "8bfdc29516df09ccce0488352f5246b1d9be1091",
+  "generated_at": "2026-04-13T00:57:23.746365+00:00",
+  "status": "collected_first_checkpoint_window_open",
+  "required_source": "ProjectState.internal_runtime_telemetry()",
+  "planned_collection_points": [
+    "before traffic starts",
+    "first accepted workflow",
+    "10 eligible workflows",
+    "25 eligible workflows",
+    "50 eligible workflows",
+    "100 eligible workflows",
+    "canary close"
+  ],
+  "export_status": {
+    "before_traffic": {
+      "status": "provider-health-only",
+      "reason": "No persisted workflow state exists before traffic starts; provider health is recorded separately.",
+      "artifact": "validation-artifacts/preflight-provider-health-2026-04-13T00-56-52Z.json"
+    },
+    "checkpoint_exports": [
+      {
+        "checkpoint": "first_accepted_workflow",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+        "collected_at": "2026-04-13T00:57:23.746365+00:00",
+        "workflow": {
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "final_providers": [
+            "openai"
+          ],
+          "observed_providers": [
+            "openai"
+          ],
+          "duration_ms": {
+            "avg": 5427.71,
+            "count": 3,
+            "max": 6133.124,
+            "min": 4386.27,
+            "total": 16283.131
+          },
+          "provider_health_summary": {
+            "openai": {
+              "active_health_check_count": 3,
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "retryable_failure_count": 0,
+              "status_counts": {
+                "healthy": 3
+              }
+            }
+          },
+          "provider_summary": {
+            "openai": {
+              "attempt_count": 3,
+              "failure_count": 0,
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "retry_attempt_count": 0,
+              "success_count": 3,
+              "task_count": 3,
+              "usage": {
+                "input_tokens": 6660,
+                "output_tokens": 579,
+                "total_tokens": 7239
+              }
+            }
+          },
+          "repair_summary": {
+            "budget_remaining": 1,
+            "cycle_count": 0,
+            "failed_task_count": 0,
+            "failure_category_counts": {},
+            "history_count": 0,
+            "max_cycles": 1,
+            "reason_counts": {}
+          },
+          "error_summary": {
+            "fallback_error_count": 0,
+            "final_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "provider_duration_ms": 6133.124,
+            "task_duration_ms": 6136.067
+          },
+          "code": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "provider_duration_ms": 5763.737,
+            "task_duration_ms": 5821.716
+          },
+          "review": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "provider_duration_ms": 4386.27,
+            "task_duration_ms": 4389.321
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_openai/artifacts/code_implementation.py",
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      }
+    ],
+    "final_export": "not-collected-window-open-minimum-not-yet-met"
+  }
+}

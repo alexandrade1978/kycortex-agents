@@ -1,0 +1,45 @@
+{
+  "captured_at": "2026-04-13T09:41:39.329840+00:00",
+  "providers": {
+    "openai": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "status": "healthy",
+      "active_check": true,
+      "backend_reachable": true,
+      "model_ready": true,
+      "timeout_seconds": 5.0,
+      "latency_ms": 1052.988,
+      "retryable": false,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001",
+      "status": "healthy",
+      "active_check": true,
+      "backend_reachable": true,
+      "model_ready": true,
+      "timeout_seconds": 5.0,
+      "latency_ms": 503.817,
+      "retryable": false,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0
+    },
+    "ollama": {
+      "provider": "ollama",
+      "model": "qwen2.5-coder:7b",
+      "status": "healthy",
+      "active_check": true,
+      "backend_reachable": true,
+      "model_ready": true,
+      "base_url": "http://127.0.0.1:11434",
+      "timeout_seconds": 5.0,
+      "latency_ms": 15.347,
+      "retryable": false,
+      "cooldown_cached": false,
+      "cooldown_remaining_seconds": 0.0
+    }
+  }
+}

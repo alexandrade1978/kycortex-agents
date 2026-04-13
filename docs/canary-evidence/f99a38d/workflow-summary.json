@@ -1,7 +1,7 @@
 {
   "candidate_sha": "f99a38d1a08dceedcd0b520e302e3615f81d60f0",
-  "generated_at": "2026-04-13T04:30:01.447970+00:00",
-  "status": "window_open_checkpoint_through_run_50_clean",
+  "generated_at": "2026-04-13T10:40:58+00:00",
+  "status": "window_open_checkpoint_through_run_100_clean",
   "release_candidate_baseline": {
     "phase15_matrix": {
       "campaign": "full_matrix_validation_2026_04_12_v7",
@@ -28,11 +28,11 @@
     }
   },
   "canary_window": {
-    "status": "window_open_checkpoint_through_run_50_clean",
+    "status": "window_open_checkpoint_through_run_100_clean",
     "window_started_at": "2026-04-13T03:25:21Z",
     "eligible_workflow_class": "release-user-smoke",
-    "eligible_workflows_seen": 50,
-    "accepted_workflows": 50,
+    "eligible_workflows_seen": 100,
+    "accepted_workflows": 100,
     "accepted_workflow_rate": 100.0,
     "false_success_count": 0,
     "false_success_rate": 0.0,
@@ -41,9 +41,9 @@
     "resume_integrity_rate": null,
     "provider_breakdown": {
       "accepted": {
-        "openai": 17,
-        "anthropic": 17,
-        "ollama": 16
+        "openai": 34,
+        "anthropic": 33,
+        "ollama": 33
       },
       "false_success": {},
       "code_validation_failed": {}
@@ -108,8 +108,23 @@
           "sample_balance": 2650.0
         },
         "result": "checkpoint_clean"
+      },
+      {
+        "checkpoint": "checkpoint_through_run_100_clean",
+        "completed_at": "2026-04-13T10:39:05.274887+00:00",
+        "provider": "openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_100_openai/project_state.json",
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_100_openai/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        },
+        "result": "checkpoint_clean"
       }
     ],
-    "next_checkpoint": "100 eligible workflows or daily review, whichever comes first"
+    "next_checkpoint": "Daily review while the window remains open; the 100-eligible-workflow threshold is satisfied, but the 7-day minimum is still outstanding."
   }
 }

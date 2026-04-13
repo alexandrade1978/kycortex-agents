@@ -1,7 +1,7 @@
 {
   "candidate_sha": "f99a38d1a08dceedcd0b520e302e3615f81d60f0",
-  "generated_at": "2026-04-13T04:30:01.447970+00:00",
-  "bundle_status": "window_open_checkpoint_through_run_50_clean",
+  "generated_at": "2026-04-13T10:40:58+00:00",
+  "bundle_status": "window_open_checkpoint_through_run_100_clean",
   "window_started": true,
   "window_started_at": "2026-04-13T03:25:21Z",
   "preflight_checkpoint": {
@@ -11,9 +11,9 @@
     "all_providers_healthy": true
   },
   "expansion_checkpoint": {
-    "captured_at": "2026-04-13T04:15:41.775710+00:00",
+    "captured_at": "2026-04-13T09:41:39.329840+00:00",
     "host": "alex-kycortex",
-    "artifact": "validation-artifacts/expansion-provider-health-2026-04-13T04-15-41Z.json",
+    "artifact": "validation-artifacts/expansion-provider-health-2026-04-13T09-41-39Z.json",
     "all_providers_healthy": true
   },
   "providers": [
@@ -22,9 +22,9 @@
       "model": "gpt-4o-mini",
       "status": "healthy_preflight_expansion_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 981.852,
+      "latency_ms": 1052.988,
       "workflow_outcomes": {
-        "accepted": 17,
+        "accepted": 34,
         "false_success": 0,
         "code_validation_failed": 0
       },
@@ -51,7 +51,24 @@
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_40_openai/project_state.json",
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_43_openai/project_state.json",
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_46_openai/project_state.json",
-          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_49_openai/project_state.json"
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_49_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_52_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_55_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_58_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_61_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_64_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_67_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_70_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_73_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_76_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_79_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_82_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_85_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_88_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_91_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_94_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_97_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_100_openai/project_state.json"
         ]
       }
     },
@@ -60,9 +77,9 @@
       "model": "claude-haiku-4-5-20251001",
       "status": "healthy_preflight_expansion_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 506.881,
+      "latency_ms": 503.817,
       "workflow_outcomes": {
-        "accepted": 17,
+        "accepted": 33,
         "false_success": 0,
         "code_validation_failed": 0
       },
@@ -89,7 +106,23 @@
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_41_anthropic/project_state.json",
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_44_anthropic/project_state.json",
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_47_anthropic/project_state.json",
-          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_50_anthropic/project_state.json"
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_50_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_53_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_56_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_59_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_62_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_65_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_68_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_71_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_74_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_77_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_80_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_83_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_86_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_89_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_92_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_95_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_98_anthropic/project_state.json"
         ]
       }
     },
@@ -98,10 +131,9 @@
       "model": "qwen2.5-coder:7b",
       "status": "healthy_preflight_expansion_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 13.226,
-      "base_url": "http://127.0.0.1:11434",
+      "latency_ms": 15.347,
       "workflow_outcomes": {
-        "accepted": 16,
+        "accepted": 33,
         "false_success": 0,
         "code_validation_failed": 0
       },
@@ -110,7 +142,6 @@
         "supporting_runs": [
           21
         ],
-        "local_baseline_model": "qwen2.5-coder:7b",
         "release_tag": "v1.0.13a6",
         "checkpoint_state_files": [
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_ollama/project_state.json",
@@ -128,10 +159,29 @@
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_39_ollama/project_state.json",
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_42_ollama/project_state.json",
           "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_45_ollama/project_state.json",
-          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_48_ollama/project_state.json"
-        ]
-      }
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_48_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_51_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_54_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_57_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_60_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_63_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_66_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_69_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_72_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_75_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_78_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_81_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_84_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_87_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_90_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_93_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_96_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_99_ollama/project_state.json"
+        ],
+        "local_baseline_model": "qwen2.5-coder:7b"
+      },
+      "base_url": "http://127.0.0.1:11434"
     }
   ],
-  "next_required_update": "Continue the active canary to the 100-eligible-workflow checkpoint or next daily review, whichever comes first, while keeping the rollback target pinned to v1.0.13a2."
+  "next_required_update": "Continue daily reviews while the active canary remains open; the 100-eligible-workflow threshold is satisfied, but the 7-day minimum is still outstanding, while keeping the rollback target pinned to v1.0.13a2."
 }

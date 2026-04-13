@@ -1,7 +1,7 @@
 {
   "candidate_sha": "8bfdc29516df09ccce0488352f5246b1d9be1091",
-  "generated_at": "2026-04-13T00:57:23.746148+00:00",
-  "bundle_status": "window_open_first_checkpoint_accepted",
+  "generated_at": "2026-04-13T01:34:53.543209Z",
+  "bundle_status": "aborted_code_validation_incident",
   "window_started": true,
   "window_started_at": "2026-04-13T00:56:30Z",
   "preflight_checkpoint": {
@@ -10,62 +10,76 @@
     "artifact": "validation-artifacts/preflight-provider-health-2026-04-13T00-56-52Z.json",
     "all_providers_healthy": true
   },
+  "expansion_checkpoint": {
+    "captured_at": "2026-04-13T01:28:52.992574Z",
+    "host": "alex-kycortex",
+    "artifact": "validation-artifacts/expansion-provider-health-2026-04-13T01-28-52Z.json",
+    "all_providers_healthy": true
+  },
   "providers": [
     {
       "provider": "openai",
       "model": "gpt-4o-mini",
-      "status": "healthy_preflight_and_first_checkpoint_clean",
+      "status": "healthy_preflight_then_code_validation_incident_during_canary",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 1184.278,
+      "latency_ms": 1188.43,
       "workflow_outcomes": {
         "accepted": 1,
-        "false_success": 0
+        "false_success": 0,
+        "code_validation_failed": 1
       },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
         "supporting_runs": [460, 19],
         "release_tag": "v1.0.13a4",
         "checkpoint_state_files": [
-          "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_openai/project_state.json"
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/project_state.json"
         ]
       }
     },
     {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
-      "status": "healthy_preflight_pending_live_checkpoint",
+      "status": "healthy_preflight_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 513.25,
+      "latency_ms": 554.845,
       "workflow_outcomes": {
-        "accepted": 0,
-        "false_success": 0
+        "accepted": 1,
+        "false_success": 0,
+        "code_validation_failed": 0
       },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
         "supporting_runs": [460, 19],
         "release_tag": "v1.0.13a4",
-        "checkpoint_state_files": []
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_anthropic/project_state.json"
+        ]
       }
     },
     {
       "provider": "ollama",
       "model": "qwen2.5-coder:7b",
-      "status": "healthy_preflight_pending_live_checkpoint",
+      "status": "healthy_preflight_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 11.952,
+      "latency_ms": 15.416,
       "base_url": "http://127.0.0.1:11434",
       "workflow_outcomes": {
-        "accepted": 0,
-        "false_success": 0
+        "accepted": 1,
+        "false_success": 0,
+        "code_validation_failed": 0
       },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
         "supporting_runs": [460, 19],
         "local_baseline_model": "qwen2.5-coder:7b",
         "release_tag": "v1.0.13a4",
-        "checkpoint_state_files": []
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_ollama/project_state.json"
+        ]
       }
     }
   ],
-  "next_required_update": "Collect the 10-eligible-workflow checkpoint or first incident and refresh provider health before any canary expansion."
+  "next_required_update": "Canary aborted after code-validation incident on run_04_openai; do not admit more traffic until the defect is fixed and a new candidate is cut."
 }

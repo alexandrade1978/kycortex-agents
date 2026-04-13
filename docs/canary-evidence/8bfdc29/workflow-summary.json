@@ -1,7 +1,7 @@
 {
   "candidate_sha": "8bfdc29516df09ccce0488352f5246b1d9be1091",
-  "generated_at": "2026-04-13T00:57:23.746148+00:00",
-  "status": "window_open_first_checkpoint_accepted",
+  "generated_at": "2026-04-13T01:34:53.543209Z",
+  "status": "aborted_code_validation_incident",
   "release_candidate_baseline": {
     "phase15_matrix": {
       "campaign": "full_matrix_validation_2026_04_12_v7",
@@ -46,22 +46,30 @@
     }
   },
   "canary_window": {
-    "status": "window_open_first_checkpoint_accepted",
+    "status": "aborted_code_validation_incident",
     "window_started_at": "2026-04-13T00:56:30Z",
+    "window_aborted_at": "2026-04-13T01:34:53.543209+00:00",
     "eligible_workflow_class": "release-user-smoke",
-    "eligible_workflows_seen": 1,
-    "accepted_workflows": 1,
-    "accepted_workflow_rate": 100.0,
+    "eligible_workflows_seen": 4,
+    "accepted_workflows": 3,
+    "accepted_workflow_rate": 75.0,
     "false_success_count": 0,
     "false_success_rate": 0.0,
+    "code_validation_failure_count": 1,
+    "code_validation_failure_rate": 25.0,
     "bounded_termination_rate": 100.0,
     "autonomous_recovery_rate": null,
     "resume_integrity_rate": null,
     "provider_breakdown": {
       "accepted": {
-        "openai": 1
+        "openai": 1,
+        "anthropic": 1,
+        "ollama": 1
       },
-      "false_success": {}
+      "false_success": {},
+      "code_validation_failed": {
+        "openai": 1
+      }
     },
     "checkpoint_history": [
       {
@@ -75,8 +83,22 @@
           "sample_balance": 2650.0
         },
         "result": "accepted"
+      },
+      {
+        "checkpoint": "abort_code_validation_run_04_openai",
+        "completed_at": "2026-04-13T01:34:53.543209+00:00",
+        "provider": "openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/project_state.json",
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/artifacts/code_implementation.py",
+          "validated": false,
+          "validation_error": "No module named 'click'",
+          "has_calculate_budget_balance": null,
+          "has_main": null,
+          "sample_balance": null
+        },
+        "result": "code_validation_incident"
       }
-    ],
-    "next_checkpoint": "10 eligible workflows or first incident"
+    ]
   }
 }

@@ -22,7 +22,9 @@ Example:
 docs/canary-evidence/be748fa/
 ```
 
-Current active released-candidate bundle:
+There is currently no active open canary window.
+
+The most recent released-candidate bundle records the aborted `v1.0.13a4` window:
 
 ```text
 docs/canary-evidence/8bfdc29/

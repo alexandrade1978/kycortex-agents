@@ -1,7 +1,7 @@
 {
   "candidate_sha": "8bfdc29516df09ccce0488352f5246b1d9be1091",
-  "generated_at": "2026-04-13T00:57:23.746365+00:00",
-  "status": "collected_first_checkpoint_window_open",
+  "generated_at": "2026-04-13T01:34:53.543209Z",
+  "status": "collected_then_aborted_code_validation_incident",
   "required_source": "ProjectState.internal_runtime_telemetry()",
   "planned_collection_points": [
     "before traffic starts",
@@ -124,8 +124,116 @@
           "has_main": true,
           "sample_balance": 2650.0
         }
+      },
+      {
+        "checkpoint": "abort_code_validation_run_04_openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/project_state.json",
+        "collected_at": "2026-04-13T01:34:53.543209+00:00",
+        "workflow": {
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "final_providers": [
+            "openai"
+          ],
+          "observed_providers": [
+            "openai"
+          ],
+          "duration_ms": {
+            "avg": 5376.397,
+            "count": 3,
+            "max": 6873.298,
+            "min": 4181.889,
+            "total": 16129.191
+          },
+          "provider_health_summary": {
+            "openai": {
+              "active_health_check_count": 3,
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "retryable_failure_count": 0,
+              "status_counts": {
+                "healthy": 3
+              }
+            }
+          },
+          "provider_summary": {
+            "openai": {
+              "attempt_count": 3,
+              "failure_count": 0,
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "retry_attempt_count": 0,
+              "success_count": 3,
+              "task_count": 3,
+              "usage": {
+                "input_tokens": 6649,
+                "output_tokens": 608,
+                "total_tokens": 7257
+              }
+            }
+          },
+          "repair_summary": {
+            "budget_remaining": 1,
+            "cycle_count": 0,
+            "failed_task_count": 0,
+            "failure_category_counts": {},
+            "history_count": 0,
+            "max_cycles": 1,
+            "reason_counts": {}
+          },
+          "error_summary": {
+            "fallback_error_count": 0,
+            "final_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "provider_duration_ms": 5074.004,
+            "task_duration_ms": 5076.527
+          },
+          "code": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "provider_duration_ms": 4181.889,
+            "task_duration_ms": 4185.9
+          },
+          "review": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "provider_duration_ms": 6873.298,
+            "task_duration_ms": 6875.992
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/artifacts/code_implementation.py",
+          "validated": false,
+          "validation_error": "No module named 'click'",
+          "has_calculate_budget_balance": null,
+          "has_main": null,
+          "sample_balance": null
+        }
       }
     ],
-    "final_export": "not-collected-window-open-minimum-not-yet-met"
+    "final_export": "not-collected-window-aborted-before-minimum"
   }
 }

@@ -1775,6 +1775,40 @@ def test_release_user_smoke_validation_errors_limit_public_artifact_path_to_file
     assert "customer-secret-root" not in str(exc_info.value)
 
 
+def test_release_user_smoke_validation_rejects_third_party_imports(tmp_path):
+    module = _load_example_module(
+        "example_release_user_smoke_third_party_import_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    output_dir = tmp_path / "customer-secret-root" / "release-user-smoke"
+    artifact_path = output_dir / "artifacts" / "budget_planner.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "import click\n\n"
+        "def calculate_budget_balance(income: float, expenses: list[float]) -> float:\n"
+        "    return income - sum(expenses)\n\n"
+        "def main() -> None:\n"
+        "    click.echo(calculate_budget_balance(5000.0, [1200.0, 700.0, 450.0]))\n",
+        encoding="utf-8",
+    )
+
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement the budget planner",
+        assigned_to="code_engineer",
+        status="done",
+    )
+    code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
+
+    with pytest.raises(RuntimeError) as exc_info:
+        module._validate_generated_code(code_task, str(output_dir))
+
+    assert str(exc_info.value) == "Generated code used unsupported non-standard-library imports: click."
+    assert "customer-secret-root" not in str(exc_info.value)
+
+
 def test_release_user_smoke_validation_failure_rewrites_project_state(tmp_path, monkeypatch):
     module = _load_example_module(
         "example_release_user_smoke_state_rewrite_test",
@@ -1859,6 +1893,100 @@ def test_release_user_smoke_validation_failure_rewrites_project_state(tmp_path, 
         "required_symbols": ["calculate_budget_balance", "main"],
         "missing_symbols": ["main"],
         "error": "Generated code did not expose main().",
+    }
+
+
+def test_release_user_smoke_third_party_import_failure_rewrites_project_state(tmp_path, monkeypatch):
+    module = _load_example_module(
+        "example_release_user_smoke_third_party_state_rewrite_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    output_dir = tmp_path / "customer-secret-root" / "release-user-smoke"
+    artifact_path = output_dir / "artifacts" / "budget_planner.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "import click\n\n"
+        "def calculate_budget_balance(income: float, expenses: list[float]) -> float:\n"
+        "    return income - sum(expenses)\n\n"
+        "def main() -> None:\n"
+        "    click.echo(calculate_budget_balance(5000.0, [1200.0, 700.0, 450.0]))\n",
+        encoding="utf-8",
+    )
+
+    project = module.build_project(str(output_dir), "openai")
+    code_task = project.get_task("code")
+    assert code_task is not None
+    code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
+
+    class FakeParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                provider="openai",
+                model=None,
+                output_dir=str(output_dir),
+                base_url=None,
+                ollama_num_ctx=16384,
+                failure_policy="continue",
+                max_repair_cycles=1,
+            )
+
+    class FakeConfig:
+        llm_model = "gpt-4o-mini"
+        workflow_acceptance_policy = "all_tasks"
+
+    class FakeOrchestrator:
+        def __init__(self, config):
+            self.config = config
+
+        def execute_workflow(self, workflow_project):
+            workflow_project.mark_workflow_running(
+                acceptance_policy="all_tasks",
+                repair_max_cycles=1,
+            )
+            for task in workflow_project.tasks:
+                task.status = "done"
+            workflow_project.mark_workflow_finished(
+                "completed",
+                acceptance_policy="all_tasks",
+                terminal_outcome="completed",
+                acceptance_criteria_met=True,
+                acceptance_evaluation={
+                    "policy": "all_tasks",
+                    "accepted": True,
+                    "reason": "all_evaluated_tasks_done",
+                    "evaluated_task_ids": [task.id for task in workflow_project.tasks],
+                    "required_task_ids": [],
+                    "completed_task_ids": [task.id for task in workflow_project.tasks],
+                    "failed_task_ids": [],
+                    "skipped_task_ids": [],
+                    "pending_task_ids": [],
+                },
+            )
+            workflow_project.save()
+
+    monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
+    monkeypatch.setattr(module, "build_config", lambda args, runtime_output_dir: FakeConfig())
+    monkeypatch.setattr(module, "build_project", lambda runtime_output_dir, provider: project)
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+
+    with pytest.raises(RuntimeError, match=r"Generated code used unsupported non-standard-library imports: click\."):
+        module.main()
+
+    reloaded = ProjectState.load(str(output_dir / "project_state.json"))
+
+    assert reloaded.phase == "failed"
+    assert reloaded.terminal_outcome == "failed"
+    assert reloaded.failure_category == "code_validation"
+    assert reloaded.acceptance_criteria_met is False
+    assert reloaded.acceptance_evaluation["accepted"] is False
+    assert reloaded.acceptance_evaluation["reason"] == "artifact_validation_failed"
+    assert reloaded.acceptance_evaluation["artifact_validation"] == {
+        "validated": False,
+        "artifact_path": "budget_planner.py",
+        "required_symbols": ["calculate_budget_balance", "main"],
+        "missing_symbols": [],
+        "error": "Generated code used unsupported non-standard-library imports: click.",
     }
 
 

@@ -1,7 +1,9 @@
 import argparse
+import ast
 import importlib.util
 from pathlib import Path
 import py_compile
+import sys
 
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
 from kycortex_agents.provider_matrix import _public_path_label
@@ -90,7 +92,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
     project = ProjectState(
         project_name=f"ReleaseUserSmoke{provider.title()}",
         goal=(
-            "Create a single-file Python budget planner that exposes a function named "
+            "Create a single-file Python budget planner using only the standard library that exposes a function named "
             "`calculate_budget_balance(income: float, expenses: list[float]) -> float` and a minimal CLI entrypoint."
         ),
         state_file=str(Path(output_dir) / "project_state.json"),
@@ -102,6 +104,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
             description=(
                 "Design a concise single-module architecture for a Python budget planner that exposes "
                 "`calculate_budget_balance(income: float, expenses: list[float]) -> float`, one formatting helper, and a minimal CLI entrypoint. "
+                "Use only the Python standard library and do not introduce third-party runtime dependencies or imports. "
                 "Keep the architecture practical and compact."
             ),
             assigned_to="architect",
@@ -113,6 +116,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
             title="Implementation",
             description=(
                 "Implement the planned single-file Python budget planner using only the standard library. "
+                "Do not add third-party runtime dependencies or imports such as click, typer, requests, rich, or pydantic. "
                 "The module must expose `calculate_budget_balance(income: float, expenses: list[float]) -> float` and a working `main()` CLI entrypoint."
             ),
             assigned_to="code_engineer",
@@ -124,7 +128,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
             id="review",
             title="Review",
             description=(
-                "Review the generated budget planner for correctness, API clarity, and obvious edge cases."
+                "Review the generated budget planner for correctness, API clarity, obvious edge cases, and strict compliance with the standard-library-only dependency contract."
             ),
             assigned_to="code_reviewer",
             dependencies=["code"],
@@ -161,6 +165,29 @@ def _code_artifact_path(task: Task, output_dir: str) -> Path | None:
         if relative_path.endswith(".py"):
             return Path(output_dir) / relative_path
     return None
+
+
+def _unsupported_non_stdlib_imports(artifact_path: Path) -> list[str]:
+    code_content = artifact_path.read_text(encoding="utf-8")
+    module_ast = ast.parse(code_content, filename=str(artifact_path))
+    stdlib_modules = frozenset(getattr(sys, "stdlib_module_names", ()))
+    unsupported_imports: set[str] = set()
+
+    for node in ast.walk(module_ast):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top_level = alias.name.split(".", 1)[0]
+                if top_level != "__future__" and top_level not in stdlib_modules:
+                    unsupported_imports.add(top_level)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level > 0:
+                unsupported_imports.add("relative import")
+                continue
+            top_level = (node.module or "").split(".", 1)[0]
+            if top_level and top_level != "__future__" and top_level not in stdlib_modules:
+                unsupported_imports.add(top_level)
+
+    return sorted(unsupported_imports)
 
 
 def _missing_symbols_from_validation_error(validation_error: str) -> list[str]:
@@ -249,6 +276,13 @@ def _validate_generated_code(task: Task, output_dir: str) -> tuple[float, str]:
         raise RuntimeError("Generated code artifact was not found.")
 
     py_compile.compile(str(artifact_path), doraise=True)
+
+    unsupported_imports = _unsupported_non_stdlib_imports(artifact_path)
+    if unsupported_imports:
+        raise RuntimeError(
+            "Generated code used unsupported non-standard-library imports: "
+            f"{', '.join(unsupported_imports)}."
+        )
 
     spec = importlib.util.spec_from_file_location("release_user_smoke_generated", artifact_path)
     if spec is None or spec.loader is None:

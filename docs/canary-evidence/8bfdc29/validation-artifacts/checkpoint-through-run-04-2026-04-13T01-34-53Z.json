@@ -1,0 +1,134 @@
+{
+  "candidate_sha": "8bfdc29516df09ccce0488352f5246b1d9be1091",
+  "window_started_at": "2026-04-13T00:56:30Z",
+  "checkpoint_status": "aborted_code_validation_incident",
+  "checkpoint_captured_at": "2026-04-13T01:34:53.543209+00:00",
+  "eligible_workflow_class": "release-user-smoke",
+  "artifact_validation_rule": {
+    "required_functions": [
+      "calculate_budget_balance",
+      "main"
+    ],
+    "sample_balance_expected": 2650.0
+  },
+  "summary": {
+    "eligible_workflows_seen": 4,
+    "accepted_workflows": 3,
+    "accepted_workflow_rate": 75.0,
+    "false_success_count": 0,
+    "false_success_rate": 0.0,
+    "code_validation_failure_count": 1,
+    "code_validation_failure_rate": 25.0,
+    "bounded_termination_rate": 100.0,
+    "autonomous_recovery_rate": null,
+    "resume_integrity_rate": null,
+    "provider_success_counts": {
+      "openai": 1,
+      "anthropic": 1,
+      "ollama": 1
+    },
+    "provider_false_success_counts": {},
+    "provider_code_validation_counts": {
+      "openai": 1
+    },
+    "first_accepted_state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+    "first_accepted_completed_at": "2026-04-13T00:57:23.746148+00:00",
+    "incident_state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/project_state.json",
+    "incident_completed_at": "2026-04-13T01:34:53.543209+00:00"
+  },
+  "runs": [
+    {
+      "ordinal": 1,
+      "provider": "openai",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+      "updated_at": "2026-04-13T00:57:23.746365+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "code_validation_failure": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_openai/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0,
+        "validation_error": null
+      }
+    },
+    {
+      "ordinal": 2,
+      "provider": "anthropic",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_anthropic/project_state.json",
+      "updated_at": "2026-04-13T01:30:40.347407+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "code_validation_failure": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_anthropic/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0,
+        "validation_error": null
+      }
+    },
+    {
+      "ordinal": 3,
+      "provider": "ollama",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_ollama/project_state.json",
+      "updated_at": "2026-04-13T01:33:54.386971+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "code_validation_failure": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/release_user_smoke_ollama/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0,
+        "validation_error": null
+      }
+    },
+    {
+      "ordinal": 4,
+      "provider": "openai",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/project_state.json",
+      "updated_at": "2026-04-13T01:34:53.543268+00:00",
+      "workflow_status": "failed",
+      "terminal_outcome": "failed",
+      "acceptance_criteria_met": false,
+      "externally_validated": false,
+      "false_success": false,
+      "code_validation_failure": true,
+      "failure_category": "code_validation",
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_8bfdc29_2026_04_13T00_56_30Z/eligible_workflows/run_04_openai/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": null,
+        "has_main": null,
+        "sample_balance": null,
+        "validation_error": "No module named 'click'"
+      }
+    }
+  ]
+}

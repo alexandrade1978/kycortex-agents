@@ -6,6 +6,13 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
+Current package version is now `1.0.13a5` ahead of the next alpha release.
+
+### Fixed
+
+- `examples/example_release_user_smoke.py` now rejects unsupported non-standard-library imports deterministically during artifact validation, preventing generated dependencies such as `click` from slipping past the release-user-smoke contract.
+- The `release-user-smoke` architecture, implementation, and review tasks now all reinforce the same standard-library-only dependency contract instead of leaving that rule scoped only to the code task.
+
 ## 1.0.13a4 - 2026-04-13
 
 ### Added

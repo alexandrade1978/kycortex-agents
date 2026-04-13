@@ -1,6 +1,6 @@
 # Completion Review - 8bfdc29
 
-Decision: not ready to close Phase 16
+Decision: canary aborted; not ready to close Phase 16
 
 ## Current State
 
@@ -9,18 +9,18 @@ Decision: not ready to close Phase 16
 - current candidate CI: GitHub Actions run `#460` completed successfully
 - current candidate release: GitHub Actions run `#19` completed successfully
 - canary window: started on `2026-04-13T00:56:30Z`
-- current checkpoint outcome: first accepted workflow clean on OpenAI at `2026-04-13T00:57:23.746148+00:00`
-- admitted eligible workflows so far: 1 total, 1 externally validated accepted, 0 incidents
-- rollback baseline `v1.0.13a2` remains re-smoke-validated on the live host
+- canary checkpoint outcome: aborted after a code-validation incident on `run_04_openai`
+- admitted eligible workflows before abort: 4 total, 3 externally validated accepted, 1 code-validation failure
+- rollback baseline `v1.0.13a2` remains pinned through retained same-host re-smoke evidence in `../2563383/validation-artifacts/rollback-smoke-v1.0.13a2-2026-04-13T00-18-10Z.json`
 
 ## Open Blockers
 
-- the minimum 7-day / 100-workflow evidence window is not complete
-- Anthropic and Ollama have healthy preflight evidence for the new window, but they do not yet have accepted live workflows in the restarted canary packet
-- the canary has not yet advanced beyond the smallest controlled subset, so broader checkpoint evidence is still missing
+- the published `v1.0.13a4` candidate remains disqualified for continued canary expansion by the code-validation incident on `run_04_openai`
+- the canary window was aborted before the minimum 7-day / 100-workflow evidence window was complete
+- the missing-dependency generation failure must be fixed before Phase 16 can restart on a fresh candidate
 
 ## Next Required Actions
 
-1. Admit the remaining controlled provider subset and preserve repository-owned checkpoint evidence through the 10-eligible-workflow checkpoint.
-2. Continue daily and threshold reviews until the 7-day and 100-workflow minimum observation window is complete.
-3. Close with the incident review, rollback confirmation, and signed completion review for the active `v1.0.13a4` window.
+1. Root-cause and fix the `run_04_openai` code-validation incident so generated `release-user-smoke` artifacts stay inside the supported dependency contract.
+2. Cut and publish a fresh candidate release line from the fixed maintenance branch.
+3. Open a new Phase 16 evidence bundle for that candidate and restart from fresh preflight provider health plus the first controlled checkpoint.

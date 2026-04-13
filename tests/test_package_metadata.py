@@ -1091,7 +1091,8 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
     assert "## Next Maintenance Action" in release_status
-    assert "continue collecting Phase 16 evidence in `docs/canary-evidence/8bfdc29/`" in release_status
+    assert "rerun the repository release gates on `1.0.13a5`, including release metadata validation and the full release check" in release_status
+    assert "cut and publish a fresh `v1.0.13a5` candidate only after the reopened line re-clears the release gates" in release_status
 
 
 def test_migration_notes_document_public_upgrade_path():

@@ -1,12 +1,12 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex after publication of the 1.0.13a4 alpha release.
+This file tracks the current repository-owned release state for KYCortex while preparing the 1.0.13a5 alpha maintenance release after publication of the 1.0.13a4 alpha release.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.13a4`
+- Package version in `pyproject.toml`: `1.0.13a5`
 - Latest released version: `1.0.13a4`
-- Release tag for this version: `v1.0.13a4`
+- Release tag for this version: `v1.0.13a5`
 - Most recent published release tag: `v1.0.13a4`
 - Branch expected for release preparation: `main`
 
@@ -46,6 +46,8 @@ This file tracks the current repository-owned release state for KYCortex after p
 - The clean canonical Phase 15 rerun `full_matrix_validation_2026_04_12_v7` finished with 15 of 15 runs at `status=completed` and 15 of 15 runs at `terminal_outcome=completed` on the current candidate line.
 - The local release-validation line re-cleared after the Phase 15 prompt hardening, including `ruff`, `mypy`, focused regressions, `scripts/release_metadata_check.py`, and `scripts/release_check.py`.
 - The current `1.0.13a4` maintenance line now rewrites deterministic `release-user-smoke` artifact-validation failures back into persisted workflow state as `code_validation` workflow failures, closing the false-success path that allowed a generated artifact without `main()` to remain recorded as accepted.
+- The reopened `1.0.13a5` maintenance line now also rejects unsupported non-standard-library imports deterministically during `release-user-smoke` artifact validation and reinforces the standard-library-only contract across architecture, implementation, and review prompts.
+- Focused `release-user-smoke` regressions re-cleared on the reopened line: `tests/test_provider_matrix.py -k release_user_smoke` passed 5 of 5 tests.
 - Local remediation validation re-cleared on the fix line: `tests/test_provider_matrix.py` passed 54 of 54 tests, and `python scripts/release_check.py` completed successfully with the full 1211-test suite green and the coverage gate still above the required threshold.
 - GitHub Actions CI also re-cleared on remediation commit `e23c1f7`, confirming the false-success fix, regression coverage, and release-status updates on the `1.0.13a4` maintenance line.
 - GitHub Actions run `#460` completed successfully on commit `8bfdc29`, and tagged Release workflow `#19` completed successfully for `v1.0.13a4` on the same published candidate line.
@@ -61,9 +63,10 @@ This file tracks the current repository-owned release state for KYCortex after p
 
 - Historical Phase 16 canary evidence for the published `v1.0.13a3` line remains closed as an abort record at `docs/canary-evidence/2563383/` after `run_06_ollama` triggered a zero-budget false success.
 - Fresh Phase 16 canary traffic for the published `v1.0.13a4` line opened on `2026-04-13T00:56:30Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status at `2026-04-13T00:56:52.840533Z`.
-- The first controlled `release-user-smoke` checkpoint admitted 1 eligible workflow on the live maintainer-operated canary host and externally validated it successfully on OpenAI at `2026-04-13T00:57:23.746148+00:00`.
-- The rollback baseline `v1.0.13a2` has now been re-smoke-validated on the live maintainer host with a controlled Ollama `release-user-smoke` run that finished `completed`, kept all 3 tasks at `done`, used `repair_cycle_count=0`, and passed artifact validation with sample balance `2650.00`.
-- The active canary window now lives under `docs/canary-evidence/8bfdc29/` and remains intentionally frozen at the smallest controlled subset until the next explicit expansion checkpoint.
+- Provider health was refreshed before expansion at `2026-04-13T01:28:52.992574Z`, and the first 3 controlled workflows validated cleanly across OpenAI, Anthropic, and Ollama by `2026-04-13T01:33:54.386905+00:00`.
+- The fourth controlled workflow `run_04_openai` then failed external artifact validation at `2026-04-13T01:34:53.543209+00:00`, and the persisted state correctly recorded `phase=failed`, `terminal_outcome=failed`, `failure_category=code_validation`, and `acceptance_criteria_met=false` because importing the generated module raised `ModuleNotFoundError: No module named 'click'`.
+- The `docs/canary-evidence/8bfdc29/` window is therefore aborted and expansion is frozen at 4 eligible workflows because accepted workflow rate fell to `75.0%`, missed the canary SLO, and triggered rollback policy.
+- The rollback baseline `v1.0.13a2` remains the approved safe target, and no broader live cutover was required because traffic never advanced beyond the controlled subset.
 
 ## Release Outcome
 
@@ -91,8 +94,8 @@ Use the following repository-owned references when validating follow-up maintena
 
 ## Next Maintenance Action
 
-For the active `v1.0.13a4` release line:
+For the reopened `1.0.13a5` maintenance line:
 
-1. continue collecting Phase 16 evidence in `docs/canary-evidence/8bfdc29/` through the next explicit checkpoint
-2. refresh provider health, workflow summaries, internal runtime telemetry, and validation artifacts before any canary expansion beyond the first accepted workflow
-3. keep the rollback target pinned to `v1.0.13a2` until the active canary window closes cleanly
+1. rerun the repository release gates on `1.0.13a5`, including release metadata validation and the full release check
+2. cut and publish a fresh `v1.0.13a5` candidate only after the reopened line re-clears the release gates
+3. keep the rollback target pinned to `v1.0.13a2` and restart Phase 16 from fresh preflight on the new candidate rather than resuming `v1.0.13a4`

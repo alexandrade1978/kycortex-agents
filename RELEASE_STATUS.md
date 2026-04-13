@@ -47,6 +47,7 @@ This file tracks the current repository-owned release state for KYCortex during 
 - The local release-validation line re-cleared after the Phase 15 prompt hardening, including `ruff`, `mypy`, focused regressions, `scripts/release_metadata_check.py`, and `scripts/release_check.py`.
 - The current `1.0.13a4` maintenance line now rewrites deterministic `release-user-smoke` artifact-validation failures back into persisted workflow state as `code_validation` workflow failures, closing the false-success path that allowed a generated artifact without `main()` to remain recorded as accepted.
 - Local remediation validation re-cleared on the fix line: `tests/test_provider_matrix.py` passed 54 of 54 tests, and `python scripts/release_check.py` completed successfully with the full 1211-test suite green and the coverage gate still above the required threshold.
+- GitHub Actions CI also re-cleared on remediation commit `e23c1f7`, confirming the false-success fix, regression coverage, and release-status updates on the `1.0.13a4` maintenance line.
 - GitHub Actions run `#456` completed successfully on commit `2563383`, and tagged Release workflow `#18` completed successfully for `v1.0.13a3` on the same published candidate line.
 - The strongest current full provider-matrix checkpoint `output/provider_matrix_validation_step3o` completed for Anthropic, Ollama, and OpenAI on the current maintenance branch.
 - Dedicated provider reruns `output/provider_matrix_validation_step3n_anthropic` and `output/provider_matrix_validation_step3n_ollama` both completed with `repair_cycle_count=0` after the latest repair-routing hardening.
@@ -60,8 +61,8 @@ This file tracks the current repository-owned release state for KYCortex during 
 - Phase 16 canary traffic for the published `v1.0.13a3` line opened on `2026-04-12T23:13:35.578054Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status.
 - The controlled `release-user-smoke` checkpoint admitted 6 eligible workflows on the live maintainer-operated canary host and externally validated 5 of them successfully.
 - `run_06_ollama` triggered a zero-budget false success: the workflow reached `completed` with `acceptance_criteria_met=true`, but the generated artifact omitted the required `main()` entrypoint.
-- The canary window is therefore aborted and further traffic is frozen until the defect is fixed, the rollback baseline is re-smoke-validated, and a fresh candidate restarts Phase 16.
-- The maintenance line now contains the local fix and regression coverage for that contract, but the published `v1.0.13a3` canary record remains historical evidence of the aborted attempt; no fresh candidate has been cut yet and Phase 16 has not restarted.
+- The rollback baseline `v1.0.13a2` has now been re-smoke-validated on the live maintainer host with a controlled Ollama `release-user-smoke` run that finished `completed`, kept all 3 tasks at `done`, used `repair_cycle_count=0`, and passed artifact validation with sample balance `2650.00`.
+- The canary window for published `v1.0.13a3` therefore remains historical abort evidence rather than an active rollout: the defect is fixed, the rollback baseline is validated again, and a fresh candidate is still required before Phase 16 can restart from zero.
 
 ## Release Outcome
 

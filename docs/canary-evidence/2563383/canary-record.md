@@ -33,7 +33,7 @@ The window was aborted on `2026-04-12T23:16:16.292317+00:00` after `run_06_ollam
 
 - rollback target SHA: `b2dc9931d12c5d31651a97bba8c99e767b582ff8`
 - rollback target role: previous published alpha release `v1.0.13a2`
-- rollback smoke status for the live canary environment: not executed after abort; any resumed canary must restart from `v1.0.13a2`
+- rollback smoke status for the live canary environment: re-smoke validated at `2026-04-13T00:18:27.996254+00:00` via controlled Ollama `release-user-smoke`; evidence `validation-artifacts/rollback-smoke-v1.0.13a2-2026-04-13T00-18-10Z.json`
 
 ## Canary Scope
 
@@ -50,6 +50,7 @@ The window was aborted on `2026-04-12T23:16:16.292317+00:00` after `run_06_ollam
 - preflight provider health captured at `2026-04-12T23:12:49.569692Z` recorded OpenAI, Anthropic, and Ollama as healthy before traffic
 - the first five eligible workflows were externally validated and accepted
 - the sixth eligible workflow `run_06_ollama` reached `completed` internally but failed external artifact validation because the generated code omitted `main()`
+- the rollback baseline `v1.0.13a2` was re-smoke-validated after the abort on the same live host with a controlled Ollama `release-user-smoke` run that finished `completed`, kept all 3 tasks at `done`, and passed artifact validation with sample balance `2650.00`
 - the canary was aborted and expansion frozen at 6 eligible workflows, far short of the minimum 7-day / 100-workflow window
 - live checkpoint exports from `snapshot()` and `internal_runtime_telemetry()` were captured for the first accepted workflow and the aborting incident checkpoint
 
@@ -58,5 +59,5 @@ The window was aborted on `2026-04-12T23:16:16.292317+00:00` after `run_06_ollam
 - Phase 16 operations guide: `../canary-operations.md`
 - repository evidence-root rules: `../README.md`
 - current candidate parity and checkpoint record: `environment-parity.md`, `provider-health.json`, `workflow-summary.json`, `internal-runtime-telemetry.json`
-- retained canary validation artifacts: `validation-artifacts/preflight-provider-health-2026-04-12T23-12-49Z.json`, `validation-artifacts/checkpoint-through-run-06-2026-04-12T23-16-16Z.json`
+- retained canary validation artifacts: `validation-artifacts/preflight-provider-health-2026-04-12T23-12-49Z.json`, `validation-artifacts/checkpoint-through-run-06-2026-04-12T23-16-16Z.json`, `validation-artifacts/rollback-smoke-v1.0.13a2-2026-04-13T00-18-10Z.json`
 - retained release evidence: Phase 15 canonical matrix `full_matrix_validation_2026_04_12_v7`, GitHub Actions runs `#456` and `#18`, and GitHub release `v1.0.13a3`

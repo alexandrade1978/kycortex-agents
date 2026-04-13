@@ -1,0 +1,108 @@
+{
+  "artifact_validation": {
+    "artifact_path": "code_implementation.py",
+    "main_present": true,
+    "required_symbols": [
+      "calculate_budget_balance",
+      "main"
+    ],
+    "sample_balance": 2650.0,
+    "validated": true
+  },
+  "project_state": {
+    "acceptance_criteria_met": true,
+    "acceptance_evaluation": {
+      "accepted": true,
+      "completed_task_ids": [
+        "arch",
+        "code",
+        "review"
+      ],
+      "evaluated_task_ids": [
+        "arch",
+        "code",
+        "review"
+      ],
+      "failed_task_ids": [],
+      "pending_task_ids": [],
+      "policy": "all_tasks",
+      "reason": "all_evaluated_tasks_done",
+      "required_task_ids": [],
+      "skipped_task_ids": [],
+      "terminal_outcome": "completed"
+    },
+    "phase": "completed",
+    "repair_summary": {
+      "budget_remaining": 1,
+      "cycle_count": 0,
+      "failed_task_count": 0,
+      "failure_category_counts": {},
+      "history_count": 0,
+      "max_cycles": 1,
+      "reason_counts": {}
+    },
+    "task_status_counts": {
+      "done": 3
+    },
+    "terminal_outcome": "completed"
+  },
+  "provider_health_summary": {
+    "ollama": {
+      "active_health_check_count": 3,
+      "last_outcome_counts": {
+        "success": 3
+      },
+      "models": [
+        "qwen2.5-coder:7b"
+      ],
+      "retryable_failure_count": 0,
+      "status_counts": {
+        "healthy": 3
+      }
+    }
+  },
+  "provider_summary": {
+    "ollama": {
+      "attempt_count": 3,
+      "duration_ms": {
+        "avg": 4020.147,
+        "count": 3,
+        "max": 4828.242,
+        "min": 3481.972,
+        "total": 12060.44
+      },
+      "failure_count": 0,
+      "models": [
+        "qwen2.5-coder:7b"
+      ],
+      "retry_attempt_count": 0,
+      "success_count": 3,
+      "task_count": 3,
+      "usage": {
+        "input_tokens": 4746,
+        "output_tokens": 568,
+        "total_tokens": 5314
+      }
+    }
+  },
+  "recorded_at": "2026-04-13T00:18:27.996254+00:00",
+  "rollback_target": {
+    "commit": "b2dc9931d12c5d31651a97bba8c99e767b582ff8",
+    "package_version": "1.0.13a2",
+    "tag": "v1.0.13a2"
+  },
+  "smoke_configuration": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen2.5-coder:7b",
+    "ollama_num_ctx": 16384,
+    "output_dir": "/home/tupira/Dados/experiments/kycortex_agents/rollback_smoke_v1_0_13a2_rerun_2026_04_13T00_18_10Z",
+    "provider": "ollama",
+    "workflow_failure_policy": "continue",
+    "workflow_max_repair_cycles": 1
+  },
+  "snapshot_task_statuses": {
+    "arch": "done",
+    "code": "done",
+    "review": "done"
+  }
+}

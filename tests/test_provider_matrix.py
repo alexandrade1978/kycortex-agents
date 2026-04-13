@@ -1775,6 +1775,93 @@ def test_release_user_smoke_validation_errors_limit_public_artifact_path_to_file
     assert "customer-secret-root" not in str(exc_info.value)
 
 
+def test_release_user_smoke_validation_failure_rewrites_project_state(tmp_path, monkeypatch):
+    module = _load_example_module(
+        "example_release_user_smoke_state_rewrite_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    output_dir = tmp_path / "customer-secret-root" / "release-user-smoke"
+    project = module.build_project(str(output_dir), "ollama")
+    code_task = project.get_task("code")
+    assert code_task is not None
+    code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
+
+    class FakeParser:
+        def parse_args(self):
+            return argparse.Namespace(
+                provider="ollama",
+                model=None,
+                output_dir=str(output_dir),
+                base_url=None,
+                ollama_num_ctx=16384,
+                failure_policy="continue",
+                max_repair_cycles=1,
+            )
+
+    class FakeConfig:
+        llm_model = "qwen2.5-coder:7b"
+        workflow_acceptance_policy = "all_tasks"
+
+    class FakeOrchestrator:
+        def __init__(self, config):
+            self.config = config
+
+        def execute_workflow(self, workflow_project):
+            workflow_project.mark_workflow_running(
+                acceptance_policy="all_tasks",
+                repair_max_cycles=1,
+            )
+            for task in workflow_project.tasks:
+                task.status = "done"
+            workflow_project.mark_workflow_finished(
+                "completed",
+                acceptance_policy="all_tasks",
+                terminal_outcome="completed",
+                acceptance_criteria_met=True,
+                acceptance_evaluation={
+                    "policy": "all_tasks",
+                    "accepted": True,
+                    "reason": "all_evaluated_tasks_done",
+                    "evaluated_task_ids": [task.id for task in workflow_project.tasks],
+                    "required_task_ids": [],
+                    "completed_task_ids": [task.id for task in workflow_project.tasks],
+                    "failed_task_ids": [],
+                    "skipped_task_ids": [],
+                    "pending_task_ids": [],
+                },
+            )
+            workflow_project.save()
+
+    def fake_validate_generated_code(task, runtime_output_dir):
+        raise RuntimeError("Generated code did not expose main().")
+
+    monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
+    monkeypatch.setattr(module, "build_config", lambda args, runtime_output_dir: FakeConfig())
+    monkeypatch.setattr(module, "build_project", lambda runtime_output_dir, provider: project)
+    monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
+    monkeypatch.setattr(module, "_validate_generated_code", fake_validate_generated_code)
+
+    with pytest.raises(RuntimeError, match=r"Generated code did not expose main\(\)\."):
+        module.main()
+
+    reloaded = ProjectState.load(str(output_dir / "project_state.json"))
+
+    assert reloaded.phase == "failed"
+    assert reloaded.terminal_outcome == "failed"
+    assert reloaded.failure_category == "code_validation"
+    assert reloaded.acceptance_criteria_met is False
+    assert reloaded.acceptance_evaluation["accepted"] is False
+    assert reloaded.acceptance_evaluation["reason"] == "artifact_validation_failed"
+    assert reloaded.acceptance_evaluation["artifact_validation"] == {
+        "validated": False,
+        "artifact_path": "budget_planner.py",
+        "required_symbols": ["calculate_budget_balance", "main"],
+        "missing_symbols": ["main"],
+        "error": "Generated code did not expose main().",
+    }
+
+
 def test_provider_matrix_example_passes_completion_budget_override(tmp_path, monkeypatch):
     module = _load_example_module(
         "example_provider_matrix_validation_run_provider_max_tokens_test",

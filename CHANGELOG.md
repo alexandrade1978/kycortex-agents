@@ -51,6 +51,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - Repository docs no longer advertise full normalized snapshots, public snapshot telemetry, or provider-matrix telemetry as stable prompt-facing or public observability behavior.
 - Completed a repository documentation consistency sweep so `README.md` and `docs/README.md` now anchor the same four-view boundary model and direct exact observability readers to `ProjectState.internal_runtime_telemetry()` instead of stale compatibility-telemetry wording.
+- `examples/example_release_user_smoke.py` now rewrites persisted workflow state to `failed` with `failure_category=code_validation` when deterministic artifact validation fails after internal workflow completion, preventing the missing-`main()` false-success path observed during the first live Phase 16 canary attempt.
 
 ### Release Readiness Notes
 

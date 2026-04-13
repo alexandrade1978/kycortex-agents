@@ -5,6 +5,7 @@ import py_compile
 
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
 from kycortex_agents.provider_matrix import _public_path_label
+from kycortex_agents.types import FailureCategory, TaskStatus, WorkflowOutcome
 
 
 DEFAULT_MODELS = {
@@ -162,6 +163,86 @@ def _code_artifact_path(task: Task, output_dir: str) -> Path | None:
     return None
 
 
+def _missing_symbols_from_validation_error(validation_error: str) -> list[str]:
+    missing_symbols: list[str] = []
+    if "calculate_budget_balance()" in validation_error:
+        missing_symbols.append("calculate_budget_balance")
+    if "main()" in validation_error:
+        missing_symbols.append("main")
+    return missing_symbols
+
+
+def _public_validation_error_message(error: Exception, artifact_path: Path | None) -> str:
+    message = str(error)
+    if artifact_path is not None:
+        message = message.replace(str(artifact_path), _public_path_label(str(artifact_path)))
+    return message
+
+
+def _artifact_validation_failure_evaluation(
+    project: ProjectState,
+    *,
+    acceptance_policy: str,
+    validation_error: str,
+    artifact_path: Path | None,
+) -> dict[str, object]:
+    if acceptance_policy == "required_tasks":
+        evaluated_tasks = [task for task in project.tasks if task.required_for_acceptance]
+    else:
+        evaluated_tasks = list(project.tasks)
+
+    completed_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.DONE.value]
+    failed_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.FAILED.value]
+    skipped_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.SKIPPED.value]
+    pending_task_ids = [
+        task.id
+        for task in evaluated_tasks
+        if task.status not in {TaskStatus.DONE.value, TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
+    ]
+
+    return {
+        "policy": acceptance_policy,
+        "accepted": False,
+        "reason": "artifact_validation_failed",
+        "evaluated_task_ids": [task.id for task in evaluated_tasks],
+        "required_task_ids": [task.id for task in project.tasks if task.required_for_acceptance],
+        "completed_task_ids": completed_task_ids,
+        "failed_task_ids": failed_task_ids,
+        "skipped_task_ids": skipped_task_ids,
+        "pending_task_ids": pending_task_ids,
+        "artifact_validation": {
+            "validated": False,
+            "artifact_path": _public_path_label(str(artifact_path)) if artifact_path is not None else None,
+            "required_symbols": ["calculate_budget_balance", "main"],
+            "missing_symbols": _missing_symbols_from_validation_error(validation_error),
+            "error": validation_error,
+        },
+    }
+
+
+def _persist_validation_failure(
+    project: ProjectState,
+    *,
+    acceptance_policy: str,
+    validation_error: str,
+    artifact_path: Path | None,
+) -> None:
+    project.mark_workflow_finished(
+        "failed",
+        acceptance_policy=acceptance_policy,
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category=FailureCategory.CODE_VALIDATION.value,
+        acceptance_criteria_met=False,
+        acceptance_evaluation=_artifact_validation_failure_evaluation(
+            project,
+            acceptance_policy=acceptance_policy,
+            validation_error=validation_error,
+            artifact_path=artifact_path,
+        ),
+    )
+    project.save()
+
+
 def _validate_generated_code(task: Task, output_dir: str) -> tuple[float, str]:
     artifact_path = _code_artifact_path(task, output_dir)
     if artifact_path is None or not artifact_path.exists():
@@ -202,6 +283,23 @@ def main() -> None:
 
     Orchestrator(config).execute_workflow(project)
 
+    code_task = next((task for task in project.tasks if task.id == "code"), None)
+    if code_task is None:
+        raise SystemExit("Smoke workflow did not create a code task.")
+
+    artifact_path = _code_artifact_path(code_task, output_dir)
+    try:
+        sample_balance, validated_artifact_path = _validate_generated_code(code_task, output_dir)
+    except Exception as exc:
+        public_validation_error = _public_validation_error_message(exc, artifact_path)
+        _persist_validation_failure(
+            project,
+            acceptance_policy=project.acceptance_policy or config.workflow_acceptance_policy,
+            validation_error=public_validation_error,
+            artifact_path=artifact_path,
+        )
+        raise RuntimeError(public_validation_error) from exc
+
     print(f"provider={_presence_label(args.provider)}")
     print(f"model={_presence_label(config.llm_model)}")
     print(f"phase={project.phase}")
@@ -221,13 +319,8 @@ def main() -> None:
         print(f"output_present={_format_output_presence(task.output)}")
         print("---")
 
-    code_task = next((task for task in project.tasks if task.id == "code"), None)
-    if code_task is None:
-        raise SystemExit("Smoke workflow did not create a code task.")
-
-    sample_balance, artifact_path = _validate_generated_code(code_task, output_dir)
     print("artifact_validation=passed")
-    print(f"validated_artifact={_public_path_label(artifact_path)}")
+    print(f"validated_artifact={_public_path_label(validated_artifact_path)}")
     print(f"sample_balance={sample_balance:.2f}")
 
 

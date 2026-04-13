@@ -1,7 +1,7 @@
 {
   "candidate_sha": "c74e957ae76e9605d21b91ccc6d36bd1f25be16c",
-  "generated_at": "2026-04-13T02:35:04.405847+00:00",
-  "status": "collected_first_checkpoint_window_open",
+  "generated_at": "2026-04-13T02:49:28.144834+00:00",
+  "status": "collected_then_aborted_code_validation_incident",
   "required_source": "ProjectState.internal_runtime_telemetry()",
   "planned_collection_points": [
     "before traffic starts",
@@ -233,8 +233,242 @@
           "has_main": true,
           "sample_balance": 2650.0
         }
+      },
+      {
+        "checkpoint": "abort_code_validation_release_user_smoke_ollama",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_ollama/project_state.json",
+        "collected_at": "2026-04-13T02:49:28.144834+00:00",
+        "workflow": {
+          "acceptance_evaluation": {
+            "accepted": false,
+            "artifact_validation": {
+              "artifact_path": "code_implementation.py",
+              "error": "Generated code did not expose main().",
+              "missing_symbols": [
+                "main"
+              ],
+              "required_symbols": [
+                "calculate_budget_balance",
+                "main"
+              ],
+              "validated": false
+            },
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "failure_category": "code_validation",
+            "pending_task_ids": [],
+            "policy": "all_tasks",
+            "reason": "artifact_validation_failed",
+            "required_task_ids": [],
+            "skipped_task_ids": [],
+            "terminal_outcome": "failed"
+          },
+          "attempt_count": 3,
+          "duration_ms": {
+            "avg": 5797.49,
+            "count": 3,
+            "max": 8221.792,
+            "min": 3661.224,
+            "total": 17392.469
+          },
+          "error_summary": {
+            "fallback_error_count": 0,
+            "final_error_count": 0
+          },
+          "fallback_summary": {
+            "entry_count": 0,
+            "providers": [],
+            "statuses": [],
+            "task_count": 0
+          },
+          "final_providers": [
+            "ollama"
+          ],
+          "observed_providers": [
+            "ollama"
+          ],
+          "provider_health_summary": {
+            "ollama": {
+              "active_health_check_count": 3,
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "retryable_failure_count": 0,
+              "status_counts": {
+                "healthy": 3
+              }
+            }
+          },
+          "provider_summary": {
+            "ollama": {
+              "attempt_count": 3,
+              "duration_ms": {
+                "avg": 5797.49,
+                "count": 3,
+                "max": 8221.792,
+                "min": 3661.224,
+                "total": 17392.469
+              },
+              "failure_count": 0,
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "retry_attempt_count": 0,
+              "success_count": 3,
+              "task_count": 3,
+              "usage": {
+                "input_tokens": 6966,
+                "output_tokens": 742,
+                "total_tokens": 7708
+              }
+            }
+          },
+          "repair_summary": {
+            "budget_remaining": 1,
+            "cycle_count": 0,
+            "failed_task_count": 0,
+            "failure_category_counts": {},
+            "history_count": 0,
+            "max_cycles": 1,
+            "reason_counts": {}
+          },
+          "resume_summary": {
+            "last_resumed_at": null,
+            "reason_counts": {},
+            "resume_event_count": 0,
+            "resumed_task_count": 0,
+            "unique_task_count": 0
+          },
+          "retry_attempt_count": 0,
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "usage": {
+            "input_tokens": 6966,
+            "output_tokens": 742,
+            "total_tokens": 7708
+          }
+        },
+        "tasks": {
+          "arch": {
+            "agent_name": "architect",
+            "attempts_used": 1,
+            "has_provider_call": true,
+            "last_attempt_duration_ms": 8223.453,
+            "model": "qwen2.5-coder:7b",
+            "provider": "ollama",
+            "provider_duration_ms": 8221.792,
+            "provider_health": {
+              "ollama": {
+                "last_health_check": {
+                  "active_check": true,
+                  "cooldown_cached": false,
+                  "status": "healthy"
+                },
+                "last_outcome": "success",
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy"
+              }
+            },
+            "provider_latency_ms": null,
+            "retry_attempt_count": 0,
+            "status": "done",
+            "success": true,
+            "task_duration_ms": 8223.453,
+            "usage": {
+              "input_tokens": 809,
+              "output_tokens": 392,
+              "total_tokens": 1201
+            }
+          },
+          "code": {
+            "agent_name": "code_engineer",
+            "attempts_used": 1,
+            "has_provider_call": true,
+            "last_attempt_duration_ms": 5557.59,
+            "model": "qwen2.5-coder:7b",
+            "provider": "ollama",
+            "provider_duration_ms": 5509.453,
+            "provider_health": {
+              "ollama": {
+                "last_health_check": {
+                  "active_check": true,
+                  "cooldown_cached": false,
+                  "status": "healthy"
+                },
+                "last_outcome": "success",
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy"
+              }
+            },
+            "provider_latency_ms": null,
+            "retry_attempt_count": 0,
+            "status": "done",
+            "success": true,
+            "task_duration_ms": 5557.59,
+            "usage": {
+              "input_tokens": 5484,
+              "output_tokens": 178,
+              "total_tokens": 5662
+            }
+          },
+          "review": {
+            "agent_name": "code_reviewer",
+            "attempts_used": 1,
+            "has_provider_call": true,
+            "last_attempt_duration_ms": 3662.407,
+            "model": "qwen2.5-coder:7b",
+            "provider": "ollama",
+            "provider_duration_ms": 3661.224,
+            "provider_health": {
+              "ollama": {
+                "last_health_check": {
+                  "active_check": true,
+                  "cooldown_cached": false,
+                  "status": "healthy"
+                },
+                "last_outcome": "success",
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy"
+              }
+            },
+            "provider_latency_ms": null,
+            "retry_attempt_count": 0,
+            "status": "done",
+            "success": true,
+            "task_duration_ms": 3662.407,
+            "usage": {
+              "input_tokens": 673,
+              "output_tokens": 172,
+              "total_tokens": 845
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_ollama/artifacts/code_implementation.py",
+          "validated": false,
+          "validation_error": "Generated code did not expose main().",
+          "has_calculate_budget_balance": null,
+          "has_main": null,
+          "sample_balance": null
+        }
       }
     ],
-    "final_export": "not-collected-window-open-minimum-not-yet-met"
+    "final_export": "not-collected-window-aborted-before-minimum"
   }
 }

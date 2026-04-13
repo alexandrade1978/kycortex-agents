@@ -22,15 +22,15 @@ Example:
 docs/canary-evidence/be748fa/
 ```
 
-There is currently an active open canary window.
+There is currently no active open canary window.
 
-Current active released-candidate bundle:
+The most recent released-candidate abort bundle records the published `v1.0.13a5` window:
 
 ```text
 docs/canary-evidence/c74e957/
 ```
 
-The most recent released-candidate abort bundle records the published `v1.0.13a4` window:
+The previous released-candidate abort bundle records the published `v1.0.13a4` window:
 
 ```text
 docs/canary-evidence/8bfdc29/

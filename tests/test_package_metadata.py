@@ -1091,8 +1091,8 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
     assert "## Next Maintenance Action" in release_status
-    assert "continue collecting Phase 16 evidence in `docs/canary-evidence/c74e957/` through the next explicit checkpoint" in release_status
-    assert "refresh provider health, workflow summaries, internal runtime telemetry, and validation artifacts before any canary expansion beyond the first accepted workflow" in release_status
+    assert "root-cause and fix the `release_user_smoke_ollama` code-validation incident so generated artifacts preserve the exact `calculate_budget_balance(income: float, expenses: list[float]) -> float` contract plus `main()`" in release_status
+    assert "restart Phase 16 from fresh preflight on the new candidate rather than resuming `docs/canary-evidence/c74e957/`, while keeping rollback target pinned to `v1.0.13a2`" in release_status
 
 
 def test_migration_notes_document_public_upgrade_path():

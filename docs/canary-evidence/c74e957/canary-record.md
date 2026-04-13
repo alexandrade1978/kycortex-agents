@@ -1,12 +1,12 @@
 # Canary Record - c74e957
 
-Status: live window open; preflight healthy and first checkpoint accepted
+Status: aborted after code-validation incident on `release_user_smoke_ollama`
 
 This record opens the candidate evidence bundle for released commit `c74e957ae76e9605d21b91ccc6d36bd1f25be16c` and tag `v1.0.13a5`.
 
 The live Phase 16 window started on `2026-04-13T02:34:33Z` on the maintainer-operated host `alex-kycortex`.
 
-The first accepted workflow completed on `2026-04-13T02:35:04.405705+00:00` after a controlled OpenAI `release-user-smoke` run finished `completed`, kept all 3 tasks at `done`, and passed external artifact validation.
+The window was aborted on `2026-04-13T02:49:28.144777+00:00` after `release_user_smoke_ollama` generated a Python artifact without `main()`, causing external artifact validation to fail with `Generated code did not expose main().`. The incident preserved bounded termination, but it dropped accepted workflow rate to `66.7%`, missed the canary SLO, and triggered rollback policy.
 
 ## Candidate Identity
 
@@ -49,16 +49,18 @@ The first accepted workflow completed on `2026-04-13T02:35:04.405705+00:00` afte
 - historical abort evidence for the published `v1.0.13a4` line is retained under `../8bfdc29/`
 - historical abort evidence for the disqualified `v1.0.13a3` line is retained under `../2563383/`
 - preflight provider health captured at `2026-04-13T02:34:45.948542+00:00` recorded OpenAI, Anthropic, and Ollama as healthy before traffic
-- the first controlled workflow `release_user_smoke_openai` was externally validated and accepted at `2026-04-13T02:35:04.405705+00:00`
-- the active window currently has 1 eligible workflow seen, 1 accepted workflow, 0 incidents, and 0 rollback actions
-- the next required checkpoint is 10 eligible workflows or the first incident, whichever comes first
-- live checkpoint exports from `snapshot()` and `internal_runtime_telemetry()` have been captured for the first accepted workflow
+- expansion provider health refreshed at `2026-04-13T02:47:53.463682+00:00` recorded OpenAI, Anthropic, and Ollama as healthy before broader admission
+- the first 2 controlled workflows `release_user_smoke_openai` and `release_user_smoke_anthropic` were externally validated and accepted by `2026-04-13T02:48:28.191709+00:00`
+- the third controlled workflow `release_user_smoke_ollama` finished `failed` with `failure_category=code_validation` after external artifact validation rejected `artifacts/code_implementation.py` because the generated module did not expose `main()`
+- the canary was aborted and expansion frozen at 3 eligible workflows because accepted workflow rate fell to `66.7%`, missed the `>=95.0%` canary SLO, and triggered rollback policy
+- no broader customer-facing traffic remained to drain, so the rollback decision froze further admission without requiring a live cutover away from the controlled subset
+- live checkpoint exports from `snapshot()` and `internal_runtime_telemetry()` have been captured for the first accepted workflow and the aborting code-validation incident checkpoint
 
 ## Evidence References
 
 - Phase 16 operations guide: `../canary-operations.md`
 - repository evidence-root rules: `../README.md`
 - current candidate parity and checkpoint record: `environment-parity.md`, `provider-health.json`, `workflow-summary.json`, `internal-runtime-telemetry.json`
-- retained canary validation artifacts: `validation-artifacts/preflight-provider-health-2026-04-13T02-34-45Z.json`, `validation-artifacts/checkpoint-first-accepted-2026-04-13T02-35-04Z.json`
+- retained canary validation artifacts: `validation-artifacts/preflight-provider-health-2026-04-13T02-34-45Z.json`, `validation-artifacts/checkpoint-first-accepted-2026-04-13T02-35-04Z.json`, `validation-artifacts/expansion-provider-health-2026-04-13T02-47-53Z.json`, `validation-artifacts/checkpoint-through-run-03-2026-04-13T02-49-28Z.json`
 - retained rollback evidence for the approved rollback target: `../2563383/validation-artifacts/rollback-smoke-v1.0.13a2-2026-04-13T00-18-10Z.json`
 - retained release evidence: Phase 15 canonical matrix `full_matrix_validation_2026_04_12_v7`, local `python scripts/release_check.py`, tagged Release workflow `#20`, and GitHub release `v1.0.13a5`

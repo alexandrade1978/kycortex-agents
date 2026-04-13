@@ -45,7 +45,7 @@ This file tracks the current repository-owned release state for KYCortex after p
 
 - The clean canonical Phase 15 rerun `full_matrix_validation_2026_04_12_v7` finished with 15 of 15 runs at `status=completed` and 15 of 15 runs at `terminal_outcome=completed` on the current candidate line.
 - The local release-validation line re-cleared after the Phase 15 prompt hardening, including `ruff`, `mypy`, focused regressions, `scripts/release_metadata_check.py`, and `scripts/release_check.py`.
-- The published `1.0.13a5` line rejects unsupported non-standard-library imports deterministically during `release-user-smoke` artifact validation and reinforces the standard-library-only contract across architecture, implementation, and review prompts.
+- The published `1.0.13a5` line rejects unsupported non-standard-library imports deterministically during `release-user-smoke` artifact validation, but the live canary still exposed a provider-specific code-validation failure where `release_user_smoke_ollama` generated an artifact without `main()` and the persisted workflow state was correctly rewritten to `failure_category=code_validation`.
 - Focused `release-user-smoke` regressions re-cleared on the published line: `tests/test_provider_matrix.py -k release_user_smoke` passed 5 of 5 tests.
 - Local release validation re-cleared on the published line: `python scripts/release_check.py` completed successfully with the full 1213-test suite green and the coverage gate still above the required threshold.
 - Tagged Release workflow `#20` re-ran the repository-owned release gate, built the wheel and source distribution, validated the staged artifacts, generated and verified `release-artifact-manifest.json`, generated `release-promotion-summary.json`, published the GitHub release, and re-verified the published assets and checksums.
@@ -61,9 +61,11 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Historical Phase 16 canary evidence for the published `v1.0.13a3` line remains closed as an abort record at `docs/canary-evidence/2563383/` after `run_06_ollama` triggered a zero-budget false success.
 - Historical Phase 16 canary evidence for the published `v1.0.13a4` line remains closed as an abort record at `docs/canary-evidence/8bfdc29/` after `run_04_openai` triggered a code-validation incident.
 - Fresh Phase 16 canary traffic for the published `v1.0.13a5` line opened on `2026-04-13T02:34:33Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status at `2026-04-13T02:34:45.948542+00:00`.
-- The first controlled `release_user_smoke_openai` checkpoint admitted 1 eligible workflow on the live maintainer-operated canary host and externally validated it successfully on OpenAI at `2026-04-13T02:35:04.405705+00:00`.
-- The active canary window now lives under `docs/canary-evidence/c74e957/` and remains intentionally frozen at the smallest controlled subset until the next explicit expansion checkpoint.
-- The rollback baseline `v1.0.13a2` remains the approved safe target, and no rollback action has been required in the current `v1.0.13a5` window.
+- Expansion provider health refreshed at `2026-04-13T02:47:53.463682+00:00` and remained healthy for OpenAI, Anthropic, and Ollama before broader admission.
+- The first 2 controlled workflows `release_user_smoke_openai` and `release_user_smoke_anthropic` were externally validated and accepted by `2026-04-13T02:48:28.191709+00:00`.
+- The third controlled workflow `release_user_smoke_ollama` finished `failed` at `2026-04-13T02:49:28.144777+00:00` with `failure_category=code_validation` after external artifact validation rejected `artifacts/code_implementation.py` because the generated module did not expose `main()`.
+- The `docs/canary-evidence/c74e957/` window is therefore aborted and expansion frozen at 3 eligible workflows because accepted workflow rate fell to `66.7%`, missed the canary SLO, and triggered rollback policy.
+- The rollback baseline `v1.0.13a2` remains the approved safe target, and no broader live cutover was required because traffic never advanced beyond the controlled subset.
 
 ## Release Outcome
 
@@ -91,8 +93,8 @@ Use the following repository-owned references when validating follow-up maintena
 
 ## Next Maintenance Action
 
-For the active published `1.0.13a5` release line:
+For the published but now-aborted `1.0.13a5` release line:
 
-1. continue collecting Phase 16 evidence in `docs/canary-evidence/c74e957/` through the next explicit checkpoint
-2. refresh provider health, workflow summaries, internal runtime telemetry, and validation artifacts before any canary expansion beyond the first accepted workflow
-3. keep the rollback target pinned to `v1.0.13a2` until the active canary window closes cleanly
+1. root-cause and fix the `release_user_smoke_ollama` code-validation incident so generated artifacts preserve the exact `calculate_budget_balance(income: float, expenses: list[float]) -> float` contract plus `main()`
+2. cut a fresh maintenance candidate only after the repaired line re-clears the repository release gates
+3. restart Phase 16 from fresh preflight on the new candidate rather than resuming `docs/canary-evidence/c74e957/`, while keeping rollback target pinned to `v1.0.13a2`

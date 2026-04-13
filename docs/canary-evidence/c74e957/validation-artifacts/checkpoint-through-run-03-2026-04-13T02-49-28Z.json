@@ -1,0 +1,100 @@
+{
+  "candidate_sha": "c74e957ae76e9605d21b91ccc6d36bd1f25be16c",
+  "window_started_at": "2026-04-13T02:34:33Z",
+  "checkpoint_status": "aborted_code_validation_incident",
+  "checkpoint_captured_at": "2026-04-13T02:49:28.144834+00:00",
+  "eligible_workflow_class": "release-user-smoke",
+  "summary": {
+    "eligible_workflows_seen": 3,
+    "accepted_workflows": 2,
+    "accepted_workflow_rate": 66.7,
+    "false_success_count": 0,
+    "false_success_rate": 0.0,
+    "code_validation_failure_count": 1,
+    "code_validation_failure_rate": 33.3,
+    "bounded_termination_rate": 100.0,
+    "autonomous_recovery_rate": null,
+    "resume_integrity_rate": null,
+    "provider_success_counts": {
+      "anthropic": 1,
+      "openai": 1
+    },
+    "provider_false_success_counts": {},
+    "provider_code_validation_failure_counts": {
+      "ollama": 1
+    },
+    "aborting_state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_ollama/project_state.json",
+    "aborted_at": "2026-04-13T02:49:28.144777+00:00"
+  },
+  "runs": [
+    {
+      "ordinal": 1,
+      "provider": "openai",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+      "updated_at": "2026-04-13T02:35:04.405847+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "code_validation_failed": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_openai/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0,
+        "validation_error": null
+      }
+    },
+    {
+      "ordinal": 2,
+      "provider": "anthropic",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_anthropic/project_state.json",
+      "updated_at": "2026-04-13T02:48:28.191817+00:00",
+      "workflow_status": "completed",
+      "terminal_outcome": "completed",
+      "acceptance_criteria_met": true,
+      "externally_validated": true,
+      "false_success": false,
+      "code_validation_failed": false,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_anthropic/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": true,
+        "has_main": true,
+        "sample_balance": 2650.0,
+        "validation_error": null
+      }
+    },
+    {
+      "ordinal": 3,
+      "provider": "ollama",
+      "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_ollama/project_state.json",
+      "updated_at": "2026-04-13T02:49:28.144834+00:00",
+      "workflow_status": "failed",
+      "terminal_outcome": "failed",
+      "acceptance_criteria_met": false,
+      "externally_validated": false,
+      "false_success": false,
+      "code_validation_failed": true,
+      "repair_cycle_count": 0,
+      "attempt_count": 3,
+      "retry_attempt_count": 0,
+      "artifact_validation": {
+        "artifact_found": true,
+        "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_c74e957_2026_04_13T02_34_33Z/eligible_workflows/release_user_smoke_ollama/artifacts/code_implementation.py",
+        "has_calculate_budget_balance": null,
+        "has_main": null,
+        "sample_balance": null,
+        "validation_error": "Generated code did not expose main()."
+      }
+    }
+  ]
+}

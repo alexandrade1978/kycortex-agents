@@ -1,7 +1,7 @@
 {
   "candidate_sha": "f99a38d1a08dceedcd0b520e302e3615f81d60f0",
-  "generated_at": "2026-04-13T03:26:22.839955+00:00",
-  "status": "window_open_first_checkpoint_accepted",
+  "generated_at": "2026-04-13T03:55:23.377221+00:00",
+  "status": "window_open_checkpoint_through_run_10_clean",
   "release_candidate_baseline": {
     "phase15_matrix": {
       "campaign": "full_matrix_validation_2026_04_12_v7",
@@ -28,11 +28,11 @@
     }
   },
   "canary_window": {
-    "status": "window_open_first_checkpoint_accepted",
+    "status": "window_open_checkpoint_through_run_10_clean",
     "window_started_at": "2026-04-13T03:25:21Z",
     "eligible_workflow_class": "release-user-smoke",
-    "eligible_workflows_seen": 1,
-    "accepted_workflows": 1,
+    "eligible_workflows_seen": 10,
+    "accepted_workflows": 10,
     "accepted_workflow_rate": 100.0,
     "false_success_count": 0,
     "false_success_rate": 0.0,
@@ -41,14 +41,17 @@
     "resume_integrity_rate": null,
     "provider_breakdown": {
       "accepted": {
-        "openai": 1
+        "openai": 4,
+        "anthropic": 3,
+        "ollama": 3
       },
-      "false_success": {}
+      "false_success": {},
+      "code_validation_failed": {}
     },
     "checkpoint_history": [
       {
         "checkpoint": "first_accepted_workflow_openai",
-        "completed_at": "2026-04-13T03:26:22.839835+00:00",
+        "completed_at": "2026-04-13T03:26:22.839955+00:00",
         "provider": "openai",
         "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_openai/project_state.json",
         "artifact_validation": {
@@ -60,8 +63,23 @@
           "sample_balance": 2650.0
         },
         "result": "accepted"
+      },
+      {
+        "checkpoint": "checkpoint_through_run_10_clean",
+        "completed_at": "2026-04-13T03:55:23.377066+00:00",
+        "provider": "openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_10_openai/project_state.json",
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_10_openai/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        },
+        "result": "checkpoint_clean"
       }
     ],
-    "next_checkpoint": "10 eligible workflows or first incident"
+    "next_checkpoint": "25 eligible workflows or daily review, whichever comes first"
   }
 }

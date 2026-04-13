@@ -1,7 +1,7 @@
 {
   "candidate_sha": "f99a38d1a08dceedcd0b520e302e3615f81d60f0",
-  "generated_at": "2026-04-13T03:26:22.839955+00:00",
-  "bundle_status": "window_open_first_checkpoint_accepted",
+  "generated_at": "2026-04-13T03:55:23.377221+00:00",
+  "bundle_status": "window_open_checkpoint_through_run_10_clean",
   "window_started": true,
   "window_started_at": "2026-04-13T03:25:21Z",
   "preflight_checkpoint": {
@@ -10,16 +10,23 @@
     "artifact": "validation-artifacts/preflight-provider-health-2026-04-13T03-25-21Z.json",
     "all_providers_healthy": true
   },
+  "expansion_checkpoint": {
+    "captured_at": "2026-04-13T03:51:37.043973+00:00",
+    "host": "alex-kycortex",
+    "artifact": "validation-artifacts/expansion-provider-health-2026-04-13T03-51-37Z.json",
+    "all_providers_healthy": true
+  },
   "providers": [
     {
       "provider": "openai",
       "model": "gpt-4o-mini",
-      "status": "healthy_preflight_and_first_checkpoint_clean",
+      "status": "healthy_preflight_expansion_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 1119.506,
+      "latency_ms": 1169.922,
       "workflow_outcomes": {
-        "accepted": 1,
-        "false_success": 0
+        "accepted": 4,
+        "false_success": 0,
+        "code_validation_failed": 0
       },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
@@ -28,19 +35,23 @@
         ],
         "release_tag": "v1.0.13a6",
         "checkpoint_state_files": [
-          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_openai/project_state.json"
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_04_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_07_openai/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_10_openai/project_state.json"
         ]
       }
     },
     {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
-      "status": "healthy_preflight_pending_live_checkpoint",
+      "status": "healthy_preflight_expansion_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 505.785,
+      "latency_ms": 489.654,
       "workflow_outcomes": {
-        "accepted": 0,
-        "false_success": 0
+        "accepted": 3,
+        "false_success": 0,
+        "code_validation_failed": 0
       },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
@@ -48,19 +59,24 @@
           21
         ],
         "release_tag": "v1.0.13a6",
-        "checkpoint_state_files": []
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_05_anthropic/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_08_anthropic/project_state.json"
+        ]
       }
     },
     {
       "provider": "ollama",
       "model": "qwen2.5-coder:7b",
-      "status": "healthy_preflight_pending_live_checkpoint",
+      "status": "healthy_preflight_expansion_and_checkpoint_clean",
       "fresh_canary_health_check": "healthy",
-      "latency_ms": 14.66,
+      "latency_ms": 12.787,
       "base_url": "http://127.0.0.1:11434",
       "workflow_outcomes": {
-        "accepted": 0,
-        "false_success": 0
+        "accepted": 3,
+        "false_success": 0,
+        "code_validation_failed": 0
       },
       "evidence": {
         "phase15_matrix_clean_outcomes": "5/5",
@@ -69,9 +85,13 @@
         ],
         "local_baseline_model": "qwen2.5-coder:7b",
         "release_tag": "v1.0.13a6",
-        "checkpoint_state_files": []
+        "checkpoint_state_files": [
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_06_ollama/project_state.json",
+          "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_09_ollama/project_state.json"
+        ]
       }
     }
   ],
-  "next_required_update": "Collect the 10-eligible-workflow checkpoint or first incident and refresh provider health before any canary expansion."
+  "next_required_update": "Continue the active canary to the 25-eligible-workflow checkpoint or daily review, whichever comes first, while keeping the rollback target pinned to v1.0.13a2."
 }

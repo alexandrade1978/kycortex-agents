@@ -1,7 +1,7 @@
 {
   "candidate_sha": "f99a38d1a08dceedcd0b520e302e3615f81d60f0",
-  "generated_at": "2026-04-13T03:26:22.839955+00:00",
-  "status": "collected_first_checkpoint_window_open",
+  "generated_at": "2026-04-13T03:55:23.377221+00:00",
+  "status": "collected_through_run_10_window_open",
   "required_source": "ProjectState.internal_runtime_telemetry()",
   "planned_collection_points": [
     "before traffic starts",
@@ -227,6 +227,2025 @@
         },
         "artifact_validation": {
           "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_openai/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_02_anthropic",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_anthropic/project_state.json",
+        "collected_at": "2026-04-13T03:51:56.332418+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "anthropic"
+          ],
+          "observed_providers": [
+            "anthropic"
+          ],
+          "provider_summary": {
+            "anthropic": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "claude-haiku-4-5-20251001"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 13458.407,
+                "min": 2933.841,
+                "max": 6613.561,
+                "avg": 4486.136
+              },
+              "usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 8537,
+                "output_tokens": 1242,
+                "total_tokens": 9779
+              }
+            }
+          },
+          "provider_health_summary": {
+            "anthropic": {
+              "models": [
+                "claude-haiku-4-5-20251001"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 13458.407,
+            "min": 2933.841,
+            "max": 6613.561,
+            "avg": 4486.136
+          },
+          "usage": {
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "input_tokens": 8537,
+            "output_tokens": 1242,
+            "total_tokens": 9779
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 6615.517,
+            "last_attempt_duration_ms": 6615.517,
+            "provider_duration_ms": 6613.561,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 1207,
+              "output_tokens": 507,
+              "total_tokens": 1714
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 3965.924,
+            "last_attempt_duration_ms": 3965.924,
+            "provider_duration_ms": 3911.005,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 6108,
+              "output_tokens": 515,
+              "total_tokens": 6623
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 2939.63,
+            "last_attempt_duration_ms": 2939.63,
+            "provider_duration_ms": 2933.841,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 1222,
+              "output_tokens": 220,
+              "total_tokens": 1442
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_anthropic/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_03_ollama",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_ollama/project_state.json",
+        "collected_at": "2026-04-13T03:52:19.911374+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "ollama"
+          ],
+          "observed_providers": [
+            "ollama"
+          ],
+          "provider_summary": {
+            "ollama": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 18606.313,
+                "min": 4822.018,
+                "max": 8414.69,
+                "avg": 6202.104
+              },
+              "usage": {
+                "input_tokens": 7311,
+                "output_tokens": 710,
+                "total_tokens": 8021
+              }
+            }
+          },
+          "provider_health_summary": {
+            "ollama": {
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 18606.313,
+            "min": 4822.018,
+            "max": 8414.69,
+            "avg": 6202.104
+          },
+          "usage": {
+            "input_tokens": 7311,
+            "output_tokens": 710,
+            "total_tokens": 8021
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 8416.308,
+            "last_attempt_duration_ms": 8416.308,
+            "provider_duration_ms": 8414.69,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 1069,
+              "output_tokens": 329,
+              "total_tokens": 1398
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 5421.953,
+            "last_attempt_duration_ms": 5421.953,
+            "provider_duration_ms": 5369.605,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 5468,
+              "output_tokens": 162,
+              "total_tokens": 5630
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 4823.791,
+            "last_attempt_duration_ms": 4823.791,
+            "provider_duration_ms": 4822.018,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 774,
+              "output_tokens": 219,
+              "total_tokens": 993
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/release_user_smoke_ollama/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_04_openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_04_openai/project_state.json",
+        "collected_at": "2026-04-13T03:53:29.258419+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "openai"
+          ],
+          "observed_providers": [
+            "openai"
+          ],
+          "provider_summary": {
+            "openai": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 17918.241,
+                "min": 5415.063,
+                "max": 6396.305,
+                "avg": 5972.747
+              },
+              "usage": {
+                "input_tokens": 7407,
+                "output_tokens": 686,
+                "total_tokens": 8093
+              }
+            }
+          },
+          "provider_health_summary": {
+            "openai": {
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 17918.241,
+            "min": 5415.063,
+            "max": 6396.305,
+            "avg": 5972.747
+          },
+          "usage": {
+            "input_tokens": 7407,
+            "output_tokens": 686,
+            "total_tokens": 8093
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 6397.94,
+            "last_attempt_duration_ms": 6397.94,
+            "provider_duration_ms": 6396.305,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 1066,
+              "output_tokens": 205,
+              "total_tokens": 1271
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 5465.888,
+            "last_attempt_duration_ms": 5465.888,
+            "provider_duration_ms": 5415.063,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 5459,
+              "output_tokens": 273,
+              "total_tokens": 5732
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 6108.104,
+            "last_attempt_duration_ms": 6108.104,
+            "provider_duration_ms": 6106.873,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 882,
+              "output_tokens": 208,
+              "total_tokens": 1090
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_04_openai/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_05_anthropic",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_05_anthropic/project_state.json",
+        "collected_at": "2026-04-13T03:53:44.769942+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "anthropic"
+          ],
+          "observed_providers": [
+            "anthropic"
+          ],
+          "provider_summary": {
+            "anthropic": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "claude-haiku-4-5-20251001"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 14564.69,
+                "min": 3809.065,
+                "max": 6822.921,
+                "avg": 4854.897
+              },
+              "usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 8537,
+                "output_tokens": 1341,
+                "total_tokens": 9878
+              }
+            }
+          },
+          "provider_health_summary": {
+            "anthropic": {
+              "models": [
+                "claude-haiku-4-5-20251001"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 14564.69,
+            "min": 3809.065,
+            "max": 6822.921,
+            "avg": 4854.897
+          },
+          "usage": {
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "input_tokens": 8537,
+            "output_tokens": 1341,
+            "total_tokens": 9878
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 6825.32,
+            "last_attempt_duration_ms": 6825.32,
+            "provider_duration_ms": 6822.921,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 1207,
+              "output_tokens": 571,
+              "total_tokens": 1778
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 3859.353,
+            "last_attempt_duration_ms": 3859.353,
+            "provider_duration_ms": 3809.065,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 6108,
+              "output_tokens": 515,
+              "total_tokens": 6623
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 3934.437,
+            "last_attempt_duration_ms": 3934.437,
+            "provider_duration_ms": 3932.704,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 1222,
+              "output_tokens": 255,
+              "total_tokens": 1477
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_05_anthropic/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_06_ollama",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_06_ollama/project_state.json",
+        "collected_at": "2026-04-13T03:54:02.546128+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "ollama"
+          ],
+          "observed_providers": [
+            "ollama"
+          ],
+          "provider_summary": {
+            "ollama": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 17552.007,
+                "min": 4836.763,
+                "max": 7350.176,
+                "avg": 5850.669
+              },
+              "usage": {
+                "input_tokens": 7311,
+                "output_tokens": 710,
+                "total_tokens": 8021
+              }
+            }
+          },
+          "provider_health_summary": {
+            "ollama": {
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 17552.007,
+            "min": 4836.763,
+            "max": 7350.176,
+            "avg": 5850.669
+          },
+          "usage": {
+            "input_tokens": 7311,
+            "output_tokens": 710,
+            "total_tokens": 8021
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 7351.699,
+            "last_attempt_duration_ms": 7351.699,
+            "provider_duration_ms": 7350.176,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 1069,
+              "output_tokens": 329,
+              "total_tokens": 1398
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 5411.268,
+            "last_attempt_duration_ms": 5411.268,
+            "provider_duration_ms": 5365.068,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 5468,
+              "output_tokens": 162,
+              "total_tokens": 5630
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 4838.935,
+            "last_attempt_duration_ms": 4838.935,
+            "provider_duration_ms": 4836.763,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 774,
+              "output_tokens": 219,
+              "total_tokens": 993
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_06_ollama/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_07_openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_07_openai/project_state.json",
+        "collected_at": "2026-04-13T03:54:35.431101+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "openai"
+          ],
+          "observed_providers": [
+            "openai"
+          ],
+          "provider_summary": {
+            "openai": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 15141.763,
+                "min": 4644.588,
+                "max": 5254.135,
+                "avg": 5047.254
+              },
+              "usage": {
+                "input_tokens": 7397,
+                "output_tokens": 664,
+                "total_tokens": 8061
+              }
+            }
+          },
+          "provider_health_summary": {
+            "openai": {
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 15141.763,
+            "min": 4644.588,
+            "max": 5254.135,
+            "avg": 5047.254
+          },
+          "usage": {
+            "input_tokens": 7397,
+            "output_tokens": 664,
+            "total_tokens": 8061
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 4645.95,
+            "last_attempt_duration_ms": 4645.95,
+            "provider_duration_ms": 4644.588,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 1066,
+              "output_tokens": 192,
+              "total_tokens": 1258
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 5303.613,
+            "last_attempt_duration_ms": 5303.613,
+            "provider_duration_ms": 5254.135,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 5459,
+              "output_tokens": 263,
+              "total_tokens": 5722
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 5245.028,
+            "last_attempt_duration_ms": 5245.028,
+            "provider_duration_ms": 5243.04,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 872,
+              "output_tokens": 209,
+              "total_tokens": 1081
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_07_openai/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_08_anthropic",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_08_anthropic/project_state.json",
+        "collected_at": "2026-04-13T03:54:49.855785+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "anthropic"
+          ],
+          "observed_providers": [
+            "anthropic"
+          ],
+          "provider_summary": {
+            "anthropic": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "claude-haiku-4-5-20251001"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 14058.383,
+                "min": 3745.192,
+                "max": 6147.208,
+                "avg": 4686.128
+              },
+              "usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 8514,
+                "output_tokens": 1247,
+                "total_tokens": 9761
+              }
+            }
+          },
+          "provider_health_summary": {
+            "anthropic": {
+              "models": [
+                "claude-haiku-4-5-20251001"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 14058.383,
+            "min": 3745.192,
+            "max": 6147.208,
+            "avg": 4686.128
+          },
+          "usage": {
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "input_tokens": 8514,
+            "output_tokens": 1247,
+            "total_tokens": 9761
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 6149.758,
+            "last_attempt_duration_ms": 6149.758,
+            "provider_duration_ms": 6147.208,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 1207,
+              "output_tokens": 501,
+              "total_tokens": 1708
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 4222.845,
+            "last_attempt_duration_ms": 4222.845,
+            "provider_duration_ms": 4165.983,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 6108,
+              "output_tokens": 492,
+              "total_tokens": 6600
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 3746.923,
+            "last_attempt_duration_ms": 3746.923,
+            "provider_duration_ms": 3745.192,
+            "provider_latency_ms": null,
+            "usage": {
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0,
+              "input_tokens": 1199,
+              "output_tokens": 254,
+              "total_tokens": 1453
+            },
+            "provider_health": {
+              "anthropic": {
+                "model": "claude-haiku-4-5-20251001",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_08_anthropic/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_09_ollama",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_09_ollama/project_state.json",
+        "collected_at": "2026-04-13T03:55:07.602361+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "ollama"
+          ],
+          "observed_providers": [
+            "ollama"
+          ],
+          "provider_summary": {
+            "ollama": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 17522.67,
+                "min": 4841.541,
+                "max": 7335.133,
+                "avg": 5840.89
+              },
+              "usage": {
+                "input_tokens": 7311,
+                "output_tokens": 710,
+                "total_tokens": 8021
+              }
+            }
+          },
+          "provider_health_summary": {
+            "ollama": {
+              "models": [
+                "qwen2.5-coder:7b"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 17522.67,
+            "min": 4841.541,
+            "max": 7335.133,
+            "avg": 5840.89
+          },
+          "usage": {
+            "input_tokens": 7311,
+            "output_tokens": 710,
+            "total_tokens": 8021
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 7336.704,
+            "last_attempt_duration_ms": 7336.704,
+            "provider_duration_ms": 7335.133,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 1069,
+              "output_tokens": 329,
+              "total_tokens": 1398
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 5395.465,
+            "last_attempt_duration_ms": 5395.465,
+            "provider_duration_ms": 5345.996,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 5468,
+              "output_tokens": 162,
+              "total_tokens": 5630
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 4843.831,
+            "last_attempt_duration_ms": 4843.831,
+            "provider_duration_ms": 4841.541,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 774,
+              "output_tokens": 219,
+              "total_tokens": 993
+            },
+            "provider_health": {
+              "ollama": {
+                "model": "qwen2.5-coder:7b",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_09_ollama/artifacts/code_implementation.py",
+          "validated": true,
+          "validation_error": null,
+          "has_calculate_budget_balance": true,
+          "has_main": true,
+          "sample_balance": 2650.0
+        }
+      },
+      {
+        "checkpoint": "run_10_openai",
+        "state_file": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_10_openai/project_state.json",
+        "collected_at": "2026-04-13T03:55:23.377221+00:00",
+        "workflow": {
+          "task_count": 3,
+          "task_status_counts": {
+            "done": 3
+          },
+          "tasks_with_provider_calls": 3,
+          "tasks_without_provider_calls": 0,
+          "acceptance_evaluation": {
+            "policy": "all_tasks",
+            "accepted": true,
+            "reason": "all_evaluated_tasks_done",
+            "evaluated_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "required_task_ids": [],
+            "completed_task_ids": [
+              "arch",
+              "code",
+              "review"
+            ],
+            "failed_task_ids": [],
+            "skipped_task_ids": [],
+            "pending_task_ids": [],
+            "terminal_outcome": "completed"
+          },
+          "resume_summary": {
+            "resume_event_count": 0,
+            "reason_counts": {},
+            "resumed_task_count": 0,
+            "unique_task_count": 0,
+            "last_resumed_at": null
+          },
+          "repair_summary": {
+            "cycle_count": 0,
+            "max_cycles": 1,
+            "budget_remaining": 1,
+            "history_count": 0,
+            "reason_counts": {},
+            "failure_category_counts": {},
+            "failed_task_count": 0
+          },
+          "final_providers": [
+            "openai"
+          ],
+          "observed_providers": [
+            "openai"
+          ],
+          "provider_summary": {
+            "openai": {
+              "task_count": 3,
+              "success_count": 3,
+              "failure_count": 0,
+              "attempt_count": 3,
+              "retry_attempt_count": 0,
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "duration_ms": {
+                "count": 3,
+                "total": 15590.407,
+                "min": 4704.443,
+                "max": 5910.663,
+                "avg": 5196.802
+              },
+              "usage": {
+                "input_tokens": 7397,
+                "output_tokens": 636,
+                "total_tokens": 8033
+              }
+            }
+          },
+          "provider_health_summary": {
+            "openai": {
+              "models": [
+                "gpt-4o-mini"
+              ],
+              "status_counts": {
+                "healthy": 3
+              },
+              "last_outcome_counts": {
+                "success": 3
+              },
+              "retryable_failure_count": 0,
+              "active_health_check_count": 3
+            }
+          },
+          "attempt_count": 3,
+          "retry_attempt_count": 0,
+          "duration_ms": {
+            "count": 3,
+            "total": 15590.407,
+            "min": 4704.443,
+            "max": 5910.663,
+            "avg": 5196.802
+          },
+          "usage": {
+            "input_tokens": 7397,
+            "output_tokens": 636,
+            "total_tokens": 8033
+          },
+          "fallback_summary": {
+            "task_count": 0,
+            "entry_count": 0,
+            "providers": [],
+            "statuses": []
+          },
+          "error_summary": {
+            "final_error_count": 0,
+            "fallback_error_count": 0
+          }
+        },
+        "tasks": {
+          "arch": {
+            "status": "done",
+            "agent_name": "architect",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 5912.693,
+            "last_attempt_duration_ms": 5912.693,
+            "provider_duration_ms": 5910.663,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 1066,
+              "output_tokens": 169,
+              "total_tokens": 1235
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "code": {
+            "status": "done",
+            "agent_name": "code_engineer",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 4758.122,
+            "last_attempt_duration_ms": 4758.122,
+            "provider_duration_ms": 4704.443,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 5459,
+              "output_tokens": 263,
+              "total_tokens": 5722
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          },
+          "review": {
+            "status": "done",
+            "agent_name": "code_reviewer",
+            "has_provider_call": true,
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "success": true,
+            "attempts_used": 1,
+            "retry_attempt_count": 0,
+            "task_duration_ms": 4977.259,
+            "last_attempt_duration_ms": 4977.259,
+            "provider_duration_ms": 4975.301,
+            "provider_latency_ms": null,
+            "usage": {
+              "input_tokens": 872,
+              "output_tokens": 204,
+              "total_tokens": 1076
+            },
+            "provider_health": {
+              "openai": {
+                "model": "gpt-4o-mini",
+                "status": "healthy",
+                "last_outcome": "success",
+                "last_health_check": {
+                  "status": "healthy",
+                  "active_check": true,
+                  "cooldown_cached": false
+                }
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "artifact_path": "/home/tupira/Dados/experiments/kycortex_agents/canary_f99a38d_2026_04_13T03_25_21Z/eligible_workflows/run_10_openai/artifacts/code_implementation.py",
           "validated": true,
           "validation_error": null,
           "has_calculate_budget_balance": true,

@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.error import URLError
 
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import WorkflowOutcome, WorkflowStatus
+from kycortex_agents.types import WorkflowOutcome
 
 
 def _load_example_module(module_name: str, relative_path: str):

@@ -848,4 +848,38 @@ def test_access_review_detail_contract_includes_approval_metadata_subfield_guida
     code_task = next(task for task in project.tasks if task.id == "code")
 
     assert "approved_by (str) and age_days (int)" in code_task.description
+
+
+def test_contract_anchor_rejects_nondict_details(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_nondict_reject_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    spec = next(spec for spec in module.SCENARIOS if spec.slug == "kyc_compliance_intake")
+    anchor = module._contract_anchor(spec)
+    assert "validate_request must return False immediately when details is not a dict" in anchor
+
+
+def test_kyc_detail_contract_rejects_nondict_details(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_kyc_nondict_detail_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    kyc_spec = next(spec for spec in module.SCENARIOS if spec.slug == "kyc_compliance_intake")
+    project = module.build_project(kyc_spec, str(tmp_path / "campaign" / "openai"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    assert "non-dict details" in code_task.description.lower()
+    assert "raise ValueError" in code_task.description
+
+
+def test_access_detail_contract_rejects_nondict_details(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_access_nondict_detail_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    access_spec = next(spec for spec in module.SCENARIOS if spec.slug == "access_review_audit")
+    project = module.build_project(access_spec, str(tmp_path / "campaign" / "anthropic"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    assert "non-dict details" in code_task.description.lower()
+    assert "raise ValueError" in code_task.description
     assert "Do not invent additional required sub-keys" in code_task.description

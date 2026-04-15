@@ -65,6 +65,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep canonical details keys exact for this scenario: identity_evidence, jurisdiction, customer_type, adverse_indicators, and missing_documents.",
             "Keep identity_evidence as the evidence collection inside details. Do not replace it with guessed aliases such as identity_proof, address_proof, documents, or document_list.",
             "Keep jurisdiction and customer_type as strings. Keep identity_evidence, adverse_indicators, and missing_documents as list-like collections inside details, not numeric severity placeholders or plain strings.",
+            "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request. Never fall back to default values for non-dict details.",
         ),
         docs_focus=(
             "analyst workflow",
@@ -206,6 +207,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep requested_roles and approval_metadata exact inside details. Do not replace them with guessed aliases such as roles, approvals, or approver_metadata.",
             "Keep requester_identity as a string, requested_roles and sod_conflicts as list-like collections, approval_metadata as a mapping object, and emergency_access plus stale_approval as boolean flags.",
             "The approval_metadata mapping contains exactly the keys approved_by (str) and age_days (int). Do not invent additional required sub-keys such as approval_date, approved_at, or approval_timestamp.",
+            "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request. Never fall back to default values for non-dict details.",
         ),
         docs_focus=(
             "access governance workflow",
@@ -257,6 +259,7 @@ def _contract_anchor(spec: ScenarioSpec) -> str:
         f"- Supporting validation surface: {spec.service_name}.validate_request(request)\n"
         "- validate_request(request) must return a plain bool (True for valid, False for invalid). Do not return a tuple, a dataclass, or a validation-result object — return exactly True or False.\n"
         "- The details field of every request is always a plain dict (Dict[str, Any]). Access detail values through dict indexing (details['key']) or details.get('key'), never through attribute access (details.key). Do not define a custom dataclass or NamedTuple for the details payload.\n"
+        "- validate_request must return False immediately when details is not a dict. Do not gracefully handle non-dict details (e.g. a plain string); treat any non-dict value as an invalid request.\n"
         "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases.\n"
         f"- Keep these names exact. Do not rename the facade to a generic alias or replace {spec.request_name} with guessed placeholder models.\n"
         "- Keep constructor field names exact. Do not replace request_id, request_type, details, or timestamp with guessed fields such as id, type, data, metadata, or status.\n"

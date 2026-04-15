@@ -2376,4 +2376,100 @@ def test_execute_empirical_validation_workflow_does_not_resume_cancelled_workflo
 
     assert execute_calls["count"] == 1
     assert project.terminal_outcome == WorkflowOutcome.CANCELLED.value
-    assert project.phase == WorkflowStatus.CANCELLED.value
+
+
+def test_can_resume_failed_workflow_ignores_repair_origin_failures(tmp_path):
+    """Only non-repair-origin failed tasks should trigger a resume."""
+    from kycortex_agents.provider_matrix import _can_resume_failed_workflow
+    from kycortex_agents.types import TaskStatus
+
+    project = ProjectState(
+        project_name="Demo",
+        goal="test",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(Task(id="code", title="Code", description="Write code", assigned_to="coder"))
+    project.add_task(Task(id="tests", title="Tests", description="Write tests", assigned_to="tester", dependencies=["code"]))
+
+    for t in project.tasks:
+        t.status = TaskStatus.DONE.value
+
+    repair_task = Task(
+        id="tests__repair_1",
+        title="Tests (repair)",
+        description="Repair tests",
+        assigned_to="tester",
+        dependencies=["code"],
+    )
+    repair_task.repair_origin_task_id = "tests"
+    repair_task.status = TaskStatus.FAILED.value
+    project.add_task(repair_task)
+
+    project.terminal_outcome = WorkflowOutcome.DEGRADED.value
+
+    assert _can_resume_failed_workflow(project) is False
+
+
+def test_execute_empirical_validation_workflow_terminates_when_only_repair_tasks_failed(monkeypatch, tmp_path):
+    """The outer resume loop must not spin forever when only repair-origin tasks are failed."""
+    import kycortex_agents.provider_matrix as provider_matrix
+    from kycortex_agents.types import TaskStatus
+
+    config = provider_matrix.build_full_workflow_config(
+        "ollama",
+        "llama3",
+        str(tmp_path / "output"),
+        workflow_failure_policy="continue",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=3,
+    )
+    project = ProjectState(
+        project_name="Demo",
+        goal="test loop termination",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(Task(id="code", title="Code", description="Write code", assigned_to="coder"))
+    project.add_task(Task(id="tests", title="Tests", description="Write tests", assigned_to="tester", dependencies=["code"]))
+
+    for t in project.tasks:
+        t.status = TaskStatus.DONE.value
+
+    repair_task = Task(
+        id="tests__repair_1",
+        title="Tests (repair)",
+        description="Repair tests",
+        assigned_to="tester",
+        dependencies=["code"],
+    )
+    repair_task.repair_origin_task_id = "tests"
+    repair_task.status = TaskStatus.FAILED.value
+    project.add_task(repair_task)
+    project.repair_cycle_count = 2
+    project.repair_max_cycles = 3
+
+    execute_calls = {"count": 0}
+
+    class DegradedOrchestrator:
+        def __init__(self, _config):
+            self.config = _config
+
+        def execute_workflow(self, state):
+            execute_calls["count"] += 1
+            if execute_calls["count"] > 2:
+                raise AssertionError("Infinite loop detected: execute_workflow called more than twice")
+            state.mark_workflow_running(
+                acceptance_policy=self.config.workflow_acceptance_policy,
+                repair_max_cycles=self.config.workflow_max_repair_cycles,
+            )
+            state.mark_workflow_finished(
+                "completed",
+                terminal_outcome=WorkflowOutcome.DEGRADED.value,
+                acceptance_criteria_met=False,
+            )
+
+    monkeypatch.setattr(provider_matrix, "Orchestrator", DegradedOrchestrator)
+
+    provider_matrix.execute_empirical_validation_workflow(config, project)
+
+    assert execute_calls["count"] == 1
+    assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value

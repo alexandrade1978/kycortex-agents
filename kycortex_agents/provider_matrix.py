@@ -431,6 +431,7 @@ def _can_resume_failed_workflow(project: ProjectState) -> bool:
     if not any(
         task.status in {TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
         for task in project.tasks
+        if not task.repair_origin_task_id
     ):
         return False
     if project.terminal_outcome == WorkflowOutcome.CANCELLED.value:

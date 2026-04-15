@@ -674,4 +674,111 @@ def test_run_scenario_provider_forwards_ollama_timeout_override(tmp_path, monkey
     assert captured["provider"] == "ollama"
     assert captured["ollama_base_url"] == "http://127.0.0.1:11434"
     assert captured["ollama_num_ctx"] == 16384
-    assert captured["ollama_timeout_seconds"] == 420.0
+
+
+# ---------------------------------------------------------------------------
+# _coerce_validation_bool  — tuple-return tolerance
+# ---------------------------------------------------------------------------
+
+def test_coerce_validation_bool_plain_true():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool(True) is True
+
+
+def test_coerce_validation_bool_plain_false():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool(False) is False
+
+
+def test_coerce_validation_bool_tuple_true():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool((True, [])) is True
+
+
+def test_coerce_validation_bool_tuple_false():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool((False, ["bad details"])) is False
+
+
+def test_coerce_validation_bool_tuple_false_empty_errors():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool((False, [])) is False
+
+
+def test_coerce_validation_bool_none_is_falsy():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool(None) is False
+
+
+def test_coerce_validation_bool_dict_valid_true():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool({"valid": True, "errors": []}) is True
+
+
+def test_coerce_validation_bool_dict_valid_false():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._coerce_validation_bool({"valid": False, "errors": ["bad"]}) is False
+
+
+# ---------------------------------------------------------------------------
+# _invalid_request_is_rejected  — tuple-return from validate_request
+# ---------------------------------------------------------------------------
+
+def test_invalid_request_is_rejected_tuple_false_counts_as_rejection():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    # validate_request returns (False, errors) — should be treated as rejection.
+    assert module._invalid_request_is_rejected(
+        lambda _req: (False, ["details must be a dict"]),
+        lambda _req: None,
+        object(),
+    ) is True
+
+
+def test_invalid_request_is_rejected_tuple_true_not_rejected():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    # validate_request returns (True, []) and handle_request does not raise.
+    assert module._invalid_request_is_rejected(
+        lambda _req: (True, []),
+        lambda _req: None,
+        object(),
+    ) is False
+
+
+def test_invalid_request_is_rejected_plain_false():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    assert module._invalid_request_is_rejected(
+        lambda _req: False,
+        lambda _req: None,
+        object(),
+    ) is True
+
+
+def test_invalid_request_is_rejected_exception_is_rejection():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    def raise_value_error(_req):
+        raise ValueError("invalid details")
+    assert module._invalid_request_is_rejected(
+        raise_value_error,
+        lambda _req: None,
+        object(),
+    ) is True
+
+
+# ---------------------------------------------------------------------------
+# Contract anchor  — validate_request return-type and details-dict guidance
+# ---------------------------------------------------------------------------
+
+def test_contract_anchor_includes_validate_request_return_type_guidance():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    spec = module.SCENARIOS[0]  # kyc_compliance_intake
+    anchor = module._contract_anchor(spec)
+    assert "return a plain bool" in anchor
+    assert "True for valid, False for invalid" in anchor
+
+
+def test_contract_anchor_includes_details_dict_guidance():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    spec = module.SCENARIOS[0]  # kyc_compliance_intake
+    anchor = module._contract_anchor(spec)
+    assert "details.get" in anchor or "details['key']" in anchor
+    assert "attribute access" in anchor

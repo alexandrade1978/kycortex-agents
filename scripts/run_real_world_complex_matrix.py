@@ -250,6 +250,8 @@ def _contract_anchor(spec: ScenarioSpec) -> str:
         f"- Primary request model: {spec.request_name}(request_id, request_type, details, timestamp)\n"
         f"- Required request workflow: {spec.service_name}.handle_request(request)\n"
         f"- Supporting validation surface: {spec.service_name}.validate_request(request)\n"
+        "- validate_request(request) must return a plain bool (True for valid, False for invalid). Do not return a tuple, a dataclass, or a validation-result object — return exactly True or False.\n"
+        "- The details field of every request is always a plain dict (Dict[str, Any]). Access detail values through dict indexing (details['key']) or details.get('key'), never through attribute access (details.key). Do not define a custom dataclass or NamedTuple for the details payload.\n"
         "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases.\n"
         f"- Keep these names exact. Do not rename the facade to a generic alias or replace {spec.request_name} with guessed placeholder models.\n"
         "- Keep constructor field names exact. Do not replace request_id, request_type, details, or timestamp with guessed fields such as id, type, data, metadata, or status.\n"
@@ -828,12 +830,28 @@ _PROGRAMMING_ERROR_TYPES: tuple[type[BaseException], ...] = (
 )
 
 
+def _coerce_validation_bool(result: Any) -> bool:
+    """Extract a boolean from a ``validate_request`` return value.
+
+    Generated services may return a plain ``bool``, a ``(bool, errors)``
+    tuple, a ``{"valid": bool, ...}`` dict, or any other truthy/falsy
+    value.  This helper normalises all of those shapes into a single
+    boolean so that the downstream validation checks work regardless of
+    the chosen return convention.
+    """
+    if isinstance(result, tuple) and len(result) >= 1:
+        return bool(result[0])
+    if isinstance(result, dict) and "valid" in result:
+        return bool(result["valid"])
+    return bool(result)
+
+
 def _invalid_request_is_rejected(validate_request: Any, handle_request: Any, invalid_request: Any) -> bool:
     try:
         validation_result = validate_request(invalid_request)
     except Exception:
         return True
-    if validation_result is False or not bool(validation_result):
+    if not _coerce_validation_bool(validation_result):
         return True
     try:
         handle_request(invalid_request)
@@ -1058,7 +1076,7 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
         checks["validation_surface_supported"] = True
 
         valid_validation_result = validate_request(low_request)
-        if valid_validation_result is False:
+        if not _coerce_validation_bool(valid_validation_result):
             raise RuntimeError("Generated code did not accept a valid scenario request through validate_request(...).")
         checks["valid_request_accepted"] = True
 

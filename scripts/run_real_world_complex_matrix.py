@@ -261,6 +261,17 @@ def _details_contract_block(spec: ScenarioSpec) -> str:
     return "\n".join(f"- {item}" for item in spec.detail_contract_bullets)
 
 
+def _test_fixture_contract_block(spec: ScenarioSpec) -> str:
+    return "\n".join(
+        (
+            f"- Every {spec.request_name} fixture in the test suite must construct details as a literal dict with populated field values.",
+            "- Never pass details as a plain string, a space-separated list of field names, or a placeholder. The implementation expects a dict and will fail on string input.",
+            "- Example of CORRECT fixture: details={'field_one': ['value'], 'field_two': 'value', 'field_three': []}",
+            "- Example of WRONG fixture: details='field_one field_two field_three'",
+        )
+    )
+
+
 def _observable_outcome_contract_block() -> str:
     return "\n".join(
         (
@@ -366,6 +377,8 @@ def build_project(spec: ScenarioSpec, output_dir: str) -> ProjectState:
                 f"{_contract_anchor(spec)}\n\n"
                 "Canonical details contract:\n"
                 f"{_details_contract_block(spec)}\n\n"
+                "Test fixture contract:\n"
+                f"{_test_fixture_contract_block(spec)}\n\n"
                 "Observable outcome contract:\n"
                 f"{_observable_outcome_contract_block()}\n\n"
                 "Return raw Python only."

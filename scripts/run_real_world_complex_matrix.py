@@ -99,6 +99,8 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep canonical details keys exact for this scenario: policy_id, claim_category, claim_amount, evidence, duplicate_claim, and suspicious_timing.",
             "Keep evidence as the supporting-evidence field inside details. Do not replace it with guessed aliases such as documents, attachments, or proofs.",
             "Keep policy_id and claim_category as strings, claim_amount as a numeric amount, evidence as a list-like collection, and duplicate_claim plus suspicious_timing as boolean flags.",
+            'The request_type value in test payloads is "claim". Accept it as-is — do not restrict request_type to an invented whitelist such as ("submit", "review", "escalate").',
+            'The claim_category field accepts free-form string labels such as "water_damage" or "theft". Do not restrict it to an invented whitelist of categories.',
         ),
         docs_focus=(
             "claim intake rules",
@@ -133,6 +135,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep canonical details keys exact for this scenario: vendor_name, service_category, due_diligence_evidence, sanctioned_region, expired_certifications, critical_service, and unresolved_incidents.",
             "Keep due_diligence_evidence as the evidence collection inside details. Do not replace it with guessed aliases such as certifications, documents, or compliance_docs.",
             "Keep sanctioned_region and critical_service as boolean flags. Keep expired_certifications and unresolved_incidents as list-like collections, using [] when absent and explicit list entries when risk is present.",
+            'The request_type value in test payloads is "vendor_submission". Accept it as-is — do not restrict request_type to an invented whitelist such as ("initial_onboarding", "renewal", "incident_review").',
         ),
         docs_focus=(
             "vendor due-diligence workflow",
@@ -167,6 +170,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep canonical details keys exact for this scenario: order_reference, return_reason, items, receipt_present, prior_returns, and timing_days.",
             "Keep items as the item payload collection inside details. Do not replace it with guessed aliases such as products, order_items, or return_lines.",
             "Keep order_reference and return_reason as strings, receipt_present as a boolean flag, and prior_returns plus timing_days as integers. Keep items as a list-like collection of item payload records, not a plain string placeholder.",
+            "Each record inside items is a dict with exactly the keys sku (str), category (str), and value (numeric). Do not rename value to price, amount, or cost.",
         ),
         docs_focus=(
             "returns screening flow",
@@ -201,6 +205,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep canonical details keys exact for this scenario: requester_identity, requested_roles, approval_metadata, sod_conflicts, emergency_access, and stale_approval.",
             "Keep requested_roles and approval_metadata exact inside details. Do not replace them with guessed aliases such as roles, approvals, or approver_metadata.",
             "Keep requester_identity as a string, requested_roles and sod_conflicts as list-like collections, approval_metadata as a mapping object, and emergency_access plus stale_approval as boolean flags.",
+            "The approval_metadata mapping contains exactly the keys approved_by (str) and age_days (int). Do not invent additional required sub-keys such as approval_date, approved_at, or approval_timestamp.",
         ),
         docs_focus=(
             "access governance workflow",
@@ -255,7 +260,9 @@ def _contract_anchor(spec: ScenarioSpec) -> str:
         "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases.\n"
         f"- Keep these names exact. Do not rename the facade to a generic alias or replace {spec.request_name} with guessed placeholder models.\n"
         "- Keep constructor field names exact. Do not replace request_id, request_type, details, or timestamp with guessed fields such as id, type, data, metadata, or status.\n"
-        f"- Keep {spec.service_name} instantiable with zero required constructor arguments. Initialize internal audit or review state inside __init__ instead of requiring callers to pass audit_history, collaborators, repositories, or other mutable state containers."
+        f"- Keep {spec.service_name} instantiable with zero required constructor arguments. Initialize internal audit or review state inside __init__ instead of requiring callers to pass audit_history, collaborators, repositories, or other mutable state containers.\n"
+        "- The timestamp field of every request is a datetime object (from the datetime module), not a float, int, or string. Validate it with isinstance(request.timestamp, datetime).\n"
+        "- The request_type field is a free-form string label. Accept any non-empty string — do not restrict it to an invented whitelist of allowed values."
     )
 
 

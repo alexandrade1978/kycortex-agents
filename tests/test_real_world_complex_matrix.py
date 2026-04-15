@@ -782,3 +782,70 @@ def test_contract_anchor_includes_details_dict_guidance():
     anchor = module._contract_anchor(spec)
     assert "details.get" in anchor or "details['key']" in anchor
     assert "attribute access" in anchor
+
+
+def test_contract_anchor_includes_timestamp_datetime_guidance():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    spec = module.SCENARIOS[0]
+    anchor = module._contract_anchor(spec)
+    assert "datetime object" in anchor
+    assert "not a float, int, or string" in anchor
+
+
+def test_contract_anchor_includes_request_type_freeform_guidance():
+    module = _load_script_module("run_real_world_complex_matrix", "scripts/run_real_world_complex_matrix.py")
+    spec = module.SCENARIOS[0]
+    anchor = module._contract_anchor(spec)
+    assert "free-form string label" in anchor
+    assert "invented whitelist" in anchor
+
+
+def test_insurance_detail_contract_includes_request_type_and_claim_category_guidance(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_insurance_rt_guidance_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    insurance_spec = next(spec for spec in module.SCENARIOS if spec.slug == "insurance_claim_triage")
+    project = module.build_project(insurance_spec, str(tmp_path / "campaign" / "openai"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+
+    assert 'request_type value in test payloads is "claim"' in code_task.description
+    assert "claim_category field accepts free-form string labels" in code_task.description
+
+
+def test_vendor_detail_contract_includes_request_type_guidance(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_vendor_rt_guidance_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    vendor_spec = next(spec for spec in module.SCENARIOS if spec.slug == "vendor_onboarding_risk")
+    project = module.build_project(vendor_spec, str(tmp_path / "campaign" / "ollama"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+
+    assert 'request_type value in test payloads is "vendor_submission"' in code_task.description
+
+
+def test_returns_detail_contract_includes_item_subfield_guidance(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_returns_item_guidance_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    returns_spec = next(spec for spec in module.SCENARIOS if spec.slug == "returns_abuse_screening")
+    project = module.build_project(returns_spec, str(tmp_path / "campaign" / "ollama"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+
+    assert "sku (str), category (str), and value (numeric)" in code_task.description
+    assert "Do not rename value to price" in code_task.description
+
+
+def test_access_review_detail_contract_includes_approval_metadata_subfield_guidance(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_access_approval_guidance_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    access_spec = next(spec for spec in module.SCENARIOS if spec.slug == "access_review_audit")
+    project = module.build_project(access_spec, str(tmp_path / "campaign" / "openai"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+
+    assert "approved_by (str) and age_days (int)" in code_task.description
+    assert "Do not invent additional required sub-keys" in code_task.description

@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-04-15T02:59:27.485280+00:00",
+  "checkpoint_type": "expansion_provider_health",
+  "providers": {
+    "openai": {
+      "status": "healthy",
+      "validation_method": "KYCortexConfig.validate_runtime()"
+    },
+    "anthropic": {
+      "status": "healthy",
+      "validation_method": "KYCortexConfig.validate_runtime()"
+    },
+    "ollama": {
+      "status": "healthy",
+      "validation_method": "KYCortexConfig.validate_runtime()",
+      "model": "qwen2.5-coder:7b",
+      "base_url": "http://127.0.0.1:11434"
+    }
+  }
+}

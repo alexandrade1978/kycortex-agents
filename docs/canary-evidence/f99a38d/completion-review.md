@@ -7,9 +7,9 @@ Decision: not ready to close Phase 16
 - published release provenance: GitHub verified tag `v1.0.13a6`
 - current candidate release workflow: GitHub Actions run `#21` completed successfully
 - canary window: started on `2026-04-13T03:25:21Z`
-- current checkpoint outcome: clean checkpoint through run 100 at `2026-04-13T10:39:05.274887+00:00`
-- admitted eligible workflows so far: 100 total, 100 externally validated accepted, 0 incidents
-- first same-day daily review: recorded at `2026-04-13T04:30:01.447970+00:00` and kept the window inside the current policy envelope
+- current checkpoint outcome: day-3 daily review at `2026-04-15T03:04:11.348007+00:00` with 103 cumulative accepted workflows
+- admitted eligible workflows so far: 103 total, 103 externally validated accepted, 0 incidents
+- daily review trail: day-1 at `2026-04-13T04:30:01.447970+00:00`, day-3 at `2026-04-15T03:04:11.348007+00:00`
 - rollback baseline `v1.0.13a2` remains re-smoke-validated on the live host through retained evidence in `../2563383/validation-artifacts/rollback-smoke-v1.0.13a2-2026-04-13T00-18-10Z.json`
 
 ## Open Blockers

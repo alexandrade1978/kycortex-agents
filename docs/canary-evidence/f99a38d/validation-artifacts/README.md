@@ -16,8 +16,11 @@ Current state:
 - the clean checkpoint through 50 eligible workflows is recorded in `checkpoint-through-run-50-2026-04-13T04-30-01Z.json`
 - the clean checkpoint through 100 eligible workflows is recorded in `checkpoint-through-run-100-2026-04-13T10-40-58Z.json`
 - the first same-day daily review is recorded in `daily-review-2026-04-13.md`
+- the day-3 daily review with continuation smoke runs is recorded in `daily-review-2026-04-15.md`
+- the day-3 expansion provider-health checkpoint is recorded in `expansion-provider-health-2026-04-15T02-59-27Z.json`
+- the day-3 continuation checkpoint with 103 cumulative accepted workflows is recorded in `checkpoint-daily-continuation-2026-04-15T03-04-11Z.json`
 - the approved rollback target `v1.0.13a2` still depends on the retained rollback re-smoke evidence in `../2563383/validation-artifacts/rollback-smoke-v1.0.13a2-2026-04-13T00-18-10Z.json`
 - the current published baseline also depends on retained repository-owned evidence from the clean Phase 15 matrix, the local `python scripts/release_check.py` pass, GitHub Actions Release workflow `#21`, and GitHub release `v1.0.13a6`
-- the active canary window is still open, so this directory currently stores the preflight packet, five expansion health refreshes, the clean 10-workflow, 25-workflow, 50-workflow, and 100-workflow checkpoints, and the first same-day daily review rather than a completed close-out set
+- the active canary window is still open, so this directory currently stores the preflight packet, six expansion health refreshes, the clean 10-workflow, 25-workflow, 50-workflow, and 100-workflow checkpoints, the day-3 continuation checkpoint, the first same-day daily review, and the day-3 daily review rather than a completed close-out set
 
 Before Phase 16 can close, copy or export the canary-window validation artifacts needed to explain accepted workflows, any recovered failures, and any rollback decision.

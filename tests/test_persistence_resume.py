@@ -252,7 +252,7 @@ def test_persisted_provider_transient_failure_does_not_auto_resume_after_reload(
         registry=AgentRegistry({"architect": ProviderBackedArchitect(TimeoutProvider(), config)}),
     )
 
-    with pytest.raises(AgentExecutionError, match="cannot resume automatically"):
+    with pytest.raises(ProviderTransientError):
         resume_orchestrator.execute_workflow(failed)
 
     reloaded_arch = require_task(failed, "arch")
@@ -261,8 +261,8 @@ def test_persisted_provider_transient_failure_does_not_auto_resume_after_reload(
     assert failed.phase == "failed"
     assert failed.failure_category == FailureCategory.PROVIDER_TRANSIENT.value
     assert failed.terminal_outcome == WorkflowOutcome.FAILED.value
-    assert failed.repair_cycle_count == 0
-    assert failed.get_task("arch__repair_1") is None
+    assert failed.repair_cycle_count == 1
+    assert failed.get_task("arch__repair_1") is not None
     assert reloaded_arch.status == TaskStatus.FAILED.value
     assert reloaded_arch.last_error_category == FailureCategory.PROVIDER_TRANSIENT.value
     assert reloaded_provider_call["provider"] == "openai"

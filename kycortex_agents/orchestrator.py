@@ -1640,6 +1640,7 @@ class Orchestrator:
             FailureCategory.CODE_VALIDATION.value,
             FailureCategory.TEST_VALIDATION.value,
             FailureCategory.DEPENDENCY_VALIDATION.value,
+            FailureCategory.PROVIDER_TRANSIENT.value,
         }
 
     def _execution_agent_name(self, task: Task) -> str:

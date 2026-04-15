@@ -4218,7 +4218,9 @@ def test_qa_tester_uses_validation_result_shape_and_alias_required_keys_in_scaff
     assert 'details={"vendor_id": "V-001", "name": "John Doe", "service_category": "IT Services"}, timestamp=fixed_time' in agent.last_user_message
     assert "result = service.handle_request(vendor_submission)" in agent.last_user_message
     assert "assert result.request_id == vendor_submission.request_id" in agent.last_user_message
-    assert "assert result.risk_score >= 0.0" in agent.last_user_message
+    assert "risk_score_value = result.risk_score" in agent.last_user_message
+    assert "if hasattr(risk_score_value, 'score'):" in agent.last_user_message
+    assert "assert risk_score_value >= 0.0" in agent.last_user_message
     assert "assert len(result.audit_log) > 0" in agent.last_user_message
     assert "Do not replace the scaffolded validation-failure payload with an empty dict" in agent.last_user_message
 
@@ -4883,6 +4885,47 @@ def test_qa_tester_extracts_request_fields_from_all_membership_validation():
     assert QATesterAgent._implementation_has_presence_only_required_field_validation(code) is True
 
 
+def test_qa_tester_extracts_required_payload_keys_from_request_attribute_loop():
+    code = (
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime = field(default_factory=datetime.now)\n"
+        "    required_fields = ['order_reference', 'return_reason', 'items']\n\n"
+        "class ReturnScreeningService:\n"
+        "    def validate_request(self, request: ReturnCase) -> bool:\n"
+        "        if not isinstance(request.details, dict):\n"
+        "            return False\n"
+        "        for field in request.required_fields:\n"
+        "            if field not in request.details:\n"
+        "                return False\n"
+        "        return True\n"
+    )
+
+    assert QATesterAgent._implementation_required_payload_keys(code) == [
+        "order_reference",
+        "return_reason",
+        "items",
+    ]
+    assert QATesterAgent._required_payload_argument_overrides(
+        "ReturnCase(request_id, request_type, details, timestamp)",
+        code,
+    ) == {
+        "details": '{"order_reference": "ORD-1001", "return_reason": "damaged_item", "items": [{"sku": "SKU-1", "category": "home", "value": 45}]}'
+    }
+    assert QATesterAgent._validation_failure_argument_overrides(
+        "ReturnCase(request_id, request_type, details, timestamp)",
+        code,
+    ) == {
+        "details": '{"order_reference": "ORD-1001", "return_reason": "damaged_item"}',
+        "timestamp": "fixed_time",
+    }
+
+
 def test_qa_tester_detects_non_validation_payload_keys():
     code = (
         "from dataclasses import dataclass, field\n"
@@ -4939,6 +4982,126 @@ def test_qa_tester_extracts_required_payload_keys_from_class_level_constant_refe
         "item_value_usd",
         "reason",
     ]
+
+
+def test_qa_tester_extracts_required_payload_keys_from_request_post_init_validation():
+    code = (
+        "from dataclasses import dataclass\n"
+        "import datetime\n"
+        "from typing import Any\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict[str, Any]\n"
+        "    timestamp: datetime.datetime\n\n"
+        "    def __post_init__(self):\n"
+        "        required_fields = ['order_reference', 'return_reason', 'receipt_present', 'prior_returns', 'timing_days']\n"
+        "        for field in required_fields:\n"
+        "            if field not in self.details:\n"
+        "                raise ValueError('Missing required fields in details.')\n"
+        "        if not isinstance(self.details['receipt_present'], bool):\n"
+        "            raise ValueError('receipt_present must be a boolean.')\n"
+        "        if not isinstance(self.details['prior_returns'], int) or not isinstance(self.details['timing_days'], int):\n"
+        "            raise ValueError('prior_returns and timing_days must be integers.')\n\n"
+        "class ReturnScreeningService:\n"
+        "    def validate_request(self, request: ReturnCase) -> bool:\n"
+        "        try:\n"
+        "            request.__post_init__()\n"
+        "            return True\n"
+        "        except ValueError:\n"
+        "            return False\n\n"
+        "    def score_risk(self, request: ReturnCase) -> int:\n"
+        "        details = request.details\n"
+        "        return len(details.get('items', []))\n"
+    )
+
+    assert QATesterAgent._implementation_required_payload_keys(code) == [
+        "order_reference",
+        "return_reason",
+        "receipt_present",
+        "prior_returns",
+        "timing_days",
+    ]
+    assert QATesterAgent._required_payload_argument_overrides(
+        "ReturnCase(request_id, request_type, details, timestamp)",
+        code,
+    ) == {
+        "details": '{"order_reference": "ORD-1001", "return_reason": "damaged_item", "receipt_present": True, "prior_returns": 0, "timing_days": 5}'
+    }
+    assert QATesterAgent._constructor_rejects_invalid_payload(
+        "ReturnCase(request_id, request_type, details, timestamp)",
+        code,
+    ) is True
+
+
+def test_qa_tester_scaffold_wraps_invalid_constructor_when_post_init_rejects_payload():
+    implementation_code = (
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n"
+        "from typing import Any\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict[str, Any]\n"
+        "    timestamp: datetime\n\n"
+        "    def __post_init__(self):\n"
+        "        if 'order_reference' not in self.details or not isinstance(self.details['order_reference'], str):\n"
+        "            raise ValueError('Invalid order_reference')\n"
+        "        if 'return_reason' not in self.details or not isinstance(self.details['return_reason'], str):\n"
+        "            raise ValueError('Invalid return_reason')\n"
+        "        if 'items' not in self.details or not isinstance(self.details['items'], list):\n"
+        "            raise ValueError('Invalid items')\n"
+        "        if 'receipt_present' not in self.details or not isinstance(self.details['receipt_present'], bool):\n"
+        "            raise ValueError('Invalid receipt_present')\n"
+        "        if 'prior_returns' not in self.details or not isinstance(self.details['prior_returns'], int):\n"
+        "            raise ValueError('Invalid prior_returns')\n"
+        "        if 'timing_days' not in self.details or not isinstance(self.details['timing_days'], int):\n"
+        "            raise ValueError('Invalid timing_days')\n\n"
+        "class ReturnScreeningService:\n"
+        "    def validate_request(self, request: ReturnCase) -> bool:\n"
+        "        try:\n"
+        "            request.__post_init__()\n"
+        "            return True\n"
+        "        except ValueError:\n"
+        "            return False\n\n"
+        "    def handle_request(self, request: ReturnCase) -> dict[str, int | str]:\n"
+        "        if not self.validate_request(request):\n"
+        "            return {'outcome': 'invalid', 'risk_score': 0}\n"
+        "        return {'outcome': 'auto-approve', 'risk_score': 0}\n"
+    )
+
+    scaffold = QATesterAgent._deterministic_surface_scaffold_block(
+        module_name="service_module",
+        task_description="Write compact pytest coverage for happy path, validation failure, and batch processing.",
+        code_exact_test_contract=(
+            "Exact test contract:\n"
+            "- Allowed production imports: ReturnCase, ReturnScreeningService\n"
+            "- Preferred service or workflow facades: ReturnScreeningService\n"
+            "- Exact public callables: none\n"
+            "- Exact public class methods: ReturnScreeningService.handle_request(request), ReturnScreeningService.validate_request(request)\n"
+            "- Exact constructor fields: ReturnCase(request_id, request_type, details, timestamp)\n"
+            "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+        ),
+        code_test_targets="Test targets:\n- Functions to test: none\n- Classes to test: ReturnScreeningService\n- Entry points to avoid in tests: none",
+        task_public_contract_anchor=(
+            "- Public facade: ReturnScreeningService\n"
+            "- Primary request model: ReturnCase(request_id, request_type, details, timestamp)\n"
+            "- Required request workflow: ReturnScreeningService.handle_request(request)\n"
+            "- Supporting validation surface: ReturnScreeningService.validate_request(request)"
+        ),
+        implementation_code=implementation_code,
+    )
+    validation_block = scaffold.split("def test_validation_failure():", 1)[1].split("def test_batch_processing():", 1)[0]
+
+    assert "def test_validation_failure():" in scaffold
+    assert "with pytest.raises(ValueError):" in validation_block
+    assert "return_case = ReturnCase(" not in validation_block
+    assert "is_valid = service.validate_request(return_case)" not in validation_block
+    assert 'ReturnCase(request_id="request_id-1", request_type="screening", details={' in validation_block
+    assert '"items": [{"sku": "SKU-1", "category": "home", "value": 45}]' in validation_block
+    assert '"timing_days":' not in validation_block
 
 
 def test_qa_tester_repairs_returns_payload_literals_for_risk_scoring():
@@ -5103,7 +5266,16 @@ def test_qa_tester_builds_stable_review_action_assertions_from_result_shape():
         "assert isinstance(result.action, str)",
         "assert isinstance(result.details, dict)",
         "assert 'risk_score' in result.details",
-        "assert result.details['risk_score'] >= 0.0",
+        "details_risk_score_value = result.details['risk_score']",
+        "if hasattr(details_risk_score_value, 'score'):",
+        "    assert isinstance(details_risk_score_value.score, (int, float))",
+        "    assert details_risk_score_value.score >= 0.0",
+        "elif isinstance(details_risk_score_value, dict) and 'score' in details_risk_score_value:",
+        "    assert isinstance(details_risk_score_value['score'], (int, float))",
+        "    assert details_risk_score_value['score'] >= 0.0",
+        "else:",
+        "    assert isinstance(details_risk_score_value, (int, float))",
+        "    assert details_risk_score_value >= 0.0",
     ]
     assert QATesterAgent._stable_batch_result_assertion_lines(
         code,
@@ -5113,7 +5285,17 @@ def test_qa_tester_builds_stable_review_action_assertions_from_result_shape():
         "assert all(isinstance(item.action, str) for item in results)",
         "assert all(isinstance(item.details, dict) for item in results)",
         "assert all('risk_score' in item.details for item in results)",
-        "assert all(item.details['risk_score'] >= 0.0 for item in results)",
+        "for item in results:",
+        "    details_risk_score_value = item.details['risk_score']",
+        "    if hasattr(details_risk_score_value, 'score'):",
+        "        assert isinstance(details_risk_score_value.score, (int, float))",
+        "        assert details_risk_score_value.score >= 0.0",
+        "    elif isinstance(details_risk_score_value, dict) and 'score' in details_risk_score_value:",
+        "        assert isinstance(details_risk_score_value['score'], (int, float))",
+        "        assert details_risk_score_value['score'] >= 0.0",
+        "    else:",
+        "        assert isinstance(details_risk_score_value, (int, float))",
+        "        assert details_risk_score_value >= 0.0",
     ]
 
 
@@ -5171,7 +5353,16 @@ def test_qa_tester_stable_assertions_cover_direct_dict_returns():
         "assert isinstance(result, dict)",
         "assert result['request_id'] == return_case.request_id",
         "assert 'risk_score' in result",
-        "assert result['risk_score'] >= 0.0",
+        "risk_score_value = result['risk_score']",
+        "if hasattr(risk_score_value, 'score'):",
+        "    assert isinstance(risk_score_value.score, (int, float))",
+        "    assert risk_score_value.score >= 0.0",
+        "elif isinstance(risk_score_value, dict) and 'score' in risk_score_value:",
+        "    assert isinstance(risk_score_value['score'], (int, float))",
+        "    assert risk_score_value['score'] >= 0.0",
+        "else:",
+        "    assert isinstance(risk_score_value, (int, float))",
+        "    assert risk_score_value >= 0.0",
         "assert 'outcome' in result",
         "assert isinstance(result['outcome'], str)",
     ]
@@ -5184,9 +5375,178 @@ def test_qa_tester_stable_assertions_cover_direct_dict_returns():
         "assert results[0]['request_id'] == requests[0].request_id",
         "assert results[-1]['request_id'] == requests[-1].request_id",
         "assert all('risk_score' in item for item in results)",
-        "assert all(item['risk_score'] >= 0.0 for item in results)",
+        "for item in results:",
+        "    risk_score_value = item['risk_score']",
+        "    if hasattr(risk_score_value, 'score'):",
+        "        assert isinstance(risk_score_value.score, (int, float))",
+        "        assert risk_score_value.score >= 0.0",
+        "    elif isinstance(risk_score_value, dict) and 'score' in risk_score_value:",
+        "        assert isinstance(risk_score_value['score'], (int, float))",
+        "        assert risk_score_value['score'] >= 0.0",
+        "    else:",
+        "        assert isinstance(risk_score_value, (int, float))",
+        "        assert risk_score_value >= 0.0",
         "assert all('outcome' in item and isinstance(item['outcome'], str) for item in results)",
     ]
+
+
+def test_qa_tester_stable_assertions_cover_structured_risk_score_wrappers():
+    code = (
+        "from dataclasses import dataclass\n"
+        "from typing import List\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: float\n\n"
+        "@dataclass\n"
+        "class RiskScore:\n"
+        "    score: float\n"
+        "    factors: List[str]\n\n"
+        "class ReturnScreeningService:\n"
+        "    def handle_request(self, request: ReturnCase) -> dict:\n"
+        "        return {'request_id': request.request_id, 'outcome': 'approved', 'risk_score': RiskScore(score=0.25, factors=['history'])}\n"
+    )
+
+    assert QATesterAgent._stable_call_assertion_lines(
+        code,
+        "ReturnScreeningService.handle_request(request)",
+        result_name="result",
+        request_name="return_case",
+        service_name="service",
+    ) == [
+        "assert isinstance(result, dict)",
+        "assert result['request_id'] == return_case.request_id",
+        "assert 'risk_score' in result",
+        "risk_score_value = result['risk_score']",
+        "if hasattr(risk_score_value, 'score'):",
+        "    assert isinstance(risk_score_value.score, (int, float))",
+        "    assert risk_score_value.score >= 0.0",
+        "elif isinstance(risk_score_value, dict) and 'score' in risk_score_value:",
+        "    assert isinstance(risk_score_value['score'], (int, float))",
+        "    assert risk_score_value['score'] >= 0.0",
+        "else:",
+        "    assert isinstance(risk_score_value, (int, float))",
+        "    assert risk_score_value >= 0.0",
+        "assert 'outcome' in result",
+        "assert isinstance(result['outcome'], str)",
+    ]
+
+
+def test_qa_tester_validation_failure_assertions_allow_none_risk_score():
+    code = (
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: float\n\n"
+        "class ReturnScreeningService:\n"
+        "    def validate_request(self, request: ReturnCase) -> bool:\n"
+        "        return 'items' in request.details\n\n"
+        "    def handle_request(self, request: ReturnCase) -> dict:\n"
+        "        if not self.validate_request(request):\n"
+        "            return {'outcome': 'validation_error', 'risk_score': None}\n"
+        "        return {'outcome': 'approved', 'risk_score': 0.25}\n"
+    )
+
+    assert QATesterAgent._stable_call_assertion_lines(
+        code,
+        "ReturnScreeningService.handle_request(request)",
+        result_name="result",
+        request_name="return_case",
+        service_name="service",
+        allow_none_scores=True,
+    ) == [
+        "assert isinstance(result, dict)",
+        "assert 'risk_score' in result",
+        "risk_score_value = result['risk_score']",
+        "if risk_score_value is None:",
+        "    assert risk_score_value is None",
+        "elif hasattr(risk_score_value, 'score'):",
+        "    assert isinstance(risk_score_value.score, (int, float))",
+        "    assert risk_score_value.score >= 0.0",
+        "elif isinstance(risk_score_value, dict) and 'score' in risk_score_value:",
+        "    assert isinstance(risk_score_value['score'], (int, float))",
+        "    assert risk_score_value['score'] >= 0.0",
+        "else:",
+        "    assert isinstance(risk_score_value, (int, float))",
+        "    assert risk_score_value >= 0.0",
+        "assert 'outcome' in result",
+        "assert isinstance(result['outcome'], str)",
+    ]
+
+
+def test_qa_tester_validation_failure_scaffold_allows_none_risk_score(tmp_path):
+    agent = CaptureQATesterAgent(build_config(tmp_path))
+
+    result = agent.run(
+        "Repair tests",
+        {
+            "code": (
+                "from dataclasses import dataclass, field\n"
+                "from datetime import datetime\n\n"
+                "@dataclass\n"
+                "class ReturnCase:\n"
+                "    request_id: str\n"
+                "    request_type: str\n"
+                "    details: dict\n"
+                "    timestamp: datetime = field(default_factory=datetime.now)\n\n"
+                "class ReturnScreeningService:\n"
+                "    def validate_request(self, request: ReturnCase) -> bool:\n"
+                "        required_fields = {'order_reference', 'return_reason', 'items'}\n"
+                "        if not isinstance(request.details, dict):\n"
+                "            return False\n"
+                "        return required_fields.issubset(request.details)\n\n"
+                "    def handle_request(self, request: ReturnCase) -> dict:\n"
+                "        if not self.validate_request(request):\n"
+                "            return {'outcome': 'validation_error', 'risk_score': None}\n"
+                "        return {'outcome': 'approved', 'risk_score': 0.25}\n"
+            ),
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "code_summary": "Return abuse screening workflow",
+            "code_outline": "class ReturnScreeningService:\n    def handle_request(self, request): ...",
+            "code_public_api": (
+                "Functions:\n- none\n"
+                "Classes:\n- ReturnCase(request_id, request_type, details, timestamp)\n"
+                "- ReturnScreeningService()"
+            ),
+            "code_exact_test_contract": (
+                "Exact test contract:\n"
+                "- Allowed production imports: ReturnCase, ReturnScreeningService\n"
+                "- Preferred service or workflow facades: ReturnScreeningService\n"
+                "- Exact public callables: none\n"
+                "- Exact public class methods: ReturnScreeningService.handle_request(request), ReturnScreeningService.validate_request(request)\n"
+                "- Exact constructor fields: ReturnCase(request_id, request_type, details, timestamp)\n"
+                "- Treat every listed import, method, and constructor field as exact."
+            ),
+            "code_test_targets": (
+                "Test targets:\n- Functions to test: none\n- Classes to test: ReturnScreeningService\n"
+                "- Batch coverage: repeated handle_request(request) calls\n- Entry points to avoid in tests: none"
+            ),
+            "code_behavior_contract": (
+                "Behavior contract:\n"
+                "- validate_request returns False when required details keys are missing\n"
+                "- handle_request returns outcome='validation_error' with risk_score=None for invalid requests"
+            ),
+            "task_public_contract_anchor": (
+                "- Public facade: ReturnScreeningService\n"
+                "- Primary request model: ReturnCase(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ReturnScreeningService.handle_request(request)\n"
+                "- Supporting validation surface: ReturnScreeningService.validate_request(request)\n"
+                "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases."
+            ),
+            "repair_validation_summary": "Generated test validation:\n- Syntax OK: yes\n- Verdict: FAIL",
+        },
+    )
+
+    assert result == "ok"
+    assert "risk_score_value = result['risk_score']" in agent.last_user_message
+    assert "if risk_score_value is None:" in agent.last_user_message
+    assert "assert risk_score_value is None" in agent.last_user_message
 
 
 def test_qa_tester_batch_scaffold_honors_runtime_return_shape_summary():
@@ -5334,7 +5694,9 @@ def test_qa_tester_scaffolds_validation_failure_with_missing_top_level_request_f
     assert "assert isinstance(result.action, str)" in agent.last_user_message
     assert "assert isinstance(result.details, dict)" in agent.last_user_message
     assert "assert 'risk_score' in result.details" in agent.last_user_message
-    assert "assert result.details['risk_score'] >= 0.0" in agent.last_user_message
+    assert "details_risk_score_value = result.details['risk_score']" in agent.last_user_message
+    assert "elif isinstance(details_risk_score_value, dict) and 'score' in details_risk_score_value:" in agent.last_user_message
+    assert "assert details_risk_score_value >= 0.0" in agent.last_user_message
     assert "assert all(isinstance(item.action, str) for item in results)" in agent.last_user_message
 
 

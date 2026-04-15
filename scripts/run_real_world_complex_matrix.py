@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import importlib.util
+import inspect
 import json
 from pathlib import Path
+import py_compile
+import sys
 import time
 import traceback
 from typing import Any, cast
@@ -19,6 +24,7 @@ from kycortex_agents.provider_matrix import (
     summarize_workflow_run,
     write_summary_json,
 )
+from kycortex_agents.types import FailureCategory, TaskStatus, WorkflowOutcome
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,7 @@ class ScenarioSpec:
     domain_summary: str
     goal: str
     behavior_bullets: tuple[str, ...]
+    detail_contract_bullets: tuple[str, ...]
     docs_focus: tuple[str, ...]
     legal_focus: tuple[str, ...]
 
@@ -53,6 +60,11 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Score risk using jurisdiction, customer type, adverse indicators, and missing-document severity.",
             "Track auditable review outcomes such as approved, escalated, or blocked.",
             "Support batch intake while preserving per-request audit records and summaries.",
+        ),
+        detail_contract_bullets=(
+            "Keep canonical details keys exact for this scenario: identity_evidence, jurisdiction, customer_type, adverse_indicators, and missing_documents.",
+            "Keep identity_evidence as the evidence collection inside details. Do not replace it with guessed aliases such as identity_proof, address_proof, documents, or document_list.",
+            "Keep jurisdiction and customer_type as strings. Keep identity_evidence, adverse_indicators, and missing_documents as list-like collections inside details, not numeric severity placeholders or plain strings.",
         ),
         docs_focus=(
             "analyst workflow",
@@ -83,6 +95,11 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Track triage outcomes such as straight-through review, manual investigation, or fraud escalation.",
             "Support batch claim review with stable per-claim results and audit logging.",
         ),
+        detail_contract_bullets=(
+            "Keep canonical details keys exact for this scenario: policy_id, claim_category, claim_amount, evidence, duplicate_claim, and suspicious_timing.",
+            "Keep evidence as the supporting-evidence field inside details. Do not replace it with guessed aliases such as documents, attachments, or proofs.",
+            "Keep policy_id and claim_category as strings, claim_amount as a numeric amount, evidence as a list-like collection, and duplicate_claim plus suspicious_timing as boolean flags.",
+        ),
         docs_focus=(
             "claim intake rules",
             "fraud-triage logic",
@@ -111,6 +128,11 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Increase risk for sanctioned regions, expired certifications, critical-service flags, and unresolved incidents.",
             "Track outcomes such as approved, conditional approval, or enhanced due diligence.",
             "Support batch onboarding review while preserving per-vendor audit history.",
+        ),
+        detail_contract_bullets=(
+            "Keep canonical details keys exact for this scenario: vendor_name, service_category, due_diligence_evidence, sanctioned_region, expired_certifications, critical_service, and unresolved_incidents.",
+            "Keep due_diligence_evidence as the evidence collection inside details. Do not replace it with guessed aliases such as certifications, documents, or compliance_docs.",
+            "Keep sanctioned_region and critical_service as boolean flags. Keep expired_certifications and unresolved_incidents as list-like collections, using [] when absent and explicit list entries when risk is present.",
         ),
         docs_focus=(
             "vendor due-diligence workflow",
@@ -141,6 +163,11 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Track outcomes such as auto-approve, manual inspection, or abuse escalation.",
             "Support batch return screening with stable per-case summaries and audit records.",
         ),
+        detail_contract_bullets=(
+            "Keep canonical details keys exact for this scenario: order_reference, return_reason, items, receipt_present, prior_returns, and timing_days.",
+            "Keep items as the item payload collection inside details. Do not replace it with guessed aliases such as products, order_items, or return_lines.",
+            "Keep order_reference and return_reason as strings, receipt_present as a boolean flag, and prior_returns plus timing_days as integers. Keep items as a list-like collection of item payload records, not a plain string placeholder.",
+        ),
         docs_focus=(
             "returns screening flow",
             "abuse indicators",
@@ -170,6 +197,11 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Track outcomes such as approved, time-boxed approval, or security escalation.",
             "Support batch access review while preserving per-request audit history and review outcomes.",
         ),
+        detail_contract_bullets=(
+            "Keep canonical details keys exact for this scenario: requester_identity, requested_roles, approval_metadata, sod_conflicts, emergency_access, and stale_approval.",
+            "Keep requested_roles and approval_metadata exact inside details. Do not replace them with guessed aliases such as roles, approvals, or approver_metadata.",
+            "Keep requester_identity as a string, requested_roles and sod_conflicts as list-like collections, approval_metadata as a mapping object, and emergency_access plus stale_approval as boolean flags.",
+        ),
         docs_focus=(
             "access governance workflow",
             "privilege risk inputs",
@@ -185,6 +217,27 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
 
 
 DEFAULT_OUTPUT_ROOT = "./output/real_world_complex_usage_2026_04_07"
+_SCENARIO_REQUEST_FIELDS = ("request_id", "request_type", "details", "timestamp")
+_ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
+_SCENARIO_PRODUCTIVITY_CHECKS = frozenset(
+    {
+        "syntax_valid",
+        "service_constructor_supported",
+        "request_signature_supported",
+        "validation_surface_supported",
+        "batch_processing_supported",
+    }
+)
+_SCENARIO_REAL_WORKFLOW_CHECKS = frozenset(
+    {
+        "valid_request_accepted",
+        "invalid_request_rejected",
+        "risk_signal_observable",
+        "audit_signal_present",
+    }
+)
+_SCENARIO_SAFETY_CHECKS = frozenset({"stdlib_only"})
+_RESULT_STATUSES = ("completed", "validation_error", "execution_error", "skipped")
 
 
 def _utc_now_iso() -> str:
@@ -199,7 +252,23 @@ def _contract_anchor(spec: ScenarioSpec) -> str:
         f"- Supporting validation surface: {spec.service_name}.validate_request(request)\n"
         "- Batch behavior stays on the same facade and should be expressed through repeated handle_request(request) calls rather than renamed public batch aliases.\n"
         f"- Keep these names exact. Do not rename the facade to a generic alias or replace {spec.request_name} with guessed placeholder models.\n"
-        "- Keep constructor field names exact. Do not replace request_id, request_type, details, or timestamp with guessed fields such as id, type, data, metadata, or status."
+        "- Keep constructor field names exact. Do not replace request_id, request_type, details, or timestamp with guessed fields such as id, type, data, metadata, or status.\n"
+        f"- Keep {spec.service_name} instantiable with zero required constructor arguments. Initialize internal audit or review state inside __init__ instead of requiring callers to pass audit_history, collaborators, repositories, or other mutable state containers."
+    )
+
+
+def _details_contract_block(spec: ScenarioSpec) -> str:
+    return "\n".join(f"- {item}" for item in spec.detail_contract_bullets)
+
+
+def _observable_outcome_contract_block() -> str:
+    return "\n".join(
+        (
+            "- handle_request(request) must return a per-request outcome object or dict, not None.",
+            "- The returned outcome must make the review decision and risk signal observable to callers, for example through outcome and risk_score style fields or equivalent structured keys.",
+            "- Preserve audit evidence either in the returned outcome or on a service audit history surface that accumulates one auditable entry per processed request.",
+            "- Do not treat a logging side effect alone or a None return as sufficient happy-path or batch behavior.",
+        )
     )
 
 
@@ -233,7 +302,11 @@ def build_project(spec: ScenarioSpec, output_dir: str) -> ProjectState:
                 "Required domain behavior:\n"
                 f"{_behavior_block(spec)}\n\n"
                 "Public contract anchor:\n"
-                f"{_contract_anchor(spec)}"
+                f"{_contract_anchor(spec)}\n\n"
+                "Canonical details contract:\n"
+                f"{_details_contract_block(spec)}\n\n"
+                "Observable outcome contract:\n"
+                f"{_observable_outcome_contract_block()}"
             ),
             assigned_to="architect",
         )
@@ -254,6 +327,10 @@ def build_project(spec: ScenarioSpec, output_dir: str) -> ProjectState:
                 f"{_behavior_block(spec)}\n\n"
                 "Public contract anchor:\n"
                 f"{_contract_anchor(spec)}\n\n"
+                "Canonical details contract:\n"
+                f"{_details_contract_block(spec)}\n\n"
+                "Observable outcome contract:\n"
+                f"{_observable_outcome_contract_block()}\n\n"
                 "Return raw Python only."
             ),
             assigned_to="code_engineer",
@@ -287,6 +364,10 @@ def build_project(spec: ScenarioSpec, output_dir: str) -> ProjectState:
                 f"{_behavior_block(spec)}\n\n"
                 "Public contract anchor:\n"
                 f"{_contract_anchor(spec)}\n\n"
+                "Canonical details contract:\n"
+                f"{_details_contract_block(spec)}\n\n"
+                "Observable outcome contract:\n"
+                f"{_observable_outcome_contract_block()}\n\n"
                 "Return raw Python only."
             ),
             assigned_to="qa_tester",
@@ -393,6 +474,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit Ollama num_ctx to request during Ollama runs.",
     )
     parser.add_argument(
+        "--ollama-model",
+        default=None,
+        help="Override the Ollama model to use instead of the auto-resolved default.",
+    )
+    parser.add_argument(
+        "--ollama-timeout-seconds",
+        type=float,
+        default=300.0,
+        help="Per-call timeout budget to request for Ollama provider calls during Ollama runs.",
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
         default=3200,
@@ -445,6 +537,643 @@ def _write_markdown(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _artifact_paths(task: Task) -> list[str]:
+    payload = task.output_payload if isinstance(task.output_payload, dict) else {}
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        return []
+    paths: list[str] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        path = artifact.get("path")
+        if isinstance(path, str) and path.strip():
+            paths.append(path)
+    return paths
+
+
+def _code_artifact_path(task: Task, output_dir: str) -> Path | None:
+    for relative_path in _artifact_paths(task):
+        if relative_path.endswith(".py"):
+            return Path(output_dir) / relative_path
+    return None
+
+
+def _unsupported_non_stdlib_imports(artifact_path: Path) -> list[str]:
+    code_content = artifact_path.read_text(encoding="utf-8")
+    module_ast = ast.parse(code_content, filename=str(artifact_path))
+    stdlib_modules = frozenset(getattr(sys, "stdlib_module_names", ()))
+    unsupported_imports: set[str] = set()
+
+    for node in ast.walk(module_ast):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top_level = alias.name.split(".", 1)[0]
+                if top_level != "__future__" and top_level not in stdlib_modules:
+                    unsupported_imports.add(top_level)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level > 0:
+                unsupported_imports.add("relative import")
+                continue
+            top_level = (node.module or "").split(".", 1)[0]
+            if top_level and top_level != "__future__" and top_level not in stdlib_modules:
+                unsupported_imports.add(top_level)
+
+    return sorted(unsupported_imports)
+
+
+def _public_artifact_label(artifact_path: Path | None) -> str | None:
+    if artifact_path is None:
+        return None
+    return artifact_path.name
+
+
+def _public_validation_error_message(error: Exception, artifact_path: Path | None) -> str:
+    message = str(error)
+    if artifact_path is not None:
+        message = message.replace(str(artifact_path), artifact_path.name)
+    return message
+
+
+def _callable_supports_leading_parameters(
+    callable_obj: object,
+    expected_parameter_names: tuple[str, ...],
+) -> bool:
+    if not callable(callable_obj):
+        return False
+    signature = inspect.signature(callable_obj)
+    parameters = list(signature.parameters.values())
+    if len(parameters) < len(expected_parameter_names):
+        return False
+    for parameter, expected_name in zip(parameters, expected_parameter_names, strict=True):
+        if parameter.name != expected_name:
+            return False
+        if parameter.kind not in {
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        }:
+            return False
+    for parameter in parameters[len(expected_parameter_names) :]:
+        if parameter.default is inspect.Parameter.empty:
+            return False
+    return True
+
+
+def _instantiate_service(service_cls: type[Any], service_name: str) -> Any:
+    signature = inspect.signature(service_cls)
+    for parameter in signature.parameters.values():
+        if parameter.kind not in {
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        }:
+            raise RuntimeError(
+                f"Generated code exposed {service_name} with unsupported constructor parameters."
+            )
+        if parameter.default is inspect.Parameter.empty:
+            raise RuntimeError(
+                f"Generated code exposed {service_name} with required constructor parameters."
+            )
+    return service_cls()
+
+
+def _scenario_request_payloads(spec: ScenarioSpec) -> dict[str, dict[str, Any]]:
+    timestamp = datetime(2026, 4, 13, 0, 0, tzinfo=timezone.utc)
+    if spec.slug == "kyc_compliance_intake":
+        request_type = "individual"
+        low_details = {
+            "identity_evidence": ["passport", "proof_of_address"],
+            "jurisdiction": "pt",
+            "customer_type": "individual",
+            "adverse_indicators": [],
+            "missing_documents": [],
+        }
+        high_details = {
+            "identity_evidence": ["passport"],
+            "jurisdiction": "sanctioned",
+            "customer_type": "corporate",
+            "adverse_indicators": ["pep", "watchlist_hit"],
+            "missing_documents": ["beneficial_owner_register"],
+        }
+    elif spec.slug == "insurance_claim_triage":
+        request_type = "claim"
+        low_details = {
+            "policy_id": "POL-1001",
+            "claim_category": "water_damage",
+            "claim_amount": 1200,
+            "evidence": ["invoice", "photos"],
+            "duplicate_claim": False,
+            "suspicious_timing": False,
+        }
+        high_details = {
+            "policy_id": "POL-2009",
+            "claim_category": "theft",
+            "claim_amount": 95000,
+            "evidence": ["statement"],
+            "duplicate_claim": True,
+            "suspicious_timing": True,
+        }
+    elif spec.slug == "vendor_onboarding_risk":
+        request_type = "vendor_submission"
+        low_details = {
+            "vendor_name": "Acme Logistics",
+            "service_category": "courier",
+            "due_diligence_evidence": ["iso27001", "soc2"],
+            "sanctioned_region": False,
+            "expired_certifications": [],
+            "critical_service": False,
+            "unresolved_incidents": [],
+        }
+        high_details = {
+            "vendor_name": "Frontier Ops",
+            "service_category": "critical_infrastructure",
+            "due_diligence_evidence": ["insurance_certificate"],
+            "sanctioned_region": True,
+            "expired_certifications": ["iso27001"],
+            "critical_service": True,
+            "unresolved_incidents": ["sev1", "sev2", "sev3"],
+        }
+    elif spec.slug == "returns_abuse_screening":
+        request_type = "return_case"
+        low_details = {
+            "order_reference": "ORD-1001",
+            "return_reason": "damaged_item",
+            "items": [{"sku": "SKU-1", "category": "home", "value": 45}],
+            "receipt_present": True,
+            "prior_returns": 0,
+            "timing_days": 5,
+        }
+        high_details = {
+            "order_reference": "ORD-9001",
+            "return_reason": "changed_mind",
+            "items": [{"sku": "SKU-9", "category": "electronics", "value": 1800}],
+            "receipt_present": False,
+            "prior_returns": 8,
+            "timing_days": 89,
+        }
+    else:
+        request_type = "access_review"
+        low_details = {
+            "requester_identity": "alice",
+            "requested_roles": ["reader"],
+            "approval_metadata": {"approved_by": "manager", "age_days": 2},
+            "sod_conflicts": [],
+            "emergency_access": False,
+            "stale_approval": False,
+        }
+        high_details = {
+            "requester_identity": "bob",
+            "requested_roles": ["admin", "payments_release"],
+            "approval_metadata": {"approved_by": "manager", "age_days": 45},
+            "sod_conflicts": ["approver_and_requester"],
+            "emergency_access": True,
+            "stale_approval": True,
+        }
+    return {
+        "low": {
+            "request_id": f"{spec.slug}-low",
+            "request_type": request_type,
+            "details": low_details,
+            "timestamp": timestamp,
+        },
+        "high": {
+            "request_id": f"{spec.slug}-high",
+            "request_type": request_type,
+            "details": high_details,
+            "timestamp": timestamp,
+        },
+        "invalid": {
+            "request_id": f"{spec.slug}-invalid",
+            "request_type": request_type,
+            "details": "invalid-details",
+            "timestamp": timestamp,
+        },
+    }
+
+
+def _build_request(request_cls: type[Any], payload: dict[str, Any]) -> Any:
+    return request_cls(
+        request_id=payload["request_id"],
+        request_type=payload["request_type"],
+        details=payload["details"],
+        timestamp=payload["timestamp"],
+    )
+
+
+def _build_request_or_capture_error(
+    request_cls: type[Any],
+    payload: dict[str, Any],
+) -> tuple[Any | None, Exception | None]:
+    try:
+        return _build_request(request_cls, payload), None
+    except Exception as exc:
+        return None, exc
+
+
+def _observable_value(value: Any) -> str:
+    try:
+        return json.dumps(value, sort_keys=True, default=str)
+    except TypeError:
+        return repr(value)
+
+
+def _observable_service_state(service: Any) -> dict[str, str]:
+    if not hasattr(service, "__dict__"):
+        return {}
+    observable: dict[str, str] = {}
+    for name, value in vars(service).items():
+        if name.startswith("_"):
+            continue
+        observable[name] = _observable_value(value)
+    return observable
+
+
+def _audit_attribute_names(service: Any) -> list[str]:
+    if not hasattr(service, "__dict__"):
+        return []
+    names: list[str] = []
+    for name, value in vars(service).items():
+        lowered = name.lower()
+        if name.startswith("_"):
+            continue
+        if any(token in lowered for token in ("audit", "history", "log")) and bool(value):
+            names.append(name)
+    return sorted(names)
+
+
+def _outcomes_expose_audit_signal(*outcomes: Any) -> bool:
+    joined = " ".join(_observable_value(outcome).lower() for outcome in outcomes)
+    return any(token in joined for token in ("audit", "review", "approved", "blocked", "escalat"))
+
+
+_PROGRAMMING_ERROR_TYPES: tuple[type[BaseException], ...] = (
+    UnboundLocalError,
+    NameError,
+    AttributeError,
+    TypeError,
+)
+
+
+def _invalid_request_is_rejected(validate_request: Any, handle_request: Any, invalid_request: Any) -> bool:
+    try:
+        validation_result = validate_request(invalid_request)
+    except Exception:
+        return True
+    if validation_result is False or not bool(validation_result):
+        return True
+    try:
+        handle_request(invalid_request)
+    except Exception:
+        return True
+    return False
+
+
+def _handle_request_survives_invalid(
+    service_cls: type[Any],
+    service_name: str,
+    request_cls: type[Any],
+    invalid_payload: dict[str, Any],
+    *,
+    tolerate_type_confusion: bool = False,
+) -> tuple[bool, str | None]:
+    """Return *(ok, error_detail)*.
+
+    Instantiates a fresh service and calls ``handle_request`` with an
+    invalid request built from *invalid_payload*.  The implementation
+    may raise a deliberate ``ValueError``/``KeyError`` or return a
+    degraded outcome — both are acceptable.  What is *not* acceptable
+    is a programming-level crash such as ``UnboundLocalError`` or
+    ``NameError``, which reveals a code-generation defect that the LLM
+    bounded-repair cycle often fails to fix.
+
+    When *tolerate_type_confusion* is ``True``, ``AttributeError`` is
+    also treated as an acceptable implicit rejection.  This is used for
+    payloads that deliberately violate the type contract (e.g. passing a
+    string where a dict is expected), where ``details.get(...)`` raising
+    ``AttributeError`` is a reasonable type-boundary response rather
+    than a code-generation defect.
+    """
+    try:
+        invalid_request = request_cls(
+            request_id=invalid_payload["request_id"],
+            request_type=invalid_payload["request_type"],
+            details=invalid_payload["details"],
+            timestamp=invalid_payload["timestamp"],
+        )
+    except Exception:
+        # Constructor itself rejects the request — acceptable.
+        return True, None
+    svc = _instantiate_service(service_cls, service_name)
+    try:
+        svc.handle_request(invalid_request)
+    except _PROGRAMMING_ERROR_TYPES as exc:
+        if tolerate_type_confusion and isinstance(exc, AttributeError):
+            return True, None
+        return False, f"{type(exc).__name__}: {exc}"
+    except Exception:
+        # Deliberate rejection (ValueError, KeyError, etc.) — acceptable.
+        return True, None
+    return True, None
+
+
+def _observed_failure_categories(project: ProjectState) -> set[str]:
+    categories: set[str] = set()
+    if isinstance(project.failure_category, str) and project.failure_category:
+        categories.add(project.failure_category)
+    for task in project.tasks:
+        if isinstance(task.last_error_category, str) and task.last_error_category:
+            categories.add(task.last_error_category)
+    return categories
+
+
+def _task_acceptance_lists(project: ProjectState, acceptance_policy: str) -> dict[str, list[str]]:
+    if acceptance_policy == "required_tasks":
+        evaluated_tasks = [task for task in project.tasks if task.required_for_acceptance]
+    else:
+        evaluated_tasks = list(project.tasks)
+    return {
+        "evaluated_task_ids": [task.id for task in evaluated_tasks],
+        "required_task_ids": [task.id for task in project.tasks if task.required_for_acceptance],
+        "completed_task_ids": [task.id for task in evaluated_tasks if task.status == TaskStatus.DONE.value],
+        "failed_task_ids": [task.id for task in evaluated_tasks if task.status == TaskStatus.FAILED.value],
+        "skipped_task_ids": [task.id for task in evaluated_tasks if task.status == TaskStatus.SKIPPED.value],
+        "pending_task_ids": [
+            task.id
+            for task in evaluated_tasks
+            if task.status not in {TaskStatus.DONE.value, TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
+        ],
+    }
+
+
+def _checks_pass(checks: dict[str, bool], required_checks: frozenset[str]) -> bool:
+    return all(bool(checks.get(check_name)) for check_name in required_checks)
+
+
+def _composite_acceptance_evaluation(
+    project: ProjectState,
+    *,
+    acceptance_policy: str,
+    scenario_validation: dict[str, Any],
+) -> dict[str, Any]:
+    base_evaluation = dict(project.acceptance_evaluation) if isinstance(project.acceptance_evaluation, dict) else {}
+    base_evaluation.setdefault("policy", acceptance_policy)
+    for key, values in _task_acceptance_lists(project, acceptance_policy).items():
+        base_evaluation.setdefault(key, values)
+
+    checks = scenario_validation.get("checks") if isinstance(scenario_validation, dict) else {}
+    checks = checks if isinstance(checks, dict) else {}
+    base_productivity_accepted = bool(base_evaluation.get("accepted", project.acceptance_criteria_met))
+    productivity_accepted = base_productivity_accepted and _checks_pass(checks, _SCENARIO_PRODUCTIVITY_CHECKS)
+    real_workflow_accepted = _checks_pass(checks, _SCENARIO_REAL_WORKFLOW_CHECKS)
+    observed_failure_categories = _observed_failure_categories(project)
+    safety_accepted = _checks_pass(checks, _SCENARIO_SAFETY_CHECKS) and not (
+        observed_failure_categories & _ZERO_BUDGET_FAILURE_CATEGORIES
+    )
+
+    productivity_reason = str(base_evaluation.get("reason") or "evaluated_tasks_incomplete")
+    if base_productivity_accepted and not productivity_accepted:
+        productivity_reason = "productivity_validation_failed"
+    real_workflow_reason = (
+        "scenario_contract_validated" if real_workflow_accepted else "scenario_validation_failed"
+    )
+    safety_reason = "no_zero_budget_incident_detected"
+    if not safety_accepted:
+        safety_reason = "safety_validation_failed"
+
+    lanes = {
+        "productivity": {"accepted": productivity_accepted, "reason": productivity_reason},
+        "real_workflow": {"accepted": real_workflow_accepted, "reason": real_workflow_reason},
+        "safety": {"accepted": safety_accepted, "reason": safety_reason},
+    }
+    failed_lane_ids = [lane_id for lane_id, lane in lanes.items() if not lane["accepted"]]
+    accepted = not failed_lane_ids
+    reason = productivity_reason if not productivity_accepted else (
+        "scenario_validation_failed" if not real_workflow_accepted else (
+            "safety_validation_failed" if not safety_accepted else productivity_reason
+        )
+    )
+
+    base_evaluation["accepted"] = accepted
+    base_evaluation["reason"] = reason
+    base_evaluation["acceptance_lanes"] = lanes
+    base_evaluation["failed_lane_ids"] = failed_lane_ids
+    base_evaluation["scenario_validation"] = scenario_validation
+    return base_evaluation
+
+
+def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str) -> dict[str, Any]:
+    artifact_path = _code_artifact_path(task, output_dir)
+    checks = {
+        "syntax_valid": False,
+        "stdlib_only": False,
+        "service_constructor_supported": False,
+        "request_signature_supported": False,
+        "validation_surface_supported": False,
+        "valid_request_accepted": False,
+        "invalid_request_rejected": False,
+        "invalid_request_handled": False,
+        "risk_signal_observable": False,
+        "audit_signal_present": False,
+        "batch_processing_supported": False,
+    }
+    result: dict[str, Any] = {
+        "validated": False,
+        "artifact_path": _public_artifact_label(artifact_path),
+        "service_name": spec.service_name,
+        "request_name": spec.request_name,
+        "checks": checks,
+        "error": None,
+        "observations": {},
+    }
+
+    try:
+        if artifact_path is None or not artifact_path.exists():
+            raise RuntimeError("Generated code artifact was not found.")
+
+        py_compile.compile(str(artifact_path), doraise=True)
+        checks["syntax_valid"] = True
+
+        unsupported_imports = _unsupported_non_stdlib_imports(artifact_path)
+        if unsupported_imports:
+            raise RuntimeError(
+                "Generated code used unsupported non-standard-library imports: "
+                f"{', '.join(unsupported_imports)}."
+            )
+        checks["stdlib_only"] = True
+
+        module_name = f"{spec.slug}_scenario_validation_generated"
+        module_spec = importlib.util.spec_from_file_location(module_name, artifact_path)
+        if module_spec is None or module_spec.loader is None:
+            raise RuntimeError(f"Could not load generated code artifact: {artifact_path.name}")
+        module = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(module)
+
+        service_cls = getattr(module, spec.service_name, None)
+        if not inspect.isclass(service_cls):
+            raise RuntimeError(f"Generated code did not expose {spec.service_name}.")
+        request_cls = getattr(module, spec.request_name, None)
+        if not inspect.isclass(request_cls):
+            raise RuntimeError(f"Generated code did not expose {spec.request_name}.")
+
+        _instantiate_service(service_cls, spec.service_name)
+        checks["service_constructor_supported"] = True
+
+        if not _callable_supports_leading_parameters(request_cls, _SCENARIO_REQUEST_FIELDS):
+            raise RuntimeError(
+                f"Generated code exposed {spec.request_name} with an incompatible constructor signature."
+            )
+        checks["request_signature_supported"] = True
+
+        request_payloads = _scenario_request_payloads(spec)
+        low_request = _build_request(request_cls, request_payloads["low"])
+        high_request = _build_request(request_cls, request_payloads["high"])
+        invalid_request, invalid_request_error = _build_request_or_capture_error(
+            request_cls,
+            request_payloads["invalid"],
+        )
+
+        validation_service = _instantiate_service(service_cls, spec.service_name)
+        validate_request = getattr(validation_service, "validate_request", None)
+        handle_request = getattr(validation_service, "handle_request", None)
+        if not _callable_supports_leading_parameters(validate_request, ("request",)):
+            raise RuntimeError(f"Generated code exposed {spec.service_name}.validate_request(...) with an incompatible signature.")
+        if not _callable_supports_leading_parameters(handle_request, ("request",)):
+            raise RuntimeError(f"Generated code exposed {spec.service_name}.handle_request(...) with an incompatible signature.")
+        validate_request = cast(Any, validate_request)
+        handle_request = cast(Any, handle_request)
+        checks["validation_surface_supported"] = True
+
+        valid_validation_result = validate_request(low_request)
+        if valid_validation_result is False:
+            raise RuntimeError("Generated code did not accept a valid scenario request through validate_request(...).")
+        checks["valid_request_accepted"] = True
+
+        invalid_request_rejected = invalid_request_error is not None
+        if invalid_request_error is None:
+            invalid_request_rejected = _invalid_request_is_rejected(
+                validate_request,
+                handle_request,
+                invalid_request,
+            )
+        if not invalid_request_rejected:
+            raise RuntimeError("Generated code did not reject a malformed scenario request.")
+        checks["invalid_request_rejected"] = True
+
+        # Verify that handle_request does not crash with programming errors
+        # when given a request whose details are incomplete (the most common
+        # invalid-path shape produced by generated tests).
+        partial_details = dict(list(request_payloads["low"]["details"].items())[:2])
+        partial_invalid_payload = {
+            "request_id": f"{spec.slug}-partial-invalid",
+            "request_type": request_payloads["low"]["request_type"],
+            "details": partial_details,
+            "timestamp": request_payloads["low"]["timestamp"],
+        }
+        survived, prog_error = _handle_request_survives_invalid(
+            service_cls, spec.service_name, request_cls, partial_invalid_payload,
+        )
+        if not survived:
+            raise RuntimeError(
+                f"Generated code crashed with a programming error when handling an "
+                f"invalid request: {prog_error}"
+            )
+        # Also verify the fully-invalid payload (details as a string).
+        if invalid_request_error is None:
+            survived_full, prog_error_full = _handle_request_survives_invalid(
+                service_cls, spec.service_name, request_cls, request_payloads["invalid"],
+                tolerate_type_confusion=True,
+            )
+            if not survived_full:
+                raise RuntimeError(
+                    f"Generated code crashed with a programming error when handling a "
+                    f"malformed request: {prog_error_full}"
+                )
+        checks["invalid_request_handled"] = True
+
+        low_service = _instantiate_service(service_cls, spec.service_name)
+        low_outcome = low_service.handle_request(low_request)
+        high_service = _instantiate_service(service_cls, spec.service_name)
+        high_outcome = high_service.handle_request(high_request)
+        low_state = _observable_service_state(low_service)
+        high_state = _observable_service_state(high_service)
+        observations: dict[str, Any] = {
+            "low_outcome": _observable_value(low_outcome),
+            "high_outcome": _observable_value(high_outcome),
+        }
+        result["observations"] = observations
+        if _observable_value(low_outcome) == _observable_value(high_outcome) and low_state == high_state:
+            raise RuntimeError(
+                "Generated code did not expose an observable difference between low-risk and high-risk requests."
+            )
+        checks["risk_signal_observable"] = True
+
+        batch_service = _instantiate_service(service_cls, spec.service_name)
+        batch_service.handle_request(low_request)
+        batch_service.handle_request(high_request)
+        checks["batch_processing_supported"] = True
+
+        audit_attributes = _audit_attribute_names(batch_service)
+        observations["audit_attributes"] = list(audit_attributes)
+        if not audit_attributes and not _outcomes_expose_audit_signal(low_outcome, high_outcome):
+            raise RuntimeError(
+                "Generated code did not expose audit history or review records after handling scenario requests."
+            )
+        checks["audit_signal_present"] = True
+
+        result["validated"] = True
+        return result
+    except Exception as exc:
+        result["error"] = _public_validation_error_message(exc, artifact_path)
+        return result
+
+
+def _scenario_validation_not_run(reason: str) -> dict[str, Any]:
+    return {
+        "validated": False,
+        "not_run_reason": reason,
+        "checks": {},
+        "error": None,
+    }
+
+
+def _apply_scenario_validation(
+    spec: ScenarioSpec,
+    *,
+    project: ProjectState,
+    output_dir: str,
+    acceptance_policy: str,
+) -> dict[str, Any]:
+    code_task = project.get_task("code")
+    if code_task is None:
+        return _scenario_validation_not_run("missing_code_task")
+
+    scenario_validation = _validate_generated_scenario(spec, code_task, output_dir)
+    acceptance_evaluation = _composite_acceptance_evaluation(
+        project,
+        acceptance_policy=acceptance_policy,
+        scenario_validation=scenario_validation,
+    )
+    accepted = bool(acceptance_evaluation.get("accepted"))
+
+    if accepted:
+        project.acceptance_evaluation = acceptance_evaluation
+        project.acceptance_criteria_met = True
+        project.save()
+        return scenario_validation
+
+    project.mark_workflow_finished(
+        "completed",
+        acceptance_policy=acceptance_policy,
+        terminal_outcome=WorkflowOutcome.DEGRADED.value,
+        failure_category=FailureCategory.SCENARIO_VALIDATION.value,
+        acceptance_criteria_met=False,
+        acceptance_evaluation=acceptance_evaluation,
+    )
+    project.save()
+    return scenario_validation
+
+
 def run_scenario_provider(
     spec: ScenarioSpec,
     provider: str,
@@ -454,14 +1183,16 @@ def run_scenario_provider(
     resume_policy: str,
     max_repair_cycles: int,
     ollama_base_url: str | None,
+    ollama_model: str | None = None,
     ollama_num_ctx: int | None,
+    ollama_timeout_seconds: float = 300.0,
     max_tokens: int,
     run_index: int,
     total_runs: int,
 ) -> dict[str, object]:
     if provider == "ollama":
         availability = get_provider_availability(provider, ollama_base_url=ollama_base_url)
-        model = resolve_model(provider, None, ollama_base_url=ollama_base_url)
+        model = resolve_model(provider, ollama_model, ollama_base_url=ollama_base_url)
     else:
         availability = get_provider_availability(provider)
         model = resolve_model(provider, None)
@@ -486,6 +1217,7 @@ def run_scenario_provider(
 
     if not availability["available"]:
         result["status"] = "skipped"
+        result["scenario_validation"] = _scenario_validation_not_run("provider_unavailable")
         result["completed_at"] = _utc_now_iso()
         result["duration_seconds"] = 0.0
         _write_json(run_root / "run_result.json", result)
@@ -502,6 +1234,7 @@ def run_scenario_provider(
             str(run_root),
             ollama_base_url=ollama_base_url,
             ollama_num_ctx=ollama_num_ctx,
+            ollama_timeout_seconds=ollama_timeout_seconds,
             max_tokens=max_tokens,
             workflow_failure_policy=failure_policy,
             workflow_resume_policy=resume_policy,
@@ -524,11 +1257,24 @@ def run_scenario_provider(
         execute_empirical_validation_workflow(config, project)
     except Exception as exc:  # pragma: no cover - exercised in real provider runs
         result["status"] = "execution_error"
+        result["scenario_validation"] = _scenario_validation_not_run("workflow_execution_failed")
         result["error_type"] = type(exc).__name__
         result["error_message"] = str(exc)
         result["traceback"] = traceback.format_exc()
     else:
         result["status"] = "completed"
+        if project.phase == "completed" and project.acceptance_criteria_met:
+            scenario_validation = _apply_scenario_validation(
+                spec,
+                project=project,
+                output_dir=str(run_root),
+                acceptance_policy=config.workflow_acceptance_policy,
+            )
+            result["scenario_validation"] = scenario_validation
+            if not project.acceptance_criteria_met:
+                result["status"] = "validation_error"
+        else:
+            result["scenario_validation"] = _scenario_validation_not_run("workflow_not_accepted")
 
     result["duration_seconds"] = round(time.perf_counter() - started, 3)
     result["completed_at"] = _utc_now_iso()
@@ -538,6 +1284,10 @@ def run_scenario_provider(
         model=model,
         output_dir=str(run_root),
     )
+    result["acceptance_criteria_met"] = project.acceptance_criteria_met
+    result["failure_category"] = project.failure_category
+    if isinstance(project.acceptance_evaluation, dict):
+        result["acceptance_reason"] = project.acceptance_evaluation.get("reason")
     _write_json(run_root / "run_result.json", result)
     print(
         f"[{run_index}/{total_runs}] scenario={spec.slug} provider={provider} status={result['status']} phase={result['summary']['phase']} terminal={result['summary']['terminal_outcome']}",
@@ -551,7 +1301,7 @@ def _aggregate_counts(runs: list[dict[str, object]], key: str) -> dict[str, dict
     for run in runs:
         label = str(run[key])
         status = str(run["status"])
-        bucket = counts.setdefault(label, {"completed": 0, "execution_error": 0, "skipped": 0})
+        bucket = counts.setdefault(label, {name: 0 for name in _RESULT_STATUSES})
         bucket[status] = bucket.get(status, 0) + 1
     return counts
 
@@ -573,19 +1323,27 @@ def build_markdown_summary(report: dict[str, object]) -> str:
         "",
         "## Run Matrix",
         "",
-        "| Scenario | Provider | Status | Phase | Terminal Outcome | Duration (s) | Repair History Entries |",
-        "| --- | --- | --- | --- | --- | ---: | ---: |",
+        "| Scenario | Provider | Status | Phase | Terminal Outcome | Accepted | Scenario Validation | Duration (s) | Repair History Entries |",
+        "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: |",
     ]
     for run in report_runs:
         summary = cast(dict[str, Any], run.get("summary") or {})
         repair_history = cast(list[object], summary.get("repair_history") or [])
+        scenario_validation = cast(dict[str, Any], run.get("scenario_validation") or {})
+        validation_status = "not_run"
+        if scenario_validation.get("validated") is True:
+            validation_status = "passed"
+        elif scenario_validation.get("error"):
+            validation_status = "failed"
         lines.append(
-            "| {scenario} | {provider} | {status} | {phase} | {terminal} | {duration} | {repair_count} |".format(
+            "| {scenario} | {provider} | {status} | {phase} | {terminal} | {accepted} | {validation} | {duration} | {repair_count} |".format(
                 scenario=run["scenario"],
                 provider=run["provider"],
                 status=run["status"],
                 phase=summary.get("phase", "n/a"),
                 terminal=summary.get("terminal_outcome", "n/a"),
+                accepted="yes" if run.get("acceptance_criteria_met") is True else "no",
+                validation=validation_status,
                 duration=run.get("duration_seconds", 0.0),
                 repair_count=len(repair_history),
             )
@@ -595,26 +1353,26 @@ def build_markdown_summary(report: dict[str, object]) -> str:
             "",
             "## Provider Totals",
             "",
-            "| Provider | Completed | Execution Error | Skipped |",
-            "| --- | ---: | ---: | ---: |",
+            "| Provider | Completed | Validation Error | Execution Error | Skipped |",
+            "| --- | ---: | ---: | ---: | ---: |",
         ]
     )
     for provider, counts in report_provider_totals.items():
         lines.append(
-            f"| {provider} | {counts.get('completed', 0)} | {counts.get('execution_error', 0)} | {counts.get('skipped', 0)} |"
+            f"| {provider} | {counts.get('completed', 0)} | {counts.get('validation_error', 0)} | {counts.get('execution_error', 0)} | {counts.get('skipped', 0)} |"
         )
     lines.extend(
         [
             "",
             "## Scenario Totals",
             "",
-            "| Scenario | Completed | Execution Error | Skipped |",
-            "| --- | ---: | ---: | ---: |",
+            "| Scenario | Completed | Validation Error | Execution Error | Skipped |",
+            "| --- | ---: | ---: | ---: | ---: |",
         ]
     )
     for scenario, counts in report_scenario_totals.items():
         lines.append(
-            f"| {scenario} | {counts.get('completed', 0)} | {counts.get('execution_error', 0)} | {counts.get('skipped', 0)} |"
+            f"| {scenario} | {counts.get('completed', 0)} | {counts.get('validation_error', 0)} | {counts.get('execution_error', 0)} | {counts.get('skipped', 0)} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -642,7 +1400,9 @@ def main() -> None:
                     resume_policy=args.resume_policy,
                     max_repair_cycles=args.max_repair_cycles,
                     ollama_base_url=args.ollama_base_url,
+                    ollama_model=args.ollama_model,
                     ollama_num_ctx=args.ollama_num_ctx,
+                    ollama_timeout_seconds=args.ollama_timeout_seconds,
                     max_tokens=args.max_tokens,
                     run_index=run_index,
                     total_runs=total_runs,

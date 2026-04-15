@@ -125,6 +125,7 @@ _MOCK_ASSERTION_METHODS = {
     "assert_not_called",
 }
 
+_ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
 
 def _harden_private_file_permissions(path: Path) -> None:
     if os.name != "posix":
@@ -1178,6 +1179,11 @@ class Orchestrator:
             contract_issues = task_public_contract_preflight.get("issues") or []
             if contract_issues:
                 validation_issues.append(f"task public contract mismatch: {', '.join(contract_issues)}")
+        invalid_dataclass_field_usages = code_analysis.get("invalid_dataclass_field_usages") or []
+        if invalid_dataclass_field_usages:
+            validation_issues.append(
+                f"non-dataclass field(...) usage: {', '.join(invalid_dataclass_field_usages)}"
+            )
         if completion_diagnostics.get("likely_truncated"):
             validation_issues.append(self._completion_validation_issue(completion_diagnostics))
         if validation_issues:
@@ -2330,17 +2336,53 @@ class Orchestrator:
     def _build_repair_instruction(self, task: Task, failure_category: str) -> str:
         if failure_category == FailureCategory.CODE_VALIDATION.value:
             last_error = task.last_error if isinstance(task.last_error, str) else ""
+            failed_code = self._failed_artifact_content(task, ArtifactType.CODE)
             if "follows default argument" in last_error.lower():
                 instruction = (
                     "Repair the generated Python module by reordering any dataclass fields that currently place a defaulted field before a required field. "
                     "Inspect every dataclass in the module, preserve the documented public names, and avoid unrelated behavior changes."
                 )
                 dataclass_examples = self._dataclass_default_order_repair_examples(
-                    self._failed_artifact_content(task, ArtifactType.CODE)
+                    failed_code
                 )
                 if dataclass_examples:
                     instruction = f"{instruction} {dataclass_examples[0]}"
                 return instruction
+            missing_import_details = self._missing_import_nameerror_details(
+                last_error,
+                failed_code,
+            )
+            if missing_import_details is not None:
+                missing_name, broken_line = missing_import_details
+                instruction = (
+                    "Repair the generated Python module so every referenced symbol is imported before first use and the module imports cleanly. "
+                    f"The current failed artifact references {missing_name} during module import but never imports it. "
+                    "Add the missing import or rewrite every use of that name to match an actually imported symbol while preserving the documented public contract."
+                )
+                if broken_line:
+                    if f"{missing_name}." in broken_line:
+                        instruction = (
+                            f"{instruction} The exact broken line `{broken_line}` still appears in the failed artifact. "
+                            f"If you keep that module-qualified reference, add `import {missing_name}` before first use instead of returning the same missing-import line unchanged."
+                        )
+                    else:
+                        instruction = (
+                            f"{instruction} The exact broken line `{broken_line}` still appears in the failed artifact. "
+                            f"Do not return that line unchanged; import the name that defines {missing_name} or rewrite the line to use an already imported symbol."
+                        )
+                return instruction
+            plain_class_field_details = self._plain_class_field_default_factory_details(
+                last_error,
+                failed_code,
+            )
+            if plain_class_field_details is not None:
+                class_name, field_name = plain_class_field_details
+                return (
+                    "Repair the generated Python module so mutable service state is initialized on real instances instead of being left as a dataclasses.Field placeholder. "
+                    "Preserve the documented public facade, constructor contract, and workflow methods. "
+                    f"The current failed artifact defines {class_name}.{field_name} with field(...) on a non-dataclass class, which leaves {field_name} unusable at runtime. "
+                    f"Initialize self.{field_name} inside __init__ and keep zero-argument construction compatible with the documented facade. Only convert {class_name} to @dataclass if the same public methods and constructor behavior remain valid."
+                )
 
         instructions = {
             FailureCategory.CODE_VALIDATION.value: "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
@@ -2864,6 +2906,11 @@ class Orchestrator:
             contract_issues = task_public_contract_preflight.get("issues") or []
             if contract_issues:
                 lines.append(f"- Task public contract mismatches: {', '.join(contract_issues)}")
+        if "invalid_dataclass_field_usages" in code_analysis:
+            invalid_field_usages = code_analysis.get("invalid_dataclass_field_usages") or []
+            lines.append(
+                f"- Non-dataclass field(...) usages: {', '.join(invalid_field_usages or ['none'])}"
+            )
         third_party_imports = code_analysis.get('third_party_imports') or []
         lines.append(f"- Third-party imports: {', '.join(third_party_imports or ['none'])}")
         if fallback_message:
@@ -3006,6 +3053,7 @@ class Orchestrator:
         test_task: Task,
         cycle: Dict[str, Any],
     ) -> Dict[str, Any]:
+        existing_tests = self._failed_artifact_content(test_task, ArtifactType.TEST)
         validation_summary = self._build_repair_validation_summary(
             test_task,
             FailureCategory.TEST_VALIDATION.value,
@@ -3022,9 +3070,10 @@ class Orchestrator:
             "instruction": self._build_code_repair_instruction_from_test_failure(
                 code_task,
                 validation_summary,
+                existing_tests,
             ),
             "validation_summary": validation_summary,
-            "existing_tests": self._failed_artifact_content(test_task, ArtifactType.TEST),
+            "existing_tests": existing_tests,
             "failed_output": code_task.output or "",
             "failed_artifact_content": self._failed_artifact_content(code_task, ArtifactType.CODE),
             "provider_call": code_task.last_provider_call,
@@ -3036,6 +3085,7 @@ class Orchestrator:
         self,
         code_task: Task,
         validation_summary: str,
+        existing_tests: object = "",
     ) -> str:
         failed_artifact_content = self._failed_artifact_content(code_task, ArtifactType.CODE)
         duplicate_argument_details = self._duplicate_constructor_argument_details(validation_summary)
@@ -3067,6 +3117,18 @@ class Orchestrator:
                     "or an equivalent explicit constructor call that binds each field once and supplies safe defaults for fields omitted by valid inputs."
                 )
             return instruction
+        plain_class_field_details = self._plain_class_field_default_factory_details(
+            validation_summary,
+            failed_artifact_content,
+        )
+        if plain_class_field_details is not None:
+            class_name, field_name = plain_class_field_details
+            return (
+                "Repair the generated Python module so mutable service state is initialized on real instances instead of being left as a dataclasses.Field placeholder. "
+                "Preserve the documented public facade, constructor contract, and workflow methods. "
+                f"The current failed artifact defines {class_name}.{field_name} with field(...) on a plain class, so {field_name} remains a Field object and runtime calls such as append() fail. "
+                f"Do not leave {field_name} = field(...) on a non-dataclass class. Initialize self.{field_name} inside __init__ with the same zero-argument construction expected by the tests, or convert the whole class to @dataclass only if that still preserves the same public methods and constructor behavior."
+            )
         missing_attribute_details = self._missing_object_attribute_details(
             validation_summary,
             failed_artifact_content,
@@ -3119,6 +3181,32 @@ class Orchestrator:
                     f"{instruction} The exact broken validation line `{validation_line}` still appears in the failed artifact. "
                     "Do not return that line unchanged; replace it with wrapper-field checks on the request object plus only true payload-key validation inside the nested container."
                 )
+            return instruction
+        invalid_outcome_audit_details = self._invalid_outcome_missing_audit_trail_details(
+            validation_summary,
+            existing_tests,
+            failed_artifact_content,
+        )
+        if invalid_outcome_audit_details is not None:
+            failing_tests, audit_field, invalid_return_call, omitted_field = invalid_outcome_audit_details
+            rendered_tests = self._render_name_list(failing_tests)
+            instruction = (
+                "Repair the generated Python module so rejected or validation-failure paths still emit non-empty audit evidence instead of returning a blank placeholder. "
+                "Preserve the documented invalid outcome contract and repair the implementation rather than weakening the tests. "
+                f"The failing pytest case {rendered_tests} requires invalid requests to keep their rejected result while populating {audit_field} with a concrete reason, trace, or rejection explanation. "
+                f"Do not leave {audit_field} empty on invalid paths, do not omit it just to fall back to an empty default, and do not return blank placeholders for rejected outcomes."
+            )
+            if invalid_return_call:
+                if omitted_field:
+                    instruction = (
+                        f"{instruction} The current failed artifact still returns {invalid_return_call} on an invalid path and omits {audit_field}, which falls back to a blank default. "
+                        f"Do not return that call unchanged; populate {audit_field} with a non-empty rejection explanation."
+                    )
+                else:
+                    instruction = (
+                        f"{instruction} The current failed artifact still returns {invalid_return_call} with an empty {audit_field}. "
+                        f"Do not return that call unchanged; populate {audit_field} with a non-empty rejection explanation."
+                    )
             return instruction
         strictness_details = self._internal_constructor_strictness_details(
             validation_summary,
@@ -3416,6 +3504,50 @@ class Orchestrator:
             for name in undefined_names
             if name.lower() not in module_defined_symbols and self._is_helper_alias_like_name(name)
         ]
+
+    @staticmethod
+    def _first_non_import_line_with_name(content: object, symbol_name: str) -> str:
+        if not isinstance(content, str) or not content.strip() or not symbol_name:
+            return ""
+        symbol_pattern = re.compile(rf"\b{re.escape(symbol_name)}\b")
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.startswith("import ") or stripped.startswith("from "):
+                continue
+            if symbol_pattern.search(stripped):
+                return stripped
+        return ""
+
+    def _missing_import_nameerror_details(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object = "",
+    ) -> tuple[str, str] | None:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return None
+
+        summary_lower = validation_summary.lower()
+        if not any(
+            marker in summary_lower
+            for marker in ("module import failed", "module import: fail", "import summary:")
+        ):
+            return None
+
+        match = re.search(
+            r"NameError:\s*name ['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]? is not defined",
+            validation_summary,
+        )
+        if match is None:
+            return None
+
+        missing_name = match.group(1)
+        if missing_name in {"field", "datetime", "date", "timedelta", "timezone"}:
+            return None
+
+        broken_line = self._first_non_import_line_with_name(failed_artifact_content, missing_name)
+        return missing_name, broken_line
 
     @staticmethod
     def _content_has_matching_datetime_import(content: object) -> bool:
@@ -3843,6 +3975,248 @@ class Orchestrator:
         class_name, missing_fields = constructor_details
         required_fields = self._required_field_list_from_failed_artifact(failed_artifact_content)
         return class_name, missing_fields, required_fields
+
+    def _plain_class_field_default_factory_details(
+        self,
+        validation_summary: object,
+        failed_artifact_content: object,
+    ) -> Optional[tuple[str, str]]:
+        summary_lower = validation_summary.lower() if isinstance(validation_summary, str) else ""
+        if not any(
+            token in summary_lower
+            for token in (
+                "non-dataclass field(...)",
+                "field' object has no attribute",
+                "field object has no attribute",
+            )
+        ):
+            return None
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return None
+
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return None
+
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef) or self._has_dataclass_decorator(node):
+                continue
+            for statement in node.body:
+                field_name = ""
+                value: Optional[ast.expr] = None
+                if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+                    field_name = statement.target.id
+                    value = statement.value
+                elif isinstance(statement, ast.Assign) and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Name):
+                    field_name = statement.targets[0].id
+                    value = statement.value
+                if not field_name or not isinstance(value, ast.Call):
+                    continue
+                if self._call_expression_basename(value.func) != "field":
+                    continue
+                return node.name, field_name
+
+        return None
+
+    @staticmethod
+    def _failing_pytest_test_names(validation_summary: object) -> list[str]:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return []
+        return list(dict.fromkeys(re.findall(r"::([A-Za-z_][A-Za-z0-9_]*)\b", validation_summary)))
+
+    @staticmethod
+    def _compare_mentions_invalid_literal(node: ast.Compare) -> bool:
+        values = [node.left, *node.comparators]
+        return any(
+            isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+            and value.value.strip().lower() == "invalid"
+            for value in values
+        )
+
+    @classmethod
+    def _test_function_targets_invalid_path(
+        cls,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> bool:
+        name_lower = node.name.lower()
+        if any(token in name_lower for token in ("invalid", "validation", "reject", "error", "failure")):
+            return True
+        for child in ast.walk(node):
+            if isinstance(child, ast.Compare) and cls._compare_mentions_invalid_literal(child):
+                return True
+        return False
+
+    @staticmethod
+    def _attribute_is_field_reference(node: ast.AST, field_name: str) -> bool:
+        return isinstance(node, ast.Attribute) and node.attr == field_name
+
+    @classmethod
+    def _is_len_of_field_reference(cls, node: ast.AST, field_name: str) -> bool:
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "len"
+            and len(node.args) == 1
+            and cls._attribute_is_field_reference(node.args[0], field_name)
+        )
+
+    @classmethod
+    def _test_requires_non_empty_result_field(
+        cls,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        field_name: str,
+    ) -> bool:
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Assert):
+                continue
+            test_expr = child.test
+            if cls._attribute_is_field_reference(test_expr, field_name):
+                return True
+            if not isinstance(test_expr, ast.Compare):
+                continue
+            if cls._is_len_of_field_reference(test_expr.left, field_name):
+                return True
+            if any(cls._is_len_of_field_reference(comparator, field_name) for comparator in test_expr.comparators):
+                return True
+            if cls._attribute_is_field_reference(test_expr.left, field_name) or any(
+                cls._attribute_is_field_reference(comparator, field_name)
+                for comparator in test_expr.comparators
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _ast_is_empty_literal(node: ast.AST | None) -> bool:
+        if node is None:
+            return False
+        if isinstance(node, ast.Constant):
+            return node.value in {"", None}
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return len(node.elts) == 0
+        if isinstance(node, ast.Dict):
+            return len(node.keys) == 0
+        if isinstance(node, ast.Call):
+            if node.args or node.keywords:
+                return False
+            if isinstance(node.func, ast.Name) and node.func.id in {"str", "list", "tuple", "set", "dict"}:
+                return True
+        return False
+
+    @classmethod
+    def _class_field_uses_empty_default(
+        cls,
+        failed_artifact_content: object,
+        class_name: str,
+        field_name: str,
+    ) -> bool:
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return False
+
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return False
+
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef) or node.name != class_name:
+                continue
+            for statement in node.body:
+                if not isinstance(statement, ast.AnnAssign):
+                    continue
+                if isinstance(statement.target, ast.Name) and statement.target.id == field_name:
+                    return cls._ast_is_empty_literal(statement.value)
+            return False
+        return False
+
+    def _invalid_outcome_audit_return_details(
+        self,
+        failed_artifact_content: object,
+        field_name: str,
+    ) -> Optional[tuple[str, bool]]:
+        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+            return None
+
+        try:
+            tree = ast.parse(failed_artifact_content)
+        except SyntaxError:
+            return None
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Return) or not isinstance(node.value, ast.Call):
+                continue
+            call = node.value
+            outcome_keyword = next((keyword for keyword in call.keywords if keyword.arg == "outcome"), None)
+            if outcome_keyword is None:
+                continue
+            if not (
+                isinstance(outcome_keyword.value, ast.Constant)
+                and isinstance(outcome_keyword.value.value, str)
+                and outcome_keyword.value.value.strip().lower() == "invalid"
+            ):
+                continue
+
+            rendered_call = ast.unparse(call).strip()
+            field_keyword = next((keyword for keyword in call.keywords if keyword.arg == field_name), None)
+            if field_keyword is not None and self._ast_is_empty_literal(field_keyword.value):
+                return rendered_call, False
+
+            class_name = self._callable_name(call)
+            if field_keyword is None and class_name and self._class_field_uses_empty_default(
+                failed_artifact_content,
+                class_name,
+                field_name,
+            ):
+                return rendered_call, True
+        return None
+
+    def _invalid_outcome_missing_audit_trail_details(
+        self,
+        validation_summary: object,
+        existing_tests: object,
+        failed_artifact_content: object,
+    ) -> Optional[tuple[list[str], str, str, bool]]:
+        if not isinstance(validation_summary, str) or not validation_summary.strip():
+            return None
+        if "AssertionError" not in validation_summary and " - assert " not in validation_summary:
+            return None
+        if not isinstance(existing_tests, str) or not existing_tests.strip():
+            return None
+
+        failing_test_names = set(self._failing_pytest_test_names(validation_summary))
+        if not failing_test_names:
+            return None
+
+        try:
+            tree = ast.parse(existing_tests)
+        except SyntaxError:
+            return None
+
+        field_name = "audit_log"
+        matching_tests: list[str] = []
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name not in failing_test_names:
+                continue
+            if not self._test_function_targets_invalid_path(node):
+                continue
+            if not self._test_requires_non_empty_result_field(node, field_name):
+                continue
+            matching_tests.append(node.name)
+
+        if not matching_tests:
+            return None
+
+        invalid_return_details = self._invalid_outcome_audit_return_details(
+            failed_artifact_content,
+            field_name,
+        )
+        if invalid_return_details is None:
+            return matching_tests, field_name, "", False
+        invalid_return_call, omitted_field = invalid_return_details
+        return matching_tests, field_name, invalid_return_call, omitted_field
 
     @staticmethod
     def _duplicate_constructor_argument_details(
@@ -4619,6 +4993,7 @@ class Orchestrator:
             "classes": {},
             "imports": [],
             "third_party_imports": [],
+            "invalid_dataclass_field_usages": [],
             "module_variables": [],
             "symbols": [],
             "has_main_guard": '__name__ == "__main__"' in raw_content or "__name__ == '__main__'" in raw_content,
@@ -4635,6 +5010,7 @@ class Orchestrator:
         functions: list[Dict[str, Any]] = []
         classes: Dict[str, Dict[str, Any]] = {}
         import_roots: set[str] = set()
+        invalid_dataclass_field_usages: list[str] = []
         module_variables: set[str] = set()
 
         for node in tree.body:
@@ -4693,12 +5069,20 @@ class Orchestrator:
             method_signatures: Dict[str, Dict[str, Any]] = {}
             bases = [self._ast_name(base) for base in node.bases]
             is_enum = any(base.endswith("Enum") for base in bases)
-            is_dataclass = any(self._ast_name(decorator).split(".")[-1] == "dataclass" for decorator in node.decorator_list)
+            is_dataclass = self._has_dataclass_decorator(node)
 
             for stmt in node.body:  # pragma: no branch
                 if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                     field_name = stmt.target.id
                     field_names.append(field_name)
+                    if (
+                        not is_dataclass
+                        and isinstance(stmt.value, ast.Call)
+                        and self._call_expression_basename(stmt.value.func) == "field"
+                    ):
+                        invalid_dataclass_field_usages.append(
+                            f"{node.name}.{field_name} uses field(...) on a non-dataclass class"
+                        )
                     if is_dataclass:
                         has_default = self._dataclass_field_has_default(stmt.value)
                         if self._dataclass_field_is_init_enabled(stmt.value):
@@ -4709,6 +5093,14 @@ class Orchestrator:
                     for target in stmt.targets:  # pragma: no branch
                         if isinstance(target, ast.Name):  # pragma: no branch
                             class_attributes.append(target.id)
+                            if (
+                                not is_dataclass
+                                and isinstance(stmt.value, ast.Call)
+                                and self._call_expression_basename(stmt.value.func) == "field"
+                            ):
+                                invalid_dataclass_field_usages.append(
+                                    f"{node.name}.{target.id} uses field(...) on a non-dataclass class"
+                                )
                 elif isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
                     signature = self._call_signature_details(stmt, skip_first_param=True)
                     init_params = signature["params"]
@@ -4716,15 +5108,33 @@ class Orchestrator:
                     constructor_max_args = signature["max_args"]
                     class_attributes.extend(self._self_assigned_attributes(stmt))
                 elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and not stmt.name.startswith("_"):  # pragma: no branch
-                    signature = self._call_signature_details(stmt, skip_first_param=True)
-                    params = ["self", *signature["params"]]
+                    binding_kind = self._method_binding_kind(stmt)
+                    signature = self._call_signature_details(
+                        stmt,
+                        skip_first_param=binding_kind != "static",
+                    )
+                    if binding_kind == "static":
+                        params = list(signature["params"])
+                    elif binding_kind == "class":
+                        params = ["cls", *signature["params"]]
+                    else:
+                        params = ["self", *signature["params"]]
                     methods.append(f"{stmt.name}({', '.join(params)})")
                     method_signatures[stmt.name] = signature
 
-            constructor_params = init_params or dataclass_init_params or field_names
-            if constructor_min_args is None and constructor_max_args is None and is_dataclass:
-                constructor_min_args = len(dataclass_required_params)
-                constructor_max_args = len(dataclass_init_params)
+            if init_params:
+                constructor_params = init_params
+            elif is_dataclass:
+                constructor_params = dataclass_init_params
+            else:
+                constructor_params = []
+            if constructor_min_args is None and constructor_max_args is None:
+                if is_dataclass:
+                    constructor_min_args = len(dataclass_required_params)
+                    constructor_max_args = len(dataclass_init_params)
+                else:
+                    constructor_min_args = 0
+                    constructor_max_args = 0
             classes[node.name] = {
                 "name": node.name,
                 "bases": bases,
@@ -4744,6 +5154,7 @@ class Orchestrator:
         analysis["third_party_imports"] = [
             module_name for module_name in sorted(import_roots) if self._is_probable_third_party_import(module_name)
         ]
+        analysis["invalid_dataclass_field_usages"] = sorted(dict.fromkeys(invalid_dataclass_field_usages))
         analysis["module_variables"] = sorted(module_variables)
         analysis["symbols"] = sorted([item["name"] for item in functions] + list(classes.keys()))
         return analysis
@@ -6410,6 +6821,16 @@ class Orchestrator:
             "return_annotation": self._ast_name(node.returns) if node.returns is not None else None,
         }
 
+    def _method_binding_kind(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            decorator_name = self._ast_name(target).split(".")[-1]
+            if decorator_name == "staticmethod":
+                return "static"
+            if decorator_name == "classmethod":
+                return "class"
+        return "instance"
+
     def _self_assigned_attributes(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
         attributes: list[str] = []
         for child in ast.walk(node):
@@ -7223,8 +7644,16 @@ class Orchestrator:
             validation_summary,
             failed_artifact_content,
         )
+        plain_class_field_details = self._plain_class_field_default_factory_details(
+            validation_summary,
+            failed_artifact_content,
+        )
         required_evidence_items = self._implementation_required_evidence_items(
             context.get("code", "") if isinstance(context, dict) else ""
+        )
+        missing_import_details = self._missing_import_nameerror_details(
+            validation_summary,
+            failed_artifact_content,
         )
 
         summary_lower = validation_summary.lower()
@@ -7327,6 +7756,28 @@ class Orchestrator:
             if "name 'field' is not defined" in summary_lower:
                 lines.append(
                     "If a dataclass uses field(...) or default_factory anywhere in the module, import field explicitly from dataclasses. Do not leave field referenced without that import."
+                )
+            if missing_import_details is not None:
+                missing_name, broken_line = missing_import_details
+                if broken_line and f"{missing_name}." in broken_line:
+                    lines.append(
+                        f"The module import is failing because `{broken_line}` uses {missing_name} before it is imported. If you keep that module-qualified reference, add `import {missing_name}` before first use instead of returning the same line unchanged."
+                    )
+                elif broken_line:
+                    lines.append(
+                        f"The module import is failing because `{broken_line}` references {missing_name} before it is imported. Import the symbol that defines {missing_name} or rewrite that line to use an already imported name."
+                    )
+                else:
+                    lines.append(
+                        f"The module import is failing because {missing_name} is referenced before it is imported. Add the missing import or rewrite every use of {missing_name} to match an actually imported symbol."
+                    )
+            if plain_class_field_details is not None:
+                class_name, field_name = plain_class_field_details
+                lines.append(
+                    f"The current failed artifact defines {class_name}.{field_name} with field(...) on a non-dataclass class. That leaves {field_name} as a dataclasses.Field placeholder at runtime instead of a mutable instance value."
+                )
+                lines.append(
+                    f"For plain service classes, initialize self.{field_name} inside __init__ and keep zero-argument construction compatible with the documented facade. Only convert {class_name} to @dataclass if the same public methods and constructor behavior remain valid."
                 )
             if (
                 "name 'datetime' is not defined" in summary_lower
@@ -7940,44 +8391,90 @@ class Orchestrator:
                     f"Task '{task.id}' is assigned to unknown agent '{task.assigned_to}'"
                 )
 
-    def _evaluate_workflow_acceptance(self, project: ProjectState) -> Dict[str, Any]:
-        policy = self.config.workflow_acceptance_policy
-        if policy == "required_tasks":
+    def _task_acceptance_lists(self, project: ProjectState, acceptance_policy: str) -> Dict[str, list[str]]:
+        if acceptance_policy == "required_tasks":
             evaluated_tasks = [task for task in project.tasks if task.required_for_acceptance]
-            if not evaluated_tasks:
-                return {
-                    "policy": policy,
-                    "accepted": False,
-                    "reason": "no_required_tasks",
-                    "evaluated_task_ids": [],
-                    "required_task_ids": [],
-                    "completed_task_ids": [],
-                    "failed_task_ids": [],
-                    "skipped_task_ids": [],
-                    "pending_task_ids": [],
-                }
         else:
             evaluated_tasks = list(project.tasks)
+        return {
+            "evaluated_task_ids": [task.id for task in evaluated_tasks],
+            "required_task_ids": [task.id for task in project.tasks if task.required_for_acceptance],
+            "completed_task_ids": [task.id for task in evaluated_tasks if task.status == TaskStatus.DONE.value],
+            "failed_task_ids": [task.id for task in evaluated_tasks if task.status == TaskStatus.FAILED.value],
+            "skipped_task_ids": [task.id for task in evaluated_tasks if task.status == TaskStatus.SKIPPED.value],
+            "pending_task_ids": [
+                task.id
+                for task in evaluated_tasks
+                if task.status not in {TaskStatus.DONE.value, TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
+            ],
+        }
 
-        completed_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.DONE.value]
-        failed_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.FAILED.value]
-        skipped_task_ids = [task.id for task in evaluated_tasks if task.status == TaskStatus.SKIPPED.value]
-        pending_task_ids = [
-            task.id
-            for task in evaluated_tasks
-            if task.status not in {TaskStatus.DONE.value, TaskStatus.FAILED.value, TaskStatus.SKIPPED.value}
-        ]
-        accepted = bool(evaluated_tasks) and len(completed_task_ids) == len(evaluated_tasks)
+    def _observed_failure_categories(self, project: ProjectState) -> set[str]:
+        categories: set[str] = set()
+        if isinstance(project.failure_category, str) and project.failure_category:
+            categories.add(project.failure_category)
+        for task in project.tasks:
+            if isinstance(task.last_error_category, str) and task.last_error_category:
+                categories.add(task.last_error_category)
+        return categories
+
+    def _evaluate_workflow_acceptance(self, project: ProjectState) -> Dict[str, Any]:
+        policy = self.config.workflow_acceptance_policy
+        productivity_lists = self._task_acceptance_lists(project, policy)
+        if policy == "required_tasks" and not productivity_lists["evaluated_task_ids"]:
+            productivity_accepted = False
+            productivity_reason = "no_required_tasks"
+        else:
+            productivity_accepted = bool(productivity_lists["evaluated_task_ids"]) and len(
+                productivity_lists["completed_task_ids"]
+            ) == len(productivity_lists["evaluated_task_ids"])
+            productivity_reason = "all_evaluated_tasks_done" if productivity_accepted else "evaluated_tasks_incomplete"
+
+        real_workflow_lists = self._task_acceptance_lists(project, "all_tasks")
+        real_workflow_accepted = bool(real_workflow_lists["evaluated_task_ids"]) and len(
+            real_workflow_lists["completed_task_ids"]
+        ) == len(real_workflow_lists["evaluated_task_ids"])
+        real_workflow_reason = "all_workflow_tasks_done" if real_workflow_accepted else "workflow_tasks_incomplete"
+
+        observed_failure_categories = self._observed_failure_categories(project)
+        zero_budget_failure_categories = sorted(observed_failure_categories & _ZERO_BUDGET_FAILURE_CATEGORIES)
+        safety_accepted = not zero_budget_failure_categories
+        safety_reason = "no_zero_budget_incident_detected" if safety_accepted else "safety_validation_failed"
+
+        acceptance_lanes = {
+            "productivity": {
+                "accepted": productivity_accepted,
+                "reason": productivity_reason,
+                "policy": policy,
+                **productivity_lists,
+            },
+            "real_workflow": {
+                "accepted": real_workflow_accepted,
+                "reason": real_workflow_reason,
+                "policy": "all_tasks",
+                **real_workflow_lists,
+            },
+            "safety": {
+                "accepted": safety_accepted,
+                "reason": safety_reason,
+                "observed_failure_categories": sorted(observed_failure_categories),
+                "zero_budget_failure_categories": zero_budget_failure_categories,
+            },
+        }
+        failed_lane_ids = [lane_id for lane_id, lane in acceptance_lanes.items() if not bool(lane["accepted"])]
+        accepted = not failed_lane_ids
+        reason = productivity_reason if not productivity_accepted else (
+            real_workflow_reason if not real_workflow_accepted else (
+                safety_reason if not safety_accepted else productivity_reason
+            )
+        )
         return {
             "policy": policy,
             "accepted": accepted,
-            "reason": "all_evaluated_tasks_done" if accepted else "evaluated_tasks_incomplete",
-            "evaluated_task_ids": [task.id for task in evaluated_tasks],
-            "required_task_ids": [task.id for task in project.tasks if task.required_for_acceptance],
-            "completed_task_ids": completed_task_ids,
-            "failed_task_ids": failed_task_ids,
-            "skipped_task_ids": skipped_task_ids,
-            "pending_task_ids": pending_task_ids,
+            "reason": reason,
+            **productivity_lists,
+            "acceptance_lanes": acceptance_lanes,
+            "failed_lane_ids": failed_lane_ids,
         }
 
     def execute_workflow(self, project: ProjectState):

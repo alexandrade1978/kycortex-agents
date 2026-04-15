@@ -1253,6 +1253,33 @@ def test_validate_code_output_rejects_import_time_errors(tmp_path):
         orchestrator._validate_code_output(output, task=task)
 
 
+def test_validate_code_output_rejects_field_default_factory_on_plain_class(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    output = AgentOutput(
+        summary="code",
+        raw_content=(
+            "from dataclasses import field\n\n"
+            "class ComplianceIntakeService:\n"
+            "    audit_history: list[dict] = field(default_factory=list)\n"
+        ),
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write one Python module.",
+        assigned_to="code_engineer",
+    )
+
+    with pytest.raises(AgentExecutionError, match=r"non-dataclass field\(\.\.\.\) usage"):
+        orchestrator._validate_code_output(output, task=task)
+
+    code_analysis = output.metadata["validation"]["code_analysis"]
+    assert code_analysis["invalid_dataclass_field_usages"] == [
+        "ComplianceIntakeService.audit_history uses field(...) on a non-dataclass class"
+    ]
+
+
 def test_validate_code_output_skips_import_validation_for_third_party_imports(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -2635,6 +2662,41 @@ def test_analyze_python_module_covers_enum_fields_and_public_async_methods(tmp_p
     assert analysis["classes"]["Status"]["methods"] == ["label(self)"]
 
 
+def test_analyze_python_module_keeps_plain_class_fields_off_constructor_and_preserves_staticmethod_args(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    raw_content = (
+        "from dataclasses import field\n\n"
+        "class ComplianceIntakeService:\n"
+        "    audit_history: list[dict] = field(default_factory=list)\n\n"
+        "    @staticmethod\n"
+        "    def validate_request(request):\n"
+        "        return isinstance(request, dict)\n\n"
+        "    def handle_request(self, request):\n"
+        "        return self.validate_request(request)\n"
+    )
+
+    analysis = orchestrator._analyze_python_module(raw_content)
+    class_info = analysis["classes"]["ComplianceIntakeService"]
+
+    assert class_info["fields"] == ["audit_history"]
+    assert class_info["constructor_params"] == []
+    assert class_info["constructor_min_args"] == 0
+    assert class_info["constructor_max_args"] == 0
+    assert class_info["methods"] == ["validate_request(request)", "handle_request(self, request)"]
+    assert class_info["method_signatures"]["validate_request"] == {
+        "params": ["request"],
+        "param_annotations": [None],
+        "min_args": 1,
+        "max_args": 1,
+        "accepts_sequence_input": False,
+        "return_annotation": None,
+    }
+    assert analysis["invalid_dataclass_field_usages"] == [
+        "ComplianceIntakeService.audit_history uses field(...) on a non-dataclass class"
+    ]
+
+
 def test_analyze_python_module_includes_public_module_variables_in_symbols(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -2665,6 +2727,7 @@ def test_analyze_python_module_returns_default_shape_for_blank_content(tmp_path)
         "classes": {},
         "imports": [],
         "third_party_imports": [],
+        "invalid_dataclass_field_usages": [],
         "module_variables": [],
         "symbols": [],
         "has_main_guard": False,
@@ -8334,7 +8397,8 @@ def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_pat
                 "class Color(Enum):\n"
                 "    RED = 1\n\n"
                 "class Thing:\n"
-                "    name: str\n\n"
+                "    def __init__(self, name: str):\n"
+                "        self.name = name\n\n"
                 "def run(value):\n"
                 "    return value\n"
             ),
@@ -8345,7 +8409,8 @@ def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_pat
                     "class Color(Enum):\n"
                     "    RED = 1\n\n"
                     "class Thing:\n"
-                    "    name: str\n\n"
+                    "    def __init__(self, name: str):\n"
+                    "        self.name = name\n\n"
                     "def run(value):\n"
                     "    return value\n"
                 ),
@@ -8359,7 +8424,8 @@ def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_pat
                             "class Color(Enum):\n"
                             "    RED = 1\n\n"
                             "class Thing:\n"
-                            "    name: str\n\n"
+                            "    def __init__(self, name: str):\n"
+                            "        self.name = name\n\n"
                             "def run(value):\n"
                             "    return value\n"
                         ),
@@ -11433,7 +11499,7 @@ def test_execute_workflow_can_continue_after_terminal_failure(tmp_path):
     assert project.acceptance_criteria_met is False
 
 
-def test_execute_workflow_can_complete_under_required_task_acceptance_policy(tmp_path):
+def test_execute_workflow_degrades_under_required_task_policy_when_real_workflow_fails(tmp_path):
     config = KYCortexConfig(
         output_dir=str(tmp_path / "output"),
         workflow_failure_policy="continue",
@@ -11476,11 +11542,16 @@ def test_execute_workflow_can_complete_under_required_task_acceptance_policy(tmp
     assert docs_task.status == TaskStatus.FAILED.value
     assert project.phase == "completed"
     assert project.acceptance_policy == "required_tasks"
-    assert project.terminal_outcome == WorkflowOutcome.COMPLETED.value
-    assert project.acceptance_criteria_met is True
+    assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value
+    assert project.acceptance_criteria_met is False
+    assert project.acceptance_evaluation["reason"] == "workflow_tasks_incomplete"
     assert project.acceptance_evaluation["required_task_ids"] == ["code"]
     assert project.acceptance_evaluation["failed_task_ids"] == []
-    assert project.snapshot().workflow_status == WorkflowStatus.COMPLETED
+    assert project.acceptance_evaluation["acceptance_lanes"]["productivity"]["accepted"] is True
+    assert project.acceptance_evaluation["acceptance_lanes"]["real_workflow"]["accepted"] is False
+    assert project.acceptance_evaluation["acceptance_lanes"]["safety"]["accepted"] is True
+    assert project.acceptance_evaluation["failed_lane_ids"] == ["real_workflow"]
+    assert project.snapshot().workflow_status == WorkflowStatus.FAILED
 
 
 def test_execute_workflow_degrades_when_required_task_policy_has_no_required_tasks(tmp_path):
@@ -11892,6 +11963,13 @@ def test_execute_workflow_resume_failed_hard_stops_for_non_repairable_failed_tas
     assert workflow_event["details"]["failure_task_id"] == "tests"
     assert workflow_event["details"]["failure_message"] == "sandbox policy blocked filesystem write outside sandbox root"
     assert workflow_event["details"]["failure_error_type"] == "RuntimeError"
+    assert project.acceptance_evaluation["acceptance_lanes"]["productivity"]["accepted"] is False
+    assert project.acceptance_evaluation["acceptance_lanes"]["real_workflow"]["accepted"] is False
+    assert project.acceptance_evaluation["acceptance_lanes"]["safety"]["accepted"] is False
+    assert project.acceptance_evaluation["acceptance_lanes"]["safety"]["zero_budget_failure_categories"] == [
+        FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+    ]
+    assert project.acceptance_evaluation["failed_lane_ids"] == ["productivity", "real_workflow", "safety"]
     assert project.get_task("tests__repair_1") is None
     assert project.repair_cycle_count == 0
 
@@ -15304,6 +15382,152 @@ def test_build_code_repair_context_from_test_failure_specializes_nested_payload_
     assert "The exact broken validation line `return required_fields.issubset(request.details)` still appears in the failed artifact" in repair_context["instruction"]
 
 
+def test_build_code_repair_context_from_test_failure_specializes_plain_class_field_default_factory_runtime_error(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    failed_code = (
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n"
+        "from typing import Any\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict[str, Any]\n"
+        "    timestamp: datetime\n\n"
+        "class ComplianceIntakeService:\n"
+        "    audit_history: list[dict[str, Any]] = field(default_factory=list)\n\n"
+        "    def handle_request(self, request: ComplianceRequest) -> dict[str, Any]:\n"
+        "        self.audit_history.append({\"request_id\": request.request_id})\n"
+        "        return {\"outcome\": \"approved\"}\n"
+    )
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output=failed_code,
+        output_payload={
+            "summary": "from dataclasses import dataclass, field",
+            "raw_content": failed_code,
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": failed_code,
+                }
+            ],
+            "metadata": {},
+        },
+    )
+    test_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        last_error=(
+            "Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s\n"
+            "Pytest failure details: FAILED tests_tests.py::test_happy_path - AttributeError: 'Field' object has no attribute 'append'"
+        ),
+        output="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
+    )
+
+    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        {"cycle": 1},
+    )
+
+    assert "initialized on real instances instead of being left as a dataclasses.Field placeholder" in repair_context["instruction"]
+    assert "ComplianceIntakeService.audit_history" in repair_context["instruction"]
+    assert "Initialize self.audit_history inside __init__" in repair_context["instruction"]
+
+
+def test_build_code_repair_context_from_test_failure_specializes_invalid_path_audit_trail_requirements(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    failed_code = (
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class TriageOutcome:\n"
+        "    outcome: str\n"
+        "    risk_score: float\n"
+        "    audit_log: str = ''\n\n"
+        "class ClaimTriageService:\n"
+        "    def validate_request(self, request) -> bool:\n"
+        "        return bool(request.claim_id and request.claim_type)\n\n"
+        "    def handle_request(self, request):\n"
+        "        if not self.validate_request(request):\n"
+        "            return TriageOutcome(outcome='invalid', risk_score=0.0)\n"
+        "        return TriageOutcome(outcome='approved', risk_score=0.2, audit_log='approved claim')\n"
+    )
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output=failed_code,
+        output_payload={
+            "summary": "from dataclasses import dataclass",
+            "raw_content": failed_code,
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": failed_code,
+                }
+            ],
+            "metadata": {},
+        },
+    )
+    test_task = Task(
+        id="tests",
+        title="Tests",
+        description="Write tests",
+        assigned_to="qa_tester",
+        last_error_category=FailureCategory.TEST_VALIDATION.value,
+        last_error="Generated test validation failed: pytest failed: 1 failed, 2 passed in 0.17s",
+        output_payload={
+            "summary": "import pytest",
+            "raw_content": (
+                "import pytest\n\n"
+                "def test_validation_failure(service, invalid_request):\n"
+                "    result = service.handle_request(invalid_request)\n"
+                "    assert result.outcome == 'invalid'\n"
+                "    assert result.risk_score == 0.0\n"
+                "    assert len(result.audit_log) > 0\n"
+            ),
+            "artifacts": [],
+            "metadata": {
+                "validation": {
+                    "test_analysis": {"syntax_ok": True},
+                    "test_execution": {
+                        "available": True,
+                        "ran": True,
+                        "returncode": 1,
+                        "summary": "1 failed, 2 passed in 0.17s",
+                        "stdout": (
+                            "FAILED tests_tests.py::test_validation_failure - AssertionError: assert 0 > 0\n"
+                        ),
+                    },
+                }
+            },
+        },
+    )
+
+    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        {"cycle": 1},
+    )
+
+    assert "rejected or validation-failure paths still emit non-empty audit evidence" in repair_context["instruction"]
+    assert "test_validation_failure requires invalid requests to keep their rejected result" in repair_context["instruction"]
+    assert "Do not leave audit_log empty on invalid paths" in repair_context["instruction"]
+    assert "returns TriageOutcome(outcome='invalid', risk_score=0.0) on an invalid path and omits audit_log" in repair_context["instruction"]
+
+
 def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_test_repairs(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
@@ -16653,6 +16877,127 @@ def test_build_repair_instruction_specializes_repeated_dataclass_field_order_fai
     assert "Inspect every dataclass in the module" in instruction
     assert "The current failed artifact still has this ordering bug in ReviewAction" in instruction
     assert "ReviewAction(action_id, action_type, details, timestamp=field(default_factory=datetime.now))" in instruction
+
+
+def test_build_repair_instruction_specializes_non_dataclass_field_default_factory_failures(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    failed_code = (
+        "from dataclasses import field\n\n"
+        "class ComplianceIntakeService:\n"
+        "    audit_history: list[dict] = field(default_factory=list)\n\n"
+        "    def handle_request(self, request):\n"
+        "        self.audit_history.append(request)\n"
+        "        return request\n"
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output="Generated code validation failed",
+        last_error=(
+            "Generated code validation failed: non-dataclass field(...) usage: "
+            "ComplianceIntakeService.audit_history uses field(...) on a non-dataclass class"
+        ),
+        output_payload={
+            "summary": "from dataclasses import field",
+            "raw_content": failed_code,
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": failed_code,
+                }
+            ],
+            "metadata": {
+                "validation": {
+                    "code_analysis": {
+                        "syntax_ok": True,
+                        "third_party_imports": [],
+                        "invalid_dataclass_field_usages": [
+                            "ComplianceIntakeService.audit_history uses field(...) on a non-dataclass class"
+                        ],
+                    }
+                }
+            },
+        },
+    )
+
+    instruction = orchestrator._build_repair_instruction(task, FailureCategory.CODE_VALIDATION.value)
+
+    assert "defines ComplianceIntakeService.audit_history with field(...) on a non-dataclass class" in instruction
+    assert "Initialize self.audit_history inside __init__" in instruction
+    assert "Only convert ComplianceIntakeService to @dataclass" in instruction
+
+
+def test_build_repair_instruction_specializes_missing_import_nameerror_failures(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    failed_code = (
+        "from dataclasses import dataclass, field\n"
+        "from datetime import datetime\n\n"
+        "logger = logging.getLogger(__name__)\n\n"
+        "@dataclass(frozen=True)\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime = field(default_factory=datetime.now)\n"
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write code",
+        assigned_to="code_engineer",
+        output="Generated code validation failed",
+        last_error=(
+            "Generated code validation failed: module import failed: "
+            "NameError: name 'logging' is not defined. Did you forget to import 'logging'?"
+        ),
+        output_payload={
+            "summary": "from dataclasses import dataclass, field",
+            "raw_content": failed_code,
+            "artifacts": [
+                {
+                    "name": "code_implementation",
+                    "artifact_type": ArtifactType.CODE.value,
+                    "content": failed_code,
+                }
+            ],
+            "metadata": {},
+        },
+    )
+
+    instruction = orchestrator._build_repair_instruction(task, FailureCategory.CODE_VALIDATION.value)
+
+    assert "references logging during module import but never imports it" in instruction
+    assert "logger = logging.getLogger(__name__)" in instruction
+    assert "add `import logging` before first use" in instruction.lower()
+
+
+def test_repair_focus_lines_specialize_missing_import_nameerror_failures(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    repair_context = {
+        "failure_category": FailureCategory.CODE_VALIDATION.value,
+        "validation_summary": (
+            "Generated code validation:\n"
+            "- Module import: FAIL\n"
+            "- Import summary: NameError: name 'logging' is not defined. Did you forget to import 'logging'?\n"
+            "- Verdict: FAIL"
+        ),
+        "failed_artifact_content": (
+            "from dataclasses import dataclass, field\n"
+            "from datetime import datetime\n\n"
+            "logger = logging.getLogger(__name__)\n"
+        ),
+    }
+
+    lines = orchestrator._repair_focus_lines(repair_context, {})
+
+    assert any("logger = logging.getLogger(__name__)" in line for line in lines)
+    assert any("import logging" in line for line in lines)
 
 
 def test_build_repair_validation_summary_uses_dependency_validation_payload(tmp_path):

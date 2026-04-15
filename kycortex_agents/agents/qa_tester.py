@@ -1677,12 +1677,14 @@ class QATesterAgent(BaseAgent):
         while current in parent_map:
             current = parent_map[current]
             if isinstance(current, ast.For):
-                if (
-                    isinstance(current.target, ast.Name)
-                    and current.target.id == node.left.id
-                    and isinstance(current.iter, ast.Name)
-                ):
-                    return required_field_names.get(current.iter.id, [])
+                if isinstance(current.target, ast.Name) and current.target.id == node.left.id:
+                    field_names = required_field_names.get(
+                        cls._named_reference_identifier(current.iter),
+                        [],
+                    )
+                    if not field_names:
+                        field_names = cls._string_literal_sequence(current.iter)
+                    return field_names
             if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 break
         return []
@@ -1762,8 +1764,14 @@ class QATesterAgent(BaseAgent):
             if isinstance(module_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and module_node.name.startswith("validate"):
                 validate_nodes.append(module_node)
             elif isinstance(module_node, ast.ClassDef):
+                class_has_payload_field = cls._class_has_payload_like_field(module_node)
                 for class_child in module_node.body:
-                    if isinstance(class_child, (ast.FunctionDef, ast.AsyncFunctionDef)) and class_child.name.startswith("validate"):
+                    if not isinstance(class_child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        continue
+                    if class_child.name.startswith("validate"):
+                        validate_nodes.append(class_child)
+                        continue
+                    if class_child.name == "__post_init__" and class_has_payload_field:
                         validate_nodes.append(class_child)
 
         def append_key(value: str) -> None:
@@ -1908,6 +1916,37 @@ class QATesterAgent(BaseAgent):
 
         return keys
 
+    @classmethod
+    def _class_has_payload_like_field(cls, class_node: ast.ClassDef) -> bool:
+        payload_attrs = {
+            "details",
+            "detail",
+            "data",
+            "payload",
+            "metadata",
+            "meta",
+            "attributes",
+            "context",
+            "request_data",
+            "document_data",
+        }
+
+        def is_payload_field(name: str) -> bool:
+            lowered = name.lower()
+            return lowered in payload_attrs or lowered.endswith(("_details", "_data", "_payload", "_metadata"))
+
+        for child in class_node.body:
+            if isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+                if is_payload_field(child.target.id):
+                    return True
+                continue
+            if not isinstance(child, ast.Assign):
+                continue
+            for target in child.targets:
+                if isinstance(target, ast.Name) and is_payload_field(target.id):
+                    return True
+        return False
+
     @staticmethod
     def _is_payload_container_expression(node: ast.AST | None, payload_alias_names: set[str]) -> bool:
         if node is None:
@@ -2043,7 +2082,7 @@ class QATesterAgent(BaseAgent):
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if "validate" not in node.name.lower():
+            if "validate" not in node.name.lower() and node.name != "__post_init__":
                 continue
             payload_aliases.update(cls._function_payload_alias_names(node))
         return payload_aliases
@@ -2659,6 +2698,51 @@ class QATesterAgent(BaseAgent):
             return []
         return [key for key in ordered_keys if key in common_key_set]
 
+    @staticmethod
+    def _indent_lines(lines: list[str], indent: str) -> list[str]:
+        return [f"{indent}{line}" if line else line for line in lines]
+
+    @staticmethod
+    def _non_negative_score_assertion_lines(
+        score_expr: str,
+        *,
+        value_name: str,
+        allow_none: bool = False,
+    ) -> list[str]:
+        lines = [f"{value_name} = {score_expr}"]
+        if allow_none:
+            lines.extend(
+                [
+                    f"if {value_name} is None:",
+                    f"    assert {value_name} is None",
+                    f"elif hasattr({value_name}, 'score'):",
+                    f"    assert isinstance({value_name}.score, (int, float))",
+                    f"    assert {value_name}.score >= 0.0",
+                    f"elif isinstance({value_name}, dict) and 'score' in {value_name}:",
+                    f"    assert isinstance({value_name}['score'], (int, float))",
+                    f"    assert {value_name}['score'] >= 0.0",
+                    "else:",
+                    f"    assert isinstance({value_name}, (int, float))",
+                    f"    assert {value_name} >= 0.0",
+                ]
+            )
+            return lines
+
+        lines.extend(
+            [
+                f"if hasattr({value_name}, 'score'):",
+                f"    assert isinstance({value_name}.score, (int, float))",
+                f"    assert {value_name}.score >= 0.0",
+                f"elif isinstance({value_name}, dict) and 'score' in {value_name}:",
+                f"    assert isinstance({value_name}['score'], (int, float))",
+                f"    assert {value_name}['score'] >= 0.0",
+                "else:",
+                f"    assert isinstance({value_name}, (int, float))",
+                f"    assert {value_name} >= 0.0",
+            ]
+        )
+        return lines
+
     @classmethod
     def _stable_direct_mapping_assertion_lines(
         cls,
@@ -2667,6 +2751,7 @@ class QATesterAgent(BaseAgent):
         *,
         result_name: str,
         request_name: str,
+        allow_none_scores: bool = False,
     ) -> list[str]:
         if cls._implementation_call_return_primitive_kind(implementation_code, callable_ref) != "dict":
             return []
@@ -2678,7 +2763,13 @@ class QATesterAgent(BaseAgent):
         for score_key in ("risk_score", "score"):
             if score_key in mapping_keys:
                 lines.append(f"assert '{score_key}' in {result_name}")
-                lines.append(f"assert {result_name}['{score_key}'] >= 0.0")
+                lines.extend(
+                    cls._non_negative_score_assertion_lines(
+                        f"{result_name}['{score_key}']",
+                        value_name=f"{score_key}_value",
+                        allow_none=allow_none_scores,
+                    )
+                )
         for text_key in (
             "action",
             "action_type",
@@ -2716,7 +2807,16 @@ class QATesterAgent(BaseAgent):
         for score_key in ("risk_score", "score"):
             if score_key in mapping_keys:
                 lines.append(f"assert all('{score_key}' in item for item in results)")
-                lines.append(f"assert all(item['{score_key}'] >= 0.0 for item in results)")
+                lines.append("for item in results:")
+                lines.extend(
+                    cls._indent_lines(
+                        cls._non_negative_score_assertion_lines(
+                            f"item['{score_key}']",
+                            value_name=f"{score_key}_value",
+                        ),
+                        "    ",
+                    )
+                )
         for text_key in (
             "action",
             "action_type",
@@ -2743,6 +2843,7 @@ class QATesterAgent(BaseAgent):
         *,
         result_name: str,
         request_name: str,
+        allow_none_scores: bool = False,
     ) -> list[str]:
         return_class_name = cls._implementation_call_return_class_name(implementation_code, callable_ref)
         if not return_class_name:
@@ -2753,9 +2854,21 @@ class QATesterAgent(BaseAgent):
         if "request_id" in field_names and request_name:
             lines.append(f"assert {result_name}.request_id == {request_name}.request_id")
         if "risk_score" in field_names:
-            lines.append(f"assert {result_name}.risk_score >= 0.0")
+            lines.extend(
+                cls._non_negative_score_assertion_lines(
+                    f"{result_name}.risk_score",
+                    value_name="risk_score_value",
+                    allow_none=allow_none_scores,
+                )
+            )
         elif "score" in field_names:
-            lines.append(f"assert {result_name}.score >= 0.0")
+            lines.extend(
+                cls._non_negative_score_assertion_lines(
+                    f"{result_name}.score",
+                    value_name="score_value",
+                    allow_none=allow_none_scores,
+                )
+            )
         for text_field in ("action", "status", "result", "outcome", "decision"):
             if text_field in field_names:
                 lines.append(f"assert isinstance({result_name}.{text_field}, str)")
@@ -2770,7 +2883,13 @@ class QATesterAgent(BaseAgent):
             )
             if "risk_score" in mapping_keys:
                 lines.append(f"assert 'risk_score' in {result_name}.{mapping_field}")
-                lines.append(f"assert {result_name}.{mapping_field}['risk_score'] >= 0.0")
+                lines.extend(
+                    cls._non_negative_score_assertion_lines(
+                        f"{result_name}.{mapping_field}['risk_score']",
+                        value_name=f"{mapping_field}_risk_score_value",
+                        allow_none=allow_none_scores,
+                    )
+                )
         if "audit_log" in field_names:
             lines.append(f"assert len({result_name}.audit_log) > 0")
         elif "audit_logs" in field_names:
@@ -2820,12 +2939,14 @@ class QATesterAgent(BaseAgent):
         result_name: str,
         request_name: str,
         service_name: str,
+        allow_none_scores: bool = False,
     ) -> list[str]:
         result_lines = cls._stable_result_assertion_lines(
             implementation_code,
             callable_ref,
             result_name=result_name,
             request_name=request_name,
+            allow_none_scores=allow_none_scores,
         )
         if result_lines:
             return result_lines
@@ -2835,6 +2956,7 @@ class QATesterAgent(BaseAgent):
             callable_ref,
             result_name=result_name,
             request_name=request_name,
+            allow_none_scores=allow_none_scores,
         )
         if direct_mapping_lines:
             return direct_mapping_lines
@@ -2898,9 +3020,27 @@ class QATesterAgent(BaseAgent):
             lines.append("assert results[0].request_id == requests[0].request_id")
             lines.append("assert results[-1].request_id == requests[-1].request_id")
         if "risk_score" in field_names:
-            lines.append("assert all(item.risk_score >= 0.0 for item in results)")
+            lines.append("for item in results:")
+            lines.extend(
+                cls._indent_lines(
+                    cls._non_negative_score_assertion_lines(
+                        "item.risk_score",
+                        value_name="risk_score_value",
+                    ),
+                    "    ",
+                )
+            )
         elif "score" in field_names:
-            lines.append("assert all(item.score >= 0.0 for item in results)")
+            lines.append("for item in results:")
+            lines.extend(
+                cls._indent_lines(
+                    cls._non_negative_score_assertion_lines(
+                        "item.score",
+                        value_name="score_value",
+                    ),
+                    "    ",
+                )
+            )
         for text_field in ("action", "status", "result", "outcome", "decision"):
             if text_field in field_names:
                 lines.append(f"assert all(isinstance(item.{text_field}, str) for item in results)")
@@ -2915,7 +3055,16 @@ class QATesterAgent(BaseAgent):
             )
             if "risk_score" in mapping_keys:
                 lines.append(f"assert all('risk_score' in item.{mapping_field} for item in results)")
-                lines.append(f"assert all(item.{mapping_field}['risk_score'] >= 0.0 for item in results)")
+                lines.append("for item in results:")
+                lines.extend(
+                    cls._indent_lines(
+                        cls._non_negative_score_assertion_lines(
+                            f"item.{mapping_field}['risk_score']",
+                            value_name=f"{mapping_field}_risk_score_value",
+                        ),
+                        "    ",
+                    )
+                )
         if "audit_log" in field_names:
             lines.append("assert all(len(item.audit_log) > 0 for item in results)")
         return lines
@@ -2950,6 +3099,12 @@ class QATesterAgent(BaseAgent):
             "region": '"us_east"',
             "reason": '"damaged in shipping"',
             "receipt_status": '"missing"',
+            "order_reference": '"ORD-1001"',
+            "return_reason": '"damaged_item"',
+            "items": '[{"sku": "SKU-1", "category": "home", "value": 45}]',
+            "receipt_present": "True",
+            "prior_returns": "0",
+            "timing_days": "5",
             "role": '"admin"',
             "request_type": '"screening"',
             "requester": '"analyst"',
@@ -3053,6 +3208,72 @@ class QATesterAgent(BaseAgent):
             "invalid_request",
             f'invalid_request = type("InvalidRequest", (), {{{rendered_items}}})()',
         )
+
+    @classmethod
+    def _constructor_rejects_invalid_payload(
+        cls,
+        signature: str,
+        implementation_code: object,
+    ) -> bool:
+        if not signature or not cls._payload_like_parameter_names(signature):
+            return False
+
+        class_name, _ = cls._signature_name_and_params(signature)
+        tree = cls._parse_implementation_tree(implementation_code)
+        if tree is None or not class_name:
+            return False
+
+        for module_node in tree.body:
+            if not isinstance(module_node, ast.ClassDef) or module_node.name != class_name:
+                continue
+
+            for class_child in module_node.body:
+                if not isinstance(class_child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if class_child.name not in {"__init__", "__post_init__"}:
+                    continue
+
+                payload_alias_names = cls._function_payload_alias_names(class_child)
+                raises_value_error = False
+                validates_payload = False
+
+                for child in ast.walk(class_child):
+                    if isinstance(child, ast.Raise):
+                        exception_node = child.exc
+                        if isinstance(exception_node, ast.Call) and isinstance(exception_node.func, ast.Name):
+                            raises_value_error = raises_value_error or exception_node.func.id == "ValueError"
+                        elif isinstance(exception_node, ast.Name):
+                            raises_value_error = raises_value_error or exception_node.id == "ValueError"
+                        continue
+
+                    if isinstance(child, ast.Compare) and child.comparators:
+                        comparator = child.comparators[0]
+                        if cls._is_payload_container_expression(comparator, payload_alias_names):
+                            validates_payload = True
+                            continue
+
+                    if not (
+                        isinstance(child, ast.Call)
+                        and isinstance(child.func, ast.Name)
+                        and child.func.id == "isinstance"
+                        and child.args
+                    ):
+                        continue
+
+                    target = child.args[0]
+                    if cls._is_payload_container_expression(target, payload_alias_names):
+                        validates_payload = True
+                        continue
+                    if isinstance(target, ast.Subscript) and cls._is_payload_container_expression(
+                        target.value,
+                        payload_alias_names,
+                    ):
+                        validates_payload = True
+
+                if raises_value_error and validates_payload:
+                    return True
+
+        return False
 
     @staticmethod
     def _implementation_raises_value_error(implementation_code: object) -> bool:
@@ -4117,6 +4338,7 @@ Return complete raw Python only."""
         validation_missing_request_field = cls._validation_failure_missing_request_field(implementation_code)
         non_validation_payload_keys = cls._implementation_non_validation_payload_keys(implementation_code)
         validation_method = cls._validation_support_method(exact_methods, preferred_facades)
+        validation_constructor_rejects_invalid_payload = False
         validation_result_kind = "bool"
         validation_result_fields: list[str] = []
         if validation_method:
@@ -4161,49 +4383,62 @@ Return complete raw Python only."""
                     validation_constructor_variable,
                 )
 
-            validation_body_lines = [line for line in (validation_service_line, validation_constructor_line) if line]
-            if validation_method and "." in validation_method:
-                validation_owner, raw_validation_method_name = validation_method.split(".", 1)
-                validation_method_name, _ = cls._signature_name_and_params(raw_validation_method_name)
-                validation_method_name = validation_method_name or raw_validation_method_name.strip()
-                validation_service_name = cls._instance_name_for_class(validation_owner)
-                validation_service_assignment = f"{validation_service_name} = {validation_owner}()"
-                if validation_body_lines and validation_body_lines[0] != validation_service_assignment:
-                    validation_body_lines.insert(0, validation_service_assignment)
-                elif not validation_body_lines:
-                    validation_body_lines.append(validation_service_assignment)
-                if validation_result_kind == "object_is_valid":
-                    validation_body_lines.append(
-                        f"validation = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
-                    )
-                    validation_body_lines.append("assert validation.is_valid is False")
-                    if "errors" in validation_result_fields:
-                        validation_body_lines.append("assert len(validation.errors) > 0")
-                else:
-                    validation_body_lines.append(
-                        f"is_valid = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
-                    )
-                    validation_body_lines.append("assert is_valid is False")
+            validation_constructor_rejects_invalid_payload = cls._constructor_rejects_invalid_payload(
+                preferred_constructor,
+                implementation_code,
+            )
 
-            validation_call_expression = cls._call_expression_without_assignment(validation_call_line)
-            validation_stable_assertion_lines: list[str] = []
-            if validation_call_line.startswith("result = "):
-                validation_stable_assertion_lines = cls._stable_call_assertion_lines(
-                    implementation_code,
-                    primary_surface_ref,
-                    result_name="result",
-                    request_name=validation_constructor_variable,
-                    service_name=primary_service_name,
-                )
-            if validation_call_expression:
-                if cls._implementation_raises_value_error(implementation_code):
-                    validation_body_lines.append("with pytest.raises(ValueError):")
-                    validation_body_lines.append(f"    {validation_call_expression}")
-                elif validation_call_line.startswith("result = ") and validation_stable_assertion_lines:
-                    validation_body_lines.append(validation_call_line)
-                    validation_body_lines.extend(validation_stable_assertion_lines)
-                else:
-                    validation_body_lines.append(validation_call_expression)
+            if validation_constructor_rejects_invalid_payload and validation_constructor_line:
+                constructor_expression = validation_constructor_line.split(" = ", 1)[1]
+                validation_body_lines = [
+                    "with pytest.raises(ValueError):",
+                    f"    {constructor_expression}",
+                ]
+            else:
+                validation_body_lines = [line for line in (validation_service_line, validation_constructor_line) if line]
+                if validation_method and "." in validation_method:
+                    validation_owner, raw_validation_method_name = validation_method.split(".", 1)
+                    validation_method_name, _ = cls._signature_name_and_params(raw_validation_method_name)
+                    validation_method_name = validation_method_name or raw_validation_method_name.strip()
+                    validation_service_name = cls._instance_name_for_class(validation_owner)
+                    validation_service_assignment = f"{validation_service_name} = {validation_owner}()"
+                    if validation_body_lines and validation_body_lines[0] != validation_service_assignment:
+                        validation_body_lines.insert(0, validation_service_assignment)
+                    elif not validation_body_lines:
+                        validation_body_lines.append(validation_service_assignment)
+                    if validation_result_kind == "object_is_valid":
+                        validation_body_lines.append(
+                            f"validation = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
+                        )
+                        validation_body_lines.append("assert validation.is_valid is False")
+                        if "errors" in validation_result_fields:
+                            validation_body_lines.append("assert len(validation.errors) > 0")
+                    else:
+                        validation_body_lines.append(
+                            f"is_valid = {validation_service_name}.{validation_method_name}({validation_constructor_variable})"
+                        )
+                        validation_body_lines.append("assert is_valid is False")
+
+                validation_call_expression = cls._call_expression_without_assignment(validation_call_line)
+                validation_stable_assertion_lines: list[str] = []
+                if validation_call_line.startswith("result = "):
+                    validation_stable_assertion_lines = cls._stable_call_assertion_lines(
+                        implementation_code,
+                        primary_surface_ref,
+                        result_name="result",
+                        request_name=validation_constructor_variable,
+                        service_name=primary_service_name,
+                        allow_none_scores=True,
+                    )
+                if validation_call_expression:
+                    if cls._implementation_raises_value_error(implementation_code):
+                        validation_body_lines.append("with pytest.raises(ValueError):")
+                        validation_body_lines.append(f"    {validation_call_expression}")
+                    elif validation_call_line.startswith("result = ") and validation_stable_assertion_lines:
+                        validation_body_lines.append(validation_call_line)
+                        validation_body_lines.extend(validation_stable_assertion_lines)
+                    else:
+                        validation_body_lines.append(validation_call_expression)
 
         batch_body_lines = [line for line in (service_line, constructor_line, batch_call_line) if line]
         batch_surface_ref = batch_method or batch_callable
@@ -4350,6 +4585,10 @@ Return complete raw Python only."""
                     lines.append(
                         "- In `test_validation_failure`, keep the scaffolded invalid constructor line exactly as shown: "
                         f"`{validation_constructor_line}`. Do not reintroduce `{validation_omitted_payload_key}` with a placeholder literal."
+                    )
+                if validation_constructor_rejects_invalid_payload:
+                    lines.append(
+                        "- The request model rejects this malformed payload during construction. Keep the invalid constructor itself inside `with pytest.raises(ValueError):` and do not assign that invalid object to a local before the context manager."
                     )
                 if non_validation_payload_keys:
                     rendered_keys = ", ".join(f"`{key}`" for key in non_validation_payload_keys[:3])

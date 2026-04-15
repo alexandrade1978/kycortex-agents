@@ -1,0 +1,677 @@
+import importlib.util
+import sys
+from pathlib import Path
+
+from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.types import FailureCategory, WorkflowOutcome
+
+
+def _load_script_module(module_name: str, relative_path: str):
+    project_root = Path(__file__).resolve().parents[1]
+    module_path = project_root / relative_path
+    sys.path.insert(0, str(project_root))
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.modules.pop(module_name, None)
+        sys.path.pop(0)
+
+
+def test_validate_generated_scenario_accepts_public_contract_and_behavior(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_validation_success_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    output_dir = tmp_path / "campaign"
+    artifact_path = output_dir / "artifacts" / "compliance_service.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self):\n"
+        "        self.audit_history = []\n\n"
+        "    def validate_request(self, request):\n"
+        "        return isinstance(request.details, dict) and 'identity_evidence' in request.details\n\n"
+        "    def handle_request(self, request):\n"
+        "        if not self.validate_request(request):\n"
+        "            raise ValueError('invalid request')\n"
+        "        risk = 1\n"
+        "        if request.details.get('jurisdiction') == 'sanctioned':\n"
+        "            risk += 5\n"
+        "        if request.details.get('missing_documents'):\n"
+        "            risk += 3\n"
+        "        outcome = 'blocked' if risk >= 6 else 'approved'\n"
+        "        self.audit_history.append({'request_id': request.request_id, 'risk': risk, 'outcome': outcome})\n"
+        "        return {'risk': risk, 'outcome': outcome}\n",
+        encoding="utf-8",
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement",
+        assigned_to="code_engineer",
+        output_payload={"artifacts": [{"path": "artifacts/compliance_service.py"}]},
+    )
+
+    result = module._validate_generated_scenario(module.SCENARIOS[0], task, str(output_dir))
+
+    assert result["validated"] is True
+    assert result["artifact_path"] == "compliance_service.py"
+    assert result["checks"]["syntax_valid"] is True
+    assert result["checks"]["stdlib_only"] is True
+    assert result["checks"]["risk_signal_observable"] is True
+    assert result["checks"]["audit_signal_present"] is True
+
+
+def test_validate_generated_scenario_rejects_missing_real_workflow_signal(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_validation_failure_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    output_dir = tmp_path / "campaign"
+    artifact_path = output_dir / "artifacts" / "compliance_service.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def validate_request(self, request):\n"
+        "        return isinstance(request.details, dict)\n\n"
+        "    def handle_request(self, request):\n"
+        "        return None\n",
+        encoding="utf-8",
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement",
+        assigned_to="code_engineer",
+        output_payload={"artifacts": [{"path": "artifacts/compliance_service.py"}]},
+    )
+
+    result = module._validate_generated_scenario(module.SCENARIOS[0], task, str(output_dir))
+
+    assert result["validated"] is False
+    assert result["checks"]["valid_request_accepted"] is True
+    assert result["checks"]["invalid_request_rejected"] is True
+    assert result["checks"]["risk_signal_observable"] is False
+    assert "low-risk and high-risk" in result["error"]
+
+
+def test_validate_generated_scenario_rejects_unbound_local_error_on_invalid_path(tmp_path):
+    """The invalid_request_handled check must catch programming errors like
+    UnboundLocalError in handle_request when given an invalid request."""
+    module = _load_script_module(
+        "real_world_complex_matrix_invalid_path_crash_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    output_dir = tmp_path / "campaign"
+    artifact_path = output_dir / "artifacts" / "compliance_service.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    # This implementation has the exact bug pattern from insurance_claim_triage/ollama v21:
+    # when validate_request returns False, risk_score is never assigned but still referenced.
+    artifact_path.write_text(
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n\n"
+        "@dataclass\n"
+        "class ComplianceRequest:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict\n"
+        "    timestamp: datetime\n\n"
+        "class ComplianceIntakeService:\n"
+        "    def __init__(self):\n"
+        "        self.audit_history = []\n\n"
+        "    def validate_request(self, request):\n"
+        "        return isinstance(request.details, dict) and 'identity_evidence' in request.details\n\n"
+        "    def handle_request(self, request):\n"
+        "        if not self.validate_request(request):\n"
+        "            outcome = 'reject'\n"
+        "        else:\n"
+        "            risk = 1\n"
+        "            if request.details.get('jurisdiction') == 'sanctioned':\n"
+        "                risk += 5\n"
+        "            if request.details.get('missing_documents'):\n"
+        "                risk += 3\n"
+        "            outcome = 'blocked' if risk >= 6 else 'approved'\n"
+        "        # BUG: risk is not defined on the invalid path\n"
+        "        self.audit_history.append({'request_id': request.request_id, 'risk': risk, 'outcome': outcome})\n"
+        "        return {'risk': risk, 'outcome': outcome}\n",
+        encoding="utf-8",
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement",
+        assigned_to="code_engineer",
+        output_payload={"artifacts": [{"path": "artifacts/compliance_service.py"}]},
+    )
+
+    result = module._validate_generated_scenario(module.SCENARIOS[0], task, str(output_dir))
+
+    assert result["validated"] is False
+    assert result["checks"]["invalid_request_rejected"] is True
+    assert result["checks"]["invalid_request_handled"] is False
+    assert "programming error" in result["error"].lower()
+
+
+def test_build_project_includes_exact_details_contract_anchor_for_kyc_scenario(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_contract_anchor_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    project = module.build_project(module.SCENARIOS[0], str(tmp_path / "campaign" / "openai"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    tests_task = next(task for task in project.tasks if task.id == "tests")
+
+    expected_keys = (
+        "identity_evidence, jurisdiction, customer_type, adverse_indicators, and missing_documents"
+    )
+    anti_alias_instruction = (
+        "Do not replace it with guessed aliases such as identity_proof, address_proof, documents, or document_list."
+    )
+    observable_outcome_instruction = "handle_request(request) must return a per-request outcome object or dict, not None."
+    zero_arg_constructor_instruction = (
+        "Keep ComplianceIntakeService instantiable with zero required constructor arguments."
+    )
+
+    assert expected_keys in code_task.description
+    assert anti_alias_instruction in code_task.description
+    assert observable_outcome_instruction in code_task.description
+    assert zero_arg_constructor_instruction in code_task.description
+    assert expected_keys in tests_task.description
+    assert anti_alias_instruction in tests_task.description
+    assert observable_outcome_instruction in tests_task.description
+    assert zero_arg_constructor_instruction in tests_task.description
+
+
+def test_build_project_includes_typed_detail_contract_anchor_for_kyc_scenario(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_kyc_typed_contract_anchor_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    project = module.build_project(module.SCENARIOS[0], str(tmp_path / "campaign" / "openai"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    tests_task = next(task for task in project.tasks if task.id == "tests")
+
+    typed_detail_instruction = (
+        "Keep jurisdiction and customer_type as strings. Keep identity_evidence, adverse_indicators, and missing_documents as list-like collections inside details, not numeric severity placeholders or plain strings."
+    )
+
+    assert typed_detail_instruction in code_task.description
+    assert typed_detail_instruction in tests_task.description
+
+
+def test_kyc_scenario_request_payloads_preserve_typed_details():
+    module = _load_script_module(
+        "real_world_complex_matrix_kyc_payloads_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    payloads = module._scenario_request_payloads(module.SCENARIOS[0])
+
+    low_details = payloads["low"]["details"]
+    high_details = payloads["high"]["details"]
+
+    assert isinstance(low_details["jurisdiction"], str)
+    assert isinstance(low_details["customer_type"], str)
+    assert isinstance(low_details["identity_evidence"], list)
+    assert isinstance(low_details["adverse_indicators"], list)
+    assert isinstance(low_details["missing_documents"], list)
+    assert isinstance(high_details["jurisdiction"], str)
+    assert isinstance(high_details["customer_type"], str)
+    assert isinstance(high_details["identity_evidence"], list)
+    assert isinstance(high_details["adverse_indicators"], list)
+    assert isinstance(high_details["missing_documents"], list)
+
+
+def test_build_project_includes_collection_type_contract_anchor_for_vendor_scenario(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_vendor_contract_anchor_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    vendor_spec = next(spec for spec in module.SCENARIOS if spec.slug == "vendor_onboarding_risk")
+    project = module.build_project(vendor_spec, str(tmp_path / "campaign" / "ollama"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    tests_task = next(task for task in project.tasks if task.id == "tests")
+
+    collection_type_instruction = (
+        "Keep sanctioned_region and critical_service as boolean flags. Keep expired_certifications and unresolved_incidents as list-like collections, using [] when absent and explicit list entries when risk is present."
+    )
+
+    assert collection_type_instruction in code_task.description
+    assert collection_type_instruction in tests_task.description
+
+
+def test_build_project_includes_typed_detail_contract_anchor_for_insurance_scenario(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_insurance_contract_anchor_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    insurance_spec = next(spec for spec in module.SCENARIOS if spec.slug == "insurance_claim_triage")
+    project = module.build_project(insurance_spec, str(tmp_path / "campaign" / "openai"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    tests_task = next(task for task in project.tasks if task.id == "tests")
+
+    typed_detail_instruction = (
+        "Keep policy_id and claim_category as strings, claim_amount as a numeric amount, evidence as a list-like collection, and duplicate_claim plus suspicious_timing as boolean flags."
+    )
+
+    assert typed_detail_instruction in code_task.description
+    assert typed_detail_instruction in tests_task.description
+
+
+def test_insurance_scenario_request_payloads_preserve_typed_details():
+    module = _load_script_module(
+        "real_world_complex_matrix_insurance_payloads_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    insurance_spec = next(spec for spec in module.SCENARIOS if spec.slug == "insurance_claim_triage")
+    payloads = module._scenario_request_payloads(insurance_spec)
+
+    low_details = payloads["low"]["details"]
+    high_details = payloads["high"]["details"]
+
+    assert isinstance(low_details["policy_id"], str)
+    assert isinstance(low_details["claim_category"], str)
+    assert isinstance(low_details["claim_amount"], (int, float))
+    assert isinstance(low_details["evidence"], list)
+    assert isinstance(low_details["duplicate_claim"], bool)
+    assert isinstance(low_details["suspicious_timing"], bool)
+    assert isinstance(high_details["policy_id"], str)
+    assert isinstance(high_details["claim_category"], str)
+    assert isinstance(high_details["claim_amount"], (int, float))
+    assert isinstance(high_details["evidence"], list)
+    assert isinstance(high_details["duplicate_claim"], bool)
+    assert isinstance(high_details["suspicious_timing"], bool)
+
+
+def test_vendor_scenario_request_payloads_preserve_collection_typed_risk_inputs():
+    module = _load_script_module(
+        "real_world_complex_matrix_vendor_payloads_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    vendor_spec = next(spec for spec in module.SCENARIOS if spec.slug == "vendor_onboarding_risk")
+    payloads = module._scenario_request_payloads(vendor_spec)
+
+    low_details = payloads["low"]["details"]
+    high_details = payloads["high"]["details"]
+
+    assert low_details["expired_certifications"] == []
+    assert low_details["unresolved_incidents"] == []
+    assert high_details["expired_certifications"] == ["iso27001"]
+    assert high_details["unresolved_incidents"] == ["sev1", "sev2", "sev3"]
+
+
+def test_build_project_includes_typed_detail_contract_anchor_for_returns_scenario(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_returns_contract_anchor_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    returns_spec = next(spec for spec in module.SCENARIOS if spec.slug == "returns_abuse_screening")
+    project = module.build_project(returns_spec, str(tmp_path / "campaign" / "ollama"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    tests_task = next(task for task in project.tasks if task.id == "tests")
+
+    typed_detail_instruction = (
+        "Keep order_reference and return_reason as strings, receipt_present as a boolean flag, and prior_returns plus timing_days as integers. Keep items as a list-like collection of item payload records, not a plain string placeholder."
+    )
+
+    assert typed_detail_instruction in code_task.description
+    assert typed_detail_instruction in tests_task.description
+
+
+def test_returns_scenario_request_payloads_preserve_typed_details():
+    module = _load_script_module(
+        "real_world_complex_matrix_returns_payloads_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    returns_spec = next(spec for spec in module.SCENARIOS if spec.slug == "returns_abuse_screening")
+    payloads = module._scenario_request_payloads(returns_spec)
+
+    low_details = payloads["low"]["details"]
+    high_details = payloads["high"]["details"]
+
+    assert isinstance(low_details["items"], list)
+    assert isinstance(low_details["receipt_present"], bool)
+    assert isinstance(low_details["prior_returns"], int)
+    assert isinstance(low_details["timing_days"], int)
+    assert isinstance(high_details["items"], list)
+    assert isinstance(high_details["receipt_present"], bool)
+    assert isinstance(high_details["prior_returns"], int)
+    assert isinstance(high_details["timing_days"], int)
+
+
+def test_build_project_includes_typed_detail_contract_anchor_for_access_review_scenario(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_access_contract_anchor_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    access_spec = next(spec for spec in module.SCENARIOS if spec.slug == "access_review_audit")
+    project = module.build_project(access_spec, str(tmp_path / "campaign" / "openai"))
+    code_task = next(task for task in project.tasks if task.id == "code")
+    tests_task = next(task for task in project.tasks if task.id == "tests")
+
+    typed_detail_instruction = (
+        "Keep requester_identity as a string, requested_roles and sod_conflicts as list-like collections, approval_metadata as a mapping object, and emergency_access plus stale_approval as boolean flags."
+    )
+
+    assert typed_detail_instruction in code_task.description
+    assert typed_detail_instruction in tests_task.description
+
+
+def test_access_review_scenario_request_payloads_preserve_typed_details():
+    module = _load_script_module(
+        "real_world_complex_matrix_access_payloads_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    access_spec = next(spec for spec in module.SCENARIOS if spec.slug == "access_review_audit")
+    payloads = module._scenario_request_payloads(access_spec)
+
+    low_details = payloads["low"]["details"]
+    high_details = payloads["high"]["details"]
+
+    assert isinstance(low_details["requester_identity"], str)
+    assert isinstance(low_details["requested_roles"], list)
+    assert isinstance(low_details["approval_metadata"], dict)
+    assert isinstance(low_details["sod_conflicts"], list)
+    assert isinstance(low_details["emergency_access"], bool)
+    assert isinstance(low_details["stale_approval"], bool)
+    assert isinstance(high_details["requester_identity"], str)
+    assert isinstance(high_details["requested_roles"], list)
+    assert isinstance(high_details["approval_metadata"], dict)
+    assert isinstance(high_details["sod_conflicts"], list)
+    assert isinstance(high_details["emergency_access"], bool)
+    assert isinstance(high_details["stale_approval"], bool)
+
+
+def test_validate_generated_returns_scenario_accepts_constructor_rejected_invalid_request(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_returns_constructor_rejection_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    output_dir = tmp_path / "campaign"
+    artifact_path = output_dir / "artifacts" / "returns_service.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n"
+        "from typing import Any\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: dict[str, Any]\n"
+        "    timestamp: datetime\n\n"
+        "    def __post_init__(self):\n"
+        "        if not isinstance(self.details, dict):\n"
+        "            raise ValueError('details must be a dict')\n"
+        "        if not isinstance(self.details.get('order_reference'), str):\n"
+        "            raise ValueError('Invalid order_reference')\n"
+        "        if not isinstance(self.details.get('return_reason'), str):\n"
+        "            raise ValueError('Invalid return_reason')\n"
+        "        if not isinstance(self.details.get('items'), list):\n"
+        "            raise ValueError('Invalid items')\n"
+        "        if not isinstance(self.details.get('receipt_present'), bool):\n"
+        "            raise ValueError('Invalid receipt_present')\n"
+        "        if not isinstance(self.details.get('prior_returns'), int):\n"
+        "            raise ValueError('Invalid prior_returns')\n"
+        "        if not isinstance(self.details.get('timing_days'), int):\n"
+        "            raise ValueError('Invalid timing_days')\n\n"
+        "class ReturnScreeningService:\n"
+        "    def __init__(self):\n"
+        "        self.audit_history = []\n\n"
+        "    def validate_request(self, request):\n"
+        "        try:\n"
+        "            request.__post_init__()\n"
+        "            return True\n"
+        "        except ValueError:\n"
+        "            return False\n\n"
+        "    def handle_request(self, request):\n"
+        "        if not self.validate_request(request):\n"
+        "            raise ValueError('invalid request')\n"
+        "        risk_score = 0\n"
+        "        if request.details['prior_returns'] > 2:\n"
+        "            risk_score += 3\n"
+        "        if not request.details['receipt_present']:\n"
+        "            risk_score += 2\n"
+        "        if any(item.get('value', 0) > 1000 for item in request.details['items']):\n"
+        "            risk_score += 4\n"
+        "        outcome = 'escalated' if risk_score >= 5 else 'approved'\n"
+        "        self.audit_history.append({'request_id': request.request_id, 'outcome': outcome, 'risk_score': risk_score})\n"
+        "        return {'outcome': outcome, 'risk_score': risk_score}\n",
+        encoding="utf-8",
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement",
+        assigned_to="code_engineer",
+        output_payload={"artifacts": [{"path": "artifacts/returns_service.py"}]},
+    )
+
+    returns_spec = next(spec for spec in module.SCENARIOS if spec.slug == "returns_abuse_screening")
+    result = module._validate_generated_scenario(returns_spec, task, str(output_dir))
+
+    assert result["validated"] is True
+    assert result["checks"]["invalid_request_rejected"] is True
+    assert result["checks"]["valid_request_accepted"] is True
+    assert result["checks"]["audit_signal_present"] is True
+
+
+def test_run_scenario_provider_reclassifies_scenario_validation_failure(tmp_path, monkeypatch):
+    module = _load_script_module(
+        "real_world_complex_matrix_run_reclassify_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    monkeypatch.setattr(module, "get_provider_availability", lambda provider, **kwargs: {"provider": provider, "available": True, "reason": None})
+    monkeypatch.setattr(module, "resolve_model", lambda provider, model=None, **kwargs: "gpt-4o-mini")
+    monkeypatch.setattr(module, "build_full_workflow_config", lambda *args, **kwargs: type("FakeConfig", (), {"workflow_acceptance_policy": "all_tasks"})())
+
+    def fake_execute(config, project):
+        run_root = Path(project.state_file).parent
+        artifact_path = run_root / "artifacts" / "generated.py"
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text("def placeholder():\n    return 1\n", encoding="utf-8")
+        project.mark_workflow_running(acceptance_policy="all_tasks", repair_max_cycles=1)
+        for task in project.tasks:
+            task.status = "done"
+            if task.id == "code":
+                task.output_payload = {"artifacts": [{"path": "artifacts/generated.py"}]}
+        project.mark_workflow_finished(
+            "completed",
+            acceptance_policy="all_tasks",
+            terminal_outcome=WorkflowOutcome.COMPLETED.value,
+            acceptance_criteria_met=True,
+            acceptance_evaluation={
+                "policy": "all_tasks",
+                "accepted": True,
+                "reason": "all_evaluated_tasks_done",
+                "evaluated_task_ids": [task.id for task in project.tasks],
+                "required_task_ids": [],
+                "completed_task_ids": [task.id for task in project.tasks],
+                "failed_task_ids": [],
+                "skipped_task_ids": [],
+                "pending_task_ids": [],
+            },
+        )
+        project.save()
+
+    monkeypatch.setattr(module, "execute_empirical_validation_workflow", fake_execute)
+    monkeypatch.setattr(
+        module,
+        "_validate_generated_scenario",
+        lambda spec, task, output_dir: {
+            "validated": False,
+            "artifact_path": "generated.py",
+            "checks": {
+                "syntax_valid": True,
+                "stdlib_only": True,
+                "service_constructor_supported": True,
+                "request_signature_supported": True,
+                "validation_surface_supported": True,
+                "valid_request_accepted": True,
+                "invalid_request_rejected": True,
+                "risk_signal_observable": False,
+                "audit_signal_present": True,
+                "batch_processing_supported": True,
+            },
+            "error": "Generated code did not expose an observable difference between low-risk and high-risk requests.",
+            "observations": {},
+        },
+    )
+
+    result = module.run_scenario_provider(
+        module.SCENARIOS[0],
+        "openai",
+        output_root=tmp_path,
+        failure_policy="continue",
+        resume_policy="resume_failed",
+        max_repair_cycles=1,
+        ollama_base_url=None,
+        ollama_num_ctx=16384,
+        max_tokens=3200,
+        run_index=1,
+        total_runs=1,
+    )
+
+    assert result["status"] == "validation_error"
+    assert result["acceptance_criteria_met"] is False
+    assert result["failure_category"] == FailureCategory.SCENARIO_VALIDATION.value
+    assert result["acceptance_reason"] == "scenario_validation_failed"
+    assert result["summary"]["phase"] == "completed"
+    assert result["summary"]["terminal_outcome"] == WorkflowOutcome.DEGRADED.value
+
+    reloaded = ProjectState.load(str(tmp_path / module.SCENARIOS[0].slug / "openai" / "project_state.json"))
+    assert reloaded.phase == "completed"
+    assert reloaded.terminal_outcome == WorkflowOutcome.DEGRADED.value
+    assert reloaded.failure_category == FailureCategory.SCENARIO_VALIDATION.value
+    assert reloaded.acceptance_criteria_met is False
+    assert reloaded.acceptance_evaluation["reason"] == "scenario_validation_failed"
+    assert reloaded.acceptance_evaluation["acceptance_lanes"]["real_workflow"]["accepted"] is False
+
+
+def test_run_scenario_provider_forwards_ollama_timeout_override(tmp_path, monkeypatch):
+    module = _load_script_module(
+        "real_world_complex_matrix_ollama_timeout_forwarding_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+
+    monkeypatch.setattr(
+        module,
+        "get_provider_availability",
+        lambda provider, **kwargs: {"provider": provider, "available": True, "reason": None},
+    )
+    monkeypatch.setattr(
+        module,
+        "resolve_model",
+        lambda provider, model=None, **kwargs: "qwen2.5-coder:7b",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeConfig:
+        workflow_acceptance_policy = "all_tasks"
+
+    def fake_build_full_workflow_config(provider, model, output_dir, **kwargs):
+        captured["provider"] = provider
+        captured["model"] = model
+        captured["output_dir"] = output_dir
+        captured.update(kwargs)
+        return FakeConfig()
+
+    def fake_execute(config, project):
+        project.mark_workflow_running(acceptance_policy="all_tasks", repair_max_cycles=1)
+        project.mark_workflow_finished(
+            "completed",
+            acceptance_policy="all_tasks",
+            terminal_outcome=WorkflowOutcome.COMPLETED.value,
+            acceptance_criteria_met=True,
+            acceptance_evaluation={
+                "policy": "all_tasks",
+                "accepted": True,
+                "reason": "all_evaluated_tasks_done",
+                "evaluated_task_ids": [task.id for task in project.tasks],
+                "required_task_ids": [],
+                "completed_task_ids": [task.id for task in project.tasks],
+                "failed_task_ids": [],
+                "skipped_task_ids": [],
+                "pending_task_ids": [],
+            },
+        )
+        project.save()
+
+    monkeypatch.setattr(module, "build_full_workflow_config", fake_build_full_workflow_config)
+    monkeypatch.setattr(module, "execute_empirical_validation_workflow", fake_execute)
+    monkeypatch.setattr(
+        module,
+        "_validate_generated_scenario",
+        lambda spec, task, output_dir: {
+            "validated": True,
+            "artifact_path": None,
+            "checks": {
+                "syntax_valid": True,
+                "stdlib_only": True,
+                "service_constructor_supported": True,
+                "request_signature_supported": True,
+                "validation_surface_supported": True,
+                "valid_request_accepted": True,
+                "invalid_request_rejected": True,
+                "risk_signal_observable": True,
+                "audit_signal_present": True,
+                "batch_processing_supported": True,
+            },
+            "error": None,
+            "observations": {},
+        },
+    )
+
+    result = module.run_scenario_provider(
+        next(spec for spec in module.SCENARIOS if spec.slug == "returns_abuse_screening"),
+        "ollama",
+        output_root=tmp_path,
+        failure_policy="continue",
+        resume_policy="resume_failed",
+        max_repair_cycles=1,
+        ollama_base_url="http://127.0.0.1:11434",
+        ollama_num_ctx=16384,
+        ollama_timeout_seconds=420.0,
+        max_tokens=3200,
+        run_index=1,
+        total_runs=1,
+    )
+
+    assert result["status"] == "completed"
+    assert captured["provider"] == "ollama"
+    assert captured["ollama_base_url"] == "http://127.0.0.1:11434"
+    assert captured["ollama_num_ctx"] == 16384
+    assert captured["ollama_timeout_seconds"] == 420.0

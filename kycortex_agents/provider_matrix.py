@@ -31,6 +31,8 @@ REPAIRABLE_FAILURE_CATEGORIES = {
     FailureCategory.CODE_VALIDATION.value,
     FailureCategory.TEST_VALIDATION.value,
     FailureCategory.DEPENDENCY_VALIDATION.value,
+    FailureCategory.WORKFLOW_BLOCKED.value,
+    FailureCategory.PROVIDER_TRANSIENT.value,
 }
 
 
@@ -135,6 +137,7 @@ def build_full_workflow_config(
     *,
     ollama_base_url: str | None = None,
     ollama_num_ctx: int | None = 16384,
+    ollama_timeout_seconds: float = 300.0,
     max_tokens: int = 3200,
     workflow_failure_policy: str = "continue",
     workflow_resume_policy: str = "resume_failed",
@@ -150,6 +153,7 @@ def build_full_workflow_config(
         temperature=0.0,
         max_tokens=max_tokens,
         timeout_seconds=180.0,
+        provider_timeout_seconds={"ollama": ollama_timeout_seconds} if provider == "ollama" else {},
         workflow_failure_policy=workflow_failure_policy,
         workflow_resume_policy=workflow_resume_policy,
         workflow_max_repair_cycles=workflow_max_repair_cycles,

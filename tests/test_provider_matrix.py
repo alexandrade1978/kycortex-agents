@@ -821,6 +821,22 @@ def test_build_full_workflow_config_applies_ollama_runtime_overrides(tmp_path):
 
     assert config.base_url == "http://localhost:11435"
     assert config.ollama_num_ctx == 16384
+    assert config.provider_timeout_seconds_for("ollama") == 300.0
+    assert config.provider_runtime_config("ollama").timeout_seconds == 300.0
+
+
+def test_build_full_workflow_config_accepts_ollama_timeout_override(tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_config
+
+    config = build_full_workflow_config(
+        "ollama",
+        "qwen2.5-coder:7b",
+        str(tmp_path / "output"),
+        ollama_timeout_seconds=420.0,
+    )
+
+    assert config.provider_timeout_seconds_for("ollama") == 420.0
+    assert config.provider_runtime_config("ollama").timeout_seconds == 420.0
 
 
 def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tmp_path):
@@ -2294,25 +2310,25 @@ def test_execute_empirical_validation_workflow_does_not_resume_non_repairable_fa
             arch = state.get_task("arch")
             assert arch is not None
             arch.status = "failed"
-            arch.last_error = "provider boom"
-            arch.last_error_type = "ProviderTransientError"
-            arch.last_error_category = "provider_transient"
+            arch.last_error = "sandbox violation"
+            arch.last_error_type = "SandboxSecurityViolation"
+            arch.last_error_category = "sandbox_security_violation"
             state.mark_workflow_finished(
                 "failed",
                 acceptance_policy=self.config.workflow_acceptance_policy,
                 terminal_outcome="failed",
-                failure_category="provider_transient",
+                failure_category="sandbox_security_violation",
                 acceptance_criteria_met=False,
                 acceptance_evaluation={"policy": self.config.workflow_acceptance_policy, "accepted": False},
             )
-            raise RuntimeError("provider boom")
+            raise RuntimeError("sandbox violation")
 
     monkeypatch.setattr(provider_matrix, "Orchestrator", NonRepairableFailingOrchestrator)
 
     try:
         provider_matrix.execute_empirical_validation_workflow(config, project)
     except RuntimeError as exc:
-        assert str(exc) == "provider boom"
+        assert str(exc) == "sandbox violation"
     else:  # pragma: no cover - safety assertion
         raise AssertionError("Expected non-repairable provider failure to propagate")
 
@@ -2321,7 +2337,7 @@ def test_execute_empirical_validation_workflow_does_not_resume_non_repairable_fa
     ]
     assert execute_calls["count"] == 1
     assert len(workflow_finished_events) == 1
-    assert project.failure_category == "provider_transient"
+    assert project.failure_category == "sandbox_security_violation"
     assert project.repair_cycle_count == 0
 
 

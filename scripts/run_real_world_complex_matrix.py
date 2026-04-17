@@ -506,6 +506,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Control Ollama thinking mode. 'false' disables thinking tokens for faster inference.",
     )
     parser.add_argument(
+        "--model",
+        default=None,
+        help="Override the model for any provider (e.g. gpt-4.1-mini for openai, claude-haiku-4-5-20251001 for anthropic).",
+    )
+    parser.add_argument(
         "--ollama-model",
         default=None,
         help="Override the Ollama model to use instead of the auto-resolved default.",
@@ -1230,6 +1235,7 @@ def run_scenario_provider(
     failure_policy: str,
     resume_policy: str,
     max_repair_cycles: int,
+    model_override: str | None = None,
     ollama_base_url: str | None,
     ollama_model: str | None = None,
     ollama_num_ctx: int | None,
@@ -1239,12 +1245,13 @@ def run_scenario_provider(
     run_index: int,
     total_runs: int,
 ) -> dict[str, object]:
+    effective_model_override = model_override
     if provider == "ollama":
         availability = get_provider_availability(provider, ollama_base_url=ollama_base_url)
-        model = resolve_model(provider, ollama_model, ollama_base_url=ollama_base_url)
+        model = resolve_model(provider, ollama_model or effective_model_override, ollama_base_url=ollama_base_url)
     else:
         availability = get_provider_availability(provider)
-        model = resolve_model(provider, None)
+        model = resolve_model(provider, effective_model_override)
     run_root = output_root / spec.slug / provider
     run_root.mkdir(parents=True, exist_ok=True)
 
@@ -1449,6 +1456,7 @@ def main() -> None:
                     failure_policy=args.failure_policy,
                     resume_policy=args.resume_policy,
                     max_repair_cycles=args.max_repair_cycles,
+                    model_override=args.model,
                     ollama_base_url=args.ollama_base_url,
                     ollama_model=args.ollama_model,
                     ollama_num_ctx=args.ollama_num_ctx,

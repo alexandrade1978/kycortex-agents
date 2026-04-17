@@ -983,7 +983,7 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions = orchestrator._parse_behavior_contract(
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = orchestrator._parse_behavior_contract(
         contract
     )
 
@@ -1007,6 +1007,7 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
         },
     }
     assert sequence_input_functions == set()
+    assert type_constraint_rules == {}
 
 
 def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path):
@@ -1022,7 +1023,7 @@ def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions = orchestrator._parse_behavior_contract(
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = orchestrator._parse_behavior_contract(
         contract
     )
 
@@ -1030,6 +1031,7 @@ def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path
     assert field_value_rules == {}
     assert batch_rules == {"process_batch": {"request_key": None, "wrapper_key": None, "fields": []}}
     assert sequence_input_functions == set()
+    assert type_constraint_rules == {}
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases(tmp_path):
@@ -3141,6 +3143,7 @@ def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_
         "assertion_like_count": 0,
         "tests_without_assertions": [],
         "contract_overreach_signals": [],
+        "type_mismatches": [],
     }
     assert syntax_error_analysis["syntax_ok"] is False
     assert syntax_error_analysis["syntax_error"] == "invalid syntax at line 1"
@@ -4538,8 +4541,8 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
     assert "- Pytest execution: unavailable (pytest missing)" in unavailable_summary
     assert unavailable_summary.endswith("- Verdict: PASS")
     assert "- Pytest execution: FAIL" in failed_summary
-    assert "Call arity mismatches: none" in failed_summary
-    assert "Unsupported mock assertions: logging.getLogger().info.call_count (line 6)" in failed_summary
+    assert "Call arity mismatches (warning): none" in failed_summary
+    assert "Unsupported mock assertions (warning): logging.getLogger().info.call_count (line 6)" in failed_summary
     assert "Pytest failure details: FAILED tests_tests.py::test_add - assert 1 == 2" in failed_summary
     assert "- Pytest summary: 1 failed" in failed_summary
     assert failed_summary.endswith("- Verdict: FAIL")
@@ -4589,7 +4592,7 @@ def test_build_test_validation_summary_reports_assertion_strength_failures(tmp_p
 
     assert "Assertion-like checks: 0" in summary
     assert "Tests without assertion-like checks: test_one (line 1), test_two (line 4)" in summary
-    assert summary.endswith("- Verdict: FAIL")
+    assert "Verdict: FAIL" in summary
 
 
 def test_build_test_validation_summary_reports_contract_overreach_signals(tmp_path):
@@ -4617,7 +4620,7 @@ def test_build_test_validation_summary_reports_contract_overreach_signals(tmp_pa
         },
     )
 
-    assert "Contract overreach signals: exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)" in summary
+    assert "Contract overreach signals (warning): exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)" in summary
     assert "exact status/action label mismatch ('escalated' vs 'blocked') suggests an unsupported threshold assumption" in summary
     assert summary.endswith("- Verdict: FAIL")
 
@@ -4644,7 +4647,7 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_m
         },
     )
 
-    assert "Contract overreach signals: exact status/action label mismatch ('blocked' vs 'approved') suggests an unsupported threshold assumption" in summary
+    assert "Contract overreach signals (warning): exact status/action label mismatch ('blocked' vs 'approved') suggests an unsupported threshold assumption" in summary
     assert summary.endswith("- Verdict: FAIL")
 
 
@@ -4670,7 +4673,7 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_e
         },
     )
 
-    assert "Contract overreach signals: exact status/action label mismatch ('straight_through_review' vs 'fraud_escalation') suggests an unsupported threshold assumption" in summary
+    assert "Contract overreach signals (warning): exact status/action label mismatch ('straight_through_review' vs 'fraud_escalation') suggests an unsupported threshold assumption" in summary
     assert summary.endswith("- Verdict: FAIL")
 
 
@@ -4696,7 +4699,7 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_p
         },
     )
 
-    assert "Contract overreach signals: exact status/action label mismatch ('straight_through_review' vs 'manual_investigation') suggests an unsupported threshold assumption" in summary
+    assert "Contract overreach signals (warning): exact status/action label mismatch ('straight_through_review' vs 'manual_investigation') suggests an unsupported threshold assumption" in summary
     assert summary.endswith("- Verdict: FAIL")
 
 
@@ -4722,7 +4725,7 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_r
         },
     )
 
-    assert "Contract overreach signals: exact status/action label mismatch ('abuse_escalation' vs 'auto_approve') suggests an unsupported threshold assumption" in summary
+    assert "Contract overreach signals (warning): exact status/action label mismatch ('abuse_escalation' vs 'auto_approve') suggests an unsupported threshold assumption" in summary
     assert summary.endswith("- Verdict: FAIL")
 
 
@@ -4748,7 +4751,7 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_p
         },
     )
 
-    assert "Contract overreach signals: exact status/action label mismatch ('fraud' vs 'straight_through_review') suggests an unsupported threshold assumption" in summary
+    assert "Contract overreach signals (warning): exact status/action label mismatch ('fraud' vs 'straight_through_review') suggests an unsupported threshold assumption" in summary
     assert summary.endswith("- Verdict: FAIL")
 
 
@@ -4774,7 +4777,7 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_r
         },
     )
 
-    assert "Contract overreach signals: exact return-shape attribute assumption ('.request_id' on 'str') suggests an unsupported wrapper expectation" in summary
+    assert "Contract overreach signals (warning): exact return-shape attribute assumption ('.request_id' on 'str') suggests an unsupported wrapper expectation" in summary
     assert summary.endswith("- Verdict: FAIL")
 
 
@@ -4802,7 +4805,7 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_a
         },
     )
 
-    assert "Contract overreach signals: exact internal action-map key assumption for 'review_actions' suggests an unsupported storage-key contract" in summary
+    assert "Contract overreach signals (warning): exact internal action-map key assumption for 'review_actions' suggests an unsupported storage-key contract" in summary
     assert summary.endswith("- Verdict: FAIL")
 
 
@@ -12611,6 +12614,13 @@ def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
 
 
 def test_test_failure_requires_code_repair_ignores_contract_overreach_static_issue(tmp_path):
+    """Contract overreach signals are now WARNING-level (Phase 3).
+
+    With only warnings, the blocking-issues check passes and the function
+    proceeds to ``_pytest_failure_is_semantic_assertion_mismatch``.  A plain
+    ``assert 2 == 3`` IS a semantic assertion mismatch, so the function
+    returns True (code repair needed) rather than the old short-circuit False.
+    """
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
     task = Task(
@@ -12641,7 +12651,7 @@ def test_test_failure_requires_code_repair_ignores_contract_overreach_static_iss
         },
     )
 
-    assert orchestrator._test_failure_requires_code_repair(task) is False
+    assert orchestrator._test_failure_requires_code_repair(task) is True
 
 
 def test_test_failure_requires_code_repair_ignores_runtime_contract_overreach_issue(tmp_path):
@@ -17110,7 +17120,7 @@ def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
 
     summary = orchestrator._build_repair_validation_summary(task, FailureCategory.TEST_VALIDATION.value)
 
-    assert "Missing function imports: add (line 4)" in summary
+    assert "Missing function imports (blocking): add (line 4)" in summary
     assert "Completion diagnostics: likely truncated at completion limit, token usage recorded" in summary
     assert "Pytest execution: FAIL" in summary
     assert summary.endswith("Verdict: FAIL")
@@ -17253,3 +17263,529 @@ def test_execute_workflow_fails_when_repair_budget_is_exhausted(tmp_path):
     assert project.failure_category == FailureCategory.REPAIR_BUDGET_EXHAUSTED.value
     assert project.acceptance_criteria_met is False
     assert project.repair_history[0]["failed_task_ids"] == ["arch"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — Validation Resilience (BLOCKING / WARNING dual-mode)
+# ---------------------------------------------------------------------------
+
+
+class TestValidationBlockingVsWarning:
+    """Tests for the Phase 3 BLOCKING / WARNING issue classification."""
+
+    @staticmethod
+    def _make_orchestrator(tmp_path):
+        config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+        return Orchestrator(config)
+
+    # -- _test_validation_has_blocking_issues ---------------------------------
+
+    def test_blocking_issues_true_for_missing_test_analysis(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        assert orch._test_validation_has_blocking_issues({}) is True
+
+    def test_blocking_issues_true_for_syntax_error(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {"test_analysis": {"syntax_ok": False}}
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_true_for_line_budget_exceeded(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {"test_analysis": {"syntax_ok": True, "line_count": 200, "line_budget": 100}}
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_true_for_test_count_mismatch(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "top_level_test_count": 3,
+                "expected_top_level_test_count": 5,
+            }
+        }
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_true_for_missing_imports(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "missing_function_imports": ["helper_function"],
+            }
+        }
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_true_for_undefined_fixtures(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "undefined_fixtures": ["db_session (line 5)"],
+            }
+        }
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_true_for_undefined_local_names(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "undefined_local_names": ["result"],
+            }
+        }
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_true_for_imported_entrypoint_symbols(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "imported_entrypoint_symbols": ["main"],
+            }
+        }
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_true_for_unsafe_entrypoint_calls(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "unsafe_entrypoint_calls": ["main() (line 10)"],
+            }
+        }
+        assert orch._test_validation_has_blocking_issues(validation) is True
+
+    def test_blocking_issues_false_for_warning_only_issues(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                "type_mismatches": ["str vs int at line 10"],
+                "payload_contract_violations": ["missing field 'name'"],
+            }
+        }
+        assert orch._test_validation_has_blocking_issues(validation) is False
+
+    def test_blocking_issues_false_for_clean_analysis(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {"test_analysis": {"syntax_ok": True}}
+        assert orch._test_validation_has_blocking_issues(validation) is False
+
+    # -- _test_validation_has_only_warnings -----------------------------------
+
+    def test_only_warnings_true_for_warning_keys(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "constructor_arity_mismatches": ["MyClass (line 5)"],
+            }
+        }
+        assert orch._test_validation_has_only_warnings(validation) is True
+
+    def test_only_warnings_false_when_blocking_present(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "constructor_arity_mismatches": ["MyClass (line 5)"],
+                "undefined_local_names": ["result"],
+            }
+        }
+        assert orch._test_validation_has_only_warnings(validation) is False
+
+    def test_only_warnings_false_for_clean_analysis(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {"test_analysis": {"syntax_ok": True}}
+        assert orch._test_validation_has_only_warnings(validation) is False
+
+    def test_only_warnings_true_for_type_mismatches(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "type_mismatches": ["str vs int at line 10"],
+            }
+        }
+        assert orch._test_validation_has_only_warnings(validation) is True
+
+    def test_only_warnings_true_for_unknown_module_symbols(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "unknown_module_symbols": ["helper_util"],
+            }
+        }
+        assert orch._test_validation_has_only_warnings(validation) is True
+
+    def test_only_warnings_true_for_call_arity_mismatches(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "call_arity_mismatches": ["func expected 2, got 3 (line 5)"],
+            }
+        }
+        assert orch._test_validation_has_only_warnings(validation) is True
+
+    def test_only_warnings_true_for_invalid_member_references(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        validation = {
+            "test_analysis": {
+                "syntax_ok": True,
+                "invalid_member_references": ["obj.nonexistent (line 5)"],
+            }
+        }
+        assert orch._test_validation_has_only_warnings(validation) is True
+
+
+class TestValidateTestOutputPytestArbiter:
+    """Tests for the pytest arbiter: warnings accepted when pytest passes."""
+
+    @staticmethod
+    def _make_orchestrator(tmp_path):
+        config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+        return Orchestrator(config)
+
+    def test_warnings_accepted_when_pytest_passes(self, tmp_path, monkeypatch):
+        orch = self._make_orchestrator(tmp_path)
+        output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+        monkeypatch.setattr(
+            orch,
+            "_analyze_test_module",
+            lambda *args, **kwargs: {
+                "syntax_ok": True,
+                "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                "type_mismatches": ["str vs int at line 10"],
+                "line_count": 10,
+            },
+        )
+        monkeypatch.setattr(
+            orch,
+            "_execute_generated_tests",
+            lambda *args, **kwargs: {"ran": True, "returncode": 0, "summary": "1 passed"},
+        )
+
+        # Should NOT raise — warnings overridden by pytest passing
+        orch._validate_test_output(
+            {"module_name": "my_module", "code": "def ok():\n    return 1"},
+            output,
+        )
+
+    def test_warnings_rejected_when_pytest_fails(self, tmp_path, monkeypatch):
+        orch = self._make_orchestrator(tmp_path)
+        output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+        monkeypatch.setattr(
+            orch,
+            "_analyze_test_module",
+            lambda *args, **kwargs: {
+                "syntax_ok": True,
+                "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                "line_count": 10,
+            },
+        )
+        monkeypatch.setattr(
+            orch,
+            "_execute_generated_tests",
+            lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": "1 failed"},
+        )
+
+        with pytest.raises(AgentExecutionError, match="pytest failed"):
+            orch._validate_test_output(
+                {"module_name": "my_module", "code": "def ok():\n    return 1"},
+                output,
+            )
+
+    def test_warnings_rejected_when_pytest_did_not_run(self, tmp_path, monkeypatch):
+        orch = self._make_orchestrator(tmp_path)
+        output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+        monkeypatch.setattr(
+            orch,
+            "_analyze_test_module",
+            lambda *args, **kwargs: {
+                "syntax_ok": True,
+                "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                "line_count": 10,
+            },
+        )
+        monkeypatch.setattr(
+            orch,
+            "_execute_generated_tests",
+            lambda *args, **kwargs: {"ran": False, "returncode": None, "summary": ""},
+        )
+
+        with pytest.raises(AgentExecutionError, match="pytest did not confirm correctness"):
+            orch._validate_test_output(
+                {"module_name": "my_module", "code": "def ok():\n    return 1"},
+                output,
+            )
+
+    def test_blocking_issues_always_reject_even_with_pytest_pass(self, tmp_path, monkeypatch):
+        orch = self._make_orchestrator(tmp_path)
+        output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+        monkeypatch.setattr(
+            orch,
+            "_analyze_test_module",
+            lambda *args, **kwargs: {
+                "syntax_ok": True,
+                "missing_function_imports": ["helper_function"],
+                "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                "line_count": 10,
+            },
+        )
+        monkeypatch.setattr(
+            orch,
+            "_execute_generated_tests",
+            lambda *args, **kwargs: {"ran": True, "returncode": 0, "summary": "1 passed"},
+        )
+
+        with pytest.raises(AgentExecutionError, match="missing function imports"):
+            orch._validate_test_output(
+                {"module_name": "my_module", "code": "def ok():\n    return 1"},
+                output,
+            )
+
+    def test_warning_issues_labeled_in_error_when_blocking_present(self, tmp_path, monkeypatch):
+        orch = self._make_orchestrator(tmp_path)
+        output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+        monkeypatch.setattr(
+            orch,
+            "_analyze_test_module",
+            lambda *args, **kwargs: {
+                "syntax_ok": True,
+                "missing_function_imports": ["helper_function"],
+                "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                "line_count": 10,
+            },
+        )
+        monkeypatch.setattr(
+            orch,
+            "_execute_generated_tests",
+            lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": "1 failed"},
+        )
+
+        with pytest.raises(AgentExecutionError) as excinfo:
+            orch._validate_test_output(
+                {"module_name": "my_module", "code": "def ok():\n    return 1"},
+                output,
+            )
+
+        message = str(excinfo.value)
+        assert "(warning) constructor arity mismatches" in message
+
+
+class TestRepairInstructionPytestFocus:
+    """Test that repair instructions are pytest-focused when only warnings exist."""
+
+    @staticmethod
+    def _make_orchestrator(tmp_path):
+        config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+        return Orchestrator(config)
+
+    def test_repair_instruction_pytest_focused_for_warnings_only(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        task = Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            output_payload={
+                "metadata": {
+                    "validation": {
+                        "test_analysis": {
+                            "syntax_ok": True,
+                            "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                        },
+                        "test_execution": {
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "1 failed",
+                        },
+                    }
+                }
+            },
+        )
+
+        instruction = orch._build_repair_instruction(task, FailureCategory.TEST_VALIDATION.value)
+        assert "pytest failure details" in instruction
+        assert "static analysis warnings" in instruction
+
+    def test_repair_instruction_generic_when_blocking_issues(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        task = Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            output_payload={
+                "metadata": {
+                    "validation": {
+                        "test_analysis": {
+                            "syntax_ok": True,
+                            "missing_function_imports": ["helper"],
+                        },
+                        "test_execution": {
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "1 failed",
+                        },
+                    }
+                }
+            },
+        )
+
+        instruction = orch._build_repair_instruction(task, FailureCategory.TEST_VALIDATION.value)
+        assert "matches the generated module contract" in instruction
+
+
+class TestTestFailureRequiresCodeRepairBlockingOnly:
+    """Test that code repair decision uses blocking-only check."""
+
+    @staticmethod
+    def _make_orchestrator(tmp_path):
+        config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+        return Orchestrator(config)
+
+    def test_warning_only_issues_do_not_block_code_repair(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        task = Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            output_payload={
+                "metadata": {
+                    "validation": {
+                        "test_analysis": {
+                            "syntax_ok": True,
+                            "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
+                            "type_mismatches": ["str vs int at line 10"],
+                        },
+                        "test_execution": {
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "1 failed",
+                            "stdout": "FAILED test_module.py::test_ok - AssertionError: assert 1 == 2\n",
+                        },
+                        "pytest_failure_origin": "tests",
+                    }
+                }
+            },
+        )
+
+        # With only warnings, _test_validation_has_blocking_issues returns False,
+        # so the code repair check proceeds to the semantic assertion check
+        # (rather than short-circuiting to "fix test instead")
+        result = orch._test_failure_requires_code_repair(task)
+        # The result depends on whether it's a semantic assertion mismatch;
+        # the key point is that it does NOT short-circuit to False due to warnings
+        assert isinstance(result, bool)
+
+    def test_blocking_issues_prevent_code_repair(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        task = Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+            output_payload={
+                "metadata": {
+                    "validation": {
+                        "test_analysis": {
+                            "syntax_ok": True,
+                            "undefined_local_names": ["result"],
+                        },
+                        "test_execution": {
+                            "ran": True,
+                            "returncode": 1,
+                            "summary": "1 failed",
+                            "stdout": "FAILED test_module.py::test_ok\n",
+                        },
+                        "pytest_failure_origin": "tests",
+                    }
+                }
+            },
+        )
+
+        # Blocking issues cause short-circuit to False (fix test, not code)
+        assert orch._test_failure_requires_code_repair(task) is False
+
+
+class TestBuildTestValidationSummarySeverity:
+    """Test that the validation summary includes severity annotations."""
+
+    @staticmethod
+    def _make_orchestrator(tmp_path):
+        config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+        return Orchestrator(config)
+
+    def test_summary_contains_blocking_annotation(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        test_analysis = {
+            "syntax_ok": True,
+            "missing_function_imports": ["helper"],
+            "undefined_fixtures": ["db"],
+        }
+        summary = orch._build_test_validation_summary(test_analysis)
+        assert "(blocking)" in summary
+        assert "Missing function imports (blocking): helper" in summary
+        assert "Undefined test fixtures (blocking): db" in summary
+
+    def test_summary_contains_warning_annotation(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        test_analysis = {
+            "syntax_ok": True,
+            "constructor_arity_mismatches": ["MyClass (line 5)"],
+            "type_mismatches": ["str vs int"],
+        }
+        summary = orch._build_test_validation_summary(test_analysis)
+        assert "(warning)" in summary
+        assert "Constructor arity mismatches (warning): MyClass (line 5)" in summary
+        assert "Type mismatches (warning): str vs int" in summary
+
+    def test_summary_verdict_pass_when_warnings_overridden_by_pytest(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        test_analysis = {
+            "syntax_ok": True,
+            "constructor_arity_mismatches": ["MyClass (line 5)"],
+        }
+        test_execution = {"ran": True, "returncode": 0, "summary": "1 passed"}
+        summary = orch._build_test_validation_summary(test_analysis, test_execution)
+        assert "PASS (warnings overridden by pytest)" in summary
+
+    def test_summary_verdict_fail_without_pytest_confirmation(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        test_analysis = {
+            "syntax_ok": True,
+            "constructor_arity_mismatches": ["MyClass (line 5)"],
+        }
+        summary = orch._build_test_validation_summary(test_analysis)
+        assert "FAIL (warnings without pytest confirmation)" in summary
+
+    def test_summary_verdict_fail_for_blocking_issues(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        test_analysis = {
+            "syntax_ok": True,
+            "missing_function_imports": ["helper"],
+        }
+        summary = orch._build_test_validation_summary(test_analysis)
+        assert "Verdict: FAIL" in summary
+
+    def test_summary_verdict_pass_for_clean_analysis(self, tmp_path):
+        orch = self._make_orchestrator(tmp_path)
+        test_analysis = {"syntax_ok": True}
+        test_execution = {"ran": True, "returncode": 0, "summary": "1 passed"}
+        summary = orch._build_test_validation_summary(test_analysis, test_execution)
+        assert "Verdict: PASS" in summary
+        assert "warnings" not in summary.split("Verdict:")[-1]

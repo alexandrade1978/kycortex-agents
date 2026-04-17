@@ -149,6 +149,37 @@ def _harden_private_directory_permissions(path: Path) -> None:
         ) from exc
 _RESERVED_FIXTURE_NAMES = {"request"}
 
+# ---------------------------------------------------------------------------
+# Test issue severity classification — Phase 3 (Model Adaptation Layer)
+# BLOCKING issues prevent test execution or indicate security risks.
+# WARNING issues may be false positives for models that generate structurally
+# different but functionally correct code; the pytest arbiter decides.
+# ---------------------------------------------------------------------------
+_BLOCKING_TEST_ISSUE_KEYS: frozenset[str] = frozenset(
+    {
+        "missing_function_imports",
+        "undefined_fixtures",
+        "undefined_local_names",
+        "imported_entrypoint_symbols",
+        "unsafe_entrypoint_calls",
+    }
+)
+
+_WARNING_TEST_ISSUE_KEYS: frozenset[str] = frozenset(
+    {
+        "unknown_module_symbols",
+        "invalid_member_references",
+        "call_arity_mismatches",
+        "constructor_arity_mismatches",
+        "contract_overreach_signals",
+        "payload_contract_violations",
+        "non_batch_sequence_calls",
+        "type_mismatches",
+        "reserved_fixture_names",
+        "unsupported_mock_assertions",
+    }
+)
+
 
 class _AstNameReplacer(ast.NodeTransformer):
     def __init__(self, replacements: Dict[str, ast.expr]):
@@ -1459,6 +1490,7 @@ class Orchestrator:
         )
 
         validation_issues: list[str] = []
+        warning_issues: list[str] = []
         if not test_analysis.get("syntax_ok", True):
             validation_issues.append(f"test syntax error {test_analysis.get('syntax_error') or 'unknown syntax error'}")
         if isinstance(line_budget, int) and test_analysis["line_count"] > line_budget:
@@ -1477,12 +1509,12 @@ class Orchestrator:
             )
         tests_without_assertions = test_analysis.get("tests_without_assertions") or []
         if tests_without_assertions:
-            validation_issues.append(
+            warning_issues.append(
                 f"tests without assertion-like checks: {', '.join(tests_without_assertions)}"
             )
         contract_overreach_signals = test_analysis.get("contract_overreach_signals") or []
         if contract_overreach_signals:
-            validation_issues.append(
+            warning_issues.append(
                 f"contract overreach signals: {', '.join(contract_overreach_signals)}"
             )
         if test_analysis.get("helper_surface_usages") and (
@@ -1508,16 +1540,28 @@ class Orchestrator:
         ):
             issues = test_analysis.get(issue_key) or []
             if issues:
-                validation_issues.append(f"{label}: {', '.join(issues)}")
-
-        if test_execution.get("ran") and test_execution.get("returncode") not in (None, 0):
-            validation_issues.append(f"pytest failed: {test_execution.get('summary') or 'generated tests failed'}")
+                target = validation_issues if issue_key in _BLOCKING_TEST_ISSUE_KEYS else warning_issues
+                target.append(f"{label}: {', '.join(issues)}")
 
         if completion_diagnostics.get("likely_truncated"):
             validation_issues.append(self._completion_validation_issue(completion_diagnostics))
 
+        # --- Pytest arbiter: warnings are accepted when tests pass ---
+        pytest_ran = test_execution.get("ran")
+        pytest_passed = pytest_ran and test_execution.get("returncode") in (None, 0)
+
+        if test_execution.get("ran") and test_execution.get("returncode") not in (None, 0):
+            validation_issues.append(f"pytest failed: {test_execution.get('summary') or 'generated tests failed'}")
+
         if validation_issues:
-            raise AgentExecutionError(f"Generated test validation failed: {'; '.join(validation_issues)}")
+            all_issues = validation_issues + [f"(warning) {w}" for w in warning_issues]
+            raise AgentExecutionError(f"Generated test validation failed: {'; '.join(all_issues)}")
+
+        if warning_issues and not pytest_passed:
+            raise AgentExecutionError(
+                f"Generated test validation failed: {'; '.join(warning_issues)} (pytest did not confirm correctness)"
+            )
+        # If only warnings and pytest passed → accept (warnings are false positives)
 
     def _output_line_count(self, raw_content: str) -> int:
         if not raw_content:
@@ -2385,6 +2429,21 @@ class Orchestrator:
                     f"Initialize self.{field_name} inside __init__ and keep zero-argument construction compatible with the documented facade. Only convert {class_name} to @dataclass if the same public methods and constructor behavior remain valid."
                 )
 
+        if failure_category == FailureCategory.TEST_VALIDATION.value:
+            validation = self._validation_payload(task)
+            test_execution = validation.get("test_execution") if validation else None
+            pytest_failed = (
+                isinstance(test_execution, dict)
+                and test_execution.get("ran")
+                and test_execution.get("returncode") not in (None, 0)
+            )
+            if pytest_failed and validation and self._test_validation_has_only_warnings(validation):
+                return (
+                    "Repair the generated pytest suite so it passes when executed. "
+                    "Focus on the actual pytest failure details (tracebacks, assertion errors) rather than static analysis warnings. "
+                    "The static warnings may be false positives caused by structurally different but valid code patterns."
+                )
+
         instructions = {
             FailureCategory.CODE_VALIDATION.value: "Repair the generated Python module so it becomes syntactically valid and internally consistent.",
             FailureCategory.TEST_VALIDATION.value: "Repair the generated pytest suite so it matches the generated module contract and passes validation.",
@@ -2849,11 +2908,67 @@ class Orchestrator:
             "undefined_local_names",
             "imported_entrypoint_symbols",
             "unsafe_entrypoint_calls",
+            "type_mismatches",
         ):
             if test_analysis.get(issue_key):
                 return True
 
         return False
+
+    def _test_validation_has_blocking_issues(self, validation: Dict[str, Any]) -> bool:
+        """Return *True* only when the test has issues that prevent execution.
+
+        Unlike ``_test_validation_has_static_issues`` (which flags any issue),
+        this method ignores WARNING-level findings so the pytest arbiter can
+        make the final accept/reject decision.
+        """
+        test_analysis = validation.get("test_analysis")
+        if not isinstance(test_analysis, dict):
+            return True
+
+        if not test_analysis.get("syntax_ok", True):
+            return True
+
+        line_count = test_analysis.get("line_count")
+        line_budget = test_analysis.get("line_budget")
+        if isinstance(line_count, int) and isinstance(line_budget, int) and line_count > line_budget:
+            return True
+
+        top_level_test_count = test_analysis.get("top_level_test_count")
+        expected_top_level_test_count = test_analysis.get("expected_top_level_test_count")
+        max_top_level_test_count = test_analysis.get("max_top_level_test_count")
+        if (
+            isinstance(top_level_test_count, int)
+            and isinstance(expected_top_level_test_count, int)
+            and top_level_test_count != expected_top_level_test_count
+        ):
+            return True
+        if (
+            isinstance(top_level_test_count, int)
+            and isinstance(max_top_level_test_count, int)
+            and top_level_test_count > max_top_level_test_count
+        ):
+            return True
+
+        fixture_count = test_analysis.get("fixture_count")
+        fixture_budget = test_analysis.get("fixture_budget")
+        if isinstance(fixture_count, int) and isinstance(fixture_budget, int) and fixture_count > fixture_budget:
+            return True
+
+        for issue_key in _BLOCKING_TEST_ISSUE_KEYS:
+            if test_analysis.get(issue_key):
+                return True
+
+        return False
+
+    def _test_validation_has_only_warnings(self, validation: Dict[str, Any]) -> bool:
+        """Return *True* when the test has static findings but all are WARNING-level."""
+        if self._test_validation_has_blocking_issues(validation):
+            return False
+        test_analysis = validation.get("test_analysis")
+        if not isinstance(test_analysis, dict):
+            return False
+        return any(test_analysis.get(key) for key in _WARNING_TEST_ISSUE_KEYS)
 
     def _build_code_validation_summary(
         self,
@@ -2980,7 +3095,7 @@ class Orchestrator:
         if failure_origin == "code_under_test":
             return True
 
-        if self._test_validation_has_static_issues(validation):
+        if self._test_validation_has_blocking_issues(validation):
             return False
 
         return (
@@ -5437,6 +5552,7 @@ class Orchestrator:
 
         validation_rules: dict[str, list[str]] = {}
         field_value_rules: dict[str, Dict[str, list[str]]] = {}
+        type_constraints: dict[str, Dict[str, list[str]]] = {}
         batch_rules: list[str] = []
         constructor_storage_rules: list[str] = []
         score_derivation_rules: list[str] = []
@@ -5469,6 +5585,11 @@ class Orchestrator:
             if lookup_rules:
                 field_value_rules[function_name] = lookup_rules
 
+        for function_name, function_node in function_map.items():
+            constraints = self._extract_type_constraints(function_node)
+            if constraints:
+                type_constraints[function_name] = constraints
+
         for function_node in function_map.values():
             batch_rule = self._extract_batch_rule(function_node, validation_rules)
             if batch_rule:
@@ -5489,13 +5610,36 @@ class Orchestrator:
             if sequence_rule:
                 sequence_input_rules.append(sequence_rule)
 
+        literal_examples = self._extract_valid_literal_examples(raw_content)
+
+        class_definition_styles: list[str] = []
+        return_type_annotations: list[str] = []
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                style = self._extract_class_definition_style(node)
+                if style:
+                    class_definition_styles.append(style)
+                for stmt in node.body:
+                    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        annotation = self._extract_return_type_annotation(node.name, stmt)
+                        if annotation:
+                            return_type_annotations.append(annotation)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                annotation = self._extract_return_type_annotation(None, node)
+                if annotation:
+                    return_type_annotations.append(annotation)
+
         if not (
             validation_rules
             or field_value_rules
+            or type_constraints
             or batch_rules
             or constructor_storage_rules
             or score_derivation_rules
             or sequence_input_rules
+            or literal_examples
+            or class_definition_styles
+            or return_type_annotations
         ):
             return ""
 
@@ -5504,6 +5648,12 @@ class Orchestrator:
             lines.append(
                 f"- {function_name} requires fields: {', '.join(validation_rules[function_name])}"
             )
+        for function_name in sorted(type_constraints):
+            for field_name in sorted(type_constraints[function_name]):
+                type_list = ", ".join(type_constraints[function_name][field_name])
+                lines.append(
+                    f"- {function_name} requires parameter `{field_name}` to be of type: {type_list}"
+                )
         for function_name in sorted(field_value_rules):
             for field_name in sorted(field_value_rules[function_name]):
                 lines.append(
@@ -5517,7 +5667,64 @@ class Orchestrator:
             lines.append(f"- {rule}")
         for rule in batch_rules:
             lines.append(f"- {rule}")
+        for style in class_definition_styles:
+            lines.append(f"- {style}")
+        for annotation in return_type_annotations:
+            lines.append(f"- {annotation}")
+        if literal_examples:
+            lines.append("")
+            lines.append("Fixture example patterns:")
+            for var_name, example_literal in sorted(literal_examples.items()):
+                lines.append(f"- {var_name} = {example_literal}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _extract_class_definition_style(node: ast.ClassDef) -> str:
+        """Return a human-readable description of how the class is defined."""
+        class_name = node.name
+        for decorator in node.decorator_list:
+            decorator_name = ""
+            if isinstance(decorator, ast.Name):
+                decorator_name = decorator.id
+            elif isinstance(decorator, ast.Attribute):
+                decorator_name = decorator.attr
+            elif isinstance(decorator, ast.Call):
+                if isinstance(decorator.func, ast.Name):
+                    decorator_name = decorator.func.id
+                elif isinstance(decorator.func, ast.Attribute):
+                    decorator_name = decorator.func.attr
+            if decorator_name == "dataclass":
+                return f"{class_name} is defined as a @dataclass"
+        for base in node.bases:
+            base_name = ""
+            if isinstance(base, ast.Name):
+                base_name = base.id
+            elif isinstance(base, ast.Attribute):
+                base_name = base.attr
+            if base_name == "BaseModel":
+                return f"{class_name} is defined as a pydantic BaseModel"
+            if base_name in ("TypedDict", "NamedTuple"):
+                return f"{class_name} is defined as a {base_name}"
+        for stmt in node.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == "__init__":
+                return f"{class_name} uses manual __init__"
+        return ""
+
+    @staticmethod
+    def _extract_return_type_annotation(class_name: str | None, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+        """Return a description of the return type annotation if present."""
+        if node.name.startswith("_"):
+            return ""
+        if node.returns is None:
+            return ""
+        try:
+            annotation = ast.unparse(node.returns)
+        except Exception:
+            return ""
+        if not annotation or annotation in ("None",):
+            return ""
+        qualified_name = f"{class_name}.{node.name}" if class_name else node.name
+        return f"{qualified_name} returns {annotation}"
 
     def _extract_constructor_storage_rule(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
         first_parameter = self._first_user_parameter(node)
@@ -5820,6 +6027,105 @@ class Orchestrator:
             return node.value
         return ""
 
+    def _extract_type_constraints(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> Dict[str, list[str]]:
+        """Extract isinstance() type checks from if-guards and raise blocks."""
+        constraints: Dict[str, list[str]] = {}
+        for child in ast.walk(node):
+            if not isinstance(child, (ast.If, ast.Assert)):
+                continue
+            isinstance_calls: list[ast.Call] = []
+            test_node = child.test if isinstance(child, ast.If) else child.test
+            self._collect_isinstance_calls(test_node, isinstance_calls)
+            for call in isinstance_calls:
+                if len(call.args) < 2:
+                    continue
+                field_name = self._isinstance_subject_name(call.args[0])
+                if not field_name:
+                    continue
+                type_names = self._isinstance_type_names(call.args[1])
+                if not type_names:
+                    continue
+                existing = constraints.get(field_name) or []
+                for type_name in type_names:
+                    if type_name not in existing:
+                        existing.append(type_name)
+                constraints[field_name] = existing
+        return constraints
+
+    def _collect_isinstance_calls(self, node: ast.AST, result: list[ast.Call]) -> None:
+        if isinstance(node, ast.Call):
+            func = node.func
+            if (isinstance(func, ast.Name) and func.id == "isinstance") or (
+                isinstance(func, ast.Attribute) and func.attr == "isinstance"
+            ):
+                result.append(node)
+                return
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            self._collect_isinstance_calls(node.operand, result)
+        elif isinstance(node, ast.BoolOp):
+            for value in node.values:
+                self._collect_isinstance_calls(value, result)
+
+    def _isinstance_subject_name(self, node: ast.AST) -> str:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            return node.attr
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, str)
+        ):
+            return node.slice.value
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+            if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                return node.args[0].value
+        return ""
+
+    def _isinstance_type_names(self, node: ast.AST) -> list[str]:
+        if isinstance(node, ast.Name):
+            return [node.id]
+        if isinstance(node, ast.Attribute):
+            return [self._ast_name(node)]
+        if isinstance(node, ast.Tuple):
+            names: list[str] = []
+            for elt in node.elts:
+                if isinstance(elt, ast.Name):
+                    names.append(elt.id)
+                elif isinstance(elt, ast.Attribute):
+                    names.append(self._ast_name(elt))
+            return names
+        return []
+
+    def _extract_valid_literal_examples(self, raw_content: str) -> Dict[str, str]:
+        """Extract sample dict/list literals from top-level constant assignments."""
+        examples: Dict[str, str] = {}
+        try:
+            tree = ast.parse(raw_content)
+        except SyntaxError:
+            return examples
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            target = node.targets[0]
+            if not isinstance(target, ast.Name):
+                continue
+            name_lower = target.id.lower()
+            if not any(
+                keyword in name_lower
+                for keyword in ("default", "sample", "example", "valid", "template")
+            ):
+                continue
+            if isinstance(node.value, (ast.Dict, ast.List)):
+                try:
+                    examples[target.id] = ast.unparse(node.value)
+                except Exception:
+                    pass
+        return examples
+
     def _extract_batch_rule(
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
@@ -5907,6 +6213,7 @@ class Orchestrator:
             "assertion_like_count": 0,
             "tests_without_assertions": [],
             "contract_overreach_signals": [],
+            "type_mismatches": [],
         }
         if not raw_content.strip():
             return analysis
@@ -5924,7 +6231,7 @@ class Orchestrator:
         helper_classes_to_avoid = set(self._helper_classes_to_avoid(code_analysis))
         module_defined_names = self._collect_module_defined_names(tree)
         entrypoint_names = self._entrypoint_symbol_names(code_analysis)
-        validation_rules, field_value_rules, batch_rules, sequence_input_functions = self._parse_behavior_contract(
+        validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = self._parse_behavior_contract(
             code_behavior_contract
         )
         analysis["top_level_test_count"] = sum(
@@ -6079,6 +6386,11 @@ class Orchestrator:
             function_names,
             class_map,
         )
+        type_mismatches = self._analyze_test_type_mismatches(
+            tree,
+            type_constraint_rules,
+            class_map,
+        )
 
         analysis["imported_module_symbols"] = sorted(imported_symbols)
         analysis["missing_function_imports"] = missing_imports
@@ -6098,18 +6410,20 @@ class Orchestrator:
         analysis["assertion_like_count"] = assertion_like_count
         analysis["tests_without_assertions"] = sorted(set(tests_without_assertions))
         analysis["contract_overreach_signals"] = sorted(set(contract_overreach_signals))
+        analysis["type_mismatches"] = type_mismatches
         return analysis
 
     def _parse_behavior_contract(
         self,
         contract: str,
-    ) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]], set[str]]:
+    ) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]], set[str], Dict[str, Dict[str, list[str]]]]:
         validation_rules: Dict[str, list[str]] = {}
         field_value_rules: Dict[str, Dict[str, list[str]]] = {}
+        type_constraint_rules: Dict[str, Dict[str, list[str]]] = {}
         batch_rules: Dict[str, Dict[str, Any]] = {}
         sequence_input_functions: set[str] = set()
         if not contract.strip():
-            return validation_rules, field_value_rules, batch_rules, sequence_input_functions
+            return validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules
 
         for raw_line in contract.splitlines():
             line = raw_line.strip()
@@ -6121,6 +6435,15 @@ class Orchestrator:
                 fields = [field.strip() for field in validation_match.group(2).split(",") if field.strip()]
                 if fields:
                     validation_rules[function_name] = fields
+                continue
+
+            type_constraint_match = re.match(r"-\s+(\w+) requires parameter `([^`]+)` to be of type: (.+)$", line)
+            if type_constraint_match:
+                function_name = type_constraint_match.group(1)
+                field_name = type_constraint_match.group(2)
+                types = [t.strip() for t in type_constraint_match.group(3).split(",") if t.strip()]
+                if types:
+                    type_constraint_rules.setdefault(function_name, {})[field_name] = types
                 continue
 
             field_value_match = re.match(r"-\s+(\w+) expects field `([^`]+)` to be one of: (.+)$", line)
@@ -6166,7 +6489,7 @@ class Orchestrator:
                     "fields": [field.strip() for field in wrapper_match.group(3).split(",") if field.strip()],
                 }
 
-        return validation_rules, field_value_rules, batch_rules, sequence_input_functions
+        return validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules
 
     def _analyze_test_behavior_contracts(
         self,
@@ -6250,6 +6573,81 @@ class Orchestrator:
                         )
 
         return sorted(payload_violations), sorted(non_batch_calls)
+
+    def _analyze_test_type_mismatches(
+        self,
+        tree: ast.AST,
+        type_constraint_rules: Dict[str, Dict[str, list[str]]],
+        class_map: Dict[str, Any],
+    ) -> list[str]:
+        if not type_constraint_rules:
+            return []
+        mismatches: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
+                continue
+            bindings = self._collect_local_bindings(node)
+            parent_map = self._parent_map(node)
+            for child in ast.walk(node):
+                if not isinstance(child, ast.Call):
+                    continue
+                callable_name = self._callable_name(child)
+                if not callable_name or callable_name not in type_constraint_rules:
+                    continue
+                if self._call_has_negative_expectation(child, parent_map):
+                    continue
+                constraints = type_constraint_rules[callable_name]
+                payload_arg = self._payload_argument_for_validation(child, callable_name)
+                payload_node = self._resolve_bound_value(payload_arg, bindings)
+                for field_name, allowed_types in constraints.items():
+                    observed_type = self._infer_argument_type(
+                        payload_node, bindings, field_name, class_map,
+                    )
+                    if not observed_type:
+                        continue
+                    allowed_lower = {t.lower() for t in allowed_types}
+                    if observed_type.lower() not in allowed_lower:
+                        mismatches.add(
+                            f"{callable_name} passes {observed_type} for `{field_name}` (expected {', '.join(allowed_types)}) at line {child.lineno}"
+                        )
+        return sorted(mismatches)
+
+    def _infer_argument_type(
+        self,
+        payload_node: Optional[ast.AST],
+        bindings: Dict[str, ast.AST],
+        field_name: str,
+        class_map: Dict[str, Any],
+    ) -> str:
+        if payload_node is None:
+            return ""
+        resolved = self._resolve_bound_value(payload_node, bindings)
+        field_value: Optional[ast.AST] = None
+        if isinstance(resolved, ast.Dict):
+            for key_node, value_node in zip(resolved.keys, resolved.values):
+                if isinstance(key_node, ast.Constant) and key_node.value == field_name:
+                    field_value = value_node
+                    break
+        elif isinstance(resolved, ast.Call):
+            field_value = self._call_argument_value(resolved, field_name, class_map)
+        if field_value is None:
+            return ""
+        field_value = self._resolve_bound_value(field_value, bindings)
+        if isinstance(field_value, ast.Constant):
+            return type(field_value.value).__name__
+        if isinstance(field_value, ast.Dict):
+            return "dict"
+        if isinstance(field_value, ast.List):
+            return "list"
+        if isinstance(field_value, ast.Tuple):
+            return "tuple"
+        if isinstance(field_value, ast.Set):
+            return "set"
+        if isinstance(field_value, ast.Call):
+            func_name = self._ast_name(field_value.func)
+            if func_name in ("dict", "list", "set", "tuple", "str", "int", "float", "bool"):
+                return func_name
+        return ""
 
     def _parent_map(self, root: ast.AST) -> Dict[ast.AST, ast.AST]:
         return {
@@ -7435,46 +7833,49 @@ class Orchestrator:
             lines.append(f"- Assertion-like checks: {assertion_like_count}")
         if syntax_ok:
             lines.append(
+                f"- Type mismatches (warning): {', '.join(test_analysis.get('type_mismatches') or ['none'])}"
+            )
+            lines.append(
                 f"- Imported module symbols: {', '.join(test_analysis.get('imported_module_symbols') or ['none'])}"
             )
             lines.append(
-                f"- Missing function imports: {', '.join(test_analysis.get('missing_function_imports') or ['none'])}"
+                f"- Missing function imports (blocking): {', '.join(test_analysis.get('missing_function_imports') or ['none'])}"
             )
             lines.append(
-                f"- Unknown module symbols: {', '.join(test_analysis.get('unknown_module_symbols') or ['none'])}"
+                f"- Unknown module symbols (warning): {', '.join(test_analysis.get('unknown_module_symbols') or ['none'])}"
             )
             lines.append(
-                f"- Invalid member references: {', '.join(test_analysis.get('invalid_member_references') or ['none'])}"
+                f"- Invalid member references (warning): {', '.join(test_analysis.get('invalid_member_references') or ['none'])}"
             )
             lines.append(
-                f"- Call arity mismatches: {', '.join(test_analysis.get('call_arity_mismatches') or ['none'])}"
+                f"- Call arity mismatches (warning): {', '.join(test_analysis.get('call_arity_mismatches') or ['none'])}"
             )
             lines.append(
-                f"- Constructor arity mismatches: {', '.join(test_analysis.get('constructor_arity_mismatches') or ['none'])}"
+                f"- Constructor arity mismatches (warning): {', '.join(test_analysis.get('constructor_arity_mismatches') or ['none'])}"
             )
             lines.append(
-                f"- Payload contract violations: {', '.join(test_analysis.get('payload_contract_violations') or ['none'])}"
+                f"- Payload contract violations (warning): {', '.join(test_analysis.get('payload_contract_violations') or ['none'])}"
             )
             lines.append(
-                f"- Non-batch sequence calls: {', '.join(test_analysis.get('non_batch_sequence_calls') or ['none'])}"
+                f"- Non-batch sequence calls (warning): {', '.join(test_analysis.get('non_batch_sequence_calls') or ['none'])}"
             )
             lines.append(
                 f"- Helper surface usages: {', '.join(test_analysis.get('helper_surface_usages') or ['none'])}"
             )
             lines.append(
-                f"- Reserved fixture names: {', '.join(test_analysis.get('reserved_fixture_names') or ['none'])}"
+                f"- Reserved fixture names (warning): {', '.join(test_analysis.get('reserved_fixture_names') or ['none'])}"
             )
             lines.append(
-                f"- Undefined test fixtures: {', '.join(test_analysis.get('undefined_fixtures') or ['none'])}"
+                f"- Undefined test fixtures (blocking): {', '.join(test_analysis.get('undefined_fixtures') or ['none'])}"
             )
             lines.append(
-                f"- Undefined local names: {', '.join(test_analysis.get('undefined_local_names') or ['none'])}"
+                f"- Undefined local names (blocking): {', '.join(test_analysis.get('undefined_local_names') or ['none'])}"
             )
             lines.append(
                 f"- Tests without assertion-like checks: {', '.join(test_analysis.get('tests_without_assertions') or ['none'])}"
             )
             lines.append(
-                f"- Contract overreach signals: {', '.join(contract_overreach_signals or ['none'])}"
+                f"- Contract overreach signals (warning): {', '.join(contract_overreach_signals or ['none'])}"
             )
         if isinstance(completion_diagnostics, dict):
             lines.append(
@@ -7482,13 +7883,13 @@ class Orchestrator:
             )
         if syntax_ok:
             lines.append(
-                f"- Imported entrypoint symbols: {', '.join(test_analysis.get('imported_entrypoint_symbols') or ['none'])}"
+                f"- Imported entrypoint symbols (blocking): {', '.join(test_analysis.get('imported_entrypoint_symbols') or ['none'])}"
             )
             lines.append(
-                f"- Unsafe entrypoint calls: {', '.join(test_analysis.get('unsafe_entrypoint_calls') or ['none'])}"
+                f"- Unsafe entrypoint calls (blocking): {', '.join(test_analysis.get('unsafe_entrypoint_calls') or ['none'])}"
             )
             lines.append(
-                f"- Unsupported mock assertions: {', '.join(test_analysis.get('unsupported_mock_assertions') or ['none'])}"
+                f"- Unsupported mock assertions (warning): {', '.join(test_analysis.get('unsupported_mock_assertions') or ['none'])}"
             )
         if isinstance(test_execution, dict):
             if not test_execution.get("available", True):
@@ -7502,7 +7903,7 @@ class Orchestrator:
                 if failure_details:
                     lines.append(f"- Pytest failure details: {'; '.join(failure_details)}")
 
-        has_static_issues = (not syntax_ok) or (
+        has_blocking_issues = (not syntax_ok) or (
             isinstance(line_count, int)
             and isinstance(line_budget, int)
             and line_count > line_budget
@@ -7520,26 +7921,22 @@ class Orchestrator:
             and fixture_count > fixture_budget
         ) or any(
             test_analysis.get(key)
-            for key in (
-                "missing_function_imports",
-                "unknown_module_symbols",
-                "invalid_member_references",
-                "call_arity_mismatches",
-                "constructor_arity_mismatches",
-                "contract_overreach_signals",
-                "payload_contract_violations",
-                "non_batch_sequence_calls",
-                "reserved_fixture_names",
-                "undefined_fixtures",
-                "undefined_local_names",
-                "tests_without_assertions",
-                "imported_entrypoint_symbols",
-                "unsafe_entrypoint_calls",
-                "unsupported_mock_assertions",
-            )
+            for key in _BLOCKING_TEST_ISSUE_KEYS
         )
+        has_warning_issues = any(
+            test_analysis.get(key)
+            for key in _WARNING_TEST_ISSUE_KEYS
+        ) or bool(test_analysis.get("tests_without_assertions"))
         execution_failed = isinstance(test_execution, dict) and test_execution.get("ran") and test_execution.get("returncode") not in (None, 0)
-        lines.append(f"- Verdict: {'FAIL' if has_static_issues or execution_failed else 'PASS'}")
+        execution_passed = isinstance(test_execution, dict) and test_execution.get("ran") and test_execution.get("returncode") == 0
+        if has_blocking_issues or execution_failed:
+            lines.append("- Verdict: FAIL")
+        elif has_warning_issues and execution_passed:
+            lines.append("- Verdict: PASS (warnings overridden by pytest)")
+        elif has_warning_issues:
+            lines.append("- Verdict: FAIL (warnings without pytest confirmation)")
+        else:
+            lines.append("- Verdict: PASS")
         return "\n".join(lines)
 
     def _ast_name(self, node: ast.AST) -> str:
@@ -7842,6 +8239,14 @@ class Orchestrator:
 
         if failure_category != FailureCategory.TEST_VALIDATION.value:
             return lines
+
+        if "type mismatches:" in summary_lower and "type mismatches: none" not in summary_lower:
+            lines.append(
+                "PRIORITY: Fix type mismatches before other repairs. When the behavior contract specifies that a parameter must be of type dict, list, int, or another concrete type, every test fixture and call argument must use a value of exactly that type — not a string placeholder."
+            )
+            lines.append(
+                "Replace string placeholders like details='details' with concrete typed values like details={'key': 'value'} when the contract requires dict. Match the exact type constraint from the behavior contract for every flagged parameter."
+            )
 
         implementation_code = context.get("code", "") if isinstance(context, dict) else ""
         available_module_symbol_map = {

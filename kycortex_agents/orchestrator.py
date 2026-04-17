@@ -1458,6 +1458,29 @@ class Orchestrator:
             code_analysis,
             code_behavior_contract if isinstance(code_behavior_contract, str) else "",
         )
+
+        # --- Auto-fix type mismatches (str → dict) before pytest ---
+        type_mismatches = test_analysis.get("type_mismatches") or []
+        if type_mismatches and isinstance(code_content, str):
+            fixed_test_content = self._auto_fix_test_type_mismatches(
+                test_content, type_mismatches, code_content
+            )
+            if fixed_test_content != test_content:
+                test_content = fixed_test_content
+                output.raw_content = test_content
+                output.summary = self._summarize_output(test_content)
+                for artifact in output.artifacts:
+                    if artifact.artifact_type != ArtifactType.TEST:
+                        continue
+                    artifact.content = test_content
+                test_artifact_content = test_content if test_artifact_content else test_artifact_content
+                test_analysis = self._analyze_test_module(
+                    test_content,
+                    module_name,
+                    code_analysis,
+                    code_behavior_contract if isinstance(code_behavior_contract, str) else "",
+                )
+
         test_analysis["line_count"] = self._output_line_count(test_content)
         line_budget = self._task_line_budget(task)
         if line_budget is not None:
@@ -6627,6 +6650,48 @@ class Orchestrator:
                         )
 
         return sorted(payload_violations), sorted(non_batch_calls)
+
+    def _auto_fix_test_type_mismatches(
+        self,
+        test_content: str,
+        type_mismatches: list[str],
+        code_content: str,
+    ) -> str:
+        """Auto-fix str→dict type mismatches in generated test code.
+
+        For each mismatch where a string is passed where a dict is expected,
+        replaces ``param='...'`` with ``param={'key': 'value', ...}`` using
+        keys discovered from the implementation code.
+        """
+        try:
+            impl_tree = ast.parse(code_content)
+        except SyntaxError:
+            return test_content
+        dict_keys = self._dict_accessed_keys_from_tree(impl_tree)
+
+        fixed = test_content
+        for mismatch in type_mismatches:
+            m = re.match(
+                r"(\w+) passes str for `(\w+)` \(expected (?:dict|Dict)",
+                mismatch,
+            )
+            if not m:
+                continue
+            param_name = m.group(2)
+            keys = dict_keys.get(param_name)
+            if not keys:
+                continue
+            dict_literal = (
+                "{"
+                + ", ".join(f"'{k}': 'value'" for k in sorted(keys))
+                + "}"
+            )
+            fixed = re.sub(
+                rf"({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")",
+                rf"\1={dict_literal}",
+                fixed,
+            )
+        return fixed
 
     def _analyze_test_type_mismatches(
         self,

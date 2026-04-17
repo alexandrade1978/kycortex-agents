@@ -1,0 +1,687 @@
+{
+  "generated_at": "2026-04-17T11:32:33.075481+00:00",
+  "output_root": "/home/tupira/Dados/experiments/kycortex_agents/v50_openai_gpt4omini",
+  "provider_totals": {
+    "openai": {
+      "completed": 5,
+      "execution_error": 0,
+      "skipped": 0,
+      "validation_error": 0
+    }
+  },
+  "providers": [
+    "openai"
+  ],
+  "runs": [
+    {
+      "acceptance_criteria_met": true,
+      "acceptance_reason": "all_evaluated_tasks_done",
+      "availability_reason": null,
+      "available": true,
+      "completed_at": "2026-04-17T11:26:38.559885+00:00",
+      "duration_seconds": 76.887,
+      "failure_category": null,
+      "model": "gpt-4o-mini",
+      "output_dir": "/home/tupira/Dados/experiments/kycortex_agents/v50_openai_gpt4omini/kyc_compliance_intake/openai",
+      "provider": "openai",
+      "scenario": "kyc_compliance_intake",
+      "scenario_title": "KYCComplianceIntake",
+      "scenario_validation": {
+        "artifact_path": "code_implementation.py",
+        "checks": {
+          "audit_signal_present": true,
+          "batch_processing_supported": true,
+          "invalid_request_handled": true,
+          "invalid_request_rejected": true,
+          "request_signature_supported": true,
+          "risk_signal_observable": true,
+          "service_constructor_supported": true,
+          "stdlib_only": true,
+          "syntax_valid": true,
+          "valid_request_accepted": true,
+          "validation_surface_supported": true
+        },
+        "error": null,
+        "observations": {
+          "audit_attributes": [
+            "audit_history"
+          ],
+          "high_outcome": "\"ComplianceOutcome(outcome='blocked', risk_score=5.5, audit_entry={'request_id': 'kyc_compliance_intake-high', 'timestamp': datetime.datetime(2026, 4, 13, 0, 0, tzinfo=datetime.timezone.utc), 'outcome': 'blocked', 'risk_score': 5.5, 'details': {'identity_evidence': ['passport'], 'jurisdiction': 'sanctioned', 'customer_type': 'corporate', 'adverse_indicators': ['pep', 'watchlist_hit'], 'missing_documents': ['beneficial_owner_register']}})\"",
+          "low_outcome": "\"ComplianceOutcome(outcome='escalated', risk_score=2.0, audit_entry={'request_id': 'kyc_compliance_intake-low', 'timestamp': datetime.datetime(2026, 4, 13, 0, 0, tzinfo=datetime.timezone.utc), 'outcome': 'escalated', 'risk_score': 2.0, 'details': {'identity_evidence': ['passport', 'proof_of_address'], 'jurisdiction': 'pt', 'customer_type': 'individual', 'adverse_indicators': [], 'missing_documents': []}})\""
+        },
+        "request_name": "ComplianceRequest",
+        "service_name": "ComplianceIntakeService",
+        "validated": true
+      },
+      "started_at": "2026-04-17T11:25:21.672381+00:00",
+      "status": "completed",
+      "summary": {
+        "output_dir": "openai",
+        "phase": "completed",
+        "project_name": "KYCComplianceIntake",
+        "repair_history": [],
+        "state_file": "project_state.json",
+        "task_status_counts": {
+          "done": 7
+        },
+        "task_summaries": [
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "arch",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "code",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "deps",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "tests",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "review",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "docs",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "legal",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          }
+        ],
+        "terminal_outcome": "completed"
+      }
+    },
+    {
+      "acceptance_criteria_met": true,
+      "acceptance_reason": "all_evaluated_tasks_done",
+      "availability_reason": null,
+      "available": true,
+      "completed_at": "2026-04-17T11:27:46.589940+00:00",
+      "duration_seconds": 68.023,
+      "failure_category": null,
+      "model": "gpt-4o-mini",
+      "output_dir": "/home/tupira/Dados/experiments/kycortex_agents/v50_openai_gpt4omini/insurance_claim_triage/openai",
+      "provider": "openai",
+      "scenario": "insurance_claim_triage",
+      "scenario_title": "InsuranceClaimTriage",
+      "scenario_validation": {
+        "artifact_path": "code_implementation.py",
+        "checks": {
+          "audit_signal_present": true,
+          "batch_processing_supported": true,
+          "invalid_request_handled": true,
+          "invalid_request_rejected": true,
+          "request_signature_supported": true,
+          "risk_signal_observable": true,
+          "service_constructor_supported": true,
+          "stdlib_only": true,
+          "syntax_valid": true,
+          "valid_request_accepted": true,
+          "validation_surface_supported": true
+        },
+        "error": null,
+        "observations": {
+          "audit_attributes": [
+            "audit_history"
+          ],
+          "high_outcome": "{\"outcome\": \"fraud_escalation\", \"risk_score\": 4.5}",
+          "low_outcome": "{\"outcome\": \"straight_through_review\", \"risk_score\": 0.0}"
+        },
+        "request_name": "ClaimRequest",
+        "service_name": "ClaimTriageService",
+        "validated": true
+      },
+      "started_at": "2026-04-17T11:26:38.567024+00:00",
+      "status": "completed",
+      "summary": {
+        "output_dir": "openai",
+        "phase": "completed",
+        "project_name": "InsuranceClaimTriage",
+        "repair_history": [],
+        "state_file": "project_state.json",
+        "task_status_counts": {
+          "done": 7
+        },
+        "task_summaries": [
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "arch",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "code",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "deps",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "tests",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "review",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "docs",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "legal",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          }
+        ],
+        "terminal_outcome": "completed"
+      }
+    },
+    {
+      "acceptance_criteria_met": true,
+      "acceptance_reason": "all_evaluated_tasks_done",
+      "availability_reason": null,
+      "available": true,
+      "completed_at": "2026-04-17T11:29:10.122607+00:00",
+      "duration_seconds": 83.526,
+      "failure_category": null,
+      "model": "gpt-4o-mini",
+      "output_dir": "/home/tupira/Dados/experiments/kycortex_agents/v50_openai_gpt4omini/vendor_onboarding_risk/openai",
+      "provider": "openai",
+      "scenario": "vendor_onboarding_risk",
+      "scenario_title": "VendorOnboardingRisk",
+      "scenario_validation": {
+        "artifact_path": "code_implementation.py",
+        "checks": {
+          "audit_signal_present": true,
+          "batch_processing_supported": true,
+          "invalid_request_handled": true,
+          "invalid_request_rejected": true,
+          "request_signature_supported": true,
+          "risk_signal_observable": true,
+          "service_constructor_supported": true,
+          "stdlib_only": true,
+          "syntax_valid": true,
+          "valid_request_accepted": true,
+          "validation_surface_supported": true
+        },
+        "error": null,
+        "observations": {
+          "audit_attributes": [
+            "audit_history"
+          ],
+          "high_outcome": "{\"outcome\": \"enhanced_due_diligence\", \"risk_score\": 220}",
+          "low_outcome": "{\"outcome\": \"approved\", \"risk_score\": 0}"
+        },
+        "request_name": "VendorSubmission",
+        "service_name": "VendorRiskReviewService",
+        "validated": true
+      },
+      "started_at": "2026-04-17T11:27:46.596763+00:00",
+      "status": "completed",
+      "summary": {
+        "output_dir": "openai",
+        "phase": "completed",
+        "project_name": "VendorOnboardingRisk",
+        "repair_history": [],
+        "state_file": "project_state.json",
+        "task_status_counts": {
+          "done": 7
+        },
+        "task_summaries": [
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "arch",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "code",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "deps",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "tests",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "review",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "docs",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "legal",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          }
+        ],
+        "terminal_outcome": "completed"
+      }
+    },
+    {
+      "acceptance_criteria_met": true,
+      "acceptance_reason": "all_evaluated_tasks_done",
+      "availability_reason": null,
+      "available": true,
+      "completed_at": "2026-04-17T11:30:49.036874+00:00",
+      "duration_seconds": 98.907,
+      "failure_category": null,
+      "model": "gpt-4o-mini",
+      "output_dir": "/home/tupira/Dados/experiments/kycortex_agents/v50_openai_gpt4omini/returns_abuse_screening/openai",
+      "provider": "openai",
+      "scenario": "returns_abuse_screening",
+      "scenario_title": "ReturnsAbuseScreening",
+      "scenario_validation": {
+        "artifact_path": "code_implementation.py",
+        "checks": {
+          "audit_signal_present": true,
+          "batch_processing_supported": true,
+          "invalid_request_handled": true,
+          "invalid_request_rejected": true,
+          "request_signature_supported": true,
+          "risk_signal_observable": true,
+          "service_constructor_supported": true,
+          "stdlib_only": true,
+          "syntax_valid": true,
+          "valid_request_accepted": true,
+          "validation_surface_supported": true
+        },
+        "error": null,
+        "observations": {
+          "audit_attributes": [
+            "audit_history"
+          ],
+          "high_outcome": "{\"outcome\": \"escalate\", \"risk_score\": 8}",
+          "low_outcome": "{\"outcome\": \"auto-approve\", \"risk_score\": 0}"
+        },
+        "request_name": "ReturnCase",
+        "service_name": "ReturnScreeningService",
+        "validated": true
+      },
+      "started_at": "2026-04-17T11:29:10.129804+00:00",
+      "status": "completed",
+      "summary": {
+        "output_dir": "openai",
+        "phase": "completed",
+        "project_name": "ReturnsAbuseScreening",
+        "repair_history": [],
+        "state_file": "project_state.json",
+        "task_status_counts": {
+          "done": 7
+        },
+        "task_summaries": [
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "arch",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "code",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "deps",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "tests",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "review",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "docs",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "legal",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          }
+        ],
+        "terminal_outcome": "completed"
+      }
+    },
+    {
+      "acceptance_criteria_met": true,
+      "acceptance_reason": "all_evaluated_tasks_done",
+      "availability_reason": null,
+      "available": true,
+      "completed_at": "2026-04-17T11:32:33.068526+00:00",
+      "duration_seconds": 104.024,
+      "failure_category": null,
+      "model": "gpt-4o-mini",
+      "output_dir": "/home/tupira/Dados/experiments/kycortex_agents/v50_openai_gpt4omini/access_review_audit/openai",
+      "provider": "openai",
+      "scenario": "access_review_audit",
+      "scenario_title": "AccessReviewAudit",
+      "scenario_validation": {
+        "artifact_path": "code_implementation.py",
+        "checks": {
+          "audit_signal_present": true,
+          "batch_processing_supported": true,
+          "invalid_request_handled": true,
+          "invalid_request_rejected": true,
+          "request_signature_supported": true,
+          "risk_signal_observable": true,
+          "service_constructor_supported": true,
+          "stdlib_only": true,
+          "syntax_valid": true,
+          "valid_request_accepted": true,
+          "validation_surface_supported": true
+        },
+        "error": null,
+        "observations": {
+          "audit_attributes": [
+            "audit_history"
+          ],
+          "high_outcome": "{\"outcome\": \"Escalated\", \"risk_score\": 16}",
+          "low_outcome": "{\"outcome\": \"Approved\", \"risk_score\": 2}"
+        },
+        "request_name": "AccessReviewRequest",
+        "service_name": "AccessReviewService",
+        "validated": true
+      },
+      "started_at": "2026-04-17T11:30:49.044107+00:00",
+      "status": "completed",
+      "summary": {
+        "output_dir": "openai",
+        "phase": "completed",
+        "project_name": "AccessReviewAudit",
+        "repair_history": [],
+        "state_file": "project_state.json",
+        "task_status_counts": {
+          "done": 7
+        },
+        "task_summaries": [
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "arch",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "code",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "deps",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "tests",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "review",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "docs",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          },
+          {
+            "has_assigned_to": true,
+            "has_attempts": true,
+            "has_provider_call": true,
+            "has_repair_origin": false,
+            "id": "legal",
+            "last_error_category": null,
+            "last_error_present": false,
+            "status": "done"
+          }
+        ],
+        "terminal_outcome": "completed"
+      }
+    }
+  ],
+  "scenario_order": [
+    "kyc_compliance_intake",
+    "insurance_claim_triage",
+    "vendor_onboarding_risk",
+    "returns_abuse_screening",
+    "access_review_audit"
+  ],
+  "scenario_totals": {
+    "access_review_audit": {
+      "completed": 1,
+      "execution_error": 0,
+      "skipped": 0,
+      "validation_error": 0
+    },
+    "insurance_claim_triage": {
+      "completed": 1,
+      "execution_error": 0,
+      "skipped": 0,
+      "validation_error": 0
+    },
+    "kyc_compliance_intake": {
+      "completed": 1,
+      "execution_error": 0,
+      "skipped": 0,
+      "validation_error": 0
+    },
+    "returns_abuse_screening": {
+      "completed": 1,
+      "execution_error": 0,
+      "skipped": 0,
+      "validation_error": 0
+    },
+    "vendor_onboarding_risk": {
+      "completed": 1,
+      "execution_error": 0,
+      "skipped": 0,
+      "validation_error": 0
+    }
+  },
+  "total_runs": 5
+}

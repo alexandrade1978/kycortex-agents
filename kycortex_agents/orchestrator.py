@@ -6709,6 +6709,29 @@ class Orchestrator:
         except SyntaxError:
             pass
 
+        # Build per-function variable maps: if a test function already
+        # assigns ``param = {dict_literal}``, reuse the variable instead
+        # of injecting a generic ``{'key': 'value'}`` replacement.
+        func_var_dict_ranges: list[tuple[int, int, set[str]]] = []
+        try:
+            _tree = ast.parse(test_content)
+            for node in ast.walk(_tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if not node.name.startswith("test_"):
+                    continue
+                dict_assigned_vars: set[str] = set()
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Assign) and len(child.targets) == 1:
+                        target = child.targets[0]
+                        if isinstance(target, ast.Name) and isinstance(child.value, ast.Dict):
+                            dict_assigned_vars.add(target.id)
+                start = node.lineno - 1
+                end = node.end_lineno or node.lineno
+                func_var_dict_ranges.append((start, end, dict_assigned_vars))
+        except SyntaxError:
+            pass
+
         lines = test_content.split("\n")
         for param_name, keys in dict_keys.items():
             if not keys:
@@ -6725,7 +6748,17 @@ class Orchestrator:
                 if i in skip_lines:
                     continue
                 if str_pattern.search(line):
-                    lines[i] = str_pattern.sub(rf"\1={dict_literal}", line)
+                    # If the same function already has ``param_name = {dict}``,
+                    # substitute with the variable reference instead of a
+                    # generic dict literal.
+                    replacement = dict_literal
+                    for fstart, fend, dvars in func_var_dict_ranges:
+                        if fstart <= i < fend and param_name in dvars:
+                            replacement = param_name
+                            break
+                    lines[i] = str_pattern.sub(
+                        rf"\1={replacement}", line
+                    )
         return "\n".join(lines)
 
     def _analyze_test_type_mismatches(

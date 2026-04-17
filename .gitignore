@@ -212,6 +212,11 @@ output/
 output_*/
 multi_agent_ollama_output/
 
+# Campaign summaries and coverage artifacts
+campaign_summary_*.json
+campaign_summary_*.md
+coverage.json
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

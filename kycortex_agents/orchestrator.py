@@ -5662,13 +5662,24 @@ class Orchestrator:
             for field_name in sorted(type_constraints[function_name]):
                 type_list = ", ".join(type_constraints[function_name][field_name])
                 keys_hint = ""
+                dict_example = ""
                 if "dict" in type_constraints[function_name][field_name]:
                     keys = dict_accessed_keys.get(field_name)
                     if keys:
-                        keys_hint = f" (keys used: {', '.join(sorted(keys))})"
+                        sorted_keys = sorted(keys)
+                        keys_hint = f" (keys used: {', '.join(sorted_keys)})"
+                        example_pairs = ", ".join(
+                            f"'{k}': 'value'" for k in sorted_keys
+                        )
+                        dict_example = (
+                            f"- EXAMPLE: {field_name}={{{example_pairs}}} "
+                            f"— NEVER pass a plain string for `{field_name}`"
+                        )
                 lines.append(
                     f"- {function_name} requires parameter `{field_name}` to be of type: {type_list}{keys_hint}"
                 )
+                if dict_example:
+                    lines.append(dict_example)
         for function_name in sorted(field_value_rules):
             for field_name in sorted(field_value_rules[function_name]):
                 lines.append(

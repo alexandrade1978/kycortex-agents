@@ -6518,7 +6518,8 @@ class Orchestrator:
             if type_constraint_match:
                 function_name = type_constraint_match.group(1)
                 field_name = type_constraint_match.group(2)
-                types = [t.strip() for t in type_constraint_match.group(3).split(",") if t.strip()]
+                raw_types = re.sub(r"\s*\(keys used:[^)]*\)", "", type_constraint_match.group(3))
+                types = [t.strip() for t in raw_types.split(",") if t.strip()]
                 if types:
                     type_constraint_rules.setdefault(function_name, {})[field_name] = types
                 continue

@@ -101,25 +101,33 @@ class TestExpressionText:
 # _validation_result_call_is_invalid
 # ---------------------------------------------------------------------------
 
+def _parse_call(code: str) -> ast.Call:
+    node = ast.parse(code, mode="eval").body
+    assert isinstance(node, ast.Call)
+    return node
+
+
+def _parse_func(code: str) -> ast.FunctionDef:
+    node = ast.parse(code).body[0]
+    assert isinstance(node, ast.FunctionDef)
+    return node
+
+
 class TestValidationResultCallIsInvalid:
     def test_call_with_is_valid_false(self):
-        code = "ValidationResult(is_valid=False)"
-        node = ast.parse(code, mode="eval").body
+        node = _parse_call("ValidationResult(is_valid=False)")
         assert QATesterAgent._validation_result_call_is_invalid(node) is True
 
     def test_call_with_is_valid_true(self):
-        code = "ValidationResult(is_valid=True)"
-        node = ast.parse(code, mode="eval").body
+        node = _parse_call("ValidationResult(is_valid=True)")
         assert QATesterAgent._validation_result_call_is_invalid(node) is False
 
     def test_call_without_is_valid(self):
-        code = "SomeOther(name='x')"
-        node = ast.parse(code, mode="eval").body
+        node = _parse_call("SomeOther(name='x')")
         assert QATesterAgent._validation_result_call_is_invalid(node) is False
 
     def test_call_with_non_constant_is_valid(self):
-        code = "ValidationResult(is_valid=some_var)"
-        node = ast.parse(code, mode="eval").body
+        node = _parse_call("ValidationResult(is_valid=some_var)")
         assert QATesterAgent._validation_result_call_is_invalid(node) is False
 
 
@@ -133,38 +141,31 @@ class TestBodyAffectsValidationResult:
         assert QATesterAgent._body_affects_validation_result(tree.body) is True
 
     def test_return_false(self):
-        code = "def f():\n    return False"
-        func = ast.parse(code).body[0]
+        func = _parse_func("def f():\n    return False")
         assert QATesterAgent._body_affects_validation_result(func.body) is True
 
     def test_return_call_with_is_valid_false(self):
-        code = "def f():\n    return ValidationResult(is_valid=False)"
-        func = ast.parse(code).body[0]
+        func = _parse_func("def f():\n    return ValidationResult(is_valid=False)")
         assert QATesterAgent._body_affects_validation_result(func.body) is True
 
     def test_assign_valid_false(self):
-        code = "def f():\n    is_valid = False"
-        func = ast.parse(code).body[0]
+        func = _parse_func("def f():\n    is_valid = False")
         assert QATesterAgent._body_affects_validation_result(func.body) is True
 
     def test_errors_append(self):
-        code = "def f():\n    errors.append('problem')"
-        func = ast.parse(code).body[0]
+        func = _parse_func("def f():\n    errors.append('problem')")
         assert QATesterAgent._body_affects_validation_result(func.body) is True
 
     def test_warning_list_not_detected(self):
-        code = "def f():\n    warning_errors.append('problem')"
-        func = ast.parse(code).body[0]
+        func = _parse_func("def f():\n    warning_errors.append('problem')")
         assert QATesterAgent._body_affects_validation_result(func.body) is False
 
     def test_benign_body(self):
-        code = "def f():\n    x = 42\n    return True"
-        func = ast.parse(code).body[0]
+        func = _parse_func("def f():\n    x = 42\n    return True")
         assert QATesterAgent._body_affects_validation_result(func.body) is False
 
     def test_return_true_not_detected(self):
-        code = "def f():\n    return True"
-        func = ast.parse(code).body[0]
+        func = _parse_func("def f():\n    return True")
         assert QATesterAgent._body_affects_validation_result(func.body) is False
 
 
@@ -216,22 +217,19 @@ class TestFunctionPayloadAliasNames:
 
 class TestSetCallArgumentValue:
     def test_set_keyword_argument(self):
-        code = "Foo(name='old')"
-        call_node = ast.parse(code, mode="eval").body
+        call_node = _parse_call("Foo(name='old')")
         new_value = ast.Constant(value="new")
         QATesterAgent._set_call_argument_value("Foo(name)", call_node, "name", new_value)
-        assert call_node.keywords[0].value.value == "new"
+        assert call_node.keywords[0].value.value == "new"  # type: ignore[attr-defined]
 
     def test_set_positional_argument(self):
-        code = "Foo('old')"
-        call_node = ast.parse(code, mode="eval").body
+        call_node = _parse_call("Foo('old')")
         new_value = ast.Constant(value="new")
         QATesterAgent._set_call_argument_value("Foo(name)", call_node, "name", new_value)
-        assert call_node.args[0].value == "new"
+        assert call_node.args[0].value == "new"  # type: ignore[attr-defined]
 
     def test_add_missing_kwarg(self):
-        code = "Foo()"
-        call_node = ast.parse(code, mode="eval").body
+        call_node = _parse_call("Foo()")
         new_value = ast.Constant(value="added")
         QATesterAgent._set_call_argument_value("Foo(name)", call_node, "name", new_value)
         assert len(call_node.keywords) == 1
@@ -347,25 +345,25 @@ class TestStatusLikeLiteralValues:
 
 class TestTestFunctionTargetsValidProcessing:
     def test_validation_in_name_returns_false(self):
-        func = ast.parse("def test_validation_error():\n    pass\n").body[0]
+        func = _parse_func("def test_validation_error():\n    pass\n")
         assert QATesterAgent._test_function_targets_valid_processing(func) is False
 
     def test_happy_in_name_returns_true(self):
-        func = ast.parse("def test_happy_path():\n    pass\n").body[0]
+        func = _parse_func("def test_happy_path():\n    pass\n")
         assert QATesterAgent._test_function_targets_valid_processing(func) is True
 
     def test_batch_in_name_returns_true(self):
-        func = ast.parse("def test_batch_processing():\n    pass\n").body[0]
+        func = _parse_func("def test_batch_processing():\n    pass\n")
         assert QATesterAgent._test_function_targets_valid_processing(func) is True
 
     def test_calls_workflow_function(self):
-        func = ast.parse(
+        func = _parse_func(
             "def test_process():\n    result = handle_request(data)\n"
-        ).body[0]
+        )
         assert QATesterAgent._test_function_targets_valid_processing(func) is True
 
     def test_no_workflow_calls(self):
-        func = ast.parse("def test_something():\n    x = 1 + 2\n").body[0]
+        func = _parse_func("def test_something():\n    x = 1 + 2\n")
         assert QATesterAgent._test_function_targets_valid_processing(func) is False
 
 

@@ -6079,7 +6079,8 @@ class Orchestrator:
     def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
         """Scan an AST for dict subscript/membership patterns and return keys by variable name.
 
-        Detects patterns like ``name['key']``, ``name["key"]``, and ``'key' in name``.
+        Detects patterns like ``name['key']``, ``name["key"]``,
+        ``'key' in name``, and ``name.get('key')``.
         Returns a mapping from variable name to the list of string keys accessed.
         """
         keys_by_name: Dict[str, list[str]] = {}
@@ -6099,6 +6100,11 @@ class Orchestrator:
                 ):
                     var_name = node.comparators[0].id
                     key_value = node.left.value
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr == "get" and isinstance(node.func.value, ast.Name):
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        var_name = node.func.value.id
+                        key_value = node.args[0].value
             if var_name and key_value and key_value not in keys_by_name.get(var_name, []):
                 keys_by_name.setdefault(var_name, []).append(key_value)
         return keys_by_name
@@ -6664,6 +6670,11 @@ class Orchestrator:
         containing the discovered keys.  This catches mismatches in ALL
         call sites (constructors, handle_request, validate_request, etc.)
         rather than only the specific lines reported by the type checker.
+
+        Lines inside test functions that intentionally test validation
+        failure (name contains ``validation_failure`` / ``invalid``, or
+        the body asserts ``is False``) are left untouched so that the
+        deliberately-wrong type continues to trigger a validation error.
         """
         try:
             impl_tree = ast.parse(code_content)
@@ -6672,6 +6683,31 @@ class Orchestrator:
         dict_keys = self._dict_accessed_keys_from_tree(impl_tree)
         if not dict_keys:
             return test_content
+
+        # Determine line ranges belonging to negative-expectation tests
+        # so the auto-fix does not "correct" intentionally-wrong types.
+        skip_lines: set[int] = set()
+        try:
+            test_tree = ast.parse(test_content)
+            for node in ast.walk(test_tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if not node.name.startswith("test_"):
+                    continue
+                name_lower = node.name.lower()
+                is_negative = "validation_failure" in name_lower or "invalid" in name_lower
+                if not is_negative:
+                    # Check body for `is_valid is False` / `is False` patterns
+                    func_src = ast.get_source_segment(test_content, node) or ""
+                    if "is False" in func_src or "is_valid is False" in func_src:
+                        is_negative = True
+                if is_negative:
+                    start = node.lineno - 1  # 0-based
+                    end = node.end_lineno or node.lineno
+                    for ln in range(start, end):
+                        skip_lines.add(ln)
+        except SyntaxError:
+            pass
 
         lines = test_content.split("\n")
         for param_name, keys in dict_keys.items():
@@ -6686,6 +6722,8 @@ class Orchestrator:
                 rf"({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")"
             )
             for i, line in enumerate(lines):
+                if i in skip_lines:
+                    continue
                 if str_pattern.search(line):
                     lines[i] = str_pattern.sub(rf"\1={dict_literal}", line)
         return "\n".join(lines)

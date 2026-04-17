@@ -5075,6 +5075,22 @@ Return complete raw Python only."""
                 "The previous validation summary already reported hollow top-level tests without assertion-like checks. Do not preserve or patch the previous pytest file in place. Rewrite the suite from scratch around only the minimum contract-backed scenarios, and ensure every retained top-level test contains at least one explicit assertion-like check. If the documented workflow is side-effect-only, assign the call to `result` and assert `result is None` or another externally observable side effect instead of leaving a bare call. For repeated batch loops without a dedicated batch return value, collect per-request results and assert batch-visible facts such as `len(results) == len(requests)` and `all(item is None for item in results)` when no stronger observable state exists.",
             )
 
+        type_mismatch_details = cls._summary_issue_value(
+            repair_validation_summary,
+            "Type mismatches (warning)",
+        )
+        if type_mismatch_details:
+            return (
+                "Previous pytest file omitted because the validation summary reported type mismatches that caused runtime failures. "
+                "Rebuild the suite from the current implementation and documented contract, using the correct argument types.",
+                "The previous validation summary reported type mismatches causing pytest failures: "
+                f"{type_mismatch_details}. "
+                "Do not preserve or patch the previous pytest file in place. Rebuild the suite from the current implementation. "
+                "When a parameter is annotated as Dict[str, Any] or dict, pass a real dict literal (e.g. {'key': 'value'}) instead of a plain string. "
+                "When a parameter is annotated as List or list, pass a real list literal. "
+                "Match every constructor and function call argument to the type declared in the implementation code.",
+            )
+
         if isinstance(existing_tests, str):
             existing_tests_context = existing_tests
         else:

@@ -5086,7 +5086,10 @@ Return complete raw Python only."""
                 "The previous validation summary reported type mismatches causing pytest failures: "
                 f"{type_mismatch_details}. "
                 "Do not preserve or patch the previous pytest file in place. Rebuild the suite from the current implementation. "
-                "When a parameter is annotated as Dict[str, Any] or dict, pass a real dict literal (e.g. {'key': 'value'}) instead of a plain string. "
+                "CRITICALLY IMPORTANT: When a parameter is typed as Dict[str, Any] or dict, you MUST pass a real Python dict literal, NEVER a string. "
+                "For example, if the code accesses details['jurisdiction'] and details['customer_type'], "
+                "the test must pass details={'jurisdiction': 'US', 'customer_type': 'individual'} — not details='jurisdiction customer_type'. "
+                "Check the behavior contract above for the required dict keys. "
                 "When a parameter is annotated as List or list, pass a real list literal. "
                 "Match every constructor and function call argument to the type declared in the implementation code.",
             )

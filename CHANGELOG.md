@@ -8,15 +8,45 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Added
 
-- No unreleased additions yet.
+- Model Capabilities Registry (`model_capabilities.py`): centralized capability metadata per provider and model, including context window sizes, temperature support, and reasoning-model flags.
+- Reasoning model token multiplier (Fix 9): `is_reasoning_model` flag in `ModelCapabilities` with a 4× `max_completion_tokens` multiplier in `OpenAIProvider` for gpt-5-mini, o1, o3, o4, and other reasoning-family models that share the token budget between reasoning and visible output.
+- `ollama_think` parameter support for explicit Ollama thinking-mode control in `config.py`, `provider_matrix.py`, `ollama_provider.py`, and `run_real_world_complex_matrix.py`.
+- Structural awareness prompts for architect, code-engineer, and QA-tester agents (MAL Phase 2) to prefer `@dataclass` containers and return-type annotations.
+- Behavior contract enrichment (MAL Phase 2+3): `_extract_type_constraints()` walks generated-code AST for `isinstance()` checks; `_extract_valid_literal_examples()` harvests fixture hints from defaults; both are integrated into `_build_code_behavior_contract()`.
+- Type-mismatch repair handler in QA tester: omits broken test cases and rebuilds with correct types when the fixture data type does not match the implementation expectation.
+- Programmatic auto-fix pipeline (Fixes 3–8): line-specific str→dict correction, dict-variable alias resolution, `.get()` dict-access detection, word-boundary guards, and validation-failure test skiplist.
+- Dynamic module validation fix (Fix 10): registers generated modules in `sys.modules` before `exec_module()` to prevent Python 3.12 `dataclasses._is_type()` crash when code uses `from __future__ import annotations` with `@dataclass`.
 
 ### Changed
 
-- No unreleased changes yet.
+- `OpenAIProvider._build_create_kwargs()` now applies `_effective_max_tokens()` instead of the raw config value, ensuring reasoning models receive a sufficient token budget.
+- Contract anchor validation now rejects non-dict `details` arguments and includes explicit type-constraint instructions in scenario prompts.
+- QA tester system prompt now includes a type-constraint instruction block derived from the behavior contract, reducing fixture type mismatches across models.
+- Behavior contract parser now strips dict key hints from type names for cleaner extraction.
+
+### Fixed
+
+- Fix 3–3c: Enriched behavior contract with dict key hints and concrete dict examples to reduce type-mismatch failures.
+- Fix 4: Added programmatic auto-fix for str→dict type mismatches in generated test files.
+- Fix 5: Made auto-fix line-specific and fixed parser for key hints.
+- Fix 6: Skip auto-fix in validation-failure tests and detect `.get()` dict access patterns.
+- Fix 7: Auto-fix now reuses local dict variable instead of injecting a generic dict literal.
+- Fix 8: Resolve dict-variable aliases and add word-boundary guards to prevent partial-match replacements in auto-fix regex.
+- Fix 9: Reasoning models (gpt-5-mini, o1, o3, o4 families) no longer produce empty responses due to exhausted token budget; a 4× multiplier gives sufficient room for both reasoning and visible output.
+- Fix 10: Dynamic module validation no longer crashes with `'NoneType' object has no attribute '__dict__'` when validating generated code that uses `from __future__ import annotations` with `@dataclass` on Python 3.12+.
+
+### Empirical Validation
+
+- gpt-4o-mini: 5/5 GREEN (v50, with `--max-repair-cycles 3`); 4/5 GREEN (v56, with `--max-repair-cycles 1`).
+- gpt-4.1-mini: 4/5 GREEN (v52, with `--max-repair-cycles 3`); 3/5 GREEN (v57, with `--max-repair-cycles 1`).
+- gpt-5-mini: 5/5 GREEN (v55 and v58, both confirmed); required Fix 9 (token multiplier) and Fix 10 (sys.modules registration).
+- qwen2.5-coder:14b (Ollama, CPU): 5/5 GREEN (v35b, v39); remains the most consistent local model.
+- Stochastic variance confirmed: gpt-4o-mini ranges from 1/5 to 5/5 across identical-code runs (v44–v50); the 5/5 result is achievable but not deterministic.
 
 ### Release Readiness Notes
 
 - The next maintenance entry will be recorded here until it is promoted into a versioned release section.
+- All 1334 tests pass. Ruff and mypy clean.
 
 ## 1.0.13a6 - 2026-04-13
 

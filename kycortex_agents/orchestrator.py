@@ -867,6 +867,41 @@ def _looks_like_secret_env_var(env_name: str) -> bool:
     return any(token_pair.issubset(tokens) for token_pair in _GENERIC_SECRET_ENV_TOKEN_PAIRS)
 
 
+def _example_from_default(node: ast.expr) -> str | None:
+    """Return an example literal string for a .get() default AST node."""
+    if isinstance(node, ast.Constant):
+        v = node.value
+        if isinstance(v, bool):
+            return "True" if v else "False"
+        if isinstance(v, int):
+            return str(max(v, 1)) if v >= 0 else str(v)
+        if isinstance(v, float):
+            return str(max(v, 1.0)) if v >= 0 else str(v)
+        if isinstance(v, str):
+            return f"'{v}'" if v else "'sample'"
+        if v is None:
+            return None
+    if isinstance(node, ast.List):
+        if not node.elts:
+            return "['sample']"
+        try:
+            return ast.unparse(node)
+        except Exception:
+            return "['sample']"
+    if isinstance(node, ast.Dict):
+        if not node.keys:
+            return "{'key': 'value'}"
+        try:
+            return ast.unparse(node)
+        except Exception:
+            return "{'key': 'value'}"
+    if isinstance(node, ast.Set):
+        return "{'sample'}"
+    if isinstance(node, ast.Tuple):
+        return "('sample',)"
+    return None
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -5680,6 +5715,7 @@ class Orchestrator:
                 f"- {function_name} requires fields: {', '.join(validation_rules[function_name])}"
             )
         dict_accessed_keys = self._dict_accessed_keys_from_tree(tree) if type_constraints else {}
+        dict_key_examples = self._infer_dict_key_value_examples(tree) if type_constraints else {}
         for function_name in sorted(type_constraints):
             for field_name in sorted(type_constraints[function_name]):
                 type_list = ", ".join(type_constraints[function_name][field_name])
@@ -5690,8 +5726,10 @@ class Orchestrator:
                     if keys:
                         sorted_keys = sorted(keys)
                         keys_hint = f" (keys used: {', '.join(sorted_keys)})"
+                        inferred = dict_key_examples.get(field_name, {})
                         example_pairs = ", ".join(
-                            f"'{k}': 'value'" for k in sorted_keys
+                            f"'{k}': {inferred.get(k, repr('value'))}"
+                            for k in sorted_keys
                         )
                         dict_example = (
                             f"- EXAMPLE: {field_name}={{{example_pairs}}} "
@@ -6074,6 +6112,57 @@ class Orchestrator:
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return node.value
         return ""
+
+    @staticmethod
+    def _infer_dict_key_value_examples(tree: ast.AST) -> Dict[str, Dict[str, str]]:
+        """Infer example values for dict keys by analysing .get() defaults and comparisons.
+
+        Returns ``{var_name: {key: example_literal}}`` where *example_literal*
+        is a Python literal string such as ``"3"`` or ``"[]"``.
+        """
+        # Track alias assignments: ``d = request.details`` → d → details
+        alias_map: Dict[str, str] = {}
+        # key → example literal string
+        raw: Dict[str, Dict[str, str]] = {}
+
+        for node in ast.walk(tree):
+            # Detect alias assignments
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target = node.targets[0]
+                value = node.value
+                if (
+                    isinstance(target, ast.Name)
+                    and isinstance(value, ast.Attribute)
+                    and isinstance(value.value, ast.Name)
+                ):
+                    alias_map[target.id] = value.attr
+
+            # Pattern: name.get('key', default)
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and isinstance(node.func.value, ast.Name)
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                var_name = node.func.value.id
+                key_name = node.args[0].value
+                if len(node.args) >= 2:
+                    default_node = node.args[1]
+                    example = _example_from_default(default_node)
+                    if example is not None:
+                        raw.setdefault(var_name, {})[key_name] = example
+
+        # Resolve aliases
+        merged: Dict[str, Dict[str, str]] = {}
+        for var_name, key_examples in raw.items():
+            real_name = alias_map.get(var_name, var_name)
+            if real_name not in merged:
+                merged[real_name] = {}
+            merged[real_name].update(key_examples)
+        return merged
 
     @staticmethod
     def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:

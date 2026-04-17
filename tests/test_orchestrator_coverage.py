@@ -9,7 +9,7 @@ import ast
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.orchestrator import Orchestrator
+from kycortex_agents.orchestrator import Orchestrator, _example_from_default
 
 
 @pytest.fixture()
@@ -679,3 +679,175 @@ class TestAnalyzeTestTypeMismatchesExtras:
         rules = {"validate": {"name": ["str"]}}
         result = orch._analyze_test_type_mismatches(tree, rules, {})
         assert isinstance(result, list)
+
+
+# -- _example_from_default ---------------------------------------------------
+
+class TestExampleFromDefault:
+    def test_bool_true(self):
+        node = ast.Constant(value=True)
+        assert _example_from_default(node) == "True"
+
+    def test_bool_false(self):
+        node = ast.Constant(value=False)
+        assert _example_from_default(node) == "False"
+
+    def test_int_zero(self):
+        node = ast.Constant(value=0)
+        assert _example_from_default(node) == "1"
+
+    def test_int_positive(self):
+        node = ast.Constant(value=5)
+        assert _example_from_default(node) == "5"
+
+    def test_int_negative(self):
+        node = ast.Constant(value=-3)
+        assert _example_from_default(node) == "-3"
+
+    def test_float_zero(self):
+        node = ast.Constant(value=0.0)
+        assert _example_from_default(node) == "1.0"
+
+    def test_float_positive(self):
+        node = ast.Constant(value=2.5)
+        assert _example_from_default(node) == "2.5"
+
+    def test_string_empty(self):
+        node = ast.Constant(value="")
+        assert _example_from_default(node) == "'sample'"
+
+    def test_string_nonempty(self):
+        node = ast.Constant(value="hello")
+        assert _example_from_default(node) == "'hello'"
+
+    def test_none(self):
+        node = ast.Constant(value=None)
+        assert _example_from_default(node) is None
+
+    def test_empty_list(self):
+        node = ast.List(elts=[], ctx=ast.Load())
+        assert _example_from_default(node) == "['sample']"
+
+    def test_nonempty_list(self):
+        node = ast.parse("[1, 2]", mode="eval").body
+        result = _example_from_default(node)
+        assert result == "[1, 2]"
+
+    def test_empty_dict(self):
+        node = ast.Dict(keys=[], values=[])
+        assert _example_from_default(node) == "{'key': 'value'}"
+
+    def test_nonempty_dict(self):
+        node = ast.parse("{'a': 1}", mode="eval").body
+        result = _example_from_default(node)
+        assert result == "{'a': 1}"
+
+    def test_set(self):
+        node = ast.Set(elts=[ast.Constant(value="x")])
+        assert _example_from_default(node) == "{'sample'}"
+
+    def test_tuple(self):
+        node = ast.Tuple(elts=[ast.Constant(value="x")], ctx=ast.Load())
+        assert _example_from_default(node) == "('sample',)"
+
+    def test_unknown_node(self):
+        node = ast.Name(id="foo", ctx=ast.Load())
+        assert _example_from_default(node) is None
+
+
+# -- _infer_dict_key_value_examples ------------------------------------------
+
+class TestInferDictKeyValueExamples:
+    def test_get_with_int_default(self, orch):
+        code = "details.get('count', 0)"
+        tree = ast.parse(code)
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert result["details"]["count"] == "1"
+
+    def test_get_with_bool_default(self, orch):
+        code = "details.get('active', False)"
+        tree = ast.parse(code)
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert result["details"]["active"] == "False"
+
+    def test_get_with_list_default(self, orch):
+        code = "details.get('items', [])"
+        tree = ast.parse(code)
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert result["details"]["items"] == "['sample']"
+
+    def test_get_with_string_default(self, orch):
+        code = "details.get('name', 'unknown')"
+        tree = ast.parse(code)
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert result["details"]["name"] == "'unknown'"
+
+    def test_alias_resolution(self, orch):
+        code = (
+            "d = request.details\n"
+            "d.get('count', 0)\n"
+        )
+        tree = ast.parse(code)
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert "details" in result
+        assert result["details"]["count"] == "1"
+
+    def test_multiple_keys(self, orch):
+        code = (
+            "details.get('prior_returns', 0)\n"
+            "details.get('receipt_present', False)\n"
+            "details.get('items', [])\n"
+        )
+        tree = ast.parse(code)
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert result["details"]["prior_returns"] == "1"
+        assert result["details"]["receipt_present"] == "False"
+        assert result["details"]["items"] == "['sample']"
+
+    def test_no_default_arg(self, orch):
+        code = "details.get('key')"
+        tree = ast.parse(code)
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert result == {}
+
+    def test_empty_code(self, orch):
+        tree = ast.parse("")
+        result = Orchestrator._infer_dict_key_value_examples(tree)
+        assert result == {}
+
+
+# -- contract uses typed examples --------------------------------------------
+
+class TestBehaviorContractTypedExamples:
+    def test_contract_uses_inferred_types(self, orch):
+        code = (
+            "class Service:\n"
+            "    def validate(self, request):\n"
+            "        if not isinstance(request.details, dict):\n"
+            "            return False\n"
+            "        return True\n"
+            "    def score(self, details):\n"
+            "        n = details.get('prior_returns', 0)\n"
+            "        ok = details.get('receipt_present', False)\n"
+            "        items = details.get('items', [])\n"
+            "        return n\n"
+        )
+        contract = orch._build_code_behavior_contract(code)
+        assert "'prior_returns': 1" in contract
+        assert "'receipt_present': False" in contract
+        assert "'items': ['sample']" in contract
+        assert "'prior_returns': 'value'" not in contract
+
+    def test_contract_fallback_to_value_when_no_default(self, orch):
+        code = (
+            "class Service:\n"
+            "    def validate(self, request):\n"
+            "        if not isinstance(request.details, dict):\n"
+            "            return False\n"
+            "        return True\n"
+            "    def process(self, details):\n"
+            "        x = details['unknown_key']\n"
+            "        return x\n"
+        )
+        contract = orch._build_code_behavior_contract(code)
+        assert "'unknown_key': 'value'" in contract

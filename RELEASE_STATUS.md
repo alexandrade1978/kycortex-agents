@@ -1,13 +1,13 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex after publication and canary kickoff of the 1.0.13a6 alpha maintenance release.
+This file tracks the current repository-owned release state for KYCortex after publication and canary kickoff of the 1.0.13a7 alpha maintenance release.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.13a6`
-- Latest released version: `1.0.13a6`
-- Release tag for this version: `v1.0.13a6`
-- Most recent published release tag: `v1.0.13a6`
+- Package version in `pyproject.toml`: `1.0.13a7`
+- Latest released version: `1.0.13a7`
+- Release tag for this version: `v1.0.13a7`
+- Most recent published release tag: `v1.0.13a7`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates

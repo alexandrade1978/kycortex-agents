@@ -46,7 +46,27 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 ### Release Readiness Notes
 
 - The next maintenance entry will be recorded here until it is promoted into a versioned release section.
-- All 1334 tests pass. Ruff and mypy clean.
+- All 1539 tests pass. Ruff and mypy clean.
+- Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN.
+
+## 1.0.13a7 - 2026-04-18
+
+### Fixed
+
+- Behavior contract EXAMPLE now uses type-inferred values from `.get()` defaults instead of placeholder `'value'` strings.  For instance, `details.get('prior_returns', 0)` now generates `'prior_returns': 1` in the example, eliminating the `TypeError: '>' not supported between instances of 'str' and 'int'` failure that blocked `returns_abuse_screening` on gpt-4o-mini.
+- New `_infer_dict_key_value_examples()` static method extracts default types (int, bool, float, str, list, dict, set, tuple) from `.get()` call patterns and resolves variable aliases.
+- New module-level `_example_from_default()` helper maps AST constant/collection defaults to representative Python literals.
+
+### Changed
+
+- Version `1.0.13a7` is now the released alpha package baseline.
+- Removed tracked `campaign_summary_v44..v51` files from repository; added `.gitignore` rules for `campaign_summary_*.json`, `campaign_summary_*.md`, and `coverage.json`.
+
+### Empirical Validation (Baseline 5×3 Campaign)
+
+- OpenAI gpt-4o-mini (v59): 4/5 GREEN — `returns_abuse_screening` blocked by str→int type mismatch in QA tester fixtures (now fixed).
+- Anthropic claude-haiku-4-5 (v60): 5/5 GREEN — all scenarios pass with 0-1 repair cycles.
+- Ollama qwen2.5-coder:7b (v61): 4/5 GREEN — `kyc_compliance_intake` blocked by ZeroDivisionError in LLM-generated `calculate_risk_score` (model capability limitation).
 
 ## 1.0.13a6 - 2026-04-13
 

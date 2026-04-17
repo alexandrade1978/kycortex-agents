@@ -2438,6 +2438,15 @@ class Orchestrator:
                 and test_execution.get("returncode") not in (None, 0)
             )
             if pytest_failed and validation and self._test_validation_has_only_warnings(validation):
+                test_analysis = validation.get("test_analysis") or {}
+                type_mismatches = test_analysis.get("type_mismatches") or []
+                if type_mismatches:
+                    return (
+                        "Repair the generated pytest suite so it passes when executed. "
+                        "The following type mismatches in test arguments are causing the pytest failures and MUST be fixed: "
+                        + "; ".join(type_mismatches) + ". "
+                        "Use the correct argument types as documented in the module contract."
+                    )
                 return (
                     "Repair the generated pytest suite so it passes when executed. "
                     "Focus on the actual pytest failure details (tracebacks, assertion errors) rather than static analysis warnings. "

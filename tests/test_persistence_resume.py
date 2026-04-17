@@ -4,7 +4,7 @@ from typing import Any, cast
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
+from kycortex_agents.exceptions import ProviderTransientError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.types import FailureCategory, TaskStatus, WorkflowOutcome

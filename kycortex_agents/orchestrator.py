@@ -6081,10 +6081,26 @@ class Orchestrator:
 
         Detects patterns like ``name['key']``, ``name["key"]``,
         ``'key' in name``, and ``name.get('key')``.
+        Also resolves aliases: if the implementation has
+        ``d = request.details`` and accesses ``d['key']``, the keys are
+        attributed to ``details`` (the attribute name) instead of ``d``.
         Returns a mapping from variable name to the list of string keys accessed.
         """
         keys_by_name: Dict[str, list[str]] = {}
+        # Track alias assignments: ``alias = something.attr`` → alias → attr
+        alias_map: Dict[str, str] = {}
         for node in ast.walk(tree):
+            # Detect alias assignments like ``d = request.details``
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target = node.targets[0]
+                value = node.value
+                if (
+                    isinstance(target, ast.Name)
+                    and isinstance(value, ast.Attribute)
+                    and isinstance(value.value, ast.Name)
+                ):
+                    alias_map[target.id] = value.attr
+
             var_name: str = ""
             key_value: str = ""
             if isinstance(node, ast.Subscript):
@@ -6107,7 +6123,20 @@ class Orchestrator:
                         key_value = node.args[0].value
             if var_name and key_value and key_value not in keys_by_name.get(var_name, []):
                 keys_by_name.setdefault(var_name, []).append(key_value)
-        return keys_by_name
+
+        # Resolve aliases: merge keys from aliased vars into the real
+        # parameter name.  E.g. ``d = request.details; d['key']`` →
+        # ``details: ['key']`` instead of ``d: ['key']``.
+        merged: Dict[str, list[str]] = {}
+        for var_name, keys in keys_by_name.items():
+            real_name = alias_map.get(var_name, var_name)
+            if real_name in merged:
+                for k in keys:
+                    if k not in merged[real_name]:
+                        merged[real_name].append(k)
+            else:
+                merged[real_name] = list(keys)
+        return merged
 
     def _extract_type_constraints(
         self,
@@ -6742,7 +6771,7 @@ class Orchestrator:
                 + "}"
             )
             str_pattern = re.compile(
-                rf"({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")"
+                rf"\b({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")"
             )
             for i, line in enumerate(lines):
                 if i in skip_lines:

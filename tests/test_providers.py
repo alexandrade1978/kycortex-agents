@@ -249,7 +249,7 @@ def test_openai_provider_metadata_includes_finish_reason_and_requested_max_token
     assert provider.generate("system", "message") == "ok"
     metadata = require_metadata(provider)
 
-    assert captured_kwargs[0]["max_tokens"] == 321
+    assert captured_kwargs[0]["max_completion_tokens"] == 321
     assert metadata["requested_max_tokens"] == 321
     assert metadata["finish_reason"] == "stop"
 

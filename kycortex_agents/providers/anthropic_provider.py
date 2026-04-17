@@ -9,6 +9,7 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers._error_classifier import is_transient_provider_exception
 from kycortex_agents.providers.base import BaseLLMProvider
+from kycortex_agents.providers.model_capabilities import get_capabilities
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -18,6 +19,7 @@ class AnthropicProvider(BaseLLMProvider):
         self.config = config
         self._client = client
         self._last_call_metadata: Optional[dict[str, Any]] = None
+        self._capabilities = get_capabilities(config.llm_provider, config.llm_model)
 
     def _base_url(self) -> Optional[str]:
         base_url = self.config.base_url or os.environ.get("ANTHROPIC_BASE_URL")
@@ -127,14 +129,16 @@ class AnthropicProvider(BaseLLMProvider):
     def generate(self, system_prompt: str, user_message: str) -> str:
         try:
             client = self._get_client()
-            response = client.messages.create(
-                model=self.config.llm_model,
-                system=system_prompt,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                timeout=self.config.timeout_seconds,
-                messages=[{"role": "user", "content": user_message}],
-            )
+            create_kwargs: dict[str, Any] = {
+                "model": self.config.llm_model,
+                "system": system_prompt,
+                self._capabilities.max_tokens_param: self.config.max_tokens,
+                "timeout": self.config.timeout_seconds,
+                "messages": [{"role": "user", "content": user_message}],
+            }
+            if self._capabilities.supports_temperature:
+                create_kwargs["temperature"] = self.config.temperature
+            response = client.messages.create(**create_kwargs)
         except Exception as exc:
             self._last_call_metadata = None
             if is_transient_provider_exception(exc):

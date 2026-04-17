@@ -11,6 +11,7 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers._error_classifier import is_retryable_http_status
 from kycortex_agents.providers.base import BaseLLMProvider, redact_sensitive_text
+from kycortex_agents.providers.model_capabilities import get_capabilities
 
 
 class OllamaProvider(BaseLLMProvider):
@@ -24,6 +25,7 @@ class OllamaProvider(BaseLLMProvider):
         self.config = config
         self._request_opener = request_opener or urlopen
         self._last_call_metadata: Optional[dict[str, Any]] = None
+        self._capabilities = get_capabilities(config.llm_provider, config.llm_model)
 
     def _endpoint(self) -> str:
         base_url = (self.config.base_url or "").rstrip("/")
@@ -125,11 +127,13 @@ class OllamaProvider(BaseLLMProvider):
         }
 
     def _build_payload(self, system_prompt: str, user_message: str) -> dict[str, Any]:
-        options: dict[str, Any] = {
-            "temperature": self.config.temperature,
-        }
+        options: dict[str, Any] = {}
+        if self._capabilities.supports_temperature:
+            options["temperature"] = self.config.temperature
         if self.config.ollama_num_ctx is not None:
             options["num_ctx"] = self.config.ollama_num_ctx
+        elif self._capabilities.context_window is not None:
+            options["num_ctx"] = self._capabilities.context_window
         payload: dict[str, Any] = {
             "model": self.config.llm_model,
             "system": system_prompt,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace as dataclass_replace
 from time import perf_counter
 from typing import Any, Optional
 
@@ -8,6 +9,18 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError
 from kycortex_agents.providers._error_classifier import is_transient_provider_exception
 from kycortex_agents.providers.base import BaseLLMProvider
+from kycortex_agents.providers.model_capabilities import get_capabilities
+
+
+def _is_unsupported_temperature_error(exc: BaseException) -> bool:
+    """Return True when the OpenAI API rejects the temperature parameter."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        err = body if "param" in body else body.get("error", {})
+        if isinstance(err, dict):
+            return err.get("param") == "temperature" and err.get("code") == "unsupported_value"
+    msg = str(exc).lower()
+    return "temperature" in msg and "unsupported" in msg
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -17,6 +30,7 @@ class OpenAIProvider(BaseLLMProvider):
         self.config = config
         self._client = client
         self._last_call_metadata: Optional[dict[str, Any]] = None
+        self._capabilities = get_capabilities(config.llm_provider, config.llm_model)
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -112,17 +126,29 @@ class OpenAIProvider(BaseLLMProvider):
             raise AgentExecutionError("OpenAI provider returned an empty response")
         return content
 
+    def _build_create_kwargs(self, system_prompt: str, user_message: str) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "model": self.config.llm_model,
+            self._capabilities.max_tokens_param: self.config.max_tokens,
+            "timeout": self.config.timeout_seconds,
+            "messages": self._build_messages(system_prompt, user_message),
+        }
+        if self._capabilities.supports_temperature:
+            kwargs["temperature"] = self.config.temperature
+        return kwargs
+
     def generate(self, system_prompt: str, user_message: str) -> str:
         try:
             client = self._get_client()
-            response = client.chat.completions.create(
-                model=self.config.llm_model,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                timeout=self.config.timeout_seconds,
-                messages=self._build_messages(system_prompt, user_message),
-            )
+            kwargs = self._build_create_kwargs(system_prompt, user_message)
+            response = client.chat.completions.create(**kwargs)
         except Exception as exc:
+            if (
+                self._capabilities.supports_temperature
+                and _is_unsupported_temperature_error(exc)
+            ):
+                self._capabilities = dataclass_replace(self._capabilities, supports_temperature=False)
+                return self.generate(system_prompt, user_message)
             self._last_call_metadata = None
             if is_transient_provider_exception(exc):
                 raise ProviderTransientError("OpenAI provider failed to call the model API") from exc

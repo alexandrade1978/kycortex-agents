@@ -6662,7 +6662,9 @@ class Orchestrator:
 
         For each mismatch where a string is passed where a dict is expected,
         replaces ``param='...'`` with ``param={'key': 'value', ...}`` using
-        keys discovered from the implementation code.
+        keys discovered from the implementation code.  Only the specific line
+        reported by the mismatch is modified so intentional string arguments
+        (e.g. negative tests) are preserved.
         """
         try:
             impl_tree = ast.parse(code_content)
@@ -6670,15 +6672,16 @@ class Orchestrator:
             return test_content
         dict_keys = self._dict_accessed_keys_from_tree(impl_tree)
 
-        fixed = test_content
+        lines = test_content.split("\n")
         for mismatch in type_mismatches:
             m = re.match(
-                r"(\w+) passes str for `(\w+)` \(expected (?:dict|Dict)",
+                r"(\w+) passes str for `(\w+)` \(expected (?:dict|Dict).*?at line (\d+)",
                 mismatch,
             )
             if not m:
                 continue
             param_name = m.group(2)
+            line_no = int(m.group(3))
             keys = dict_keys.get(param_name)
             if not keys:
                 continue
@@ -6687,12 +6690,13 @@ class Orchestrator:
                 + ", ".join(f"'{k}': 'value'" for k in sorted(keys))
                 + "}"
             )
-            fixed = re.sub(
-                rf"({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")",
-                rf"\1={dict_literal}",
-                fixed,
-            )
-        return fixed
+            if 0 < line_no <= len(lines):
+                lines[line_no - 1] = re.sub(
+                    rf"({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")",
+                    rf"\1={dict_literal}",
+                    lines[line_no - 1],
+                )
+        return "\n".join(lines)
 
     def _analyze_test_type_mismatches(
         self,

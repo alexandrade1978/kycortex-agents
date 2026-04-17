@@ -5657,11 +5657,17 @@ class Orchestrator:
             lines.append(
                 f"- {function_name} requires fields: {', '.join(validation_rules[function_name])}"
             )
+        dict_accessed_keys = self._dict_accessed_keys_from_tree(tree) if type_constraints else {}
         for function_name in sorted(type_constraints):
             for field_name in sorted(type_constraints[function_name]):
                 type_list = ", ".join(type_constraints[function_name][field_name])
+                keys_hint = ""
+                if "dict" in type_constraints[function_name][field_name]:
+                    keys = dict_accessed_keys.get(field_name)
+                    if keys:
+                        keys_hint = f" (keys used: {', '.join(sorted(keys))})"
                 lines.append(
-                    f"- {function_name} requires parameter `{field_name}` to be of type: {type_list}"
+                    f"- {function_name} requires parameter `{field_name}` to be of type: {type_list}{keys_hint}"
                 )
         for function_name in sorted(field_value_rules):
             for field_name in sorted(field_value_rules[function_name]):
@@ -6035,6 +6041,34 @@ class Orchestrator:
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return node.value
         return ""
+
+    @staticmethod
+    def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
+        """Scan an AST for dict subscript/membership patterns and return keys by variable name.
+
+        Detects patterns like ``name['key']``, ``name["key"]``, and ``'key' in name``.
+        Returns a mapping from variable name to the list of string keys accessed.
+        """
+        keys_by_name: Dict[str, list[str]] = {}
+        for node in ast.walk(tree):
+            var_name: str = ""
+            key_value: str = ""
+            if isinstance(node, ast.Subscript):
+                if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                    var_name = node.value.id
+                    key_value = node.slice.value
+            elif isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.In):
+                if (
+                    isinstance(node.left, ast.Constant)
+                    and isinstance(node.left.value, str)
+                    and len(node.comparators) == 1
+                    and isinstance(node.comparators[0], ast.Name)
+                ):
+                    var_name = node.comparators[0].id
+                    key_value = node.left.value
+            if var_name and key_value and key_value not in keys_by_name.get(var_name, []):
+                keys_by_name.setdefault(var_name, []).append(key_value)
+        return keys_by_name
 
     def _extract_type_constraints(
         self,

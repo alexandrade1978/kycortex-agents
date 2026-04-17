@@ -1060,7 +1060,12 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
         if module_spec is None or module_spec.loader is None:
             raise RuntimeError(f"Could not load generated code artifact: {artifact_path.name}")
         module = importlib.util.module_from_spec(module_spec)
-        module_spec.loader.exec_module(module)
+        sys.modules[module_name] = module
+        try:
+            module_spec.loader.exec_module(module)
+        except Exception:
+            sys.modules.pop(module_name, None)
+            raise
 
         service_cls = getattr(module, spec.service_name, None)
         if not inspect.isclass(service_cls):
@@ -1179,6 +1184,9 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
     except Exception as exc:
         result["error"] = _public_validation_error_message(exc, artifact_path)
         return result
+    finally:
+        module_name = f"{spec.slug}_scenario_validation_generated"
+        sys.modules.pop(module_name, None)
 
 
 def _scenario_validation_not_run(reason: str) -> dict[str, Any]:

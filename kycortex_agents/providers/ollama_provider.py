@@ -130,13 +130,16 @@ class OllamaProvider(BaseLLMProvider):
         }
         if self.config.ollama_num_ctx is not None:
             options["num_ctx"] = self.config.ollama_num_ctx
-        return {
+        payload: dict[str, Any] = {
             "model": self.config.llm_model,
             "system": system_prompt,
             "prompt": user_message,
             "stream": False,
             "options": options,
         }
+        if self.config.ollama_think is not None:
+            payload["think"] = self.config.ollama_think
+        return payload
 
     def _extract_content(self, payload: dict[str, Any]) -> str:
         content = payload.get("response")

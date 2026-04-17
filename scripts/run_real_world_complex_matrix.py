@@ -499,6 +499,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit Ollama num_ctx to request during Ollama runs.",
     )
     parser.add_argument(
+        "--ollama-think",
+        type=str,
+        choices=["true", "false"],
+        default=None,
+        help="Control Ollama thinking mode. 'false' disables thinking tokens for faster inference.",
+    )
+    parser.add_argument(
         "--ollama-model",
         default=None,
         help="Override the Ollama model to use instead of the auto-resolved default.",
@@ -1226,6 +1233,7 @@ def run_scenario_provider(
     ollama_base_url: str | None,
     ollama_model: str | None = None,
     ollama_num_ctx: int | None,
+    ollama_think: bool | None = None,
     ollama_timeout_seconds: float = 300.0,
     max_tokens: int,
     run_index: int,
@@ -1275,6 +1283,7 @@ def run_scenario_provider(
             str(run_root),
             ollama_base_url=ollama_base_url,
             ollama_num_ctx=ollama_num_ctx,
+            ollama_think=ollama_think,
             ollama_timeout_seconds=ollama_timeout_seconds,
             max_tokens=max_tokens,
             workflow_failure_policy=failure_policy,
@@ -1443,6 +1452,7 @@ def main() -> None:
                     ollama_base_url=args.ollama_base_url,
                     ollama_model=args.ollama_model,
                     ollama_num_ctx=args.ollama_num_ctx,
+                    ollama_think={"true": True, "false": False}.get(args.ollama_think) if args.ollama_think else None,
                     ollama_timeout_seconds=args.ollama_timeout_seconds,
                     max_tokens=args.max_tokens,
                     run_index=run_index,

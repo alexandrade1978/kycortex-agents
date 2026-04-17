@@ -64,6 +64,7 @@ class KYCortexConfig:
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     ollama_num_ctx: Optional[int] = None
+    ollama_think: Optional[bool] = None
     temperature: float = 0.2
     max_tokens: int = 4096
     timeout_seconds: float = 60.0

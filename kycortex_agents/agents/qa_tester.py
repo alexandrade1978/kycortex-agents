@@ -17,6 +17,8 @@ Import the real generated module using the provided module name.
 Do not copy or re-declare the production implementation inside the test file.
 If the code uses randomness, make tests deterministic with a fixed seed or monkeypatching.
 Focus only on the exported classes and functions listed in the provided module outline.
+When the behavior contract reports class definition styles such as "@dataclass", "manual __init__", or "pydantic BaseModel", match that exact pattern in test instantiations and assertions. Do not assume @dataclass constructor conventions if the implementation uses manual __init__, and vice versa.
+When the behavior contract reports return type annotations, use those exact types for assertion checks instead of guessing return shapes.
 Use the provided public API contract as ground truth for exact symbol names, enum members, constructor arguments, and entrypoints.
 When an Exact test contract block is provided, treat it as the highest-priority import, method, and constructor surface. It overrides every generic example below.
 When a task-level public contract anchor block is provided, treat it as higher priority than generic examples and use it to break ties in favor of the anchored facade, methods, and constructor fields.
@@ -143,6 +145,7 @@ If a previous pytest failure showed a batch audit mismatch such as assert 5 == 3
 Never define a custom fixture named `request`; pytest reserves that name. Use inline setup or a specific fixture name such as `sample_request` instead.
 Do not use mock-style bookkeeping assertions such as `.call_count` or `.assert_called_once()` on logging objects, production callables, or other real objects unless the same test first installs a real `Mock`, `MagicMock`, or `patch` target for that exact object.
 If repair context suggests truncation or incomplete output, remove non-essential comments, blank lines, extra fixtures, and optional helper scaffolding before dropping any required scenario.
+When the behavior contract specifies type constraints such as "requires parameter `details` to be of type: dict", every test fixture and call argument MUST use a value of exactly that type. Do not use string placeholders like details='details' when the contract requires dict; use details={'key': 'value'} or another concrete dict literal instead.
 If you are repairing a previously invalid or truncated test file, rewrite the complete pytest module from the top instead of continuing from a partial tail."""
 
 CONTRACT_FIRST_SYSTEM_PROMPT = """You are a QA Engineer at KYCortex AI Software House.
@@ -150,6 +153,8 @@ Return only raw Python pytest code.
 When an Exact test contract block is provided, treat it as the ground truth for imports, facades, methods, and constructor fields.
 When a task-level public contract anchor block is provided, treat it as higher priority than generic examples and keep the anchored facade, methods, and constructor fields exact.
 Use the deterministic scaffold as the exact public-surface starting point when it is provided.
+When the behavior contract reports class definition styles such as "@dataclass", "manual __init__", or "pydantic BaseModel", match that exact pattern in test instantiations and assertions. Do not assume @dataclass constructor conventions if the implementation uses manual __init__, and vice versa.
+When the behavior contract reports return type annotations, use those exact types for assertion checks instead of guessing return shapes.
 For compact anchored workflow tasks, default to exactly three top-level tests named test_happy_path, test_validation_failure, and test_batch_processing unless the exact contract or behavior contract explicitly requires more coverage.
 For compact anchored workflow tasks with a hard line cap such as 150 lines, treat that trio as the effective maximum unless the exact contract or behavior contract explicitly requires more coverage. Delete any fourth-or-later top-level test before returning.
 Do not use per-test docstrings in this compact mode. Strip comments, extra blank lines, and optional helper-only imports before returning.
@@ -174,6 +179,7 @@ If the previous validation summary reports contract overreach signals, that prio
 If repair feedback reports contract overreach signals, discard the prior overreaching assertions and rebuild only contract-backed scenarios instead of preserving brittle exact batch-count or threshold guesses.
 If repair feedback reports tests without assertion-like checks, discard the prior hollow test bodies and rebuild the minimum contract-backed suite with explicit assertions instead of patching the old file in place.
 If a test uses the same invalid sample for validate_request(...) and a later workflow call, the validator expectation must agree with the workflow expectation. Do not assert validate_request(...) is True and then expect that same sample to fail immediately in handle_request(...), process_request(...), or a similar validation-gated workflow.
+When the behavior contract specifies type constraints such as "requires parameter `details` to be of type: dict", every test fixture and call argument MUST use a value of exactly that type. Do not use string placeholders like details='details' when the contract requires dict; use details={'key': 'value'} or another concrete dict literal instead.
 Write a complete syntactically valid pytest module."""
 
 class QATesterAgent(BaseAgent):

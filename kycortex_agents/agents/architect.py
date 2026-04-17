@@ -47,6 +47,7 @@ When a target module filename is provided, describe only that file and avoid dir
 For compact single-module service tasks, prefer one cohesive public service surface plus domain models over separate helper-only collaborators or interface sections.
 Do not invent standalone RiskScorer, AuditLogger, BatchProcessor, Manager, Processor, or similar public helper types unless the task explicitly requires those public surfaces.
 When describing typed entities or dataclasses, list required fields before defaulted fields and call out defaults explicitly so downstream code generation does not infer an invalid constructor order.
+Prefer @dataclass for data containers and typed collections such as list[SpecificType] over generic dicts. Include type annotations on all public methods so test generation can match return shapes precisely.
 Example: describe AuditLog as action, details, timestamp(default now) rather than action, timestamp, details.
 When a task-level public contract anchor is provided, treat it as the exact public API ground truth. Preserve listed facade, model, method, and constructor-field names exactly and do not invent alternate aliases or competing public entrypoints."""
 

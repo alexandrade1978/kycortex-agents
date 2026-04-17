@@ -269,6 +269,7 @@ Return only raw Python source code.
 Do not include markdown fences, file trees, headings, or explanatory prose.
 You are writing exactly one importable Python module.
 The module must run as-is, keep its types internally consistent, and expose a coherent public API.
+Prefer @dataclass for data containers and typed collections such as list[SpecificType] over generic dicts unless the task explicitly requires a different pattern. Include return type annotations on all public methods.
 Do not invent extra files, package layouts, or persistence layers unless the task explicitly requires them.
 Prefer in-memory state and simple standard-library containers unless the task explicitly requires durable persistence, SQL, or filesystem-backed storage.
 Prefer the Python standard library only.

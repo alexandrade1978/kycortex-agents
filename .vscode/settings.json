@@ -17,5 +17,6 @@
     "multi_agent_ollama_output",
     "output",
     "**/__pycache__"
-  ]
+  ],
+  "chat.agent.maxRequests": 75
 }

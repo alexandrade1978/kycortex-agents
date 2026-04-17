@@ -1460,10 +1460,9 @@ class Orchestrator:
         )
 
         # --- Auto-fix type mismatches (str → dict) before pytest ---
-        type_mismatches = test_analysis.get("type_mismatches") or []
-        if type_mismatches and isinstance(code_content, str):
+        if isinstance(code_content, str):
             fixed_test_content = self._auto_fix_test_type_mismatches(
-                test_content, type_mismatches, code_content
+                test_content, code_content
             )
             if fixed_test_content != test_content:
                 test_content = fixed_test_content
@@ -6655,34 +6654,27 @@ class Orchestrator:
     def _auto_fix_test_type_mismatches(
         self,
         test_content: str,
-        type_mismatches: list[str],
         code_content: str,
     ) -> str:
         """Auto-fix str→dict type mismatches in generated test code.
 
-        For each mismatch where a string is passed where a dict is expected,
-        replaces ``param='...'`` with ``param={'key': 'value', ...}`` using
-        keys discovered from the implementation code.  Only the specific line
-        reported by the mismatch is modified so intentional string arguments
-        (e.g. negative tests) are preserved.
+        Scans the implementation code to discover which parameters are used
+        as dicts (via subscript/key-access patterns).  Then replaces any
+        ``param='...'`` string literal in the test with a dict literal
+        containing the discovered keys.  This catches mismatches in ALL
+        call sites (constructors, handle_request, validate_request, etc.)
+        rather than only the specific lines reported by the type checker.
         """
         try:
             impl_tree = ast.parse(code_content)
         except SyntaxError:
             return test_content
         dict_keys = self._dict_accessed_keys_from_tree(impl_tree)
+        if not dict_keys:
+            return test_content
 
         lines = test_content.split("\n")
-        for mismatch in type_mismatches:
-            m = re.match(
-                r"(\w+) passes str for `(\w+)` \(expected (?:dict|Dict).*?at line (\d+)",
-                mismatch,
-            )
-            if not m:
-                continue
-            param_name = m.group(2)
-            line_no = int(m.group(3))
-            keys = dict_keys.get(param_name)
+        for param_name, keys in dict_keys.items():
             if not keys:
                 continue
             dict_literal = (
@@ -6690,12 +6682,12 @@ class Orchestrator:
                 + ", ".join(f"'{k}': 'value'" for k in sorted(keys))
                 + "}"
             )
-            if 0 < line_no <= len(lines):
-                lines[line_no - 1] = re.sub(
-                    rf"({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")",
-                    rf"\1={dict_literal}",
-                    lines[line_no - 1],
-                )
+            str_pattern = re.compile(
+                rf"({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")"
+            )
+            for i, line in enumerate(lines):
+                if str_pattern.search(line):
+                    lines[i] = str_pattern.sub(rf"\1={dict_literal}", line)
         return "\n".join(lines)
 
     def _analyze_test_type_mismatches(

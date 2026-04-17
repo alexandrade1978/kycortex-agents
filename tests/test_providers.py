@@ -254,6 +254,27 @@ def test_openai_provider_metadata_includes_finish_reason_and_requested_max_token
     assert metadata["finish_reason"] == "stop"
 
 
+def test_openai_provider_reasoning_model_multiplies_max_tokens(tmp_path):
+    captured_kwargs = []
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        llm_model="gpt-5-mini",
+        api_key="token",
+        max_tokens=4096,
+    )
+    provider = OpenAIProvider(
+        config,
+        client=build_client(response=build_response_with_usage("ok"), captured_kwargs=captured_kwargs),
+    )
+
+    assert provider.generate("system", "message") == "ok"
+    metadata = require_metadata(provider)
+
+    assert captured_kwargs[0]["max_completion_tokens"] == 4096 * 4
+    assert metadata["requested_max_tokens"] == 4096 * 4
+
+
 def test_anthropic_provider_metadata_includes_stop_reason_and_requested_max_tokens(tmp_path):
     captured_kwargs = []
     response = SimpleNamespace(

@@ -23,6 +23,7 @@ class ModelCapabilities:
     supports_system_role: bool = True
     context_window: Optional[int] = None
     output_format_hints: tuple[str, ...] = ()
+    is_reasoning_model: bool = False
 
     @classmethod
     def openai_default(cls) -> ModelCapabilities:
@@ -95,24 +96,27 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=True,
         context_window=1_047_576,
     ),
-    # --- OpenAI: gpt-5 family (temperature not supported) ---
+    # --- OpenAI: gpt-5 family (temperature not supported, reasoning models) ---
     "openai:gpt-5-mini": ModelCapabilities(
         provider="openai",
         max_tokens_param="max_completion_tokens",
         supports_temperature=False,
         context_window=1_047_576,
+        is_reasoning_model=True,
     ),
     "openai:gpt-5": ModelCapabilities(
         provider="openai",
         max_tokens_param="max_completion_tokens",
         supports_temperature=False,
         context_window=1_047_576,
+        is_reasoning_model=True,
     ),
     "openai:gpt-5-nano": ModelCapabilities(
         provider="openai",
         max_tokens_param="max_completion_tokens",
         supports_temperature=False,
         context_window=1_047_576,
+        is_reasoning_model=True,
     ),
     # --- OpenAI: o-series reasoning models (temperature not supported) ---
     "openai:o1-mini": ModelCapabilities(
@@ -121,6 +125,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=False,
         context_window=128_000,
+        is_reasoning_model=True,
     ),
     "openai:o1": ModelCapabilities(
         provider="openai",
@@ -128,6 +133,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=False,
         context_window=128_000,
+        is_reasoning_model=True,
     ),
     "openai:o3-mini": ModelCapabilities(
         provider="openai",
@@ -135,6 +141,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=True,
         context_window=200_000,
+        is_reasoning_model=True,
     ),
     "openai:o3": ModelCapabilities(
         provider="openai",
@@ -142,6 +149,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=True,
         context_window=200_000,
+        is_reasoning_model=True,
     ),
     "openai:o4-mini": ModelCapabilities(
         provider="openai",
@@ -149,6 +157,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=True,
         context_window=200_000,
+        is_reasoning_model=True,
     ),
     # --- OpenAI: glob fallbacks for future dated variants ---
     "openai:gpt-4o-mini-*": ModelCapabilities(
@@ -180,6 +189,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         max_tokens_param="max_completion_tokens",
         supports_temperature=False,
         context_window=1_047_576,
+        is_reasoning_model=True,
     ),
     "openai:o1*": ModelCapabilities(
         provider="openai",
@@ -187,6 +197,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=False,
         context_window=128_000,
+        is_reasoning_model=True,
     ),
     "openai:o3*": ModelCapabilities(
         provider="openai",
@@ -194,6 +205,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=True,
         context_window=200_000,
+        is_reasoning_model=True,
     ),
     "openai:o4*": ModelCapabilities(
         provider="openai",
@@ -201,6 +213,7 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         supports_temperature=False,
         supports_system_role=True,
         context_window=200_000,
+        is_reasoning_model=True,
     ),
     # --- Anthropic: Claude model families ---
     "anthropic:claude-3-5-sonnet-*": ModelCapabilities(

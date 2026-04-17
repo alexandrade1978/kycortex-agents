@@ -126,10 +126,17 @@ class OpenAIProvider(BaseLLMProvider):
             raise AgentExecutionError("OpenAI provider returned an empty response")
         return content
 
+    _REASONING_TOKEN_MULTIPLIER = 4
+
+    def _effective_max_tokens(self) -> int:
+        if self._capabilities.is_reasoning_model:
+            return self.config.max_tokens * self._REASONING_TOKEN_MULTIPLIER
+        return self.config.max_tokens
+
     def _build_create_kwargs(self, system_prompt: str, user_message: str) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self.config.llm_model,
-            self._capabilities.max_tokens_param: self.config.max_tokens,
+            self._capabilities.max_tokens_param: self._effective_max_tokens(),
             "timeout": self.config.timeout_seconds,
             "messages": self._build_messages(system_prompt, user_message),
         }
@@ -159,7 +166,7 @@ class OpenAIProvider(BaseLLMProvider):
     def _extract_metadata(self, response: Any) -> Optional[dict[str, Any]]:
         usage = getattr(response, "usage", None)
         metadata: dict[str, Any] = {
-            "requested_max_tokens": self.config.max_tokens,
+            "requested_max_tokens": self._effective_max_tokens(),
             "finish_reason": None,
         }
         try:

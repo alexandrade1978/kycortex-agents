@@ -451,6 +451,7 @@ def execute_empirical_validation_workflow(config: KYCortexConfig, project: Proje
     last_error: Exception | None = None
 
     while True:
+        cycle_before = project.repair_cycle_count
         try:
             orchestrator.execute_workflow(project)
         except Exception as exc:  # pragma: no cover - exercised via monkeypatched test doubles
@@ -464,6 +465,8 @@ def execute_empirical_validation_workflow(config: KYCortexConfig, project: Proje
             and _can_resume_failed_workflow(project)
         )
         if not should_resume:
+            break
+        if last_error is not None and project.repair_cycle_count == cycle_before:
             break
 
     if last_error is not None:

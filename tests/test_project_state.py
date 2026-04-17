@@ -1032,6 +1032,9 @@ def test_fail_task_redacts_live_failure_state_events_and_terminal_context():
     )
     workflow_event = next(event for event in project.execution_events if event["event"] == "workflow_finished")
 
+    assert task.last_error is not None
+    assert task.output_payload is not None
+    assert task.last_provider_call is not None
     assert "sk-ant-secret-987654" not in task.last_error
     assert "hunter2" not in task.output_payload["raw_content"]
     assert "secret-pass" not in str(task.last_provider_call)
@@ -1454,9 +1457,11 @@ def test_fail_task_syncs_redacted_repair_failure_back_to_origin():
 
     origin = require_task(project, "docs")
 
+    assert origin.last_error is not None
+    assert origin.output_payload is not None
+    assert origin.last_provider_call is not None
     assert "hunter2" not in origin.last_error
     assert origin.output == origin.last_error
-    assert origin.output_payload is not None
     assert "sk-ant-secret-987654" not in origin.output_payload["raw_content"]
     assert "secret-pass" not in str(origin.last_provider_call)
     assert "sk-secret-123456" not in str(origin.last_provider_call)
@@ -1531,6 +1536,7 @@ def test_pause_workflow_redacts_sensitive_operator_reason():
     changed = project.pause_workflow(reason="api_key=sk-secret-123456")
 
     assert changed is True
+    assert project.workflow_pause_reason is not None
     assert "sk-secret-123456" not in project.workflow_pause_reason
     assert "[REDACTED]" in project.workflow_pause_reason
     assert "sk-secret-123456" not in project.execution_events[-1]["details"]["reason"]
@@ -1602,10 +1608,13 @@ def test_cancel_workflow_redacts_sensitive_operator_reason():
     snapshot = project.snapshot()
 
     assert cancelled_task_ids == ["docs"]
+    assert task.last_error is not None
+    assert task.output is not None
     assert "hunter2" not in task.last_error
     assert "hunter2" not in task.output
     assert "hunter2" not in task_cancelled_event["details"]["reason"]
     assert "hunter2" not in workflow_cancelled_event["details"]["reason"]
+    assert task.last_error is not None
     assert "[REDACTED]" in task.last_error
     assert task.output == task.last_error
     assert "[REDACTED]" in task_cancelled_event["details"]["reason"]
@@ -4890,6 +4899,8 @@ def test_skip_task_redacts_sensitive_operator_reason():
 
     task = require_task(project, "docs")
 
+    assert task.last_error is not None
+    assert task.output is not None
     assert "sk-ant-secret-987654" not in task.last_error
     assert "sk-ant-secret-987654" not in task.output
     assert "sk-ant-secret-987654" not in task.history[-1]["error_message"]

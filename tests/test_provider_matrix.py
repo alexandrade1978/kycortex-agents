@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from urllib.error import URLError
 
+from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import WorkflowOutcome
 
@@ -2473,3 +2474,74 @@ def test_execute_empirical_validation_workflow_terminates_when_only_repair_tasks
 
     assert execute_calls["count"] == 1
     assert project.terminal_outcome == WorkflowOutcome.DEGRADED.value
+
+
+def test_execute_empirical_validation_workflow_breaks_on_stalled_blocked_loop(monkeypatch, tmp_path):
+    """The outer resume loop must terminate when workflow_blocked repeats without consuming repair budget."""
+    import kycortex_agents.provider_matrix as provider_matrix
+    from kycortex_agents.types import FailureCategory, TaskStatus
+
+    config = provider_matrix.build_full_workflow_config(
+        "ollama",
+        "llama3",
+        str(tmp_path / "output"),
+        workflow_failure_policy="continue",
+        workflow_resume_policy="resume_failed",
+        workflow_max_repair_cycles=3,
+    )
+    project = ProjectState(
+        project_name="Demo",
+        goal="test stalled blocked loop",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(Task(id="code", title="Code", description="Write code", assigned_to="coder"))
+    project.add_task(Task(id="tests", title="Tests", description="Write tests", assigned_to="tester", dependencies=["code"]))
+
+    code_task = project.get_task("code")
+    tests_task = project.get_task("tests")
+    assert code_task is not None
+    assert tests_task is not None
+    code_task.status = TaskStatus.FAILED.value
+    tests_task.status = TaskStatus.SKIPPED.value
+
+    repair_task = Task(
+        id="code__repair_1",
+        title="Code (repair)",
+        description="Repair code",
+        assigned_to="coder",
+        dependencies=[],
+    )
+    repair_task.repair_origin_task_id = "code"
+    repair_task.status = TaskStatus.PENDING.value
+    project.add_task(repair_task)
+    project.repair_cycle_count = 1
+    project.repair_max_cycles = 3
+
+    execute_calls = {"count": 0}
+
+    class BlockedOrchestrator:
+        def __init__(self, _config):
+            self.config = _config
+
+        def execute_workflow(self, state):
+            execute_calls["count"] += 1
+            if execute_calls["count"] > 5:
+                raise AssertionError("Infinite loop detected: execute_workflow called too many times")
+            state.mark_workflow_running(
+                acceptance_policy=self.config.workflow_acceptance_policy,
+                repair_max_cycles=self.config.workflow_max_repair_cycles,
+            )
+            state.mark_workflow_finished(
+                "failed",
+                terminal_outcome=WorkflowOutcome.FAILED.value,
+                failure_category=FailureCategory.WORKFLOW_BLOCKED.value,
+                acceptance_criteria_met=False,
+            )
+            raise AgentExecutionError("Workflow is blocked")
+
+    monkeypatch.setattr(provider_matrix, "Orchestrator", BlockedOrchestrator)
+
+    with pytest.raises(AgentExecutionError, match="blocked"):
+        provider_matrix.execute_empirical_validation_workflow(config, project)
+
+    assert execute_calls["count"] == 1

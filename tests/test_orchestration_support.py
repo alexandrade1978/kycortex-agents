@@ -25,7 +25,13 @@ from kycortex_agents.orchestration.sandbox_templates import (
 	render_generated_test_runner,
 	render_sandbox_sitecustomize,
 )
-from kycortex_agents.types import ArtifactRecord, ArtifactType, ExecutionSandboxPolicy
+from kycortex_agents.orchestration.validation_runtime import (
+	provider_call_metadata,
+	redact_validation_execution_result,
+	sanitize_output_provider_call_metadata,
+	summarize_pytest_output,
+)
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -214,3 +220,64 @@ def test_build_sandbox_preexec_fn_applies_limits_with_injected_modules():
 		("core", (0, 0)),
 		("fsize", (1048576, 1048576)),
 	]
+
+
+def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():
+	assert summarize_pytest_output("", "", 5) == "pytest exited with code 5"
+	assert summarize_pytest_output("line one", "line two", 1) == "line two"
+
+
+def test_redact_validation_execution_result_redacts_sensitive_values():
+	result = redact_validation_execution_result(
+		{
+			"stdout": "api_key=sk-secret-123456",
+			"stderr": "Authorization: Bearer sk-ant-secret-987654",
+		}
+	)
+
+	assert "sk-secret-123456" not in str(result)
+	assert "sk-ant-secret-987654" not in str(result)
+	assert "[REDACTED]" in result["stdout"]
+	assert "[REDACTED]" in result["stderr"]
+
+
+def test_provider_call_metadata_prefers_output_and_redacts_sensitive_fields():
+	output = AgentOutput(
+		summary="ok",
+		raw_content="ok",
+		metadata={
+			"provider_call": {
+				"provider": "anthropic",
+				"model": "claude-test",
+				"base_url": "https://bob:secret-pass@example.com/messages",
+				"error_message": "Authorization: Bearer sk-ant-secret-987654",
+			}
+		},
+	)
+
+	metadata = provider_call_metadata(object(), output)
+
+	assert metadata is not None
+	assert metadata["provider"] == "anthropic"
+	assert metadata["model"] == "claude-test"
+	assert "secret-pass" not in str(metadata)
+	assert "sk-ant-secret-987654" not in str(metadata)
+
+
+def test_sanitize_output_provider_call_metadata_updates_output_copy_in_place():
+	output = AgentOutput(
+		summary="ok",
+		raw_content="ok",
+		metadata={
+			"provider_call": {
+				"provider": "openai",
+				"base_url": "https://alice:secret-pass@example.com/v1",
+			}
+		},
+	)
+
+	sanitized = sanitize_output_provider_call_metadata(output)
+
+	assert sanitized is output
+	assert "secret-pass" not in str(sanitized.metadata["provider_call"])
+	assert "[REDACTED]" in sanitized.metadata["provider_call"]["base_url"]

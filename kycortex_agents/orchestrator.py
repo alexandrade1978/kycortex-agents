@@ -37,6 +37,12 @@ from kycortex_agents.orchestration.sandbox_templates import (
     render_generated_import_runner,
     render_generated_test_runner,
 )
+from kycortex_agents.orchestration.validation_runtime import (
+    provider_call_metadata,
+    redact_validation_execution_result,
+    sanitize_output_provider_call_metadata,
+    summarize_pytest_output,
+)
 from kycortex_agents.providers.base import (
     redact_sensitive_data,
     redact_sensitive_text,
@@ -1218,40 +1224,20 @@ class Orchestrator:
         return build_sandbox_preexec_fn(sandbox_policy, os_module=os, resource_module=resource)
 
     def _summarize_pytest_output(self, stdout: str, stderr: str, returncode: int) -> str:
-        combined_lines = [line.strip() for line in f"{stdout}\n{stderr}".splitlines() if line.strip()]
-        if not combined_lines:
-            return f"pytest exited with code {returncode}"
-        for line in reversed(combined_lines):
-            if line.startswith("=") or line.startswith("FAILED") or line.startswith("ERROR") or "passed" in line:
-                return line
-        return combined_lines[-1][:240]
+        return summarize_pytest_output(stdout, stderr, returncode)
 
     @staticmethod
     def _redact_validation_execution_result(result: Dict[str, Any]) -> Dict[str, Any]:
-        return cast(Dict[str, Any], redact_sensitive_data(result))
+        return redact_validation_execution_result(result)
 
     def _sanitize_provider_call_metadata(self, provider_call: Dict[str, Any]) -> Dict[str, Any]:
         return sanitize_provider_call_metadata(provider_call)
 
     def _sanitize_output_provider_call_metadata(self, output: AgentOutput) -> AgentOutput:
-        provider_call = output.metadata.get("provider_call") if isinstance(output.metadata, dict) else None
-        if not isinstance(provider_call, dict):
-            return output
-        output.metadata = dict(output.metadata)
-        output.metadata["provider_call"] = self._sanitize_provider_call_metadata(provider_call)
-        return output
+        return sanitize_output_provider_call_metadata(output)
 
     def _provider_call_metadata(self, agent: Any, output: Optional[AgentOutput] = None) -> Optional[Dict[str, Any]]:
-        if output is not None:
-            provider_call = output.metadata.get("provider_call")
-            if isinstance(provider_call, dict):
-                return self._sanitize_provider_call_metadata(provider_call)
-        getter = getattr(agent, "get_last_provider_call_metadata", None)
-        if callable(getter):
-            metadata = getter()
-            if isinstance(metadata, dict):
-                return self._sanitize_provider_call_metadata(metadata)
-        return None
+        return provider_call_metadata(agent, output)
 
     def _persist_artifacts(self, artifacts: list[ArtifactRecord]) -> None:
         self._artifact_persistence_support().persist_artifacts(artifacts)

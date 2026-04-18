@@ -2,9 +2,11 @@ import ast
 import os
 import re
 import stat
+from types import SimpleNamespace
 
 import pytest
 
+from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
@@ -12,12 +14,18 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
 )
+from kycortex_agents.orchestration.sandbox_runtime import (
+	build_generated_test_env,
+	build_sandbox_preexec_fn,
+	looks_like_secret_env_var,
+	sanitize_generated_filename,
+)
 from kycortex_agents.orchestration.sandbox_templates import (
 	render_generated_import_runner,
 	render_generated_test_runner,
 	render_sandbox_sitecustomize,
 )
-from kycortex_agents.types import ArtifactRecord, ArtifactType
+from kycortex_agents.types import ArtifactRecord, ArtifactType, ExecutionSandboxPolicy
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -145,3 +153,64 @@ def test_render_generated_import_runner_includes_module_filename():
 	assert 'TMP_PATH / "sitecustomize.py"' in script
 	assert repr("code_under_test.py") in script
 	assert '"code_under_test"' in script
+
+
+def test_looks_like_secret_env_var_detects_generic_secret_markers():
+	assert looks_like_secret_env_var("OPENAI_API_KEY") is True
+	assert looks_like_secret_env_var("client_secret") is True
+	assert looks_like_secret_env_var("NORMAL_ENV") is False
+
+
+def test_sanitize_generated_filename_strips_traversal_and_preserves_suffix():
+	assert sanitize_generated_filename("../../tests generated", "generated_tests.py") == "tests_generated.py"
+	assert sanitize_generated_filename("custom-name", "generated_tests.py") == "custom-name.py"
+
+
+def test_build_generated_test_env_writes_sandbox_bindings_and_sitecustomize(tmp_path):
+	policy = KYCortexConfig(output_dir=str(tmp_path / "output")).execution_sandbox_policy()
+	env = build_generated_test_env(tmp_path, policy, host_env={"PATH": "/usr/bin", "PYTHONPATH": "/tmp/injected"})
+
+	assert env["PATH"] == str(tmp_path)
+	assert env["HOME"] == str(tmp_path)
+	assert env["KYCORTEX_SANDBOX_ROOT"] == str(tmp_path)
+	assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+	assert env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+	assert "PYTHONPATH" not in env
+	assert (tmp_path / "sitecustomize.py").read_text(encoding="utf-8").startswith("import asyncio\n")
+
+
+def test_build_generated_test_env_omits_sandbox_files_when_disabled(tmp_path):
+	policy = ExecutionSandboxPolicy(enabled=False)
+	env = build_generated_test_env(tmp_path, policy, host_env={"PATH": "/usr/bin", "PYTHONPATH": "/tmp/injected"})
+
+	assert env["PATH"] == "/usr/bin"
+	assert "KYCORTEX_SANDBOX_ROOT" not in env
+	assert "XDG_CONFIG_HOME" not in env
+	assert "PYTHONPATH" not in env
+	assert not (tmp_path / "sitecustomize.py").exists()
+
+
+def test_build_sandbox_preexec_fn_applies_limits_with_injected_modules():
+	policy = ExecutionSandboxPolicy(enabled=True, max_cpu_seconds=5.2, max_memory_mb=128)
+	recorded_calls: list[tuple[object, tuple[int, int]]] = []
+	recorded_umasks: list[int] = []
+	fake_os = SimpleNamespace(name="posix", umask=lambda value: recorded_umasks.append(value) or 0)
+	fake_resource = SimpleNamespace(
+		RLIMIT_CPU="cpu",
+		RLIMIT_AS="as",
+		RLIMIT_CORE="core",
+		RLIMIT_FSIZE="fsize",
+		setrlimit=lambda limit, values: recorded_calls.append((limit, values)),
+	)
+
+	preexec = build_sandbox_preexec_fn(policy, os_module=fake_os, resource_module=fake_resource)
+
+	assert callable(preexec)
+	preexec()
+	assert recorded_umasks == [0o077]
+	assert recorded_calls == [
+		("cpu", (5, 5)),
+		("as", (134217728, 134217728)),
+		("core", (0, 0)),
+		("fsize", (1048576, 1048576)),
+	]

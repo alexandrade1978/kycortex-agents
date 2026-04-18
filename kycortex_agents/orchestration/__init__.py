@@ -46,6 +46,9 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 	validation_summary_helper_alias_names,
 	validation_summary_symbols,
 )
+from kycortex_agents.orchestration.repair_test_runtime import (
+	build_runtime_only_test_repair_lines,
+)
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
@@ -134,6 +137,7 @@ __all__ = [
 	"BLOCKING_TEST_ISSUE_KEYS",
 	"build_code_validation_summary",
 	"build_test_validation_summary",
+	"build_runtime_only_test_repair_lines",
 	"cancel_workflow",
 	"compact_architecture_context",
 	"completion_diagnostics_from_provider_call",

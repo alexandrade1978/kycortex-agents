@@ -39,6 +39,9 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 	previous_valid_test_surface,
 	validation_summary_helper_alias_names,
 )
+from kycortex_agents.orchestration.repair_test_runtime import (
+	build_runtime_only_test_repair_lines,
+)
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
@@ -714,6 +717,51 @@ def test_analyze_test_repair_surface_collects_reusable_imports_and_alias_drift_d
 	assert analysis.undefined_available_module_symbols == ["AuditLogger"]
 	assert analysis.helper_alias_names == ["AuditService"]
 	assert analysis.previous_member_calls == {"ComplianceIntakeService": ["handle_request"]}
+
+
+def test_build_runtime_only_test_repair_lines_handles_helper_runtime_focus_directly():
+	lines = build_runtime_only_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- imported module symbols: validate_request, score_request, log_audit\n"
+			"- unknown module symbols: none\n"
+			"- constructor arity mismatches: none\n"
+			"- pytest execution: fail\n"
+		),
+		failed_content_lower="def test_log_audit():\n    assert len(service.audit_logs) == 3\n",
+		imported_module_symbols=["validate_request", "score_request", "log_audit"],
+		unknown_module_symbols=[],
+		previous_member_calls={},
+		previous_constructor_keywords={},
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+	)
+
+	assert any("collapse the suite to exactly three tests" in line for line in lines)
+	assert any("Delete standalone score_request, log_audit, and extra invalid-case tests" in line for line in lines)
+	assert any("When behavior is uncertain, prefer stable invariants" in line for line in lines)
+
+
+def test_build_runtime_only_test_repair_lines_handles_return_shape_and_did_not_raise_directly():
+	lines = build_runtime_only_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- exact return-shape attribute assumption\n"
+			"- pytest execution: fail\n"
+			"- pytest failure details: failed tests_tests.py::test_validation_failure - failed: did not raise <class 'valueerror'>\n"
+		),
+		failed_content_lower="def test_happy_path():\n    assert outcome.request_id == '1'\n",
+		imported_module_symbols=[],
+		unknown_module_symbols=[],
+		previous_member_calls={},
+		previous_constructor_keywords={},
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+	)
+
+	assert any("wrapped object return shape" in line for line in lines)
+	assert any("rebuild that scenario around an input that actually violates the current validator or contract" in line for line in lines)
+	assert any("reserve pytest.raises only for an input that the current validator demonstrably rejects" in line for line in lines)
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

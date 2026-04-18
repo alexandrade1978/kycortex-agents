@@ -1,6 +1,6 @@
 from collections import deque
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Any, Optional, Callable, cast
+from typing import List, Dict, Any, Optional, Callable, Mapping, cast
 from datetime import datetime, timezone
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
@@ -944,7 +944,7 @@ class ProjectState:
         terminal_outcome: Optional[str] = None,
         failure_category: Optional[str] = None,
         acceptance_criteria_met: Optional[bool] = None,
-        acceptance_evaluation: Optional[Dict[str, Any]] = None,
+        acceptance_evaluation: Optional[Mapping[str, Any]] = None,
     ):
         """Mark the workflow finished under the supplied phase label."""
 

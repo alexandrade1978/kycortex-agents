@@ -25,12 +25,22 @@ from kycortex_agents.orchestration.sandbox_templates import (
 	render_generated_test_runner,
 	render_sandbox_sitecustomize,
 )
+from kycortex_agents.orchestration.task_constraints import (
+	compact_architecture_context,
+	should_compact_architecture_context,
+	task_exact_top_level_test_count,
+	task_fixture_budget,
+	task_line_budget,
+	task_max_top_level_test_count,
+	task_requires_cli_entrypoint,
+)
 from kycortex_agents.orchestration.validation_runtime import (
 	provider_call_metadata,
 	redact_validation_execution_result,
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
 )
+from kycortex_agents.memory.project_state import Task
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy
 
 
@@ -281,3 +291,75 @@ def test_sanitize_output_provider_call_metadata_updates_output_copy_in_place():
 	assert sanitized is output
 	assert "secret-pass" not in str(sanitized.metadata["provider_call"])
 	assert "[REDACTED]" in sanitized.metadata["provider_call"]["base_url"]
+
+
+def test_task_constraint_helpers_parse_limits_and_optional_inputs_directly():
+	task = Task(
+		id="tests",
+		title="Tests",
+		description=(
+			"Write exactly 2 top-level test functions at most 3 fixtures and under 40 lines. "
+			"Include a CLI demo entrypoint."
+		),
+		assigned_to="qa_tester",
+	)
+
+	assert task_line_budget(task) == 40
+	assert task_requires_cli_entrypoint(task) is True
+	assert task_exact_top_level_test_count(task) == 2
+	assert task_max_top_level_test_count(task) is None
+	assert task_fixture_budget(task) == 3
+	assert task_line_budget(None) is None
+	assert task_requires_cli_entrypoint(None) is False
+
+
+def test_should_compact_architecture_context_uses_budget_and_repair_signals_directly():
+	anchor = "- Public facade: ComplianceIntakeService"
+	budget_task = Task(
+		id="code",
+		title="Implementation",
+		description="Write one Python module under 300 lines.",
+		assigned_to="code_engineer",
+	)
+	repair_task = Task(
+		id="code_repair",
+		title="Repair",
+		description="Write one Python module.",
+		assigned_to="code_engineer",
+		repair_context={"cycle": 1},
+	)
+
+	assert should_compact_architecture_context(budget_task, anchor, "code_engineer", 900) is True
+	assert should_compact_architecture_context(budget_task, anchor, "architect", 900) is False
+	assert should_compact_architecture_context(repair_task, anchor, "code_engineer", 3200) is True
+	assert should_compact_architecture_context(budget_task, "", "code_engineer", 900) is False
+
+
+def test_compact_architecture_context_builds_low_budget_and_repair_summaries_directly():
+	anchor = (
+		"- Public facade: ComplianceIntakeService\n"
+		"- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)"
+	)
+	budget_task = Task(
+		id="code",
+		title="Implementation",
+		description="Write one Python module under 300 lines with a CLI demo entrypoint.",
+		assigned_to="code_engineer",
+	)
+	repair_task = Task(
+		id="repair",
+		title="Repair",
+		description="Write one Python module.",
+		assigned_to="code_engineer",
+		repair_context={"cycle": 1},
+	)
+
+	budget_summary = compact_architecture_context(budget_task, anchor)
+	repair_summary = compact_architecture_context(repair_task, anchor)
+
+	assert budget_summary.startswith("Low-budget architecture summary:")
+	assert "Stay comfortably under 300 lines" in budget_summary
+	assert 'main() plus a literal if __name__ == "__main__": block' in budget_summary
+	assert repair_summary.startswith("Repair-focused architecture summary:")
+	assert "Do not copy illustrative code blocks over the failing implementation" in repair_summary
+	assert "prefer the existing failing module, the validation summary, and the cited pytest details" in repair_summary

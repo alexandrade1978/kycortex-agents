@@ -52,6 +52,21 @@ from kycortex_agents.orchestration.validation_runtime import (
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
 )
+from kycortex_agents.orchestration.workflow_control import (
+    cancel_workflow,
+    emit_workflow_progress,
+    exit_if_workflow_cancelled,
+    exit_if_workflow_paused,
+    log_event,
+    override_task,
+    pause_workflow,
+    privacy_safe_log_fields,
+    replay_workflow,
+    resume_workflow,
+    skip_task,
+    task_id_collection_count,
+    task_id_count_log_field_name,
+)
 from kycortex_agents.providers.base import (
     redact_sensitive_data,
     redact_sensitive_text,
@@ -225,176 +240,58 @@ class Orchestrator:
         self.logger = logging.getLogger("Orchestrator")
 
     def _log_event(self, level: str, event: str, **fields: Any) -> None:
-        log_method = getattr(self.logger, level)
-        safe_fields = cast(Dict[str, Any], redact_sensitive_data(self._privacy_safe_log_fields(fields)))
-        log_method(event, extra={"event": event, **safe_fields})
+        log_event(self.logger, level, event, **fields)
 
     @staticmethod
     def _privacy_safe_log_fields(fields: Dict[str, Any]) -> Dict[str, Any]:
-        safe_fields: Dict[str, Any] = {}
-        for field_name, value in fields.items():
-            minimized_field_name = Orchestrator._task_id_count_log_field_name(field_name)
-            if minimized_field_name is not None:
-                count = Orchestrator._task_id_collection_count(value)
-                if count is not None:
-                    safe_fields[minimized_field_name] = count
-                    continue
-            safe_fields[field_name] = value
-        return safe_fields
+        return privacy_safe_log_fields(fields)
 
     @staticmethod
     def _task_id_collection_count(value: Any) -> Optional[int]:
-        if isinstance(value, (list, tuple, set)):
-            return len(value)
-        if isinstance(value, str):
-            return 1 if value else 0
-        if value is None:
-            return 0
-        return None
+        return task_id_collection_count(value)
 
     @staticmethod
     def _task_id_count_log_field_name(field_name: str) -> Optional[str]:
-        if field_name == "task_ids" or field_name.endswith("_task_ids"):
-            return f"{field_name[:-len('_ids')]}_count"
-        return None
+        return task_id_count_log_field_name(field_name)
 
     def _emit_workflow_progress(self, project: ProjectState, *, task: Optional[Task] = None) -> None:
-        workflow_telemetry = project.record_workflow_progress(
-            task_id=task.id if task is not None else None,
-            task_status=task.status if task is not None else None,
-        )
-        self._log_event(
-            "info",
-            "workflow_progress",
-            project_name=project.project_name,
-            phase=project.phase,
-            task_id=task.id if task is not None else None,
-            task_status=task.status if task is not None else None,
-            workflow_telemetry=workflow_telemetry,
-        )
+        emit_workflow_progress(self.logger, project, task=task)
 
     def pause_workflow(self, project: ProjectState, *, reason: str) -> bool:
         """Pause a workflow so the orchestrator stops dispatching new runnable tasks."""
 
-        changed = project.pause_workflow(reason=reason)
-        if changed:
-            project.save()
-            self._log_event(
-                "info",
-                "workflow_paused",
-                project_name=project.project_name,
-                phase=project.phase,
-                reason=project.workflow_pause_reason,
-            )
-        return changed
+        return pause_workflow(self.logger, project, reason=reason)
 
     def resume_workflow(self, project: ProjectState, *, reason: str = "paused_workflow") -> bool:
         """Resume a paused workflow so execution can continue on the next run."""
 
-        changed = project.resume_workflow(reason=reason)
-        if changed:
-            project.save()
-            self._log_event(
-                "info",
-                "workflow_resumed",
-                project_name=project.project_name,
-                phase=project.phase,
-                reason=reason,
-            )
-        return changed
+        return resume_workflow(self.logger, project, reason=reason)
 
     def cancel_workflow(self, project: ProjectState, *, reason: str = "manual_cancel") -> list[str]:
         """Cancel a workflow through the orchestrator control surface."""
 
-        was_cancelled = project.is_workflow_cancelled()
-        cancelled_task_ids = project.cancel_workflow(reason=reason)
-        if not was_cancelled and project.is_workflow_cancelled():
-            project.save()
-            self._log_event(
-                "warning",
-                "workflow_cancelled",
-                project_name=project.project_name,
-                phase=project.phase,
-                reason=reason,
-                cancelled_task_ids=list(cancelled_task_ids),
-            )
-        return cancelled_task_ids
+        return cancel_workflow(self.logger, project, reason=reason)
 
     def skip_task(self, project: ProjectState, task_id: str, *, reason: str) -> bool:
         """Skip a task manually through the orchestrator control surface."""
 
-        task = project.get_task(task_id)
-        if task is None:
-            return False
-        project.skip_task(task_id, reason, reason_type="manual")
-        project.save()
-        self._log_event(
-            "info",
-            "task_skipped",
-            project_name=project.project_name,
-            task_id=task_id,
-            phase=project.phase,
-            reason=reason,
-        )
-        return True
+        return skip_task(self.logger, project, task_id, reason=reason)
 
     def override_task(self, project: ProjectState, task_id: str, output: str | AgentOutput, *, reason: str) -> bool:
         """Complete a task manually through the orchestrator control surface."""
 
-        changed = project.override_task(task_id, output, reason=reason)
-        if changed:
-            project.save()
-            self._log_event(
-                "info",
-                "task_overridden",
-                project_name=project.project_name,
-                task_id=task_id,
-                phase=project.phase,
-                reason=reason,
-            )
-        return changed
+        return override_task(self.logger, project, task_id, output, reason=reason)
 
     def replay_workflow(self, project: ProjectState, *, reason: str = "manual_replay") -> list[str]:
         """Reset a workflow so it can be executed again from its initial task set."""
 
-        replayed_task_ids = project.replay_workflow(reason=reason)
-        if replayed_task_ids:
-            project.save()
-            self._log_event(
-                "info",
-                "workflow_replayed",
-                project_name=project.project_name,
-                phase=project.phase,
-                reason=reason,
-                replayed_task_ids=list(replayed_task_ids),
-            )
-        return replayed_task_ids
+        return replay_workflow(self.logger, project, reason=reason)
 
     def _exit_if_workflow_paused(self, project: ProjectState) -> bool:
-        if not project.is_workflow_paused():
-            return False
-        project.save()
-        self._log_event(
-            "info",
-            "workflow_paused",
-            project_name=project.project_name,
-            phase=project.phase,
-            reason=project.workflow_pause_reason,
-        )
-        return True
+        return exit_if_workflow_paused(self.logger, project)
 
     def _exit_if_workflow_cancelled(self, project: ProjectState) -> bool:
-        if not project.is_workflow_cancelled():
-            return False
-        project.save()
-        self._log_event(
-            "warning",
-            "workflow_cancelled",
-            project_name=project.project_name,
-            phase=project.phase,
-            terminal_outcome=project.terminal_outcome,
-        )
-        return True
+        return exit_if_workflow_cancelled(self.logger, project)
 
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""

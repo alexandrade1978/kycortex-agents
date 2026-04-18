@@ -40,6 +40,11 @@ from kycortex_agents.orchestration.validation_runtime import (
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
 )
+from kycortex_agents.orchestration.workflow_control import (
+	privacy_safe_log_fields,
+	task_id_collection_count,
+	task_id_count_log_field_name,
+)
 from kycortex_agents.memory.project_state import Task
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy
 
@@ -363,3 +368,22 @@ def test_compact_architecture_context_builds_low_budget_and_repair_summaries_dir
 	assert repair_summary.startswith("Repair-focused architecture summary:")
 	assert "Do not copy illustrative code blocks over the failing implementation" in repair_summary
 	assert "prefer the existing failing module, the validation summary, and the cited pytest details" in repair_summary
+
+
+def test_workflow_control_log_helpers_minimize_task_ids_directly():
+	fields = privacy_safe_log_fields(
+		{
+			"task_ids": ["arch", "code"],
+			"replayed_task_ids": ["arch"],
+			"reason": "manual",
+		}
+	)
+
+	assert fields == {"task_count": 2, "replayed_task_count": 1, "reason": "manual"}
+	assert task_id_collection_count(["arch", "code"]) == 2
+	assert task_id_collection_count("arch") == 1
+	assert task_id_collection_count(None) == 0
+	assert task_id_collection_count(3) is None
+	assert task_id_count_log_field_name("task_ids") == "task_count"
+	assert task_id_count_log_field_name("replayed_task_ids") == "replayed_task_count"
+	assert task_id_count_log_field_name("task_id") is None

@@ -25,6 +25,14 @@ from kycortex_agents.orchestration.repair_analysis import (
 	required_field_list_from_failed_artifact,
 	suggest_declared_attribute_replacement,
 )
+from kycortex_agents.orchestration.repair_signals import (
+	content_has_incomplete_required_evidence_payload,
+	content_has_matching_datetime_import,
+	implementation_prefers_direct_datetime_import,
+	implementation_required_evidence_items,
+	validation_summary_has_missing_datetime_import_issue,
+	validation_summary_has_required_evidence_runtime_issue,
+)
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
@@ -593,6 +601,42 @@ def test_duplicate_constructor_rewrite_hint_and_invalid_audit_detection_work_dir
 		"TriageOutcome(outcome='invalid', risk_score=0.0)",
 		True,
 	)
+
+
+def test_datetime_repair_signals_detect_missing_imports_directly():
+	failed_tests = (
+		"from code_implementation import ComplianceRequest\n\n"
+		"def test_request():\n"
+		"    request = ComplianceRequest(request_id='req-1', timestamp=datetime.now())\n"
+	)
+
+	assert content_has_matching_datetime_import("from datetime import datetime\n") is True
+	assert validation_summary_has_missing_datetime_import_issue(
+		"Generated test validation:\n- Undefined local names: datetime (line 5)\n- Verdict: FAIL",
+		failed_tests,
+	) is True
+	assert implementation_prefers_direct_datetime_import("from datetime import datetime\n\ndef build():\n    return datetime.now()\n") is True
+
+
+def test_required_evidence_repair_signals_detect_incomplete_payloads_directly():
+	implementation_code = (
+		"def validate_request(request):\n"
+		"    required_evidence = ['ID', 'Address', 'Proof of Income']\n"
+		"    return all(item in request.details.get('documents', []) for item in required_evidence)\n"
+	)
+	failed_tests = (
+		"def test_happy_path():\n"
+		"    request = {'documents': ['ID']}\n"
+		"    assert len(service.risk_scores) == 1\n"
+	)
+
+	assert implementation_required_evidence_items(implementation_code) == ["ID", "Address", "Proof of Income"]
+	assert content_has_incomplete_required_evidence_payload(failed_tests, implementation_code) is True
+	assert validation_summary_has_required_evidence_runtime_issue(
+		"Generated test validation:\n- Pytest execution: FAIL\n- Pytest failure details: FAILED tests_tests.py::test_happy_path - AssertionError: assert 0 == 1\n- Verdict: FAIL",
+		"risk_scores = []\n" + failed_tests,
+		implementation_code,
+	) is True
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

@@ -27,6 +27,15 @@ from kycortex_agents.orchestration.repair_analysis import (
 	required_field_list_from_failed_artifact,
 	suggest_declared_attribute_replacement,
 )
+from kycortex_agents.orchestration.repair_signals import (
+	content_has_bare_datetime_reference,
+	content_has_incomplete_required_evidence_payload,
+	content_has_matching_datetime_import,
+	implementation_prefers_direct_datetime_import,
+	implementation_required_evidence_items,
+	validation_summary_has_missing_datetime_import_issue,
+	validation_summary_has_required_evidence_runtime_issue,
+)
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
@@ -121,6 +130,9 @@ __all__ = [
 	"completion_diagnostics_summary",
 	"completion_hit_limit",
 	"completion_validation_issue",
+	"content_has_bare_datetime_reference",
+	"content_has_incomplete_required_evidence_payload",
+	"content_has_matching_datetime_import",
 	"default_value_for_annotation",
 	"duplicate_constructor_argument_call_details",
 	"duplicate_constructor_argument_call_hint",
@@ -134,6 +146,8 @@ __all__ = [
 	"first_non_import_line_with_name",
 	"harden_private_directory_permissions",
 	"harden_private_file_permissions",
+	"implementation_prefers_direct_datetime_import",
+	"implementation_required_evidence_items",
 	"internal_constructor_strictness_details",
 	"invalid_outcome_missing_audit_trail_details",
 	"looks_like_secret_env_var",
@@ -170,6 +184,8 @@ __all__ = [
 	"validation_has_blocking_issues",
 	"validation_has_only_warnings",
 	"validation_has_static_issues",
+	"validation_summary_has_missing_datetime_import_issue",
+	"validation_summary_has_required_evidence_runtime_issue",
 	"task_id_collection_count",
 	"task_id_count_log_field_name",
 	"task_exact_top_level_test_count",

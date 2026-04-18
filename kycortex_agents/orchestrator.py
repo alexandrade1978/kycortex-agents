@@ -8,7 +8,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import tokenize
 from dataclasses import asdict
 from pathlib import Path
@@ -28,15 +27,14 @@ from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
-from kycortex_agents.orchestration.sandbox_runtime import (
-    build_generated_test_env,
-    build_sandbox_preexec_fn,
-    sanitize_generated_filename,
+from kycortex_agents.orchestration.sandbox_execution import (
+    execute_generated_module_import,
+    execute_generated_tests,
+    sandbox_security_violation,
+    write_generated_import_runner,
+    write_generated_test_runner,
 )
-from kycortex_agents.orchestration.sandbox_templates import (
-    render_generated_import_runner,
-    render_generated_test_runner,
-)
+from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.task_constraints import (
     compact_architecture_context,
     should_compact_architecture_context,
@@ -569,75 +567,19 @@ class Orchestrator:
         return match.group("owner"), match.group("name"), args
 
     def _execute_generated_module_import(self, module_filename: str, code_content: str) -> Dict[str, Any]:
-        result: Dict[str, Any] = {
-            "ran": False,
-            "returncode": None,
-            "summary": "",
-        }
-        if not code_content.strip():
-            result["summary"] = "generated code was empty"
-            return result
-
-        sandbox_policy = self.config.execution_sandbox_policy()
-        wall_clock_seconds = sandbox_policy.max_wall_clock_seconds
-        with tempfile.TemporaryDirectory(
-            prefix="kycortex-import-",
-            dir=sandbox_policy.temp_root,
-        ) as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            tmp_path.chmod(0o700)
-            safe_module_filename = self._sanitize_generated_filename(module_filename, "generated_module.py")
-            import_runner_path = self._write_generated_import_runner(
-                tmp_path,
-                safe_module_filename,
-                sandbox_policy.enabled,
-            )
-            module_path = tmp_path / safe_module_filename
-            module_path.write_text(code_content, encoding="utf-8")
-            for path in (module_path, import_runner_path):
-                path.chmod(0o600)
-            env = self._build_generated_test_env(tmp_path, sandbox_policy)
-            command = [sys.executable]
-            if sandbox_policy.enabled:
-                command.append("-I")
-            command.append(str(import_runner_path))
-            try:
-                completed = subprocess.run(
-                    command,
-                    cwd=tmp_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=wall_clock_seconds,
-                    env=env,
-                    preexec_fn=self._sandbox_preexec_fn(sandbox_policy),
-                    check=False,
-                )
-            except subprocess.TimeoutExpired:
-                result["ran"] = True
-                result["returncode"] = -1
-                result["summary"] = f"module import timed out after {wall_clock_seconds:g} seconds"
-                return self._redact_validation_execution_result(result)
-
-        result["ran"] = True
-        result["returncode"] = completed.returncode
-        result["stdout"] = completed.stdout.strip()
-        result["stderr"] = completed.stderr.strip()
-        combined_lines = [line.strip() for line in f"{completed.stdout}\n{completed.stderr}".splitlines() if line.strip()]
-        if completed.returncode == 0:
-            result["summary"] = combined_lines[-1][:240] if combined_lines else "module import succeeded"
-        else:
-            result["summary"] = combined_lines[-1][:240] if combined_lines else (
-                f"module import exited with code {completed.returncode}"
-            )
-        result["sandbox"] = {
-            "enabled": sandbox_policy.enabled,
-            "allow_network": sandbox_policy.allow_network,
-            "allow_subprocesses": sandbox_policy.allow_subprocesses,
-            "max_cpu_seconds": sandbox_policy.max_cpu_seconds,
-            "max_wall_clock_seconds": sandbox_policy.max_wall_clock_seconds,
-            "max_memory_mb": sandbox_policy.max_memory_mb,
-        }
-        return self._redact_validation_execution_result(result)
+        return execute_generated_module_import(
+            module_filename,
+            code_content,
+            self.config.execution_sandbox_policy(),
+            python_executable=sys.executable,
+            host_env=os.environ,
+            subprocess_run=subprocess.run,
+            sanitize_filename=self._sanitize_generated_filename,
+            write_import_runner_fn=self._write_generated_import_runner,
+            build_env_fn=self._build_generated_test_env,
+            build_preexec_fn=self._sandbox_preexec_fn,
+            redact_result=self._redact_validation_execution_result,
+        )
 
     def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:
         raw_code_analysis = context.get("code_analysis")
@@ -857,8 +799,7 @@ class Orchestrator:
         return FailureCategory.TASK_EXECUTION.value
 
     def _is_sandbox_security_violation(self, exc: Exception) -> bool:
-        message = str(exc).lower()
-        return "sandbox policy blocked" in message
+        return sandbox_security_violation(exc)
 
     def _is_repairable_failure(self, failure_category: str) -> bool:
         return failure_category in {
@@ -921,76 +862,23 @@ class Orchestrator:
         test_filename: str,
         test_content: str,
     ) -> Dict[str, Any]:
-        result: Dict[str, Any] = {
-            "available": importlib.util.find_spec("pytest") is not None,
-            "ran": False,
-            "returncode": None,
-            "summary": "",
-        }
-        if not result["available"]:
-            result["summary"] = "pytest is not installed in the current environment"
-            return self._redact_validation_execution_result(result)
-        if not code_content.strip() or not test_content.strip():
-            result["summary"] = "generated code or tests were empty"
-            return self._redact_validation_execution_result(result)
-
-        sandbox_policy = self.config.execution_sandbox_policy()
-        wall_clock_seconds = sandbox_policy.max_wall_clock_seconds
-        with tempfile.TemporaryDirectory(
-            prefix="kycortex-tests-",
-            dir=sandbox_policy.temp_root,
-        ) as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            tmp_path.chmod(0o700)
-            safe_module_filename = self._sanitize_generated_filename(module_filename, "generated_module.py")
-            safe_test_filename = self._sanitize_generated_filename(test_filename, "generated_tests.py")
-            pytest_config_path = tmp_path / "pytest.ini"
-            pytest_runner_path = self._write_generated_test_runner(tmp_path, safe_test_filename, sandbox_policy.enabled)
-            module_path = tmp_path / safe_module_filename
-            test_path = tmp_path / safe_test_filename
-            module_path.write_text(code_content, encoding="utf-8")
-            test_path.write_text(test_content, encoding="utf-8")
-            pytest_config_path.write_text("[pytest]\n", encoding="utf-8")
-            for path in (module_path, test_path, pytest_config_path, pytest_runner_path):
-                path.chmod(0o600)
-            env = self._build_generated_test_env(tmp_path, sandbox_policy)
-            command = [sys.executable]
-            if sandbox_policy.enabled:
-                command.append("-I")
-            command.append(str(pytest_runner_path))
-            try:
-                completed = subprocess.run(
-                    command,
-                    cwd=tmp_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=wall_clock_seconds,
-                    env=env,
-                    preexec_fn=self._sandbox_preexec_fn(sandbox_policy),
-                    check=False,
-                )
-            except subprocess.TimeoutExpired:
-                result["ran"] = True
-                result["returncode"] = -1
-                result["summary"] = (
-                    f"pytest timed out after {wall_clock_seconds:g} seconds"
-                )
-                return self._redact_validation_execution_result(result)
-
-        result["ran"] = True
-        result["returncode"] = completed.returncode
-        result["stdout"] = completed.stdout.strip()
-        result["stderr"] = completed.stderr.strip()
-        result["summary"] = self._summarize_pytest_output(completed.stdout, completed.stderr, completed.returncode)
-        result["sandbox"] = {
-            "enabled": sandbox_policy.enabled,
-            "allow_network": sandbox_policy.allow_network,
-            "allow_subprocesses": sandbox_policy.allow_subprocesses,
-            "max_cpu_seconds": sandbox_policy.max_cpu_seconds,
-            "max_wall_clock_seconds": sandbox_policy.max_wall_clock_seconds,
-            "max_memory_mb": sandbox_policy.max_memory_mb,
-        }
-        return self._redact_validation_execution_result(result)
+        return execute_generated_tests(
+            module_filename,
+            code_content,
+            test_filename,
+            test_content,
+            self.config.execution_sandbox_policy(),
+            python_executable=sys.executable,
+            host_env=os.environ,
+            pytest_spec_finder=importlib.util.find_spec,
+            subprocess_run=subprocess.run,
+            sanitize_filename=self._sanitize_generated_filename,
+            write_test_runner_fn=self._write_generated_test_runner,
+            build_env_fn=self._build_generated_test_env,
+            build_preexec_fn=self._sandbox_preexec_fn,
+            summarize_output=self._summarize_pytest_output,
+            redact_result=self._redact_validation_execution_result,
+        )
 
     def _build_generated_test_env(
         self,
@@ -1005,18 +893,7 @@ class Orchestrator:
         test_filename: str,
         sandbox_enabled: bool,
     ) -> Path:
-        runner_path = tmp_path / "_kycortex_run_pytest.py"
-        runner_path.write_text(
-            render_generated_test_runner(
-                sandbox_enabled=sandbox_enabled,
-                pytest_config_path=str(tmp_path / "pytest.ini"),
-                rootdir_path=str(tmp_path),
-                pytest_log_path=str(tmp_path / "pytest.log"),
-                test_filename=test_filename,
-            ),
-            encoding="utf-8",
-        )
-        return runner_path
+        return write_generated_test_runner(tmp_path, test_filename, sandbox_enabled)
 
     def _write_generated_import_runner(
         self,
@@ -1024,15 +901,7 @@ class Orchestrator:
         module_filename: str,
         sandbox_enabled: bool,
     ) -> Path:
-        runner_path = tmp_path / "_kycortex_import_module.py"
-        runner_path.write_text(
-            render_generated_import_runner(
-                sandbox_enabled=sandbox_enabled,
-                module_filename=module_filename,
-            ),
-            encoding="utf-8",
-        )
-        return runner_path
+        return write_generated_import_runner(tmp_path, module_filename, sandbox_enabled)
 
     def _sanitize_generated_filename(self, filename: str, default_filename: str) -> str:
         return sanitize_generated_filename(filename, default_filename)

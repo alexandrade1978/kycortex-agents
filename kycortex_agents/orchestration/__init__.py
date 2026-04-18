@@ -7,6 +7,13 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
 )
+from kycortex_agents.orchestration.sandbox_execution import (
+	execute_generated_module_import,
+	execute_generated_tests,
+	sandbox_security_violation,
+	write_generated_import_runner,
+	write_generated_test_runner,
+)
 from kycortex_agents.orchestration.sandbox_runtime import (
 	build_generated_test_env,
 	build_sandbox_preexec_fn,
@@ -71,6 +78,8 @@ __all__ = [
 	"BLOCKING_TEST_ISSUE_KEYS",
 	"cancel_workflow",
 	"compact_architecture_context",
+	"execute_generated_module_import",
+	"execute_generated_tests",
 	"emit_workflow_progress",
 	"exit_if_workflow_cancelled",
 	"exit_if_workflow_paused",
@@ -91,6 +100,7 @@ __all__ = [
 	"pytest_failure_is_semantic_assertion_mismatch",
 	"pytest_failure_origin",
 	"should_compact_architecture_context",
+	"sandbox_security_violation",
 	"skip_task",
 	"provider_call_metadata",
 	"redact_validation_execution_result",
@@ -108,4 +118,6 @@ __all__ = [
 	"task_max_top_level_test_count",
 	"task_requires_cli_entrypoint",
 	"WARNING_TEST_ISSUE_KEYS",
+	"write_generated_import_runner",
+	"write_generated_test_runner",
 ]

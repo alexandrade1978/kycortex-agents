@@ -14,6 +14,13 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
 )
+from kycortex_agents.orchestration.sandbox_execution import (
+	execute_generated_module_import,
+	execute_generated_tests,
+	sandbox_security_violation,
+	write_generated_import_runner,
+	write_generated_test_runner,
+)
 from kycortex_agents.orchestration.sandbox_runtime import (
 	build_generated_test_env,
 	build_sandbox_preexec_fn,
@@ -244,6 +251,65 @@ def test_build_sandbox_preexec_fn_applies_limits_with_injected_modules():
 		("core", (0, 0)),
 		("fsize", (1048576, 1048576)),
 	]
+
+
+def test_write_generated_runner_helpers_persist_scripts(tmp_path):
+	pytest_runner = write_generated_test_runner(tmp_path, "generated_tests.py", sandbox_enabled=True)
+	import_runner = write_generated_import_runner(tmp_path, "generated_module.py", sandbox_enabled=False)
+
+	assert pytest_runner.name == "_kycortex_run_pytest.py"
+	assert import_runner.name == "_kycortex_import_module.py"
+	assert "generated_tests.py" in pytest_runner.read_text(encoding="utf-8")
+	assert "generated_module.py" in import_runner.read_text(encoding="utf-8")
+
+
+def test_execute_generated_tests_returns_unavailable_when_pytest_missing_directly(tmp_path):
+	policy = KYCortexConfig(output_dir=str(tmp_path / "output")).execution_sandbox_policy()
+
+	result = execute_generated_tests(
+		"generated_module.py",
+		"def ok():\n    return 1\n",
+		"generated_tests.py",
+		"def test_ok():\n    assert True\n",
+		policy,
+		pytest_spec_finder=lambda name: None,
+	)
+
+	assert result == {
+		"available": False,
+		"ran": False,
+		"returncode": None,
+		"summary": "pytest is not installed in the current environment",
+	}
+
+
+def test_execute_generated_module_import_redacts_sensitive_output_directly(tmp_path):
+	policy = KYCortexConfig(output_dir=str(tmp_path / "output")).execution_sandbox_policy()
+
+	def fake_run(*args, **kwargs):
+		return SimpleNamespace(
+			returncode=1,
+			stdout="api_key=sk-secret-123456",
+			stderr="Authorization: Bearer sk-ant-secret-987654",
+		)
+
+	result = execute_generated_module_import(
+		"generated_module.py",
+		"def ok():\n    return 1\n",
+		policy,
+		subprocess_run=fake_run,
+	)
+
+	assert result["ran"] is True
+	assert result["returncode"] == 1
+	assert "[REDACTED]" in result["stdout"]
+	assert "[REDACTED]" in result["stderr"]
+	assert "sk-secret-123456" not in result["summary"]
+
+
+def test_sandbox_security_violation_detects_blocked_message():
+	assert sandbox_security_violation(RuntimeError("sandbox policy blocked filesystem write outside sandbox root")) is True
+	assert sandbox_security_violation(RuntimeError("provider temporarily unavailable")) is False
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

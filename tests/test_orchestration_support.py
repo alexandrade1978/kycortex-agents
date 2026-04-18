@@ -14,6 +14,10 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
 )
+from kycortex_agents.orchestration.repair_instructions import (
+	build_code_repair_instruction_from_test_failure,
+	build_repair_instruction,
+)
 from kycortex_agents.orchestration.sandbox_execution import (
 	execute_generated_module_import,
 	execute_generated_tests,
@@ -385,6 +389,84 @@ def test_build_test_validation_summary_reports_warning_override_and_pytest_detai
 	assert "Constructor arity mismatches (warning): MyClass (line 5)" in summary
 	assert "Pytest execution: PASS" in summary
 	assert summary.endswith("- Verdict: PASS (warnings overridden by pytest)")
+
+
+def test_build_repair_instruction_specializes_missing_import_directly():
+	instruction = build_repair_instruction(
+		"code-task",
+		"code_validation",
+		last_error="NameError: name 'logging' is not defined",
+		failed_code="logger = logging.getLogger(__name__)",
+		validation={},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: ("logging", "logger = logging.getLogger(__name__)"),
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: False,
+	)
+
+	assert "references logging during module import but never imports it" in instruction
+	assert "logger = logging.getLogger(__name__)" in instruction
+
+
+def test_build_repair_instruction_uses_pytest_warning_focus_directly():
+	instruction = build_repair_instruction(
+		"tests-task",
+		"test_validation",
+		last_error="",
+		failed_code="",
+		validation={
+			"test_analysis": {"type_mismatches": ["str vs int at line 10"]},
+			"test_execution": {"ran": True, "returncode": 1, "summary": "1 failed"},
+		},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: None,
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: True,
+	)
+
+	assert "type mismatches in test arguments" in instruction
+	assert "Use the correct argument types" in instruction
+
+
+def test_build_code_repair_instruction_from_test_failure_handles_duplicate_constructor_binding_directly():
+	instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: ("ComplianceRequest", "details"),
+		duplicate_constructor_argument_call_hint=lambda summary, code: "ComplianceRequest(request_id, details, **request.details)",
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: "ComplianceRequest(request_id=request.request_id, details=request.details)",
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: None,
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: None,
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: None,
+		internal_constructor_strictness_details=lambda summary, code: None,
+	)
+
+	assert "passes details twice to ComplianceRequest(...)" in instruction
+	assert "ComplianceRequest(request_id, details, **request.details)" in instruction
+	assert "ComplianceRequest(request_id=request.request_id, details=request.details)" in instruction
+
+
+def test_build_code_repair_instruction_from_test_failure_uses_generic_strictness_fallback_directly():
+	instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: None,
+		duplicate_constructor_argument_call_hint=lambda summary, code: None,
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: None,
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: None,
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: None,
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: None,
+		internal_constructor_strictness_details=lambda summary, code: ("ComplianceRequest", ["details", "status"], ["request_id"]),
+	)
+
+	assert "ComplianceRequest(...) still requires details, status" in instruction
+	assert "validator only requires request_id" in instruction
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

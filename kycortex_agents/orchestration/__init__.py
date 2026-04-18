@@ -7,6 +7,10 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
 )
+from kycortex_agents.orchestration.repair_instructions import (
+	build_code_repair_instruction_from_test_failure,
+	build_repair_instruction,
+)
 from kycortex_agents.orchestration.sandbox_execution import (
 	execute_generated_module_import,
 	execute_generated_tests,
@@ -82,8 +86,10 @@ __all__ = [
 	"AcceptanceEvaluation",
 	"AcceptanceLane",
 	"TaskAcceptanceLists",
+	"build_code_repair_instruction_from_test_failure",
 	"build_generated_test_env",
 	"build_sandbox_preexec_fn",
+	"build_repair_instruction",
 	"BLOCKING_TEST_ISSUE_KEYS",
 	"build_code_validation_summary",
 	"build_test_validation_summary",

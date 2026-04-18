@@ -1,13 +1,13 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex after publication and canary kickoff of the 1.0.13a7 alpha maintenance release.
+This file tracks the current repository-owned release state for KYCortex after publication and canary kickoff of the 1.0.13a8 alpha maintenance release.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.13a7`
-- Latest released version: `1.0.13a7`
-- Release tag for this version: `v1.0.13a7`
-- Most recent published release tag: `v1.0.13a7`
+- Package version in `pyproject.toml`: `1.0.13a8`
+- Latest released version: `1.0.13a8`
+- Release tag for this version: `v1.0.13a8`
+- Most recent published release tag: `v1.0.13a8`
 - Branch expected for release preparation: `main`
 
 ## Repository Release Gates
@@ -59,6 +59,9 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Public docs and examples now align on the validated local Ollama baseline `qwen2.5-coder:7b` with `ollama_num_ctx=16384`, using explicit HTTP endpoint overrides when the runtime is not exposed at the default local URL.
 - Clean-environment GitHub Actions validation is restored after the provider-matrix budget regression test was updated to inject its own fake OpenAI credential instead of depending on ambient developer-shell secrets.
 - The live local smoke run `output/release_user_smoke_ollama_live` completed with `repair_cycle_count=0`, and a clean-install smoke of the released package also generated a valid artifact against the same local Ollama runtime.
+- The `v1.0.13a8` fix adds typed `detail_fixture_example` dicts to each `ScenarioSpec` in the campaign script, replacing the generic `{'field_one': 'value'}` placeholder that the LLM was copying verbatim into test fixtures, causing `TypeError: '>' not supported between instances of 'str' and 'int'`.
+- Campaign `v63_openai_returns_typed_fixture` validated `returns_abuse_screening` with OpenAI gpt-4o-mini: `status=completed`, 7/7 tasks done, 0 repair cycles, 86s — previously always failed with `test_validation` after 3 repair cycles.
+- Updated baseline: OpenAI 5/5, Anthropic 5/5, Ollama 4/5 = 14/15 total (up from 13/15).
 
 ## Current Canary Status
 

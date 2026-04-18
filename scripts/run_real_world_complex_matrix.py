@@ -38,6 +38,7 @@ class ScenarioSpec:
     goal: str
     behavior_bullets: tuple[str, ...]
     detail_contract_bullets: tuple[str, ...]
+    detail_fixture_example: dict[str, object]
     docs_focus: tuple[str, ...]
     legal_focus: tuple[str, ...]
 
@@ -67,6 +68,13 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep jurisdiction and customer_type as strings. Keep identity_evidence, adverse_indicators, and missing_documents as list-like collections inside details, not numeric severity placeholders or plain strings.",
             "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request. Never fall back to default values for non-dict details.",
         ),
+        detail_fixture_example={
+            "identity_evidence": ["passport_scan"],
+            "jurisdiction": "US",
+            "customer_type": "individual",
+            "adverse_indicators": [],
+            "missing_documents": [],
+        },
         docs_focus=(
             "analyst workflow",
             "risk scoring inputs",
@@ -103,6 +111,14 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             'The request_type value in test payloads is "claim". Accept it as-is — do not restrict request_type to an invented whitelist such as ("submit", "review", "escalate").',
             'The claim_category field accepts free-form string labels such as "water_damage" or "theft". Do not restrict it to an invented whitelist of categories.',
         ),
+        detail_fixture_example={
+            "policy_id": "POL-12345",
+            "claim_category": "water_damage",
+            "claim_amount": 5000,
+            "evidence": ["photo_1"],
+            "duplicate_claim": False,
+            "suspicious_timing": False,
+        },
         docs_focus=(
             "claim intake rules",
             "fraud-triage logic",
@@ -138,6 +154,15 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep sanctioned_region and critical_service as boolean flags. Keep expired_certifications and unresolved_incidents as list-like collections, using [] when absent and explicit list entries when risk is present.",
             'The request_type value in test payloads is "vendor_submission". Accept it as-is — do not restrict request_type to an invented whitelist such as ("initial_onboarding", "renewal", "incident_review").',
         ),
+        detail_fixture_example={
+            "vendor_name": "Acme Corp",
+            "service_category": "logistics",
+            "due_diligence_evidence": ["cert_1"],
+            "sanctioned_region": False,
+            "expired_certifications": [],
+            "critical_service": True,
+            "unresolved_incidents": [],
+        },
         docs_focus=(
             "vendor due-diligence workflow",
             "risk escalation signals",
@@ -173,6 +198,14 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep order_reference and return_reason as strings, receipt_present as a boolean flag, and prior_returns plus timing_days as integers. Keep items as a list-like collection of item payload records, not a plain string placeholder.",
             "Each record inside items is a dict with exactly the keys sku (str), category (str), and value (numeric). Do not rename value to price, amount, or cost.",
         ),
+        detail_fixture_example={
+            "order_reference": "ORD-12345",
+            "return_reason": "damaged",
+            "items": [{"sku": "ITEM1", "category": "electronics", "value": 1500}],
+            "receipt_present": False,
+            "prior_returns": 3,
+            "timing_days": 15,
+        },
         docs_focus=(
             "returns screening flow",
             "abuse indicators",
@@ -209,6 +242,14 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "The approval_metadata mapping contains exactly the keys approved_by (str) and age_days (int). Do not invent additional required sub-keys such as approval_date, approved_at, or approval_timestamp.",
             "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request. Never fall back to default values for non-dict details.",
         ),
+        detail_fixture_example={
+            "requester_identity": "user@example.com",
+            "requested_roles": ["admin"],
+            "approval_metadata": {"approved_by": "manager", "age_days": 10},
+            "sod_conflicts": [],
+            "emergency_access": False,
+            "stale_approval": False,
+        },
         docs_focus=(
             "access governance workflow",
             "privilege risk inputs",
@@ -274,12 +315,14 @@ def _details_contract_block(spec: ScenarioSpec) -> str:
 
 
 def _test_fixture_contract_block(spec: ScenarioSpec) -> str:
+    example_repr = repr(spec.detail_fixture_example)
+    wrong_keys = " ".join(spec.detail_fixture_example)
     return "\n".join(
         (
             f"- Every {spec.request_name} fixture in the test suite must construct details as a literal dict with populated field values.",
             "- Never pass details as a plain string, a space-separated list of field names, or a placeholder. The implementation expects a dict and will fail on string input.",
-            "- Example of CORRECT fixture: details={'field_one': ['value'], 'field_two': 'value', 'field_three': []}",
-            "- Example of WRONG fixture: details='field_one field_two field_three'",
+            f"- Example of CORRECT fixture: details={example_repr}",
+            f"- Example of WRONG fixture: details='{wrong_keys}'",
         )
     )
 

@@ -47,7 +47,23 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - The next maintenance entry will be recorded here until it is promoted into a versioned release section.
 - All 1539 tests pass. Ruff and mypy clean.
-- Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN.
+- Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN → 14/15 GREEN after v1.0.13a8 typed fixture fix.
+
+## 1.0.13a8 - 2026-04-18
+
+### Fixed
+
+- Campaign script `_test_fixture_contract_block()` now uses scenario-specific typed fixture examples instead of a generic `{'field_one': 'value'}` placeholder.  Each `ScenarioSpec` carries a `detail_fixture_example` dict with correctly-typed Python values (int, bool, list[dict], etc.) that the LLM uses as the "CORRECT fixture" reference when generating test code.
+- This eliminates the root cause of the `returns_abuse_screening` str→int TypeError on OpenAI gpt-4o-mini: the LLM was copying the generic `'value'` string placeholders into test fixtures, causing `details.get('prior_returns', 0) > 2` to compare str vs int.
+
+### Changed
+
+- Version `1.0.13a8` is now the released alpha package baseline.
+
+### Empirical Validation
+
+- Campaign v63 `returns_abuse_screening` with OpenAI gpt-4o-mini: `status=completed`, 7/7 tasks done, 0 repair cycles, 86s.
+- Updated baseline: OpenAI 5/5, Anthropic 5/5, Ollama 4/5 = 14/15 total (up from 13/15).
 
 ## 1.0.13a7 - 2026-04-18
 

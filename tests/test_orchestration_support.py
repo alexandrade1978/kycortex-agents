@@ -1,3 +1,4 @@
+import ast
 import os
 import re
 import stat
@@ -5,10 +6,16 @@ import stat
 import pytest
 
 from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
+)
+from kycortex_agents.orchestration.sandbox_templates import (
+	render_generated_import_runner,
+	render_generated_test_runner,
+	render_sandbox_sitecustomize,
 )
 from kycortex_agents.types import ArtifactRecord, ArtifactType
 
@@ -92,3 +99,49 @@ def test_artifact_persistence_support_rejects_invalid_segment_from_injected_sani
 
 	with pytest.raises(AgentExecutionError, match="artifact path contains an invalid segment"):
 		support.sanitize_artifact_relative_path("reports/unsafe/summary.md")
+
+
+def test_ast_name_replacer_rewrites_names_in_expression():
+	expression = ast.parse("foo + bar", mode="eval").body
+	rewritten = AstNameReplacer(
+		{
+			"foo": ast.Constant(value=10),
+			"bar": ast.Name(id="baz", ctx=ast.Load()),
+		}
+	).visit(expression)
+
+	assert ast.unparse(ast.fix_missing_locations(rewritten)) == "10 + baz"
+
+
+def test_render_sandbox_sitecustomize_returns_dedented_script():
+	script = render_sandbox_sitecustomize()
+
+	assert script.startswith("import asyncio\n")
+	assert "sandbox policy blocked filesystem write outside sandbox root" in script
+	assert script.endswith("\n")
+
+
+def test_render_generated_test_runner_includes_configured_paths(tmp_path):
+	script = render_generated_test_runner(
+		sandbox_enabled=True,
+		pytest_config_path=str(tmp_path / "pytest.ini"),
+		rootdir_path=str(tmp_path),
+		pytest_log_path=str(tmp_path / "pytest.log"),
+		test_filename="generated_tests.py",
+	)
+
+	assert 'sandbox_sitecustomize = TMP_PATH / "sitecustomize.py"' in script
+	assert repr(str(tmp_path / "pytest.ini")) in script
+	assert repr("generated_tests.py") in script
+	assert "pytest.main(pytest_args)" in script
+
+
+def test_render_generated_import_runner_includes_module_filename():
+	script = render_generated_import_runner(
+		sandbox_enabled=False,
+		module_filename="code_under_test.py",
+	)
+
+	assert 'TMP_PATH / "sitecustomize.py"' in script
+	assert repr("code_under_test.py") in script
+	assert '"code_under_test"' in script

@@ -40,6 +40,15 @@ from kycortex_agents.orchestration.validation_runtime import (
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
 )
+from kycortex_agents.orchestration.validation_analysis import (
+	pytest_contract_overreach_signals,
+	pytest_failure_details,
+	pytest_failure_is_semantic_assertion_mismatch,
+	pytest_failure_origin,
+	validation_has_blocking_issues,
+	validation_has_only_warnings,
+	validation_has_static_issues,
+)
 from kycortex_agents.orchestration.workflow_control import (
 	privacy_safe_log_fields,
 	task_id_collection_count,
@@ -387,3 +396,49 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert task_id_count_log_field_name("task_ids") == "task_count"
 	assert task_id_count_log_field_name("replayed_task_ids") == "replayed_task_count"
 	assert task_id_count_log_field_name("task_id") is None
+
+
+def test_validation_analysis_helpers_extract_failure_details_and_origin_directly():
+	test_execution = {
+		"stdout": "FAILED tests_tests.py::test_example - AssertionError: assert 1 == 2\nE   AssertionError: assert 1 == 2\n",
+		"stderr": "",
+	}
+
+	assert pytest_failure_details(test_execution) == [
+		"FAILED tests_tests.py::test_example - AssertionError: assert 1 == 2 | AssertionError: assert 1 == 2"
+	]
+	assert pytest_failure_origin({"stdout": "tests_tests.py:24: AssertionError\n", "stderr": ""}, "code.py", "tests_tests.py") == "tests"
+	assert pytest_failure_is_semantic_assertion_mismatch(test_execution) is True
+
+
+def test_validation_analysis_helpers_classify_blocking_and_warning_issues_directly():
+	blocking_validation = {
+		"test_analysis": {
+			"syntax_ok": True,
+			"undefined_local_names": ["result"],
+		}
+	}
+	warning_validation = {
+		"test_analysis": {
+			"syntax_ok": True,
+			"constructor_arity_mismatches": ["MyClass (line 5)"],
+		}
+	}
+
+	assert validation_has_static_issues(blocking_validation) is True
+	assert validation_has_blocking_issues(blocking_validation) is True
+	assert validation_has_blocking_issues(warning_validation) is False
+	assert validation_has_only_warnings(warning_validation) is True
+
+
+def test_validation_analysis_helpers_detect_contract_overreach_directly():
+	test_execution = {
+		"stdout": "FAILED tests_tests.py::test_example - AssertionError: assert 'approved' == 'rejected'\n",
+		"stderr": "",
+	}
+
+	signals = pytest_contract_overreach_signals(test_execution)
+
+	assert signals == [
+		"exact status/action label mismatch ('approved' vs 'rejected') suggests an unsupported threshold assumption"
+	]

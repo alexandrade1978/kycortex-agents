@@ -33,6 +33,17 @@ from kycortex_agents.orchestration.validation_runtime import (
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
 )
+from kycortex_agents.orchestration.validation_analysis import (
+	BLOCKING_TEST_ISSUE_KEYS,
+	WARNING_TEST_ISSUE_KEYS,
+	pytest_contract_overreach_signals,
+	pytest_failure_details,
+	pytest_failure_is_semantic_assertion_mismatch,
+	pytest_failure_origin,
+	validation_has_blocking_issues,
+	validation_has_only_warnings,
+	validation_has_static_issues,
+)
 from kycortex_agents.orchestration.workflow_control import (
 	cancel_workflow,
 	emit_workflow_progress,
@@ -57,6 +68,7 @@ __all__ = [
 	"TaskAcceptanceLists",
 	"build_generated_test_env",
 	"build_sandbox_preexec_fn",
+	"BLOCKING_TEST_ISSUE_KEYS",
 	"cancel_workflow",
 	"compact_architecture_context",
 	"emit_workflow_progress",
@@ -74,6 +86,10 @@ __all__ = [
 	"render_sandbox_sitecustomize",
 	"replay_workflow",
 	"resume_workflow",
+	"pytest_contract_overreach_signals",
+	"pytest_failure_details",
+	"pytest_failure_is_semantic_assertion_mismatch",
+	"pytest_failure_origin",
 	"should_compact_architecture_context",
 	"skip_task",
 	"provider_call_metadata",
@@ -81,6 +97,9 @@ __all__ = [
 	"sanitize_output_provider_call_metadata",
 	"sanitize_generated_filename",
 	"summarize_pytest_output",
+	"validation_has_blocking_issues",
+	"validation_has_only_warnings",
+	"validation_has_static_issues",
 	"task_id_collection_count",
 	"task_id_count_log_field_name",
 	"task_exact_top_level_test_count",
@@ -88,4 +107,5 @@ __all__ = [
 	"task_line_budget",
 	"task_max_top_level_test_count",
 	"task_requires_cli_entrypoint",
+	"WARNING_TEST_ISSUE_KEYS",
 ]

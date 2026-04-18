@@ -14,6 +14,17 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
 )
+from kycortex_agents.orchestration.repair_analysis import (
+	duplicate_constructor_explicit_rewrite_hint,
+	invalid_outcome_missing_audit_trail_details,
+	missing_import_nameerror_details,
+	missing_object_attribute_details,
+	nested_payload_wrapper_field_validation_details,
+	plain_class_field_default_factory_details,
+	render_name_list,
+	required_field_list_from_failed_artifact,
+	suggest_declared_attribute_replacement,
+)
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
@@ -467,6 +478,121 @@ def test_build_code_repair_instruction_from_test_failure_uses_generic_strictness
 
 	assert "ComplianceRequest(...) still requires details, status" in instruction
 	assert "validator only requires request_id" in instruction
+
+
+def test_missing_import_nameerror_details_extracts_symbol_and_line_directly():
+	details = missing_import_nameerror_details(
+		"Generated code validation:\n- Module import: FAIL\n- Import summary: NameError: name 'logging' is not defined\n- Verdict: FAIL",
+		"from dataclasses import dataclass\nlogger = logging.getLogger(__name__)\n",
+	)
+
+	assert details == ("logging", "logger = logging.getLogger(__name__)")
+
+
+def test_required_field_and_nested_wrapper_detection_work_directly():
+	failed_code = (
+		"def validate_request(request):\n"
+		"    required_fields = {'request_id', 'request_type', 'details'}\n"
+		"    return required_fields.issubset(request.details)\n"
+	)
+
+	assert required_field_list_from_failed_artifact(failed_code) == ["request_id", "request_type", "details"]
+	assert nested_payload_wrapper_field_validation_details(
+		"FAILED tests_tests.py::test_happy_path - ValueError: Invalid request\nFAILED tests_tests.py::test_batch_processing - ValueError: Invalid request",
+		failed_code,
+	) == (
+		"details",
+		["request_id", "request_type", "details"],
+		"return required_fields.issubset(request.details)",
+	)
+
+
+def test_plain_class_field_default_factory_details_detects_runtime_placeholder_directly():
+	failed_code = (
+		"from dataclasses import field\n\n"
+		"class ComplianceIntakeService:\n"
+		"    audit_history: list[dict] = field(default_factory=list)\n"
+	)
+
+	assert plain_class_field_default_factory_details(
+		"AttributeError: 'Field' object has no attribute 'append'",
+		failed_code,
+	) == ("ComplianceIntakeService", "audit_history")
+
+
+def test_missing_object_attribute_and_replacement_helpers_work_directly():
+	failed_code = (
+		"from dataclasses import dataclass\n\n"
+		"@dataclass\n"
+		"class VendorProfile:\n"
+		"    certifications: list[str]\n"
+		"    incidents: list[str]\n"
+	)
+
+	class_name, attribute_name, class_fields = missing_object_attribute_details(
+		"AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'",
+		failed_code,
+	)
+
+	assert (class_name, attribute_name) == ("VendorProfile", "expired_certifications")
+	assert class_fields == ["certifications", "incidents"]
+	assert suggest_declared_attribute_replacement(attribute_name, class_fields) == "certifications"
+	assert render_name_list(class_fields) == "certifications and incidents"
+
+
+def test_duplicate_constructor_rewrite_hint_and_invalid_audit_detection_work_directly():
+	failed_code = (
+		"from dataclasses import dataclass\n\n"
+		"@dataclass\n"
+		"class VendorProfile:\n"
+		"    vendor_id: str\n"
+		"    service_category: str\n"
+		"    due_diligence_evidence: list[str]\n"
+		"    is_sanctioned: bool\n\n"
+		"def validate_request(request):\n"
+		"    required_fields = ['vendor_id', 'service_category', 'due_diligence_evidence']\n"
+		"    return all(field in request.details for field in required_fields)\n\n"
+		"def build_vendor_profile(request):\n"
+		"    vendor_id = request.details['vendor_id']\n"
+		"    return VendorProfile(vendor_id, **request.details)\n"
+	)
+
+	assert duplicate_constructor_explicit_rewrite_hint(
+		"TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'",
+		failed_code,
+	) == (
+		"VendorProfile(vendor_id=vendor_id, service_category=request.details['service_category'], "
+		"due_diligence_evidence=request.details['due_diligence_evidence'], "
+		"is_sanctioned=request.details.get('is_sanctioned', False))"
+	)
+
+	invalid_path_code = (
+		"from dataclasses import dataclass\n\n"
+		"@dataclass\n"
+		"class TriageOutcome:\n"
+		"    outcome: str\n"
+		"    risk_score: float\n"
+		"    audit_log: str = ''\n\n"
+		"def handle_request(request):\n"
+		"    return TriageOutcome(outcome='invalid', risk_score=0.0)\n"
+	)
+	tests_code = (
+		"def test_validation_failure(service, invalid_request):\n"
+		"    result = service.handle_request(invalid_request)\n"
+		"    assert result.outcome == 'invalid'\n"
+		"    assert len(result.audit_log) > 0\n"
+	)
+
+	assert invalid_outcome_missing_audit_trail_details(
+		"FAILED tests_tests.py::test_validation_failure - AssertionError: assert 0 > 0",
+		tests_code,
+		invalid_path_code,
+	) == (
+		["test_validation_failure"],
+		"audit_log",
+		"TriageOutcome(outcome='invalid', risk_score=0.0)",
+		True,
+	)
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

@@ -25,6 +25,26 @@ from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
+from kycortex_agents.orchestration.repair_analysis import (
+    class_field_annotations_from_failed_artifact,
+    class_field_names_from_failed_artifact,
+    default_value_for_annotation,
+    duplicate_constructor_argument_call_details,
+    duplicate_constructor_argument_call_hint,
+    duplicate_constructor_argument_details,
+    duplicate_constructor_explicit_rewrite_hint,
+    first_non_import_line_with_name,
+    internal_constructor_strictness_details,
+    invalid_outcome_missing_audit_trail_details,
+    missing_import_nameerror_details,
+    missing_object_attribute_details,
+    missing_required_constructor_details,
+    nested_payload_wrapper_field_validation_details,
+    plain_class_field_default_factory_details,
+    render_name_list,
+    required_field_list_from_failed_artifact,
+    suggest_declared_attribute_replacement,
+)
 from kycortex_agents.orchestration.repair_instructions import (
     build_code_repair_instruction_from_test_failure,
     build_repair_instruction,
@@ -1813,47 +1833,14 @@ class Orchestrator:
 
     @staticmethod
     def _first_non_import_line_with_name(content: object, symbol_name: str) -> str:
-        if not isinstance(content, str) or not content.strip() or not symbol_name:
-            return ""
-        symbol_pattern = re.compile(rf"\b{re.escape(symbol_name)}\b")
-        for line in content.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            if stripped.startswith("import ") or stripped.startswith("from "):
-                continue
-            if symbol_pattern.search(stripped):
-                return stripped
-        return ""
+        return first_non_import_line_with_name(content, symbol_name)
 
     def _missing_import_nameerror_details(
         self,
         validation_summary: object,
         failed_artifact_content: object = "",
     ) -> tuple[str, str] | None:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return None
-
-        summary_lower = validation_summary.lower()
-        if not any(
-            marker in summary_lower
-            for marker in ("module import failed", "module import: fail", "import summary:")
-        ):
-            return None
-
-        match = re.search(
-            r"NameError:\s*name ['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]? is not defined",
-            validation_summary,
-        )
-        if match is None:
-            return None
-
-        missing_name = match.group(1)
-        if missing_name in {"field", "datetime", "date", "timedelta", "timezone"}:
-            return None
-
-        broken_line = self._first_non_import_line_with_name(failed_artifact_content, missing_name)
-        return missing_name, broken_line
+        return missing_import_nameerror_details(validation_summary, failed_artifact_content)
 
     @staticmethod
     def _content_has_matching_datetime_import(content: object) -> bool:
@@ -2150,180 +2137,49 @@ class Orchestrator:
 
     @staticmethod
     def _render_name_list(names: list[str]) -> str:
-        cleaned = [name for name in names if isinstance(name, str) and name]
-        if not cleaned:
-            return ""
-        if len(cleaned) == 1:
-            return cleaned[0]
-        if len(cleaned) == 2:
-            return f"{cleaned[0]} and {cleaned[1]}"
-        return f"{', '.join(cleaned[:-1])}, and {cleaned[-1]}"
+        return render_name_list(names)
 
     @staticmethod
     def _missing_required_constructor_details(
         validation_summary: object,
     ) -> Optional[tuple[str, list[str]]]:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return None
-
-        match = re.search(
-            r"TypeError:\s+([A-Za-z_][A-Za-z0-9_]*)\.__init__\(\).*?missing\s+\d+\s+required positional arguments?:\s*([^\n;|]+)",
-            validation_summary,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-
-        missing_fields = list(dict.fromkeys(re.findall(r"'([^']+)'", match.group(2))))
-        if not missing_fields:
-            return None
-        return match.group(1), missing_fields
+        return missing_required_constructor_details(validation_summary)
 
     @staticmethod
     def _required_field_list_from_failed_artifact(
         failed_artifact_content: object,
     ) -> list[str]:
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return []
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return []
-
-        for node in ast.walk(tree):
-            target_names: list[str] = []
-            value_node: ast.AST | None = None
-            if isinstance(node, ast.Assign):
-                target_names = [target.id for target in node.targets if isinstance(target, ast.Name)]
-                value_node = node.value
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                target_names = [node.target.id]
-                value_node = node.value
-            if not any(name in {"required_fields", "required_keys"} for name in target_names):
-                continue
-            if value_node is None:
-                continue
-
-            items = Orchestrator._string_literal_sequence(value_node)
-            if items:
-                return items
-
-            try:
-                value = ast.literal_eval(value_node)
-            except (ValueError, SyntaxError):
-                continue
-            if isinstance(value, (list, tuple, set)) and all(isinstance(item, str) for item in value):
-                return list(value)
-
-        return []
+        return required_field_list_from_failed_artifact(failed_artifact_content)
 
     def _nested_payload_wrapper_field_validation_details(
         self,
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[tuple[str, list[str], str]]:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return None
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return None
-
-        summary_lower = validation_summary.lower()
-        if "valueerror" not in summary_lower or "invalid" not in summary_lower:
-            return None
-        if not any(token in summary_lower for token in ("test_happy_path", "test_batch", "test_batch_processing")):
-            return None
-
-        container_name = next(
-            (
-                name
-                for name in ("details", "data", "metadata", "payload")
-                if f"request.{name}" in failed_artifact_content
-            ),
-            "",
+        return nested_payload_wrapper_field_validation_details(
+            validation_summary,
+            failed_artifact_content,
         )
-        if not container_name:
-            return None
-
-        required_fields = self._required_field_list_from_failed_artifact(failed_artifact_content)
-        if not required_fields:
-            return None
-
-        wrapper_field_names = {"request_id", "request_type", "details", "data", "metadata", "payload"}
-        offending_fields = [
-            field for field in required_fields
-            if field in wrapper_field_names or field == container_name
-        ]
-        if not offending_fields:
-            return None
-
-        validation_line = ""
-        for line in failed_artifact_content.splitlines():
-            stripped = line.strip()
-            if (
-                stripped
-                and f"request.{container_name}" in stripped
-                and ("issubset" in stripped or " in request." in stripped)
-            ):
-                validation_line = stripped
-                break
-
-        return container_name, offending_fields, validation_line
 
     def _internal_constructor_strictness_details(
         self,
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[tuple[str, list[str], list[str]]]:
-        constructor_details = self._missing_required_constructor_details(validation_summary)
-        if constructor_details is None:
-            return None
-        class_name, missing_fields = constructor_details
-        required_fields = self._required_field_list_from_failed_artifact(failed_artifact_content)
-        return class_name, missing_fields, required_fields
+        return internal_constructor_strictness_details(
+            validation_summary,
+            failed_artifact_content,
+        )
 
     def _plain_class_field_default_factory_details(
         self,
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[tuple[str, str]]:
-        summary_lower = validation_summary.lower() if isinstance(validation_summary, str) else ""
-        if not any(
-            token in summary_lower
-            for token in (
-                "non-dataclass field(...)",
-                "field' object has no attribute",
-                "field object has no attribute",
-            )
-        ):
-            return None
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return None
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return None
-
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef) or self._has_dataclass_decorator(node):
-                continue
-            for statement in node.body:
-                field_name = ""
-                value: Optional[ast.expr] = None
-                if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
-                    field_name = statement.target.id
-                    value = statement.value
-                elif isinstance(statement, ast.Assign) and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Name):
-                    field_name = statement.targets[0].id
-                    value = statement.value
-                if not field_name or not isinstance(value, ast.Call):
-                    continue
-                if self._call_expression_basename(value.func) != "field":
-                    continue
-                return node.name, field_name
-
-        return None
+        return plain_class_field_default_factory_details(
+            validation_summary,
+            failed_artifact_content,
+        )
 
     @staticmethod
     def _failing_pytest_test_names(validation_summary: object) -> list[str]:
@@ -2483,300 +2339,76 @@ class Orchestrator:
         existing_tests: object,
         failed_artifact_content: object,
     ) -> Optional[tuple[list[str], str, str, bool]]:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return None
-        if "AssertionError" not in validation_summary and " - assert " not in validation_summary:
-            return None
-        if not isinstance(existing_tests, str) or not existing_tests.strip():
-            return None
-
-        failing_test_names = set(self._failing_pytest_test_names(validation_summary))
-        if not failing_test_names:
-            return None
-
-        try:
-            tree = ast.parse(existing_tests)
-        except SyntaxError:
-            return None
-
-        field_name = "audit_log"
-        matching_tests: list[str] = []
-        for node in tree.body:
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if node.name not in failing_test_names:
-                continue
-            if not self._test_function_targets_invalid_path(node):
-                continue
-            if not self._test_requires_non_empty_result_field(node, field_name):
-                continue
-            matching_tests.append(node.name)
-
-        if not matching_tests:
-            return None
-
-        invalid_return_details = self._invalid_outcome_audit_return_details(
+        return invalid_outcome_missing_audit_trail_details(
+            validation_summary,
+            existing_tests,
             failed_artifact_content,
-            field_name,
         )
-        if invalid_return_details is None:
-            return matching_tests, field_name, "", False
-        invalid_return_call, omitted_field = invalid_return_details
-        return matching_tests, field_name, invalid_return_call, omitted_field
 
     @staticmethod
     def _duplicate_constructor_argument_details(
         validation_summary: object,
     ) -> Optional[tuple[str, str]]:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return None
-
-        match = re.search(
-            r"TypeError:\s+([A-Za-z_][A-Za-z0-9_]*)\.__init__\(\).*?got multiple values for argument '([^']+)'",
-            validation_summary,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        return match.group(1), match.group(2)
+        return duplicate_constructor_argument_details(validation_summary)
 
     def _duplicate_constructor_argument_call_hint(
         self,
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[str]:
-        call_details = self._duplicate_constructor_argument_call_details(
+        return duplicate_constructor_argument_call_hint(
             validation_summary,
             failed_artifact_content,
         )
-        if call_details is None:
-            return None
-        return call_details[2]
 
     def _duplicate_constructor_argument_call_details(
         self,
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[tuple[str, str, str, str, str]]:
-        duplicate_argument_details = self._duplicate_constructor_argument_details(
+        return duplicate_constructor_argument_call_details(
             validation_summary,
+            failed_artifact_content,
         )
-        if duplicate_argument_details is None:
-            return None
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return None
-
-        class_name, field_name = duplicate_argument_details
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return None
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            if self._callable_name(node) != class_name:
-                continue
-
-            mapping_expression = ""
-            for keyword in node.keywords:
-                if keyword.arg is None:
-                    mapping_expression = self._render_expression(keyword.value).strip()
-                    break
-            if not mapping_expression:
-                continue
-
-            field_expression = ""
-            for keyword in node.keywords:
-                if keyword.arg == field_name:
-                    field_expression = self._render_expression(keyword.value).strip()
-                    break
-            if not field_expression:
-                for argument in node.args:
-                    rendered_argument = self._render_expression(argument).strip()
-                    if (
-                        rendered_argument == field_name
-                        or self._expression_root_name(argument) == field_name
-                    ):
-                        field_expression = rendered_argument
-                        break
-            if not field_expression:
-                continue
-
-            rendered_call = self._render_expression(node).strip()
-            if rendered_call:
-                return class_name, field_name, rendered_call, mapping_expression, field_expression
-        return None
 
     def _duplicate_constructor_explicit_rewrite_hint(
         self,
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[str]:
-        call_details = self._duplicate_constructor_argument_call_details(
+        return duplicate_constructor_explicit_rewrite_hint(
             validation_summary,
             failed_artifact_content,
         )
-        if call_details is None:
-            return None
-
-        class_name, field_name, _, mapping_expression, field_expression = call_details
-        class_fields = self._class_field_names_from_failed_artifact(
-            failed_artifact_content,
-            class_name,
-        )
-        if not class_fields:
-            return None
-
-        required_fields = set(self._required_field_list_from_failed_artifact(failed_artifact_content))
-        annotation_map = self._class_field_annotations_from_failed_artifact(
-            failed_artifact_content,
-            class_name,
-        )
-        rendered_arguments: list[str] = []
-        for class_field in class_fields:
-            if class_field == field_name:
-                field_value = field_expression
-            elif class_field in required_fields:
-                field_value = f"{mapping_expression}[{class_field!r}]"
-            else:
-                default_value = self._default_value_for_annotation(annotation_map.get(class_field, ""))
-                if default_value:
-                    field_value = f"{mapping_expression}.get({class_field!r}, {default_value})"
-                else:
-                    field_value = f"{mapping_expression}.get({class_field!r})"
-            rendered_arguments.append(f"{class_field}={field_value}")
-
-        if not rendered_arguments:
-            return None
-        return f"{class_name}({', '.join(rendered_arguments)})"
 
     @staticmethod
     def _class_field_annotations_from_failed_artifact(
         failed_artifact_content: object,
         class_name: str,
     ) -> dict[str, str]:
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return {}
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return {}
-
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef) or node.name != class_name:
-                continue
-            annotations: dict[str, str] = {}
-            for statement in node.body:
-                if not isinstance(statement, ast.AnnAssign):
-                    continue
-                if isinstance(statement.target, ast.Name):
-                    annotations[statement.target.id] = ast.unparse(statement.annotation).strip()
-            return annotations
-        return {}
+        return class_field_annotations_from_failed_artifact(failed_artifact_content, class_name)
 
     @staticmethod
     def _default_value_for_annotation(annotation: str) -> str:
-        normalized = annotation.strip()
-        if not normalized:
-            return ""
-        if normalized == "bool":
-            return "False"
-        if normalized == "str":
-            return "''"
-        if normalized == "int":
-            return "0"
-        if normalized == "float":
-            return "0.0"
-        if normalized in {"dict", "Dict"} or normalized.startswith(("dict[", "Dict[")):
-            return "{}"
-        if normalized in {"list", "List"} or normalized.startswith(("list[", "List[")):
-            return "[]"
-        if normalized in {"set", "Set"} or normalized.startswith(("set[", "Set[")):
-            return "set()"
-        return ""
+        return default_value_for_annotation(annotation)
 
     @staticmethod
     def _class_field_names_from_failed_artifact(
         failed_artifact_content: object,
         class_name: str,
     ) -> list[str]:
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return []
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return []
-
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef) or node.name != class_name:
-                continue
-            fields: list[str] = []
-            for statement in node.body:
-                if not isinstance(statement, ast.AnnAssign):
-                    continue
-                if isinstance(statement.target, ast.Name):
-                    fields.append(statement.target.id)
-            return fields
-        return []
+        return class_field_names_from_failed_artifact(failed_artifact_content, class_name)
 
     def _missing_object_attribute_details(
         self,
         validation_summary: object,
         failed_artifact_content: object,
     ) -> Optional[tuple[str, str, list[str]]]:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return None
-
-        match = re.search(
-            r"AttributeError:\s+['\"]([A-Za-z_][A-Za-z0-9_]*)['\"] object has no attribute ['\"]([^'\"]+)['\"]",
-            validation_summary,
-        )
-        if match is None:
-            return None
-
-        class_name = match.group(1)
-        attribute_name = match.group(2).strip()
-        if not attribute_name:
-            return None
-        class_fields = self._class_field_names_from_failed_artifact(
-            failed_artifact_content,
-            class_name,
-        )
-        return class_name, attribute_name, class_fields
+        return missing_object_attribute_details(validation_summary, failed_artifact_content)
 
     @staticmethod
     def _suggest_declared_attribute_replacement(attribute_name: str, class_fields: list[str]) -> Optional[str]:
-        if not attribute_name or not class_fields:
-            return None
-
-        normalized_attribute = attribute_name.lower()
-        attribute_tokens = {token for token in normalized_attribute.split("_") if token}
-        best_match: Optional[str] = None
-        best_score = (-1, -1)
-
-        for field_name in class_fields:
-            normalized_field = field_name.lower()
-            if normalized_field == normalized_attribute:
-                return field_name
-
-            field_tokens = {token for token in normalized_field.split("_") if token}
-            overlap = len(field_tokens & attribute_tokens)
-            prefix_suffix_bonus = 1 if (
-                normalized_attribute.endswith(normalized_field)
-                or normalized_field.endswith(normalized_attribute)
-            ) else 0
-            if overlap <= 0 and prefix_suffix_bonus == 0:
-                continue
-
-            score = (prefix_suffix_bonus, overlap)
-            if score > best_score:
-                best_score = score
-                best_match = field_name
-
-        return best_match
+        return suggest_declared_attribute_replacement(attribute_name, class_fields)
 
     def _previous_valid_test_surface(
         self, failed_artifact_content: object, imported_module_symbols: list[str]

@@ -54,6 +54,15 @@ from kycortex_agents.orchestration.repair_signals import (
     validation_summary_has_missing_datetime_import_issue,
     validation_summary_has_required_evidence_runtime_issue,
 )
+from kycortex_agents.orchestration.repair_test_analysis import (
+    analyze_test_repair_surface,
+    is_helper_alias_like_name,
+    module_defined_symbol_names,
+    normalized_helper_surface_symbols,
+    previous_valid_test_surface,
+    validation_summary_helper_alias_names,
+    validation_summary_symbols,
+)
 from kycortex_agents.orchestration.repair_instructions import (
     build_code_repair_instruction_from_test_failure,
     build_repair_instruction,
@@ -1758,87 +1767,29 @@ class Orchestrator:
         return [item.strip() for item in raw_usages if isinstance(item, str) and item.strip()]
 
     def _normalized_helper_surface_symbols(self, raw_values: object) -> list[str]:
-        if not isinstance(raw_values, list):
-            return []
-
-        seen: set[str] = set()
-        symbols: list[str] = []
-        for value in raw_values:
-            if not isinstance(value, str):
-                continue
-            symbol = value.split(" (line ", 1)[0].strip()
-            if not symbol or symbol in seen:
-                continue
-            seen.add(symbol)
-            symbols.append(symbol)
-        return symbols
+        return normalized_helper_surface_symbols(raw_values)
 
     @staticmethod
     def _validation_summary_symbols(validation_summary: str, label: str) -> list[str]:
-        prefix = f"- {label}:"
-        for line in validation_summary.splitlines():
-            if not line.startswith(prefix):
-                continue
-            raw_value = line[len(prefix):].strip()
-            if not raw_value or raw_value.lower() == "none":
-                return []
-            return [item.strip() for item in raw_value.split(",") if item.strip()]
-        return []
+        return validation_summary_symbols(validation_summary, label)
 
     @staticmethod
     def _module_defined_symbol_names(implementation_code: object) -> list[str]:
-        if not isinstance(implementation_code, str) or not implementation_code.strip():
-            return []
-        try:
-            tree = ast.parse(implementation_code)
-        except SyntaxError:
-            return []
-
-        names: list[str] = []
-        seen: set[str] = set()
-        for node in tree.body:
-            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if node.name in seen:
-                continue
-            seen.add(node.name)
-            names.append(node.name)
-        return names
+        return module_defined_symbol_names(implementation_code)
 
     @staticmethod
     def _is_helper_alias_like_name(name: str) -> bool:
-        normalized = name.strip().lower()
-        if not normalized:
-            return False
-        return normalized.endswith((
-            "logger",
-            "scorer",
-            "processor",
-            "manager",
-            "repository",
-            "validator",
-            "engine",
-            "service",
-        ))
+        return is_helper_alias_like_name(name)
 
     def _validation_summary_helper_alias_names(
         self,
         validation_summary: object,
         implementation_code: object = "",
     ) -> list[str]:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return []
-        module_defined_symbols = {
-            name.lower() for name in self._module_defined_symbol_names(implementation_code)
-        }
-        undefined_names = self._normalized_helper_surface_symbols(
-            self._validation_summary_symbols(validation_summary, "Undefined local names")
+        return validation_summary_helper_alias_names(
+            validation_summary,
+            implementation_code,
         )
-        return [
-            name
-            for name in undefined_names
-            if name.lower() not in module_defined_symbols and self._is_helper_alias_like_name(name)
-        ]
 
     @staticmethod
     def _first_non_import_line_with_name(content: object, symbol_name: str) -> str:
@@ -1918,23 +1869,18 @@ class Orchestrator:
     ) -> bool:
         if not isinstance(validation_summary, str) or not validation_summary.strip():
             return True
-        available_module_symbols = {
-            name.lower(): name for name in self._module_defined_symbol_names(implementation_code)
-        }
-        undefined_local_names = self._normalized_helper_surface_symbols(
-            self._validation_summary_symbols(validation_summary, "Undefined local names")
+        analysis = analyze_test_repair_surface(
+            validation_summary,
+            implementation_code,
+            failed_artifact_content,
         )
-        has_reusable_missing_imports = any(
-            name.lower() not in {"datetime", "pytest"}
-            and name.lower() in available_module_symbols
-            for name in undefined_local_names
-        )
+        has_reusable_missing_imports = bool(analysis.undefined_available_module_symbols)
         has_required_evidence_runtime_issue = self._validation_summary_has_required_evidence_runtime_issue(
             validation_summary,
             failed_artifact_content,
             implementation_code,
         )
-        if self._validation_summary_helper_alias_names(validation_summary, implementation_code):
+        if analysis.helper_alias_names:
             return False
         if has_required_evidence_runtime_issue and not has_reusable_missing_imports:
             return False
@@ -2308,78 +2254,10 @@ class Orchestrator:
     def _previous_valid_test_surface(
         self, failed_artifact_content: object, imported_module_symbols: list[str]
     ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return {}, {}
-        if not imported_module_symbols:
-            return {}, {}
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return {}, {}
-
-        imported_symbol_set = set(imported_module_symbols)
-        instance_bindings: dict[str, str] = {}
-        member_calls_by_class: dict[str, list[str]] = {}
-        constructor_keywords_by_class: dict[str, list[str]] = {}
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            value = node.value
-            if not (
-                isinstance(value, ast.Call)
-                and isinstance(value.func, ast.Name)
-                and value.func.id in imported_symbol_set
-            ):
-                continue
-
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    instance_bindings[target.id] = value.func.id
-            for keyword in value.keywords:
-                if keyword.arg:
-                    self._append_unique_mapping_value(
-                        constructor_keywords_by_class, value.func.id, keyword.arg
-                    )
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-
-            if isinstance(node.func, ast.Name) and node.func.id in imported_symbol_set:
-                for keyword in node.keywords:
-                    if keyword.arg:
-                        self._append_unique_mapping_value(
-                            constructor_keywords_by_class, node.func.id, keyword.arg
-                        )
-                continue
-
-            if not isinstance(node.func, ast.Attribute):
-                continue
-
-            owner_class: str | None = None
-            value = node.func.value
-            if isinstance(value, ast.Name):
-                owner_class = instance_bindings.get(value.id)
-            elif (
-                isinstance(value, ast.Call)
-                and isinstance(value.func, ast.Name)
-                and value.func.id in imported_symbol_set
-            ):
-                owner_class = value.func.id
-                for keyword in value.keywords:
-                    if keyword.arg:
-                        self._append_unique_mapping_value(
-                            constructor_keywords_by_class, value.func.id, keyword.arg
-                        )
-
-            if owner_class:
-                self._append_unique_mapping_value(
-                    member_calls_by_class, owner_class, node.func.attr
-                )
-
-        return member_calls_by_class, constructor_keywords_by_class
+        return previous_valid_test_surface(
+            failed_artifact_content,
+            imported_module_symbols,
+        )
 
     def _has_repair_task_for_cycle(self, project: ProjectState, task_id: str, cycle_number: int) -> bool:
         for existing_task in project.tasks:
@@ -6065,36 +5943,17 @@ class Orchestrator:
             )
 
         implementation_code = context.get("code", "") if isinstance(context, dict) else ""
-        available_module_symbol_map = {
-            name.lower(): name for name in self._module_defined_symbol_names(implementation_code)
-        }
-        imported_module_symbols = self._validation_summary_symbols(
-            validation_summary, "Imported module symbols"
+        surface_analysis = analyze_test_repair_surface(
+            validation_summary,
+            implementation_code,
+            failed_artifact_content,
         )
-        undefined_local_names = self._normalized_helper_surface_symbols(
-            self._validation_summary_symbols(validation_summary, "Undefined local names")
-        )
-        undefined_available_module_symbols: list[str] = []
-        for name in undefined_local_names:
-            normalized_name = name.lower()
-            if normalized_name in {"pytest", "datetime"}:
-                continue
-            actual_name = available_module_symbol_map.get(normalized_name)
-            if actual_name and actual_name not in imported_module_symbols and actual_name not in undefined_available_module_symbols:
-                undefined_available_module_symbols.append(actual_name)
-        helper_alias_names = [
-            name
-            for name in undefined_local_names
-            if name not in imported_module_symbols
-            and name.lower() not in available_module_symbol_map
-            and self._is_helper_alias_like_name(name)
-        ]
-        unknown_module_symbols = self._validation_summary_symbols(
-            validation_summary, "Unknown module symbols"
-        )
-        previous_member_calls, previous_constructor_keywords = self._previous_valid_test_surface(
-            failed_artifact_content, imported_module_symbols
-        )
+        imported_module_symbols = surface_analysis.imported_module_symbols
+        undefined_available_module_symbols = surface_analysis.undefined_available_module_symbols
+        helper_alias_names = surface_analysis.helper_alias_names
+        unknown_module_symbols = surface_analysis.unknown_module_symbols
+        previous_member_calls = surface_analysis.previous_member_calls
+        previous_constructor_keywords = surface_analysis.previous_constructor_keywords
 
         lines.append(
             "Rewrite the full pytest module from the top, but treat the current implementation artifact and API contract as fixed ground truth. Remove any test, fixture, or helper that is not required by the documented scenarios."

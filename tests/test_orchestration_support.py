@@ -33,6 +33,12 @@ from kycortex_agents.orchestration.repair_signals import (
 	validation_summary_has_missing_datetime_import_issue,
 	validation_summary_has_required_evidence_runtime_issue,
 )
+from kycortex_agents.orchestration.repair_test_analysis import (
+	analyze_test_repair_surface,
+	module_defined_symbol_names,
+	previous_valid_test_surface,
+	validation_summary_helper_alias_names,
+)
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
@@ -637,6 +643,77 @@ def test_required_evidence_repair_signals_detect_incomplete_payloads_directly():
 		"risk_scores = []\n" + failed_tests,
 		implementation_code,
 	) is True
+
+
+def test_module_defined_symbol_names_and_helper_alias_detection_work_directly():
+	implementation_code = (
+		"class ComplianceIntakeService:\n"
+		"    pass\n\n"
+		"def validate_request(request):\n"
+		"    return True\n"
+	)
+	validation_summary = (
+		"Generated test validation:\n"
+		"- Undefined local names: AuditLogger (line 6), validate_request (line 9)\n"
+		"- Verdict: FAIL"
+	)
+
+	assert module_defined_symbol_names(implementation_code) == ["ComplianceIntakeService", "validate_request"]
+	assert validation_summary_helper_alias_names(validation_summary, implementation_code) == ["AuditLogger"]
+
+
+def test_previous_valid_test_surface_extracts_member_calls_and_constructor_keywords_directly():
+	failed_tests = (
+		"from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+		"def test_happy_path():\n"
+		"    service = ComplianceIntakeService()\n"
+		"    request = ComplianceRequest(request_id='req-1', request_type='screening', details={}, timestamp=1.0)\n"
+		"    service.handle_request(request)\n"
+	)
+
+	member_calls, constructor_keywords = previous_valid_test_surface(
+		failed_tests,
+		["ComplianceIntakeService", "ComplianceRequest"],
+	)
+
+	assert member_calls == {"ComplianceIntakeService": ["handle_request"]}
+	assert constructor_keywords == {
+		"ComplianceRequest": ["request_id", "request_type", "details", "timestamp"]
+	}
+
+
+def test_analyze_test_repair_surface_collects_reusable_imports_and_alias_drift_directly():
+	implementation_code = (
+		"class AuditLogger:\n"
+		"    pass\n\n"
+		"class ComplianceIntakeService:\n"
+		"    def handle_request(self, request):\n"
+		"        return None\n"
+	)
+	validation_summary = (
+		"Generated test validation:\n"
+		"- Imported module symbols: ComplianceIntakeService\n"
+		"- Undefined local names: AuditLogger (line 6), AuditService (line 8), pytest (line 10)\n"
+		"- Unknown module symbols: none\n"
+		"- Verdict: FAIL"
+	)
+	failed_tests = (
+		"from code_implementation import ComplianceIntakeService\n\n"
+		"def test_happy_path():\n"
+		"    service = ComplianceIntakeService()\n"
+		"    service.handle_request(None)\n"
+	)
+
+	analysis = analyze_test_repair_surface(
+		validation_summary,
+		implementation_code,
+		failed_tests,
+	)
+
+	assert analysis.imported_module_symbols == ["ComplianceIntakeService"]
+	assert analysis.undefined_available_module_symbols == ["AuditLogger"]
+	assert analysis.helper_alias_names == ["AuditService"]
+	assert analysis.previous_member_calls == {"ComplianceIntakeService": ["handle_request"]}
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

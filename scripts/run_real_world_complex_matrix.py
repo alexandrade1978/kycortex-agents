@@ -58,7 +58,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
         ),
         behavior_bullets=(
             "Validate required identity evidence and reject malformed onboarding submissions early.",
-            "Score risk using jurisdiction, customer type, adverse indicators, and missing-document severity.",
+            "Score risk as an additive numeric value (int or float, minimum 0). Increase the score when adverse indicators or missing documents are present. Use addition and weighted sums only — never divide by the count of any detail field because empty lists would cause ZeroDivisionError.",
             "Track auditable review outcomes such as approved, escalated, or blocked.",
             "Support batch intake while preserving per-request audit records and summaries.",
         ),
@@ -67,6 +67,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep identity_evidence as the evidence collection inside details. Do not replace it with guessed aliases such as identity_proof, address_proof, documents, or document_list.",
             "Keep jurisdiction and customer_type as strings. Keep identity_evidence, adverse_indicators, and missing_documents as list-like collections inside details, not numeric severity placeholders or plain strings.",
             "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request. Never fall back to default values for non-dict details.",
+            "Risk scoring must use additive accumulation (start at 0, add points for each risk factor). Never divide by len(adverse_indicators), len(missing_documents), or any other detail count — those collections can be empty, making the divisor zero.",
         ),
         detail_fixture_example={
             "identity_evidence": ["passport_scan"],

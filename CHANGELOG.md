@@ -47,7 +47,22 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - The next maintenance entry will be recorded here until it is promoted into a versioned release section.
 - All 1539 tests pass. Ruff and mypy clean.
-- Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN → 14/15 GREEN after v1.0.13a8 typed fixture fix.
+- Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN → 14/15 GREEN after v1.0.13a8 typed fixture fix → **15/15 GREEN** after v1.0.13a9 additive scoring guidance.
+
+## 1.0.13a9 - 2026-04-18
+
+### Fixed
+
+- `kyc_compliance_intake` ScenarioSpec now includes explicit additive-scoring guidance in `behavior_bullets` and `detail_contract_bullets` to prevent Ollama qwen2.5-coder:7b from generating division-based `calculate_risk_score` formulas that cause `ZeroDivisionError` when `adverse_indicators` and `missing_documents` are empty lists.
+
+### Changed
+
+- Version `1.0.13a9` is now the released alpha package baseline.
+
+### Empirical Validation
+
+- Campaign v64 `kyc_compliance_intake` with Ollama qwen2.5-coder:7b: `status=completed`, `accepted=yes`, 1 repair cycle, ~18 min.
+- **Full baseline 5×3 matrix: 15/15 GREEN** (OpenAI 5/5, Anthropic 5/5, Ollama 5/5).
 
 ## 1.0.13a8 - 2026-04-18
 

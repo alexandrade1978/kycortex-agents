@@ -34,6 +34,15 @@ from kycortex_agents.orchestration.task_constraints import (
 	task_max_top_level_test_count,
 	task_requires_cli_entrypoint,
 )
+from kycortex_agents.orchestration.validation_reporting import (
+	build_code_validation_summary,
+	build_test_validation_summary,
+	completion_diagnostics_from_provider_call,
+	completion_diagnostics_summary,
+	completion_hit_limit,
+	completion_validation_issue,
+	looks_structurally_truncated,
+)
 from kycortex_agents.orchestration.validation_runtime import (
 	provider_call_metadata,
 	redact_validation_execution_result,
@@ -76,8 +85,14 @@ __all__ = [
 	"build_generated_test_env",
 	"build_sandbox_preexec_fn",
 	"BLOCKING_TEST_ISSUE_KEYS",
+	"build_code_validation_summary",
+	"build_test_validation_summary",
 	"cancel_workflow",
 	"compact_architecture_context",
+	"completion_diagnostics_from_provider_call",
+	"completion_diagnostics_summary",
+	"completion_hit_limit",
+	"completion_validation_issue",
 	"execute_generated_module_import",
 	"execute_generated_tests",
 	"emit_workflow_progress",
@@ -86,6 +101,7 @@ __all__ = [
 	"harden_private_directory_permissions",
 	"harden_private_file_permissions",
 	"looks_like_secret_env_var",
+	"looks_structurally_truncated",
 	"log_event",
 	"override_task",
 	"pause_workflow",

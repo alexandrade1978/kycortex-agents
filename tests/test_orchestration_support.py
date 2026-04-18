@@ -41,6 +41,14 @@ from kycortex_agents.orchestration.task_constraints import (
 	task_max_top_level_test_count,
 	task_requires_cli_entrypoint,
 )
+from kycortex_agents.orchestration.validation_reporting import (
+	build_code_validation_summary,
+	build_test_validation_summary,
+	completion_diagnostics_from_provider_call,
+	completion_diagnostics_summary,
+	completion_validation_issue,
+	looks_structurally_truncated,
+)
 from kycortex_agents.orchestration.validation_runtime import (
 	provider_call_metadata,
 	redact_validation_execution_result,
@@ -310,6 +318,73 @@ def test_execute_generated_module_import_redacts_sensitive_output_directly(tmp_p
 def test_sandbox_security_violation_detects_blocked_message():
 	assert sandbox_security_violation(RuntimeError("sandbox policy blocked filesystem write outside sandbox root")) is True
 	assert sandbox_security_violation(RuntimeError("provider temporarily unavailable")) is False
+
+
+def test_validation_reporting_detects_structural_truncation_and_completion_summary():
+	assert looks_structurally_truncated("label:\n", "expected an indented block") is True
+	assert looks_structurally_truncated("value = 1\n", "invalid syntax") is False
+	assert completion_validation_issue({"hit_token_limit": True}) == "output likely truncated at the completion token limit"
+	assert completion_diagnostics_summary({"done_reason": "stop"}) == "provider termination reason recorded"
+
+
+def test_completion_diagnostics_from_provider_call_marks_length_limited_output_as_truncated():
+	diagnostics = completion_diagnostics_from_provider_call(
+		{
+			"requested_max_tokens": 900,
+			"finish_reason": "length",
+			"usage": {"output_tokens": 900},
+		},
+		syntax_ok=False,
+	)
+
+	assert diagnostics == {
+		"requested_max_tokens": 900,
+		"output_tokens": 900,
+		"finish_reason": "length",
+		"stop_reason": None,
+		"done_reason": None,
+		"hit_token_limit": True,
+		"likely_truncated": True,
+	}
+
+
+def test_build_code_validation_summary_reports_import_and_contract_failures_directly():
+	summary = build_code_validation_summary(
+		{"syntax_ok": True, "third_party_imports": [], "line_count": 12, "line_budget": 20},
+		"failed import",
+		completion_diagnostics={"output_tokens": 120},
+		import_validation={"ran": True, "returncode": 1, "summary": "TypeError"},
+		task_public_contract_preflight={
+			"anchor_present": True,
+			"passed": False,
+			"public_facade": "ComplianceIntakeService",
+			"issues": ["missing public facade ComplianceIntakeService"],
+		},
+	)
+
+	assert "Line count: 12/20" in summary
+	assert "Completion diagnostics: token usage recorded" in summary
+	assert "Module import: FAIL" in summary
+	assert "Task public contract: FAIL" in summary
+
+
+def test_build_test_validation_summary_reports_warning_override_and_pytest_details_directly():
+	summary = build_test_validation_summary(
+		{
+			"syntax_ok": True,
+			"constructor_arity_mismatches": ["MyClass (line 5)"],
+		},
+		{
+			"available": True,
+			"ran": True,
+			"returncode": 0,
+			"summary": "1 passed",
+		},
+	)
+
+	assert "Constructor arity mismatches (warning): MyClass (line 5)" in summary
+	assert "Pytest execution: PASS" in summary
+	assert summary.endswith("- Verdict: PASS (warnings overridden by pytest)")
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

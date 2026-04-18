@@ -1,14 +1,21 @@
 # Release Status
 
-This file tracks the current repository-owned release state for KYCortex after publication and canary kickoff of the 1.0.13a9 alpha maintenance release.
+This file tracks the current repository-owned release state for KYCortex after publication of the `1.0.13a6` alpha baseline and during refactor engineering on the current development head.
 
 ## Current State
 
-- Package version in `pyproject.toml`: `1.0.13a9`
-- Latest released version: `1.0.13a9`
-- Release tag for this version: `v1.0.13a9`
-- Most recent published release tag: `v1.0.13a9`
+- Package version in `pyproject.toml`: `1.0.13a10.dev0`
+- Latest released version: `1.0.13a6`
+- Release tag for this version: `not tagged (development head)`
+- Most recent published release tag: `v1.0.13a6`
 - Branch expected for release preparation: `main`
+
+## Refactor Engineering Suspension
+
+- The current development head is in refactor-engineering mode and does not carry an active release, canary, or production-readiness claim.
+- The last published and trusted release baseline remains `v1.0.13a6` on commit `f99a38d`.
+- Historical canary evidence for the published `v1.0.13a6` line remains retained in the repository, but the branch is not currently advancing that canary window.
+- A fresh release or canary claim is blocked until the refactor branch requalifies itself with deterministic validation gates and a new empirical baseline.
 
 ## Repository Release Gates
 
@@ -43,6 +50,8 @@ This file tracks the current repository-owned release state for KYCortex after p
 
 ## Current Release Validation Snapshot
 
+- The release-validation snapshot below is historical evidence for the published `v1.0.13a6` line; it is not a release or canary claim for the current development head.
+
 - The clean canonical Phase 15 rerun `full_matrix_validation_2026_04_12_v7` finished with 15 of 15 runs at `status=completed` and 15 of 15 runs at `terminal_outcome=completed` on the current candidate line.
 - The local release-validation line re-cleared after the Phase 15 prompt hardening, including `ruff`, `mypy`, focused regressions, `scripts/release_metadata_check.py`, and `scripts/release_check.py`.
 - The published `1.0.13a5` line correctly recorded the Phase 16 abort when `release_user_smoke_ollama` generated an artifact without `main()` and the persisted workflow state was rewritten to `failure_category=code_validation`.
@@ -65,20 +74,23 @@ This file tracks the current repository-owned release state for KYCortex after p
 
 ## Current Canary Status
 
+- There is no active canary claim on the current development head.
+- The last published `v1.0.13a6` Phase 16 evidence remains retained as historical published-line evidence while refactor engineering is in progress.
 - Historical Phase 16 canary evidence for the published `v1.0.13a3` line remains closed as an abort record at `docs/canary-evidence/2563383/` after `run_06_ollama` triggered a zero-budget false success.
 - Historical Phase 16 canary evidence for the published `v1.0.13a4` line remains closed as an abort record at `docs/canary-evidence/8bfdc29/` after `run_04_openai` triggered a code-validation incident.
 - Historical Phase 16 canary evidence for the previously published `v1.0.13a5` line remains closed as an abort record at `docs/canary-evidence/c74e957/` after `release_user_smoke_ollama` triggered a code-validation incident.
-- Fresh Phase 16 canary traffic for the published `v1.0.13a6` line opened on `2026-04-13T03:25:21Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status in the live kickoff bundle.
+- Historical Phase 16 canary traffic for the published `v1.0.13a6` line opened on `2026-04-13T03:25:21Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status in the live kickoff bundle.
 - The first controlled workflow `release_user_smoke_openai` was externally validated and accepted at `2026-04-13T03:26:22.839835+00:00`, refreshed expansion provider health at `2026-04-13T03:51:37.043973+00:00`, `2026-04-13T04:03:29.889609+00:00`, `2026-04-13T04:15:41.775710+00:00`, `2026-04-13T09:22:33.389958+00:00`, and `2026-04-13T09:41:39.329840+00:00` kept OpenAI, Anthropic, and Ollama healthy before continued same-day admission and the run-100 push, and no provider-health incident occurred during expansion.
 - The clean checkpoint through run 100 completed at `2026-04-13T10:39:05.274887+00:00` with 100 eligible workflows seen, 100 accepted workflows, 0 incidents, 0 rollback actions, and provider breakdown OpenAI 34, Anthropic 33, Ollama 33.
 - The first same-day daily review was recorded at `2026-04-13T04:30:01.447970+00:00` and confirmed the window remains within the current policy envelope.
-- The next required checkpoint is a daily review while the window remains open; the 100-workflow threshold is now satisfied, but the 7-day minimum is still outstanding.
-- The active Phase 16 canary bundle is tracked at `docs/canary-evidence/f99a38d/` for the published tag `v1.0.13a6`.
+- The retained Phase 16 evidence bundle remains tracked at `docs/canary-evidence/f99a38d/` for the published tag `v1.0.13a6`.
 - The rollback baseline `v1.0.13a2` remains the approved safe target, and no live cutover has been required.
 
 ## Release Outcome
 
 The 1.0.13a6 alpha release is now captured directly in the package metadata, changelog, release guide, release-check workflow inputs, and the published GitHub release evidence.
+
+The current development head is not a published release candidate. It is an explicit refactor branch that must earn a fresh release and canary claim after requalification.
 
 The repository's public licensing guidance continues to document the AGPL open-source distribution together with a separate commercial licensing path.
 
@@ -102,8 +114,8 @@ Use the following repository-owned references when validating follow-up maintena
 
 ## Next Maintenance Action
 
-For the active published `1.0.13a6` canary line:
+For the current development head in refactor-engineering mode:
 
-1. continue daily reviews while the active canary remains open and preserve each follow-up repository-owned evidence packet now that the 100-workflow checkpoint is satisfied
-2. continue the active canary until the remaining 7-day minimum observation window is complete
-3. keep the rollback target pinned to `v1.0.13a2` and close with incident review, rollback confirmation, and a signed completion review for `docs/canary-evidence/f99a38d/`
+1. complete the documentation and version truth reset for the refactor branch
+2. begin the low-risk orchestrator refactor by extracting deterministic infrastructure and internal interfaces
+3. re-open targeted validation only after deterministic gates are green, then collect a fresh empirical baseline before any new release or canary claim

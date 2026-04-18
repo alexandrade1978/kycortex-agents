@@ -17,12 +17,12 @@ def _read_text(relative_path: str) -> str:
     return PROJECT_ROOT.joinpath(relative_path).read_text(encoding="utf-8")
 
 
-def _parse_version(value: str) -> tuple[int, int, int, int, int]:
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?", value)
+def _parse_version(value: str) -> tuple[int, int, int, int, int, int, int]:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?(?:\.dev(\d+))?", value)
     if match is None:
         raise ValueError(f"invalid package version: {value}")
 
-    major, minor, patch, prerelease_label, prerelease_number = match.groups()
+    major, minor, patch, prerelease_label, prerelease_number, dev_number = match.groups()
     prerelease_order = {
         None: 3,
         "rc": 2,
@@ -35,6 +35,8 @@ def _parse_version(value: str) -> tuple[int, int, int, int, int]:
         int(patch),
         prerelease_order[prerelease_label],
         int(prerelease_number) if prerelease_number is not None else 0,
+        0 if dev_number is not None else 1,
+        int(dev_number) if dev_number is not None else 0,
     )
 
 

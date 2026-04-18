@@ -26,6 +26,8 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
 from kycortex_agents.providers.base import (
     redact_sensitive_data,
     redact_sensitive_text,
@@ -126,27 +128,6 @@ _MOCK_ASSERTION_METHODS = {
 }
 
 _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
-
-def _harden_private_file_permissions(path: Path) -> None:
-    if os.name != "posix":
-        return
-    try:
-        path.chmod(0o600)
-    except OSError as exc:
-        raise AgentExecutionError(
-            f"Artifact persistence failed: could not harden file permissions for {path.name}"
-        ) from exc
-
-
-def _harden_private_directory_permissions(path: Path) -> None:
-    if os.name != "posix":
-        return
-    try:
-        path.chmod(0o700)
-    except OSError as exc:
-        raise AgentExecutionError(
-            f"Artifact persistence failed: could not harden directory permissions for {path.name}"
-        ) from exc
 _RESERVED_FIXTURE_NAMES = {"request"}
 
 # ---------------------------------------------------------------------------
@@ -2088,76 +2069,25 @@ class Orchestrator:
         return None
 
     def _persist_artifacts(self, artifacts: list[ArtifactRecord]) -> None:
-        for artifact in artifacts:
-            content = artifact.content
-            if not isinstance(content, str) or not content.strip():
-                continue
-            persisted_content = redact_sensitive_text(content)
-            target_path = self._resolve_artifact_output_path(artifact)
-            self._validate_artifact_output_path(target_path)
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            _harden_private_directory_permissions(target_path.parent)
-            self._validate_artifact_output_path(target_path)
-            target_path.write_text(persisted_content, encoding="utf-8")
-            _harden_private_file_permissions(target_path)
-            artifact.content = persisted_content
-            artifact.path = self._artifact_record_path(target_path)
+        self._artifact_persistence_support().persist_artifacts(artifacts)
 
     def _resolve_artifact_output_path(self, artifact: ArtifactRecord) -> Path:
-        output_root = Path(self.config.output_dir).resolve()
-        relative_path = self._sanitize_artifact_relative_path(
-            artifact.path if artifact.path else self._default_artifact_path(artifact)
-        )
-        return output_root / relative_path
+        return self._artifact_persistence_support().resolve_artifact_output_path(artifact)
 
     def _validate_artifact_output_path(self, target_path: Path) -> None:
-        output_root = Path(self.config.output_dir).resolve()
-        resolved_target = target_path.resolve(strict=False)
-        try:
-            resolved_target.relative_to(output_root)
-        except ValueError as exc:
-            raise AgentExecutionError(
-                "Artifact persistence failed: artifact path resolves outside the output directory"
-            ) from exc
+        self._artifact_persistence_support().validate_artifact_output_path(target_path)
 
     def _sanitize_artifact_relative_path(self, artifact_path: str) -> Path:
-        candidate = Path(artifact_path)
-        if candidate.is_absolute():
-            raise AgentExecutionError("Artifact persistence failed: absolute artifact paths are not allowed")
-
-        sanitized_parts: list[str] = []
-        for part in candidate.parts:
-            if part == "..":
-                raise AgentExecutionError("Artifact persistence failed: parent-directory traversal is not allowed")
-            cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", part).strip()
-            if not cleaned or cleaned in (".", ".."):
-                raise AgentExecutionError("Artifact persistence failed: artifact path contains an invalid segment")
-            sanitized_parts.append(cleaned)
-
-        if not sanitized_parts:
-            raise AgentExecutionError("Artifact persistence failed: artifact path must not be empty")
-
-        return Path(*sanitized_parts)
+        return self._artifact_persistence_support().sanitize_artifact_relative_path(artifact_path)
 
     def _artifact_record_path(self, target_path: Path) -> str:
-        output_root = Path(self.config.output_dir).resolve()
-        resolved_target = target_path.resolve()
-        try:
-            return str(resolved_target.relative_to(output_root))
-        except ValueError:
-            return str(resolved_target)
+        return self._artifact_persistence_support().artifact_record_path(target_path)
 
     def _default_artifact_path(self, artifact: ArtifactRecord) -> str:
-        suffix_map = {
-            ArtifactType.DOCUMENT: ".md",
-            ArtifactType.CODE: ".py",
-            ArtifactType.TEST: ".py",
-            ArtifactType.CONFIG: ".json",
-            ArtifactType.TEXT: ".txt",
-            ArtifactType.OTHER: ".artifact",
-        }
-        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", artifact.name).strip("._") or "artifact"
-        return f"artifacts/{safe_name}{suffix_map.get(artifact.artifact_type, '.artifact')}"
+        return self._artifact_persistence_support().default_artifact_path(artifact)
+
+    def _artifact_persistence_support(self) -> ArtifactPersistenceSupport:
+        return ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub)
 
     @staticmethod
     def _agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:
@@ -9102,7 +9032,7 @@ class Orchestrator:
                     f"Task '{task.id}' is assigned to unknown agent '{task.assigned_to}'"
                 )
 
-    def _task_acceptance_lists(self, project: ProjectState, acceptance_policy: str) -> Dict[str, list[str]]:
+    def _task_acceptance_lists(self, project: ProjectState, acceptance_policy: str) -> TaskAcceptanceLists:
         if acceptance_policy == "required_tasks":
             evaluated_tasks = [task for task in project.tasks if task.required_for_acceptance]
         else:
@@ -9129,7 +9059,7 @@ class Orchestrator:
                 categories.add(task.last_error_category)
         return categories
 
-    def _evaluate_workflow_acceptance(self, project: ProjectState) -> Dict[str, Any]:
+    def _evaluate_workflow_acceptance(self, project: ProjectState) -> AcceptanceEvaluation:
         policy = self.config.workflow_acceptance_policy
         productivity_lists = self._task_acceptance_lists(project, policy)
         if policy == "required_tasks" and not productivity_lists["evaluated_task_ids"]:
@@ -9152,7 +9082,7 @@ class Orchestrator:
         safety_accepted = not zero_budget_failure_categories
         safety_reason = "no_zero_budget_incident_detected" if safety_accepted else "safety_validation_failed"
 
-        acceptance_lanes = {
+        acceptance_lanes: dict[str, AcceptanceLane] = {
             "productivity": {
                 "accepted": productivity_accepted,
                 "reason": productivity_reason,

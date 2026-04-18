@@ -9,10 +9,11 @@ A tagged package release publishes a versioned artifact. It does not, by itself,
 ## Current Status
 
 - The public package line remains Alpha.
-- `1.0.13a6` is the current released alpha baseline and the active published Phase 16 canary candidate, with the live evidence bundle tracked at `docs/canary-evidence/f99a38d/` after healthy three-provider preflight, repeated healthy expansion refreshes through `2026-04-13T09:41:39.329840+00:00`, a clean 100-eligible-workflow checkpoint, and the first same-day daily review while the 7-day minimum remains open.
+- `1.0.13a6` remains the current released alpha baseline.
+- The current development head is in refactor-engineering mode and does not carry an active canary or production-readiness claim.
+- Historical Phase 16 evidence for the published `v1.0.13a6` line remains tracked at `docs/canary-evidence/f99a38d/` as the last published canary evidence set.
 - `1.0.13a5` remains the previous historical published line below the current baseline, and its canary evidence remains the abort record at `docs/canary-evidence/c74e957/` after `release_user_smoke_ollama` triggered a code-validation incident.
 - `1.0.13a4` remains the older historical published line below that baseline, and its canary evidence remains the abort record at `docs/canary-evidence/8bfdc29/`.
-- There is currently an active Phase 16 canary candidate on a published tag.
 - Production go-live is not declared until the gates in this document are satisfied and the decision is recorded in repository release materials.
 
 ## Scope

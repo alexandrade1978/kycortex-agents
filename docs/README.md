@@ -105,7 +105,9 @@ These values mirror the provider mappings and defaults exported by `kycortex_age
 
 The latest released alpha is `1.0.13a6`.
 
-The active Phase 16 canary evidence bundle is tracked at `canary-evidence/f99a38d/` for the published tag `v1.0.13a6`. That live window opened on `2026-04-13T03:25:21Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status, refreshed expansion health remained healthy through `2026-04-13T09:41:39.329840+00:00`, the clean checkpoint through 100 eligible workflows completed at `2026-04-13T10:39:05.274887+00:00` with all 100 runs externally validated, and the first same-day daily review remained recorded at `2026-04-13T04:30:01.447970+00:00` while the canary stays open for the remaining 7-day minimum.
+The current development head is in refactor-engineering mode. No active canary or production claim is attached to the branch until a fresh empirical requalification is completed.
+
+The last published Phase 16 evidence bundle remains tracked at `canary-evidence/f99a38d/` for the published tag `v1.0.13a6`. That historical window opened on `2026-04-13T03:25:21Z` after OpenAI, Anthropic, and Ollama all reported healthy preflight provider status, refreshed expansion health remained healthy through `2026-04-13T09:41:39.329840+00:00`, the clean checkpoint through 100 eligible workflows completed at `2026-04-13T10:39:05.274887+00:00` with all 100 runs externally validated, and the first same-day daily review remained recorded at `2026-04-13T04:30:01.447970+00:00`.
 
 The most recent released-candidate abort bundle is now `canary-evidence/c74e957/`, which records the disqualified `v1.0.13a5` window after `release_user_smoke_ollama` failed external artifact validation because the generated module did not expose `main()`.
 

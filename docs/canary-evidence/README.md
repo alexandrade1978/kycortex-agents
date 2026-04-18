@@ -22,7 +22,9 @@ Example:
 docs/canary-evidence/be748fa/
 ```
 
-There is currently an active open canary window:
+There is no active canary claim on the current development head.
+
+The most recent retained published-line canary evidence bundle is:
 
 ```text
 docs/canary-evidence/f99a38d/

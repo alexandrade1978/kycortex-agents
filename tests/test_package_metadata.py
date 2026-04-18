@@ -1061,14 +1061,15 @@ def test_release_status_documents_current_repository_release_readiness_state():
     release_status_path = Path(__file__).resolve().parents[1] / "RELEASE_STATUS.md"
     release_status = release_status_path.read_text(encoding="utf-8")
     version = kycortex_agents.__version__
-    latest_released_version = "1.0.13a9"
+    latest_released_version = "1.0.13a6"
 
     assert "# Release Status" in release_status
     assert "## Current State" in release_status
     assert f"Package version in `pyproject.toml`: `{version}`" in release_status
     assert f"Latest released version: `{latest_released_version}`" in release_status
-    assert f"Release tag for this version: `v{version}`" in release_status
+    assert "Release tag for this version: `not tagged (development head)`" in release_status
     assert f"Most recent published release tag: `v{latest_released_version}`" in release_status
+    assert "## Refactor Engineering Suspension" in release_status
     assert "## Repository Release Gates" in release_status
     assert "python scripts/release_check.py" in release_status
     assert "make release-check" in release_status
@@ -1091,8 +1092,8 @@ def test_release_status_documents_current_repository_release_readiness_state():
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
     assert "## Next Maintenance Action" in release_status
-    assert "continue daily reviews while the active canary remains open and preserve each follow-up repository-owned evidence packet now that the 100-workflow checkpoint is satisfied" in release_status
-    assert "continue the active canary until the remaining 7-day minimum observation window is complete" in release_status
+    assert "complete the documentation and version truth reset for the refactor branch" in release_status
+    assert "begin the low-risk orchestrator refactor by extracting deterministic infrastructure and internal interfaces" in release_status
 
 
 def test_migration_notes_document_public_upgrade_path():

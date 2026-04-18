@@ -6,6 +6,12 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
+### Refactor Reset
+
+- Current package version is now `1.0.13a10.dev0` ahead of the next alpha release.
+- The last published and trusted alpha baseline remains `1.0.13a6`.
+- Release and canary claims are suspended on the current development head while the orchestrator refactor is in progress.
+
 ### Added
 
 - Model Capabilities Registry (`model_capabilities.py`): centralized capability metadata per provider and model, including context window sizes, temperature support, and reasoning-model flags.
@@ -49,7 +55,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - All 1539 tests pass. Ruff and mypy clean.
 - Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN → 14/15 GREEN after v1.0.13a8 typed fixture fix → **15/15 GREEN** after v1.0.13a9 additive scoring guidance.
 
-## 1.0.13a9 - 2026-04-18
+## 1.0.13a9 - 2026-04-18 (branch-only checkpoint)
 
 ### Fixed
 
@@ -57,14 +63,14 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Changed
 
-- Version `1.0.13a9` is now the released alpha package baseline.
+- `1.0.13a9` was retained as a branch-only maintenance checkpoint; `v1.0.13a6` remains the latest released alpha package baseline.
 
 ### Empirical Validation
 
 - Campaign v64 `kyc_compliance_intake` with Ollama qwen2.5-coder:7b: `status=completed`, `accepted=yes`, 1 repair cycle, ~18 min.
 - **Full baseline 5×3 matrix: 15/15 GREEN** (OpenAI 5/5, Anthropic 5/5, Ollama 5/5).
 
-## 1.0.13a8 - 2026-04-18
+## 1.0.13a8 - 2026-04-18 (branch-only checkpoint)
 
 ### Fixed
 
@@ -73,14 +79,14 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Changed
 
-- Version `1.0.13a8` is now the released alpha package baseline.
+- `1.0.13a8` was retained as a branch-only maintenance checkpoint; `v1.0.13a6` remains the latest released alpha package baseline.
 
 ### Empirical Validation
 
 - Campaign v63 `returns_abuse_screening` with OpenAI gpt-4o-mini: `status=completed`, 7/7 tasks done, 0 repair cycles, 86s.
 - Updated baseline: OpenAI 5/5, Anthropic 5/5, Ollama 4/5 = 14/15 total (up from 13/15).
 
-## 1.0.13a7 - 2026-04-18
+## 1.0.13a7 - 2026-04-18 (branch-only checkpoint)
 
 ### Fixed
 
@@ -90,7 +96,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Changed
 
-- Version `1.0.13a7` is now the released alpha package baseline.
+- `1.0.13a7` was retained as a branch-only maintenance checkpoint; `v1.0.13a6` remains the latest released alpha package baseline.
 - Removed tracked `campaign_summary_v44..v51` files from repository; added `.gitignore` rules for `campaign_summary_*.json`, `campaign_summary_*.md`, and `coverage.json`.
 
 ### Empirical Validation (Baseline 5×3 Campaign)

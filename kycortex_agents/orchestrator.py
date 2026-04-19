@@ -138,6 +138,7 @@ from kycortex_agents.orchestration.task_constraints import (
 from kycortex_agents.orchestration.test_ast_analysis import (
     ast_contains_node,
     bound_target_names,
+    call_argument_value,
     collect_local_bindings,
     collect_local_name_bindings,
     collect_module_defined_names,
@@ -146,14 +147,20 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     collect_test_local_types,
     collect_undefined_local_names,
     count_test_assertion_like_checks,
+    extract_literal_dict_keys,
+    extract_literal_field_values,
+    extract_literal_list_items,
     extract_parametrize_argument_names,
+    extract_string_literals,
     find_unsupported_mock_assertions,
     function_argument_names,
+    infer_argument_type,
     is_mock_factory_call,
     is_patch_call,
     iter_relevant_test_body_nodes,
     known_type_allows_member,
     patched_target_name_from_call,
+    resolve_bound_value,
     with_uses_pytest_assertion_context,
     with_uses_pytest_raises,
     supports_mock_assertion_target,
@@ -3875,35 +3882,7 @@ class Orchestrator:
         field_name: str,
         class_map: Dict[str, Any],
     ) -> str:
-        if payload_node is None:
-            return ""
-        resolved = self._resolve_bound_value(payload_node, bindings)
-        field_value: Optional[ast.AST] = None
-        if isinstance(resolved, ast.Dict):
-            for key_node, value_node in zip(resolved.keys, resolved.values):
-                if isinstance(key_node, ast.Constant) and key_node.value == field_name:
-                    field_value = value_node
-                    break
-        elif isinstance(resolved, ast.Call):
-            field_value = self._call_argument_value(resolved, field_name, class_map)
-        if field_value is None:
-            return ""
-        field_value = self._resolve_bound_value(field_value, bindings)
-        if isinstance(field_value, ast.Constant):
-            return type(field_value.value).__name__
-        if isinstance(field_value, ast.Dict):
-            return "dict"
-        if isinstance(field_value, ast.List):
-            return "list"
-        if isinstance(field_value, ast.Tuple):
-            return "tuple"
-        if isinstance(field_value, ast.Set):
-            return "set"
-        if isinstance(field_value, ast.Call):
-            func_name = ast_name(field_value.func)
-            if func_name in ("dict", "list", "set", "tuple", "str", "int", "float", "bool"):
-                return func_name
-        return ""
+        return infer_argument_type(payload_node, bindings, field_name, class_map)
 
     def _parent_map(self, root: ast.AST) -> Dict[ast.AST, ast.AST]:
         return {
@@ -4495,12 +4474,7 @@ class Orchestrator:
         *,
         max_depth: int = 3,
     ) -> Optional[ast.AST]:
-        current = node
-        depth = 0
-        while isinstance(current, ast.Name) and depth < max_depth:
-            current = bindings.get(current.id, current)
-            depth += 1
-        return current
+        return resolve_bound_value(node, bindings, max_depth=max_depth)
 
     def _extract_literal_dict_keys(
         self,
@@ -4508,34 +4482,7 @@ class Orchestrator:
         bindings: Dict[str, ast.AST],
         class_map: Optional[Dict[str, Any]] = None,
     ) -> Optional[set[str]]:
-        resolved = self._resolve_bound_value(node, bindings)
-        if isinstance(resolved, ast.Dict):
-            keys = {
-                key.value
-                for key in resolved.keys
-                if isinstance(key, ast.Constant) and isinstance(key.value, str)
-            }
-            return keys
-        if (
-            isinstance(resolved, ast.Subscript)
-            and isinstance(resolved.slice, ast.Constant)
-            and isinstance(resolved.slice.value, str)
-        ):
-            source = self._resolve_bound_value(resolved.value, bindings)
-            if isinstance(source, ast.Dict):
-                for key_node, value_node in zip(source.keys, source.values):
-                    if (
-                        isinstance(key_node, ast.Constant)
-                        and key_node.value == resolved.slice.value
-                    ):
-                        return self._extract_literal_dict_keys(value_node, bindings, class_map)
-        if isinstance(resolved, ast.Call):
-            for candidate_name in ("data", "payload", "request", "item"):  # pragma: no branch
-                candidate_value = self._call_argument_value(resolved, candidate_name, class_map or {})
-                nested_keys = self._extract_literal_dict_keys(candidate_value, bindings, class_map)
-                if nested_keys is not None:  # pragma: no branch
-                    return nested_keys
-        return None
+        return extract_literal_dict_keys(node, bindings, class_map)
 
     def _extract_literal_field_values(
         self,
@@ -4544,26 +4491,10 @@ class Orchestrator:
         field_name: str,
         class_map: Dict[str, Any],
     ) -> list[str]:
-        resolved = self._resolve_bound_value(node, bindings)
-        if isinstance(resolved, ast.Dict):
-            for key_node, value_node in zip(resolved.keys, resolved.values):
-                if isinstance(key_node, ast.Constant) and key_node.value == field_name:
-                    return self._extract_string_literals(value_node, bindings)
-            return []
-        if isinstance(resolved, ast.Call):  # pragma: no branch
-            direct_value = self._call_argument_value(resolved, field_name, class_map)
-            if direct_value is not None:
-                return self._extract_string_literals(direct_value, bindings)
-            nested_payload = self._call_argument_value(resolved, "data", class_map)
-            if nested_payload is not None:
-                return self._extract_literal_field_values(nested_payload, bindings, field_name, class_map)
-        return []
+        return extract_literal_field_values(node, bindings, field_name, class_map)
 
     def _extract_string_literals(self, node: Optional[ast.AST], bindings: Dict[str, ast.AST]) -> list[str]:
-        resolved = self._resolve_bound_value(node, bindings)
-        if isinstance(resolved, ast.Constant) and isinstance(resolved.value, str):
-            return [resolved.value]
-        return []
+        return extract_string_literals(node, bindings)
 
     def _call_argument_value(
         self,
@@ -4571,28 +4502,14 @@ class Orchestrator:
         argument_name: str,
         class_map: Dict[str, Any],
     ) -> Optional[ast.AST]:
-        for keyword in node.keywords:
-            if keyword.arg == argument_name:
-                return keyword.value
-        if not isinstance(node.func, ast.Name):
-            return None
-        constructor_params = class_map.get(node.func.id, {}).get("constructor_params") or []
-        if argument_name not in constructor_params:
-            return None
-        argument_index = constructor_params.index(argument_name)
-        if argument_index < len(node.args):
-            return node.args[argument_index]
-        return None
+        return call_argument_value(node, argument_name, class_map)
 
     def _extract_literal_list_items(
         self,
         node: Optional[ast.AST],
         bindings: Dict[str, ast.AST],
     ) -> Optional[list[ast.AST]]:
-        resolved = self._resolve_bound_value(node, bindings)
-        if isinstance(resolved, ast.List):
-            return list(resolved.elts)
-        return None
+        return extract_literal_list_items(node, bindings)
 
     def _validate_batch_call(
         self,

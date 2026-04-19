@@ -133,6 +133,7 @@ from kycortex_agents.orchestration.sandbox_templates import (
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
 	ast_contains_node,
+	call_argument_value,
 	collect_local_bindings,
 	collect_local_name_bindings,
 	collect_module_defined_names,
@@ -141,12 +142,18 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	collect_test_local_types,
 	collect_undefined_local_names,
 	count_test_assertion_like_checks,
+	extract_literal_dict_keys,
+	extract_literal_field_values,
+	extract_literal_list_items,
 	extract_parametrize_argument_names,
+	extract_string_literals,
 	find_unsupported_mock_assertions,
 	function_argument_names,
+	infer_argument_type,
 	is_mock_factory_call,
 	is_patch_call,
 	patched_target_name_from_call,
+	resolve_bound_value,
 	with_uses_pytest_assertion_context,
 	with_uses_pytest_raises,
 )
@@ -472,6 +479,40 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 	call_tree = ast.parse("service.validate(payload)", mode="eval").body
 	inner_name = next(node for node in ast.walk(call_tree) if isinstance(node, ast.Name) and node.id == "payload")
 	assert ast_contains_node(call_tree, inner_name) is True
+
+	bindings = {
+		"payload": ast.Dict(
+			keys=[ast.Constant("payload"), ast.Constant("status")],
+			values=[
+				ast.Dict(keys=[ast.Constant("name")], values=[ast.Constant("Ada")]),
+				ast.Constant("approved"),
+			],
+		),
+		"request_obj": ast.Call(
+			func=ast.Name("Request"),
+			args=[ast.Constant("pending")],
+			keywords=[
+				ast.keyword(
+					arg="data",
+					value=ast.Dict(keys=[ast.Constant("status")], values=[ast.Constant("denied")]),
+				)
+			],
+		),
+		"items": ast.List(elts=[ast.Dict(keys=[ast.Constant("request_id")], values=[ast.Constant("id-1")])]),
+	}
+	class_map = {"Request": {"constructor_params": ["status", "data"]}}
+	request_call = bindings["request_obj"]
+	assert isinstance(request_call, ast.Call)
+	assert isinstance(resolve_bound_value(ast.Name("request_obj"), bindings), ast.Call)
+	assert isinstance(call_argument_value(request_call, "status", class_map), ast.Constant)
+	assert extract_literal_dict_keys(ast.Subscript(value=ast.Name("payload"), slice=ast.Constant("payload")), bindings, class_map) == {"name"}
+	assert extract_literal_dict_keys(ast.Name("request_obj"), bindings, class_map) == {"status"}
+	assert extract_literal_field_values(ast.Name("payload"), bindings, "status", class_map) == ["approved"]
+	assert extract_literal_field_values(ast.Name("request_obj"), bindings, "status", class_map) == ["pending"]
+	assert extract_string_literals(ast.Constant(123), bindings) == []
+	assert extract_literal_list_items(ast.Name("items"), bindings) is not None
+	assert infer_argument_type(ast.Name("payload"), bindings, "status", class_map) == "str"
+	assert infer_argument_type(ast.parse("{'items': list()}", mode="eval").body, {}, "items", class_map) == "list"
 
 
 def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():

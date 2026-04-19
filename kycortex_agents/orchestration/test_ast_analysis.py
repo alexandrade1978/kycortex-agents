@@ -7,6 +7,7 @@ import builtins
 from typing import Any, Callable, Dict, Iterator, Optional
 
 from kycortex_agents.orchestration.ast_tools import (
+    ast_name,
     attribute_chain,
     expression_root_name,
     first_call_argument,
@@ -357,6 +358,146 @@ def collect_local_bindings(node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict
     return bindings
 
 
+def resolve_bound_value(
+    node: Optional[ast.AST],
+    bindings: Dict[str, ast.AST],
+    *,
+    max_depth: int = 3,
+) -> Optional[ast.AST]:
+    current = node
+    depth = 0
+    while isinstance(current, ast.Name) and depth < max_depth:
+        current = bindings.get(current.id, current)
+        depth += 1
+    return current
+
+
+def call_argument_value(
+    node: ast.Call,
+    argument_name: str,
+    class_map: Dict[str, Any],
+) -> Optional[ast.AST]:
+    for keyword in node.keywords:
+        if keyword.arg == argument_name:
+            return keyword.value
+    if not isinstance(node.func, ast.Name):
+        return None
+    constructor_params = class_map.get(node.func.id, {}).get("constructor_params") or []
+    if argument_name not in constructor_params:
+        return None
+    argument_index = constructor_params.index(argument_name)
+    if argument_index < len(node.args):
+        return node.args[argument_index]
+    return None
+
+
+def extract_literal_dict_keys(
+    node: Optional[ast.AST],
+    bindings: Dict[str, ast.AST],
+    class_map: Optional[Dict[str, Any]] = None,
+) -> Optional[set[str]]:
+    resolved = resolve_bound_value(node, bindings)
+    if isinstance(resolved, ast.Dict):
+        return {
+            key.value
+            for key in resolved.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+    if (
+        isinstance(resolved, ast.Subscript)
+        and isinstance(resolved.slice, ast.Constant)
+        and isinstance(resolved.slice.value, str)
+    ):
+        source = resolve_bound_value(resolved.value, bindings)
+        if isinstance(source, ast.Dict):
+            for key_node, value_node in zip(source.keys, source.values):
+                if isinstance(key_node, ast.Constant) and key_node.value == resolved.slice.value:
+                    return extract_literal_dict_keys(value_node, bindings, class_map)
+    if isinstance(resolved, ast.Call):
+        for candidate_name in ("data", "payload", "request", "item"):
+            candidate_value = call_argument_value(resolved, candidate_name, class_map or {})
+            nested_keys = extract_literal_dict_keys(candidate_value, bindings, class_map)
+            if nested_keys is not None:
+                return nested_keys
+    return None
+
+
+def extract_literal_field_values(
+    node: Optional[ast.AST],
+    bindings: Dict[str, ast.AST],
+    field_name: str,
+    class_map: Dict[str, Any],
+) -> list[str]:
+    resolved = resolve_bound_value(node, bindings)
+    if isinstance(resolved, ast.Dict):
+        for key_node, value_node in zip(resolved.keys, resolved.values):
+            if isinstance(key_node, ast.Constant) and key_node.value == field_name:
+                return extract_string_literals(value_node, bindings)
+        return []
+    if isinstance(resolved, ast.Call):
+        direct_value = call_argument_value(resolved, field_name, class_map)
+        if direct_value is not None:
+            return extract_string_literals(direct_value, bindings)
+        nested_payload = call_argument_value(resolved, "data", class_map)
+        if nested_payload is not None:
+            return extract_literal_field_values(nested_payload, bindings, field_name, class_map)
+    return []
+
+
+def extract_string_literals(node: Optional[ast.AST], bindings: Dict[str, ast.AST]) -> list[str]:
+    resolved = resolve_bound_value(node, bindings)
+    if isinstance(resolved, ast.Constant) and isinstance(resolved.value, str):
+        return [resolved.value]
+    return []
+
+
+def extract_literal_list_items(
+    node: Optional[ast.AST],
+    bindings: Dict[str, ast.AST],
+) -> Optional[list[ast.AST]]:
+    resolved = resolve_bound_value(node, bindings)
+    if isinstance(resolved, ast.List):
+        return list(resolved.elts)
+    return None
+
+
+def infer_argument_type(
+    payload_node: Optional[ast.AST],
+    bindings: Dict[str, ast.AST],
+    field_name: str,
+    class_map: Dict[str, Any],
+) -> str:
+    if payload_node is None:
+        return ""
+    resolved = resolve_bound_value(payload_node, bindings)
+    field_value: Optional[ast.AST] = None
+    if isinstance(resolved, ast.Dict):
+        for key_node, value_node in zip(resolved.keys, resolved.values):
+            if isinstance(key_node, ast.Constant) and key_node.value == field_name:
+                field_value = value_node
+                break
+    elif isinstance(resolved, ast.Call):
+        field_value = call_argument_value(resolved, field_name, class_map)
+    if field_value is None:
+        return ""
+    field_value = resolve_bound_value(field_value, bindings)
+    if isinstance(field_value, ast.Constant):
+        return type(field_value.value).__name__
+    if isinstance(field_value, ast.Dict):
+        return "dict"
+    if isinstance(field_value, ast.List):
+        return "list"
+    if isinstance(field_value, ast.Tuple):
+        return "tuple"
+    if isinstance(field_value, ast.Set):
+        return "set"
+    if isinstance(field_value, ast.Call):
+        func_name = ast_name(field_value.func)
+        if func_name in {"dict", "list", "set", "tuple", "str", "int", "float", "bool"}:
+            return func_name
+    return ""
+
+
 def collect_module_defined_names(tree: ast.AST) -> set[str]:
     if not isinstance(tree, ast.Module):
         return set()
@@ -442,6 +583,7 @@ __all__ = [
     "MOCK_ASSERTION_METHODS",
     "ast_contains_node",
     "bound_target_names",
+    "call_argument_value",
     "collect_local_bindings",
     "collect_local_name_bindings",
     "collect_module_defined_names",
@@ -450,14 +592,20 @@ __all__ = [
     "collect_test_local_types",
     "collect_undefined_local_names",
     "count_test_assertion_like_checks",
+    "extract_literal_dict_keys",
+    "extract_literal_field_values",
+    "extract_literal_list_items",
     "extract_parametrize_argument_names",
+    "extract_string_literals",
     "find_unsupported_mock_assertions",
     "function_argument_names",
+    "infer_argument_type",
     "is_mock_factory_call",
     "is_patch_call",
     "iter_relevant_test_body_nodes",
     "known_type_allows_member",
     "patched_target_name_from_call",
+    "resolve_bound_value",
     "with_uses_pytest_assertion_context",
     "with_uses_pytest_raises",
     "supports_mock_assertion_target",

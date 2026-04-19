@@ -26,6 +26,10 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
 	annotation_accepts_sequence_input,
 	call_signature_details,
+	call_expression_basename,
+	dataclass_field_has_default,
+	dataclass_field_is_init_enabled,
+	has_dataclass_decorator,
 	method_binding_kind,
 	self_assigned_attributes,
 )
@@ -209,6 +213,10 @@ __all__ = [
 	"unredacted_agent_result",
 	"annotation_accepts_sequence_input",
 	"call_signature_details",
+	"call_expression_basename",
+	"dataclass_field_has_default",
+	"dataclass_field_is_init_enabled",
+	"has_dataclass_decorator",
 	"method_binding_kind",
 	"self_assigned_attributes",
 	"build_code_validation_repair_lines",

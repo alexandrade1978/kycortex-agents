@@ -29,6 +29,10 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
 	annotation_accepts_sequence_input,
 	call_signature_details,
+	call_expression_basename,
+	dataclass_field_has_default,
+	dataclass_field_is_init_enabled,
+	has_dataclass_decorator,
 	method_binding_kind,
 	self_assigned_attributes,
 )
@@ -513,6 +517,21 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	assert method_binding_kind(classmethod_node) == "class"
 	assert method_binding_kind(instance_node) == "instance"
 	assert self_assigned_attributes(instance_node) == ["value"]
+
+	class_node = ast.parse(
+		"@dataclasses.dataclass\n"
+		"class Payload:\n"
+		"    value: int\n"
+	).body[0]
+	assert isinstance(class_node, ast.ClassDef)
+	assert has_dataclass_decorator(class_node) is True
+	assert call_expression_basename(ast.parse("field(default=1)", mode="eval").body.func) == "field"
+	assert call_expression_basename(ast.parse("factory.helpers.build", mode="eval").body) == "build"
+	assert dataclass_field_has_default(None) is False
+	assert dataclass_field_has_default(ast.parse("field(default=1)", mode="eval").body) is True
+	assert dataclass_field_has_default(ast.parse("field()", mode="eval").body) is False
+	assert dataclass_field_is_init_enabled(ast.parse("field(init=False)", mode="eval").body) is False
+	assert dataclass_field_is_init_enabled(ast.parse("field(default=1)", mode="eval").body) is True
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

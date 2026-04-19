@@ -83,9 +83,53 @@ def self_assigned_attributes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> li
     return attributes
 
 
+def has_dataclass_decorator(node: ast.ClassDef) -> bool:
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if isinstance(target, ast.Name) and target.id == "dataclass":
+            return True
+        if isinstance(target, ast.Attribute) and target.attr == "dataclass":
+            return True
+    return False
+
+
+def call_expression_basename(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def dataclass_field_has_default(value: ast.expr | None) -> bool:
+    if value is None:
+        return False
+    if not isinstance(value, ast.Call) or call_expression_basename(value.func) != "field":
+        return True
+    if value.args:
+        return True
+    return any(keyword.arg in {"default", "default_factory"} for keyword in value.keywords)
+
+
+def dataclass_field_is_init_enabled(value: ast.expr | None) -> bool:
+    if not isinstance(value, ast.Call) or call_expression_basename(value.func) != "field":
+        return True
+    for keyword in value.keywords:
+        if keyword.arg != "init":
+            continue
+        if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, bool):
+            return keyword.value.value
+        return True
+    return True
+
+
 __all__ = [
     "annotation_accepts_sequence_input",
     "call_signature_details",
+    "call_expression_basename",
+    "dataclass_field_has_default",
+    "dataclass_field_is_init_enabled",
+    "has_dataclass_decorator",
     "method_binding_kind",
     "self_assigned_attributes",
 ]

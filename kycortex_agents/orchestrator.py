@@ -40,6 +40,10 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
     annotation_accepts_sequence_input,
     call_signature_details,
+    call_expression_basename,
+    dataclass_field_has_default,
+    dataclass_field_is_init_enabled,
+    has_dataclass_decorator,
     method_binding_kind,
     self_assigned_attributes,
 )
@@ -1925,13 +1929,7 @@ class Orchestrator:
 
     @staticmethod
     def _has_dataclass_decorator(node: ast.ClassDef) -> bool:
-        for decorator in node.decorator_list:
-            target = decorator.func if isinstance(decorator, ast.Call) else decorator
-            if isinstance(target, ast.Name) and target.id == "dataclass":
-                return True
-            if isinstance(target, ast.Attribute) and target.attr == "dataclass":
-                return True
-        return False
+        return has_dataclass_decorator(node)
 
     def _dataclass_default_order_repair_examples(
         self,
@@ -2814,24 +2812,10 @@ class Orchestrator:
         return analysis
 
     def _dataclass_field_has_default(self, value: Optional[ast.expr]) -> bool:
-        if value is None:
-            return False
-        if not isinstance(value, ast.Call) or self._call_expression_basename(value.func) != "field":
-            return True
-        if value.args:
-            return True
-        return any(keyword.arg in {"default", "default_factory"} for keyword in value.keywords)
+        return dataclass_field_has_default(value)
 
     def _dataclass_field_is_init_enabled(self, value: Optional[ast.expr]) -> bool:
-        if not isinstance(value, ast.Call) or self._call_expression_basename(value.func) != "field":
-            return True
-        for keyword in value.keywords:
-            if keyword.arg != "init":
-                continue
-            if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, bool):
-                return keyword.value.value
-            return True
-        return True
+        return dataclass_field_is_init_enabled(value)
 
     def _is_probable_third_party_import(self, module_name: str) -> bool:
         normalized_name = module_name.strip()
@@ -3434,11 +3418,7 @@ class Orchestrator:
         return expression
 
     def _call_expression_basename(self, node: ast.AST) -> str:
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Attribute):
-            return node.attr
-        return ""
+        return call_expression_basename(node)
 
     def _direct_return_expression(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Optional[ast.expr]:
         for statement in node.body:

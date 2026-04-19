@@ -35,6 +35,26 @@ def normalized_helper_surface_symbols(raw_values: object) -> list[str]:
     return symbols
 
 
+def helper_surface_usages_for_test_repair(
+    validation_payload: object,
+    failure_category: str,
+) -> list[str]:
+    if failure_category != "test_validation":
+        return []
+    if not isinstance(validation_payload, dict):
+        return []
+
+    test_analysis = validation_payload.get("test_analysis")
+    if not isinstance(test_analysis, dict):
+        return []
+
+    raw_usages = test_analysis.get("helper_surface_usages")
+    if not isinstance(raw_usages, list):
+        return []
+
+    return [item.strip() for item in raw_usages if isinstance(item, str) and item.strip()]
+
+
 def validation_summary_symbols(validation_summary: str, label: str) -> list[str]:
     prefix = f"- {label}:"
     for line in validation_summary.splitlines():

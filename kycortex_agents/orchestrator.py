@@ -254,6 +254,7 @@ from kycortex_agents.orchestration.workflow_control import (
     build_repair_context,
     ensure_budget_decomposition_task,
     failed_task_ids_for_repair,
+    has_repair_task_for_cycle,
     cancel_workflow,
     emit_workflow_progress,
     exit_if_workflow_cancelled,
@@ -1800,13 +1801,7 @@ class Orchestrator:
         )
 
     def _has_repair_task_for_cycle(self, project: ProjectState, task_id: str, cycle_number: int) -> bool:
-        for existing_task in project.tasks:
-            if existing_task.repair_origin_task_id != task_id:
-                continue
-            if existing_task.repair_attempt != cycle_number:
-                continue
-            return True
-        return False
+        return has_repair_task_for_cycle(project, task_id, cycle_number)
 
     def _queue_active_cycle_repair(self, project: ProjectState, task: Task) -> bool:
         return queue_active_cycle_repair(

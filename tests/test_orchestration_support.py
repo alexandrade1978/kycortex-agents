@@ -257,6 +257,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	build_repair_context,
 	ensure_budget_decomposition_task,
 	failed_task_ids_for_repair,
+	has_repair_task_for_cycle,
 	merge_prior_repair_context,
 	privacy_safe_log_fields,
 	queue_active_cycle_repair,
@@ -2715,6 +2716,18 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert active_repair_cycle(project) is None
 	project.repair_history.append({"cycle": 1, "failed_task_ids": ["code"]})
 	assert active_repair_cycle(project) == {"cycle": 1, "failed_task_ids": ["code"]}
+	project.add_task(
+		Task(
+			id="code__repair_cycle_1",
+			title="Repair implementation",
+			description="Repair code",
+			assigned_to="code_engineer",
+			repair_origin_task_id="code",
+			repair_attempt=1,
+		)
+	)
+	assert has_repair_task_for_cycle(project, "code", 1) is True
+	assert has_repair_task_for_cycle(project, "code", 2) is False
 	repair_task = Task(
 		id="code__repair_1",
 		title="Repair implementation",

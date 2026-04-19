@@ -199,6 +199,16 @@ def active_repair_cycle(project: ProjectState) -> dict[str, Any] | None:
     return current_cycle
 
 
+def has_repair_task_for_cycle(project: ProjectState, task_id: str, cycle_number: int) -> bool:
+    for existing_task in project.tasks:
+        if existing_task.repair_origin_task_id != task_id:
+            continue
+        if existing_task.repair_attempt != cycle_number:
+            continue
+        return True
+    return False
+
+
 def failed_task_ids_for_repair(project: ProjectState) -> list[str]:
     active_repair_origins = {
         task.repair_origin_task_id

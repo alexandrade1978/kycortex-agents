@@ -25,6 +25,7 @@ from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
+from kycortex_agents.orchestration.output_helpers import semantic_output_key, summarize_output
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
     class_field_annotations_from_failed_artifact,
@@ -639,7 +640,7 @@ class Orchestrator:
         )
         if finalized_test_content != test_content:
             output.raw_content = finalized_test_content
-            output.summary = self._summarize_output(finalized_test_content)
+            output.summary = summarize_output(finalized_test_content)
             for artifact in output.artifacts:
                 if artifact.artifact_type != ArtifactType.TEST:
                     continue
@@ -665,7 +666,7 @@ class Orchestrator:
             if fixed_test_content != test_content:
                 test_content = fixed_test_content
                 output.raw_content = test_content
-                output.summary = self._summarize_output(test_content)
+                output.summary = summarize_output(test_content)
                 for artifact in output.artifacts:
                     if artifact.artifact_type != ArtifactType.TEST:
                         continue
@@ -1044,7 +1045,7 @@ class Orchestrator:
                     ctx["budget_decomposition_brief"] = visible_output
                 if self._is_budget_decomposition_planner(prev_task):
                     continue
-                semantic_key = self._semantic_output_key(prev_task)
+                semantic_key = semantic_output_key(prev_task.assigned_to, prev_task.title)
                 if semantic_key:
                     semantic_output = visible_output
                     if semantic_key == "architecture" and compact_architecture_context:
@@ -2482,7 +2483,7 @@ class Orchestrator:
             "code_artifact_path": artifact_path,
             "module_name": path_obj.stem,
             "module_filename": path_obj.name,
-            "code_summary": self._summarize_output(code_content),
+            "code_summary": summarize_output(code_content),
             "code_outline": self._build_code_outline(code_content),
             "code_analysis": code_analysis,
             "code_public_api": self._build_code_public_api(code_analysis),
@@ -5595,7 +5596,7 @@ class Orchestrator:
     def _normalize_agent_result(self, result: Any) -> AgentOutput:
         if isinstance(result, AgentOutput):
             return result
-        return AgentOutput(summary=self._summarize_output(result), raw_content=result)
+        return AgentOutput(summary=summarize_output(result), raw_content=result)
 
     def _unredacted_agent_result(self, agent: Any, result: AgentOutput) -> AgentOutput:
         getter = getattr(agent, "_consume_last_unredacted_output", None)
@@ -5604,40 +5605,6 @@ class Orchestrator:
             if isinstance(unredacted, AgentOutput):
                 return unredacted
         return result
-
-    def _summarize_output(self, raw_content: str) -> str:
-        stripped = raw_content.strip()
-        if not stripped:
-            return ""
-        return stripped.splitlines()[0].strip()[:120]
-
-    def _semantic_output_key(self, task: Task) -> Optional[str]:
-        role_key = AgentRegistry.normalize_key(task.assigned_to)
-        semantic_map = {
-            "architect": "architecture",
-            "code_engineer": "code",
-            "dependency_manager": "dependencies",
-            "code_reviewer": "review",
-            "qa_tester": "tests",
-            "docs_writer": "documentation",
-            "legal_advisor": "legal",
-        }
-        if role_key in semantic_map:
-            return semantic_map[role_key]
-        title_key = task.title.lower().replace(" ", "_")
-        if "architect" in title_key or "architecture" in title_key:
-            return "architecture"
-        if "review" in title_key:
-            return "review"
-        if "test" in title_key:
-            return "tests"
-        if "depend" in title_key or "requirement" in title_key or "package" in title_key:
-            return "dependencies"
-        if "doc" in title_key:
-            return "documentation"
-        if "legal" in title_key or "license" in title_key:
-            return "legal"
-        return None
 
     def _validate_agent_resolution(self, project: ProjectState) -> None:
         for task in project.tasks:

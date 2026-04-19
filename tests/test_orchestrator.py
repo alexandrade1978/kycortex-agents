@@ -21,6 +21,8 @@ from kycortex_agents.orchestration import (
     build_dependency_validation_summary,
     build_repair_focus_lines,
     build_test_validation_summary,
+    semantic_output_key,
+    summarize_output,
 )
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
@@ -5375,11 +5377,11 @@ def test_ast_name_formats_nested_attributes(tmp_path):
 
 def test_summarize_output_returns_blank_for_whitespace_and_truncates_first_line(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._summarize_output("   ") == ""
-    assert orchestrator._summarize_output("  first line  \nsecond line") == "first line"
-    assert len(orchestrator._summarize_output("x" * 200)) == 120
+    assert summarize_output("   ") == ""
+    assert summarize_output("  first line  \nsecond line") == "first line"
+    assert len(summarize_output("x" * 200)) == 120
 
 
 @pytest.mark.parametrize(
@@ -5396,9 +5398,9 @@ def test_summarize_output_returns_blank_for_whitespace_and_truncates_first_line(
 )
 def test_semantic_output_key_title_fallbacks(tmp_path, task, expected_key):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._semantic_output_key(task) == expected_key
+    assert semantic_output_key(task.assigned_to, task.title) == expected_key
 
 
 def test_build_agent_input_uses_repair_defaults_when_optional_fields_are_blank(tmp_path):

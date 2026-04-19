@@ -12056,7 +12056,7 @@ def test_execute_workflow_resume_failed_hard_stops_for_non_repairable_failed_tas
     assert project.acceptance_evaluation["acceptance_lanes"]["productivity"]["accepted"] is False
     assert project.acceptance_evaluation["acceptance_lanes"]["real_workflow"]["accepted"] is False
     assert project.acceptance_evaluation["acceptance_lanes"]["safety"]["accepted"] is False
-    assert project.acceptance_evaluation["acceptance_lanes"]["safety"]["zero_budget_failure_categories"] == [
+    assert project.acceptance_evaluation["acceptance_lanes"]["safety"].get("zero_budget_failure_categories") == [
         FailureCategory.SANDBOX_SECURITY_VIOLATION.value
     ]
     assert project.acceptance_evaluation["failed_lane_ids"] == ["productivity", "real_workflow", "safety"]

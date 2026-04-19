@@ -457,9 +457,11 @@ def test_test_ast_analysis_helpers_collect_parametrized_names_and_bindings_direc
 		"@pytest.mark.parametrize(argnames='left, right', argvalues=[(1, 2)])\n"
 		"def test_keyword(left, right):\n"
 		"    return left + right\n"
-	).body[0].decorator_list[0]
-	assert isinstance(keyword_decorator, ast.Call)
-	assert extract_parametrize_argument_names(keyword_decorator) == {"left", "right"}
+	).body[0]
+	assert isinstance(keyword_decorator, ast.FunctionDef)
+	keyword_decorator_call = keyword_decorator.decorator_list[0]
+	assert isinstance(keyword_decorator_call, ast.Call)
+	assert extract_parametrize_argument_names(keyword_decorator_call) == {"left", "right"}
 
 
 def test_test_ast_analysis_helpers_detect_undefined_names_patch_targets_and_mocks_directly():
@@ -781,7 +783,9 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	).body[0]
 	assert isinstance(class_node, ast.ClassDef)
 	assert has_dataclass_decorator(class_node) is True
-	assert call_expression_basename(ast.parse("field(default=1)", mode="eval").body.func) == "field"
+	field_call = ast.parse("field(default=1)", mode="eval").body
+	assert isinstance(field_call, ast.Call)
+	assert call_expression_basename(field_call.func) == "field"
 	assert call_expression_basename(ast.parse("factory.helpers.build", mode="eval").body) == "build"
 	assert dataclass_field_has_default(None) is False
 	assert dataclass_field_has_default(ast.parse("field(default=1)", mode="eval").body) is True
@@ -795,7 +799,9 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 		"        consume(item)\n"
 	).body[0]
 	assert isinstance(sequence_node, ast.FunctionDef)
-	assert first_user_parameter(sequence_node).arg == "items"
+	sequence_parameter = first_user_parameter(sequence_node)
+	assert sequence_parameter is not None
+	assert sequence_parameter.arg == "items"
 	assert parameter_is_iterated(sequence_node, "items") is True
 	assert parameter_is_iterated(sequence_node, "other") is False
 
@@ -1362,7 +1368,7 @@ def test_workflow_acceptance_helpers_build_lists_and_zero_budget_safety_directly
 	assert evaluation["accepted"] is False
 	assert evaluation["failed_lane_ids"] == ["real_workflow", "safety"]
 	assert evaluation["acceptance_lanes"]["productivity"]["accepted"] is True
-	assert evaluation["acceptance_lanes"]["safety"]["zero_budget_failure_categories"] == [
+	assert evaluation["acceptance_lanes"]["safety"].get("zero_budget_failure_categories") == [
 		FailureCategory.SANDBOX_SECURITY_VIOLATION.value
 	]
 
@@ -1650,10 +1656,12 @@ def test_missing_object_attribute_and_replacement_helpers_work_directly():
 		"    incidents: list[str]\n"
 	)
 
-	class_name, attribute_name, class_fields = missing_object_attribute_details(
+	attribute_details = missing_object_attribute_details(
 		"AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'",
 		failed_code,
 	)
+	assert attribute_details is not None
+	class_name, attribute_name, class_fields = attribute_details
 
 	assert (class_name, attribute_name) == ("VendorProfile", "expired_certifications")
 	assert class_fields == ["certifications", "incidents"]

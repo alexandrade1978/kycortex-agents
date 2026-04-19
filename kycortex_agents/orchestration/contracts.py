@@ -21,7 +21,14 @@ class TaskAcceptanceLists(TypedDict):
 	pending_task_ids: list[str]
 
 
-class AcceptanceLane(TypedDict, total=False):
+class AcceptanceLaneRequired(TypedDict):
+	"""Acceptance-lane fields that are always present."""
+
+	accepted: bool
+	reason: str
+
+
+class AcceptanceLane(AcceptanceLaneRequired, total=False):
 	"""Single acceptance lane summary.
 
 	Task-oriented lanes carry the task-id buckets above plus acceptance metadata.
@@ -29,8 +36,6 @@ class AcceptanceLane(TypedDict, total=False):
 	lists.
 	"""
 
-	accepted: bool
-	reason: str
 	policy: str
 	evaluated_task_ids: list[str]
 	required_task_ids: list[str]

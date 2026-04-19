@@ -45,7 +45,9 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     call_expression_basename,
     dataclass_field_has_default,
     dataclass_field_is_init_enabled,
+    dict_accessed_keys_from_tree,
     direct_return_expression,
+    example_from_default,
     extract_indirect_required_fields,
     extract_lookup_field_rules,
     extract_required_fields,
@@ -53,6 +55,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     field_selector_name,
     first_user_parameter,
     has_dataclass_decorator,
+    infer_dict_key_value_examples,
     method_binding_kind,
     parameter_is_iterated,
     self_assigned_attributes,
@@ -251,37 +254,7 @@ _RESERVED_FIXTURE_NAMES = {"request"}
 # ---------------------------------------------------------------------------
 def _example_from_default(node: ast.expr) -> str | None:
     """Return an example literal string for a .get() default AST node."""
-    if isinstance(node, ast.Constant):
-        v = node.value
-        if isinstance(v, bool):
-            return "True" if v else "False"
-        if isinstance(v, int):
-            return str(max(v, 1)) if v >= 0 else str(v)
-        if isinstance(v, float):
-            return str(max(v, 1.0)) if v >= 0 else str(v)
-        if isinstance(v, str):
-            return f"'{v}'" if v else "'sample'"
-        if v is None:
-            return None
-    if isinstance(node, ast.List):
-        if not node.elts:
-            return "['sample']"
-        try:
-            return ast.unparse(node)
-        except Exception:
-            return "['sample']"
-    if isinstance(node, ast.Dict):
-        if not node.keys:
-            return "{'key': 'value'}"
-        try:
-            return ast.unparse(node)
-        except Exception:
-            return "{'key': 'value'}"
-    if isinstance(node, ast.Set):
-        return "{'sample'}"
-    if isinstance(node, ast.Tuple):
-        return "('sample',)"
-    return None
+    return example_from_default(node)
 
 
 class Orchestrator:
@@ -3469,117 +3442,11 @@ class Orchestrator:
 
     @staticmethod
     def _infer_dict_key_value_examples(tree: ast.AST) -> Dict[str, Dict[str, str]]:
-        """Infer example values for dict keys by analysing .get() defaults and comparisons.
-
-        Returns ``{var_name: {key: example_literal}}`` where *example_literal*
-        is a Python literal string such as ``"3"`` or ``"[]"``.
-        """
-        # Track alias assignments: ``d = request.details`` → d → details
-        alias_map: Dict[str, str] = {}
-        # key → example literal string
-        raw: Dict[str, Dict[str, str]] = {}
-
-        for node in ast.walk(tree):
-            # Detect alias assignments
-            if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                target = node.targets[0]
-                value = node.value
-                if (
-                    isinstance(target, ast.Name)
-                    and isinstance(value, ast.Attribute)
-                    and isinstance(value.value, ast.Name)
-                ):
-                    alias_map[target.id] = value.attr
-
-            # Pattern: name.get('key', default)
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "get"
-                and isinstance(node.func.value, ast.Name)
-                and node.args
-                and isinstance(node.args[0], ast.Constant)
-                and isinstance(node.args[0].value, str)
-            ):
-                var_name = node.func.value.id
-                key_name = node.args[0].value
-                if len(node.args) >= 2:
-                    default_node = node.args[1]
-                    example = _example_from_default(default_node)
-                    if example is not None:
-                        raw.setdefault(var_name, {})[key_name] = example
-
-        # Resolve aliases
-        merged: Dict[str, Dict[str, str]] = {}
-        for var_name, key_examples in raw.items():
-            real_name = alias_map.get(var_name, var_name)
-            if real_name not in merged:
-                merged[real_name] = {}
-            merged[real_name].update(key_examples)
-        return merged
+        return infer_dict_key_value_examples(tree)
 
     @staticmethod
     def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
-        """Scan an AST for dict subscript/membership patterns and return keys by variable name.
-
-        Detects patterns like ``name['key']``, ``name["key"]``,
-        ``'key' in name``, and ``name.get('key')``.
-        Also resolves aliases: if the implementation has
-        ``d = request.details`` and accesses ``d['key']``, the keys are
-        attributed to ``details`` (the attribute name) instead of ``d``.
-        Returns a mapping from variable name to the list of string keys accessed.
-        """
-        keys_by_name: Dict[str, list[str]] = {}
-        # Track alias assignments: ``alias = something.attr`` → alias → attr
-        alias_map: Dict[str, str] = {}
-        for node in ast.walk(tree):
-            # Detect alias assignments like ``d = request.details``
-            if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                target = node.targets[0]
-                value = node.value
-                if (
-                    isinstance(target, ast.Name)
-                    and isinstance(value, ast.Attribute)
-                    and isinstance(value.value, ast.Name)
-                ):
-                    alias_map[target.id] = value.attr
-
-            var_name: str = ""
-            key_value: str = ""
-            if isinstance(node, ast.Subscript):
-                if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
-                    var_name = node.value.id
-                    key_value = node.slice.value
-            elif isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.In):
-                if (
-                    isinstance(node.left, ast.Constant)
-                    and isinstance(node.left.value, str)
-                    and len(node.comparators) == 1
-                    and isinstance(node.comparators[0], ast.Name)
-                ):
-                    var_name = node.comparators[0].id
-                    key_value = node.left.value
-            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if node.func.attr == "get" and isinstance(node.func.value, ast.Name):
-                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-                        var_name = node.func.value.id
-                        key_value = node.args[0].value
-            if var_name and key_value and key_value not in keys_by_name.get(var_name, []):
-                keys_by_name.setdefault(var_name, []).append(key_value)
-
-        # Resolve aliases: merge keys from aliased vars into the real
-        # parameter name.  E.g. ``d = request.details; d['key']`` →
-        # ``details: ['key']`` instead of ``d: ['key']``.
-        merged: Dict[str, list[str]] = {}
-        for var_name, keys in keys_by_name.items():
-            real_name = alias_map.get(var_name, var_name)
-            if real_name in merged:
-                for k in keys:
-                    if k not in merged[real_name]:
-                        merged[real_name].append(k)
-            else:
-                merged[real_name] = list(keys)
-        return merged
+        return dict_accessed_keys_from_tree(tree)
 
     def _extract_type_constraints(
         self,

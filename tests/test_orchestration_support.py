@@ -34,7 +34,9 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	call_expression_basename,
 	dataclass_field_has_default,
 	dataclass_field_is_init_enabled,
+	dict_accessed_keys_from_tree,
 	direct_return_expression,
+	example_from_default,
 	extract_indirect_required_fields,
 	extract_lookup_field_rules,
 	extract_required_fields,
@@ -42,6 +44,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	field_selector_name,
 	first_user_parameter,
 	has_dataclass_decorator,
+	infer_dict_key_value_examples,
 	method_binding_kind,
 	parameter_is_iterated,
 	self_assigned_attributes,
@@ -610,6 +613,30 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	assert isinstance(iterated_sequence_node, ast.FunctionDef)
 	assert extract_sequence_input_rule(annotated_sequence_node) == "handle accepts sequence inputs via parameter `items`"
 	assert extract_sequence_input_rule(iterated_sequence_node) == "handle accepts sequence inputs via parameter `items`"
+
+	assert example_from_default(ast.Constant(True)) == "True"
+	assert example_from_default(ast.Constant(0)) == "1"
+	assert example_from_default(ast.List(elts=[], ctx=ast.Load())) == "['sample']"
+	assert example_from_default(ast.Dict(keys=[], values=[])) == "{'key': 'value'}"
+
+	dict_tree = ast.parse(
+		"d = request.details\n"
+		"d.get('count', 0)\n"
+		"details.get('active', False)\n"
+	)
+	assert infer_dict_key_value_examples(dict_tree) == {
+		"details": {"count": "1", "active": "False"},
+	}
+
+	access_tree = ast.parse(
+		"d = request.details\n"
+		"value = d['count']\n"
+		"'status' in details\n"
+		"details.get('active', False)\n"
+	)
+	assert dict_accessed_keys_from_tree(access_tree) == {
+		"details": ["count", "status", "active"],
+	}
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

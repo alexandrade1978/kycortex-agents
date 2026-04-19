@@ -68,6 +68,130 @@ def extract_sequence_input_rule(node: ast.FunctionDef | ast.AsyncFunctionDef) ->
     return ""
 
 
+def example_from_default(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Constant):
+        value = node.value
+        if isinstance(value, bool):
+            return "True" if value else "False"
+        if isinstance(value, int):
+            return str(max(value, 1)) if value >= 0 else str(value)
+        if isinstance(value, float):
+            return str(max(value, 1.0)) if value >= 0 else str(value)
+        if isinstance(value, str):
+            return f"'{value}'" if value else "'sample'"
+        if value is None:
+            return None
+    if isinstance(node, ast.List):
+        if not node.elts:
+            return "['sample']"
+        try:
+            return ast.unparse(node)
+        except Exception:
+            return "['sample']"
+    if isinstance(node, ast.Dict):
+        if not node.keys:
+            return "{'key': 'value'}"
+        try:
+            return ast.unparse(node)
+        except Exception:
+            return "{'key': 'value'}"
+    if isinstance(node, ast.Set):
+        return "{'sample'}"
+    if isinstance(node, ast.Tuple):
+        return "('sample',)"
+    return None
+
+
+def infer_dict_key_value_examples(tree: ast.AST) -> Dict[str, Dict[str, str]]:
+    alias_map: Dict[str, str] = {}
+    raw: Dict[str, Dict[str, str]] = {}
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            value = node.value
+            if (
+                isinstance(target, ast.Name)
+                and isinstance(value, ast.Attribute)
+                and isinstance(value.value, ast.Name)
+            ):
+                alias_map[target.id] = value.attr
+
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and isinstance(node.func.value, ast.Name)
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            var_name = node.func.value.id
+            key_name = node.args[0].value
+            if len(node.args) >= 2:
+                default_node = node.args[1]
+                example = example_from_default(default_node)
+                if example is not None:
+                    raw.setdefault(var_name, {})[key_name] = example
+
+    merged: Dict[str, Dict[str, str]] = {}
+    for var_name, key_examples in raw.items():
+        real_name = alias_map.get(var_name, var_name)
+        if real_name not in merged:
+            merged[real_name] = {}
+        merged[real_name].update(key_examples)
+    return merged
+
+
+def dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
+    keys_by_name: Dict[str, list[str]] = {}
+    alias_map: Dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            value = node.value
+            if (
+                isinstance(target, ast.Name)
+                and isinstance(value, ast.Attribute)
+                and isinstance(value.value, ast.Name)
+            ):
+                alias_map[target.id] = value.attr
+
+        var_name = ""
+        key_value = ""
+        if isinstance(node, ast.Subscript):
+            if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                var_name = node.value.id
+                key_value = node.slice.value
+        elif isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.In):
+            if (
+                isinstance(node.left, ast.Constant)
+                and isinstance(node.left.value, str)
+                and len(node.comparators) == 1
+                and isinstance(node.comparators[0], ast.Name)
+            ):
+                var_name = node.comparators[0].id
+                key_value = node.left.value
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr == "get" and isinstance(node.func.value, ast.Name):
+                if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                    var_name = node.func.value.id
+                    key_value = node.args[0].value
+        if var_name and key_value and key_value not in keys_by_name.get(var_name, []):
+            keys_by_name.setdefault(var_name, []).append(key_value)
+
+    merged: Dict[str, list[str]] = {}
+    for var_name, keys in keys_by_name.items():
+        real_name = alias_map.get(var_name, var_name)
+        if real_name in merged:
+            for key in keys:
+                if key not in merged[real_name]:
+                    merged[real_name].append(key)
+        else:
+            merged[real_name] = list(keys)
+    return merged
+
+
 def call_signature_details(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     *,
@@ -261,7 +385,9 @@ __all__ = [
     "call_expression_basename",
     "dataclass_field_has_default",
     "dataclass_field_is_init_enabled",
+    "dict_accessed_keys_from_tree",
     "direct_return_expression",
+    "example_from_default",
     "extract_indirect_required_fields",
     "extract_lookup_field_rules",
     "extract_required_fields",
@@ -269,6 +395,7 @@ __all__ = [
     "field_selector_name",
     "first_user_parameter",
     "has_dataclass_decorator",
+    "infer_dict_key_value_examples",
     "method_binding_kind",
     "parameter_is_iterated",
     "self_assigned_attributes",

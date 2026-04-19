@@ -246,6 +246,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 )
 from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
+    build_code_repair_context_from_test_failure,
     build_repair_context,
     ensure_budget_decomposition_task,
     cancel_workflow,
@@ -1458,33 +1459,15 @@ class Orchestrator:
         test_task: Task,
         cycle: Dict[str, Any],
     ) -> Dict[str, Any]:
-        existing_tests = self._failed_artifact_content(test_task, ArtifactType.TEST)
-        validation_summary = self._build_repair_validation_summary(
+        return build_code_repair_context_from_test_failure(
+            code_task,
             test_task,
-            FailureCategory.TEST_VALIDATION.value,
+            cycle,
+            failed_artifact_content=self._failed_artifact_content,
+            build_repair_validation_summary=self._build_repair_validation_summary,
+            build_code_repair_instruction_from_test_failure=self._build_code_repair_instruction_from_test_failure,
+            merge_prior_repair_context=self._merge_prior_repair_context,
         )
-        repair_context = {
-            "cycle": cycle.get("cycle"),
-            "failure_category": FailureCategory.CODE_VALIDATION.value,
-            "failure_message": test_task.last_error or test_task.output or "",
-            "failure_error_type": test_task.last_error_type,
-            "repair_owner": "code_engineer",
-            "original_assigned_to": code_task.assigned_to,
-            "source_failure_task_id": test_task.id,
-            "source_failure_category": test_task.last_error_category or FailureCategory.TEST_VALIDATION.value,
-            "instruction": self._build_code_repair_instruction_from_test_failure(
-                code_task,
-                validation_summary,
-                existing_tests,
-            ),
-            "validation_summary": validation_summary,
-            "existing_tests": existing_tests,
-            "failed_output": code_task.output or "",
-            "failed_artifact_content": self._failed_artifact_content(code_task, ArtifactType.CODE),
-            "provider_call": code_task.last_provider_call,
-        }
-        self._merge_prior_repair_context(code_task, repair_context)
-        return repair_context
 
     def _build_code_repair_instruction_from_test_failure(
         self,

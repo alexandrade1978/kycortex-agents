@@ -249,6 +249,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 )
 from kycortex_agents.orchestration.workflow_control import (
 	active_repair_cycle,
+	build_code_repair_context_from_test_failure,
 	build_repair_context,
 	ensure_budget_decomposition_task,
 	merge_prior_repair_context,
@@ -2743,6 +2744,28 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert built_context["failed_artifact_content"] == "artifact:code_validation:code__repair_1"
 	assert built_context["helper_surface_symbols"] == ["RiskScoringService"]
 	assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in built_context["instruction"]
+	code_from_test_context = build_code_repair_context_from_test_failure(
+		repair_task,
+		Task(
+			id="tests__repair_1",
+			title="Repair tests",
+			description="Repair tests",
+			assigned_to="qa_tester",
+			last_error_category=FailureCategory.TEST_VALIDATION.value,
+			last_error="pytest failed",
+		),
+		{"cycle": 3},
+		failed_artifact_content=lambda current_task, artifact_type: f"artifact:{artifact_type.value}:{current_task.id}",
+		build_repair_validation_summary=lambda current_task, failure_category: f"summary:{failure_category}:{current_task.id}",
+		build_code_repair_instruction_from_test_failure=lambda current_task, validation_summary, existing_tests: f"instruction:{current_task.id}:{validation_summary}:{existing_tests}",
+		merge_prior_repair_context=merge_prior_repair_context,
+	)
+	assert code_from_test_context["cycle"] == 3
+	assert code_from_test_context["failure_category"] == FailureCategory.CODE_VALIDATION.value
+	assert code_from_test_context["source_failure_task_id"] == "tests__repair_1"
+	assert code_from_test_context["existing_tests"] == "artifact:test:tests__repair_1"
+	assert code_from_test_context["failed_artifact_content"] == "artifact:code:code__repair_1"
+	assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in code_from_test_context["instruction"]
 
 
 def test_repair_instruction_owner_mapping_directly():

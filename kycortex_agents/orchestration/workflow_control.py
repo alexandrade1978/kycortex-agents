@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional, cast
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
-from kycortex_agents.types import AgentOutput, FailureCategory
+from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory
 
 
 def log_event(logger: Any, level: str, event: str, **fields: Any) -> None:
@@ -232,6 +232,45 @@ def build_repair_context(
             helper_surface_usages
         )
     merge_prior_repair_context(task, repair_context)
+    return repair_context
+
+
+def build_code_repair_context_from_test_failure(
+    code_task: Task,
+    test_task: Task,
+    cycle: dict[str, Any],
+    *,
+    failed_artifact_content: Callable[[Task, Any], str],
+    build_repair_validation_summary: Callable[[Task, str], str],
+    build_code_repair_instruction_from_test_failure: Callable[[Task, str, object], str],
+    merge_prior_repair_context: Callable[[Task, dict[str, Any]], None],
+) -> dict[str, Any]:
+    existing_tests = failed_artifact_content(test_task, AgentOutputArtifactType.TEST)
+    validation_summary = build_repair_validation_summary(
+        test_task,
+        FailureCategory.TEST_VALIDATION.value,
+    )
+    repair_context: dict[str, Any] = {
+        "cycle": cycle.get("cycle"),
+        "failure_category": FailureCategory.CODE_VALIDATION.value,
+        "failure_message": test_task.last_error or test_task.output or "",
+        "failure_error_type": test_task.last_error_type,
+        "repair_owner": "code_engineer",
+        "original_assigned_to": code_task.assigned_to,
+        "source_failure_task_id": test_task.id,
+        "source_failure_category": test_task.last_error_category or FailureCategory.TEST_VALIDATION.value,
+        "instruction": build_code_repair_instruction_from_test_failure(
+            code_task,
+            validation_summary,
+            existing_tests,
+        ),
+        "validation_summary": validation_summary,
+        "existing_tests": existing_tests,
+        "failed_output": code_task.output or "",
+        "failed_artifact_content": failed_artifact_content(code_task, AgentOutputArtifactType.CODE),
+        "provider_call": code_task.last_provider_call,
+    }
+    merge_prior_repair_context(code_task, repair_context)
     return repair_context
 
 

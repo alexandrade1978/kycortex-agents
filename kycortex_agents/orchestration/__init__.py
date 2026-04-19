@@ -13,6 +13,7 @@ from kycortex_agents.orchestration.ast_tools import (
 	render_expression,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.orchestration.dependency_analysis import (
 	analyze_dependency_manifest,
 	normalize_import_name,
@@ -295,6 +296,7 @@ __all__ = [
 	"python_import_roots",
 	"render_expression",
 	"ArtifactPersistenceSupport",
+	"failed_artifact_content",
 	"analyze_dependency_manifest",
 	"AcceptanceEvaluation",
 	"AcceptanceLane",

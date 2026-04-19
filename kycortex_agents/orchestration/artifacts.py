@@ -18,6 +18,33 @@ from kycortex_agents.types import ArtifactRecord, ArtifactType
 SegmentSanitizer = Callable[[str, str, str], str]
 
 
+def failed_artifact_content(
+    output: object,
+    output_payload: object,
+    artifact_type: ArtifactType | None = None,
+) -> str:
+    if not isinstance(output_payload, dict):
+        return output if isinstance(output, str) else ""
+    artifacts = output_payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        raw_content = output_payload.get("raw_content")
+        if isinstance(raw_content, str):
+            return raw_content
+        return output if isinstance(output, str) else ""
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        if artifact_type is not None and artifact.get("artifact_type") != artifact_type.value:
+            continue
+        content = artifact.get("content")
+        if isinstance(content, str) and content.strip():
+            return content
+    raw_content = output_payload.get("raw_content")
+    if isinstance(raw_content, str):
+        return raw_content
+    return output if isinstance(output, str) else ""
+
+
 @dataclass(frozen=True)
 class ArtifactPersistenceSupport:
     """Persist artifacts safely within the configured output directory."""

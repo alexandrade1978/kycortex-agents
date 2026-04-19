@@ -28,6 +28,7 @@ from kycortex_agents.orchestration.ast_tools import (
     python_import_roots,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.orchestration.dependency_analysis import (
     analyze_dependency_manifest,
     normalize_import_name,
@@ -1247,21 +1248,7 @@ class Orchestrator:
         return validation if isinstance(validation, dict) else {}
 
     def _failed_artifact_content(self, task: Task, artifact_type: Optional[ArtifactType] = None) -> str:
-        if not isinstance(task.output_payload, dict):
-            return task.output or ""
-        artifacts = task.output_payload.get("artifacts")
-        if not isinstance(artifacts, list):
-            return task.output or task.output_payload.get("raw_content", "")
-        for artifact in artifacts:
-            if not isinstance(artifact, dict):
-                continue
-            if artifact_type is not None and artifact.get("artifact_type") != artifact_type.value:
-                continue
-            content = artifact.get("content")
-            if isinstance(content, str) and content.strip():
-                return content
-        raw_content = task.output_payload.get("raw_content")
-        return raw_content if isinstance(raw_content, str) else (task.output or "")
+        return failed_artifact_content(task.output, task.output_payload, artifact_type)
 
     def _task_context_output(self, task: Task) -> str:
         if isinstance(task.output, str) and task.output.strip():

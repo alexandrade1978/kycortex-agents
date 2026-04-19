@@ -21,6 +21,7 @@ from kycortex_agents.orchestration.ast_tools import (
 	render_expression,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.orchestration.dependency_analysis import (
 	analyze_dependency_manifest,
 	normalize_import_name,
@@ -270,6 +271,29 @@ def test_harden_private_file_permissions_sets_mode_600(tmp_path):
 	harden_private_file_permissions(artifact_path)
 
 	assert stat.S_IMODE(artifact_path.stat().st_mode) == 0o600
+
+
+def test_failed_artifact_content_prefers_matching_artifact_then_raw_content_directly():
+	assert failed_artifact_content(
+		"fallback",
+		{
+			"raw_content": "raw fallback",
+			"artifacts": [
+				{"artifact_type": ArtifactType.TEST.value, "content": "def test_ok():\n    assert True"},
+				{"artifact_type": ArtifactType.CODE.value, "content": "def ok():\n    return 1"},
+			],
+		},
+		ArtifactType.CODE,
+	) == "def ok():\n    return 1"
+	assert failed_artifact_content(
+		"fallback",
+		{
+			"raw_content": "raw fallback",
+			"artifacts": ["invalid", {"artifact_type": ArtifactType.CODE.value, "content": "   "}],
+		},
+		ArtifactType.CODE,
+	) == "raw fallback"
+	assert failed_artifact_content("fallback", "not-a-dict", ArtifactType.CODE) == "fallback"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")

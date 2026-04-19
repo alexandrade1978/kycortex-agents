@@ -277,3 +277,8 @@ def summary_limit_exceeded(validation_summary: object, label: str) -> bool:
         limit = int(match.group(2))
         return actual > limit
     return False
+
+
+def is_budget_decomposition_planner(task: Task) -> bool:
+    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    return repair_context.get("decomposition_mode") == "budget_compaction_planner"

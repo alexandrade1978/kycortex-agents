@@ -203,6 +203,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 )
 from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
+	is_budget_decomposition_planner,
 	parse_task_public_contract_surface,
 	should_compact_architecture_context,
 	summary_limit_exceeded,
@@ -2417,6 +2418,23 @@ def test_task_constraint_helpers_parse_limits_and_optional_inputs_directly():
 	assert summary_limit_exceeded("- Line count: 205 / 200", "Line count") is True
 	assert summary_limit_exceeded("- Fixture count: 2 / 3", "Fixture count") is False
 	assert summary_limit_exceeded("", "Line count") is False
+	assert is_budget_decomposition_planner(
+		Task(
+			id="planner",
+			title="Budget Plan",
+			description="Produce a compact brief.",
+			assigned_to="architect",
+			repair_context={"decomposition_mode": "budget_compaction_planner"},
+		)
+	) is True
+	assert is_budget_decomposition_planner(
+		Task(
+			id="regular",
+			title="Regular Task",
+			description="Implement the workflow.",
+			assigned_to="code_engineer",
+		)
+	) is False
 
 
 def test_should_compact_architecture_context_uses_budget_and_repair_signals_directly():

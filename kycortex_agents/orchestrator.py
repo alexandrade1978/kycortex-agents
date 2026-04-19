@@ -142,6 +142,7 @@ from kycortex_agents.orchestration.sandbox_execution import (
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.task_constraints import (
     compact_architecture_context,
+    is_budget_decomposition_planner,
     parse_task_public_contract_surface,
     should_compact_architecture_context,
     summary_limit_exceeded,
@@ -1516,8 +1517,7 @@ class Orchestrator:
         )
 
     def _is_budget_decomposition_planner(self, task: Task) -> bool:
-        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-        return repair_context.get("decomposition_mode") == "budget_compaction_planner"
+        return is_budget_decomposition_planner(task)
 
     @staticmethod
     def _summary_limit_exceeded(validation_summary: object, label: str) -> bool:

@@ -1935,12 +1935,6 @@ class Orchestrator:
         )
 
     @staticmethod
-    def _append_unique_mapping_value(mapping: dict[str, list[str]], key: str, value: str) -> None:
-        values = mapping.setdefault(key, [])
-        if value not in values:
-            values.append(value)
-
-    @staticmethod
     def _has_dataclass_decorator(node: ast.ClassDef) -> bool:
         return has_dataclass_decorator(node)
 

@@ -270,6 +270,7 @@ from kycortex_agents.orchestration.workflow_control import (
     task_id_collection_count,
     task_id_count_log_field_name,
     validate_agent_resolution,
+    queue_active_cycle_repair,
 )
 from kycortex_agents.orchestration.workflow_acceptance import evaluate_workflow_acceptance
 from kycortex_agents.providers.base import (
@@ -1808,46 +1809,16 @@ class Orchestrator:
         return False
 
     def _queue_active_cycle_repair(self, project: ProjectState, task: Task) -> bool:
-        if self.config.workflow_resume_policy != "resume_failed":
-            return False
-        if task.repair_origin_task_id is not None:
-            return False
-        current_cycle = self._active_repair_cycle(project)
-        if current_cycle is None:
-            return False
-        cycle_number = int(current_cycle.get("cycle") or 0)
-        if cycle_number <= 0:
-            return False
-        if self._has_repair_task_for_cycle(project, task.id, cycle_number):
-            return False
-
-        self._configure_repair_attempts(project, [task.id], current_cycle)
-        repair_task_ids = self._repair_task_ids_for_cycle(project, [task.id])
-        if not repair_task_ids:
-            return False
-        project.resume_failed_tasks(
-            include_failed_tasks=False,
-            failed_task_ids=[task.id],
-            additional_task_ids=repair_task_ids,
+        return queue_active_cycle_repair(
+            project,
+            task,
+            workflow_resume_policy=self.config.workflow_resume_policy,
+            active_repair_cycle=self._active_repair_cycle,
+            has_repair_task_for_cycle=self._has_repair_task_for_cycle,
+            configure_repair_attempts=self._configure_repair_attempts,
+            repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
+            log_event=self._log_event,
         )
-        project._record_execution_event(
-            event="task_repair_chained",
-            task_id=task.id,
-            status=task.status,
-            details={
-                "repair_task_ids": repair_task_ids,
-                "repair_cycle_count": project.repair_cycle_count,
-            },
-        )
-        self._log_event(
-            "info",
-            "task_repair_chained",
-            project_name=project.project_name,
-            task_id=task.id,
-            repair_task_ids=repair_task_ids,
-            repair_cycle_count=project.repair_cycle_count,
-        )
-        return True
 
     def _failed_artifact_content_for_category(self, task: Task, failure_category: str) -> str:
         return failed_artifact_content_for_category(task.output, task.output_payload, failure_category)

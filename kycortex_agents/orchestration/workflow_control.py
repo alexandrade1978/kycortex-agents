@@ -307,6 +307,61 @@ def configure_repair_attempts(
         planned_task_ids.add(task.id)
 
 
+def queue_active_cycle_repair(
+    project: ProjectState,
+    task: Task,
+    *,
+    workflow_resume_policy: str,
+    active_repair_cycle,
+    has_repair_task_for_cycle,
+    configure_repair_attempts,
+    repair_task_ids_for_cycle,
+    log_event,
+) -> bool:
+    if workflow_resume_policy != "resume_failed":
+        return False
+    if task.repair_origin_task_id is not None:
+        return False
+
+    current_cycle = active_repair_cycle(project)
+    if current_cycle is None:
+        return False
+    cycle_number = int(current_cycle.get("cycle") or 0)
+    if cycle_number <= 0:
+        return False
+    if has_repair_task_for_cycle(project, task.id, cycle_number):
+        return False
+
+    configure_repair_attempts(project, [task.id], current_cycle)
+    repair_task_ids = repair_task_ids_for_cycle(project, [task.id])
+    if not repair_task_ids:
+        return False
+
+    project.resume_failed_tasks(
+        include_failed_tasks=False,
+        failed_task_ids=[task.id],
+        additional_task_ids=repair_task_ids,
+    )
+    project._record_execution_event(
+        event="task_repair_chained",
+        task_id=task.id,
+        status=task.status,
+        details={
+            "repair_task_ids": repair_task_ids,
+            "repair_cycle_count": project.repair_cycle_count,
+        },
+    )
+    log_event(
+        "info",
+        "task_repair_chained",
+        project_name=project.project_name,
+        task_id=task.id,
+        repair_task_ids=repair_task_ids,
+        repair_cycle_count=project.repair_cycle_count,
+    )
+    return True
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

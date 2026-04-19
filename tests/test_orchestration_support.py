@@ -259,6 +259,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	failed_task_ids_for_repair,
 	merge_prior_repair_context,
 	privacy_safe_log_fields,
+	queue_active_cycle_repair,
 	repair_task_ids_for_cycle,
 	task_id_collection_count,
 	task_id_count_log_field_name,
@@ -2864,6 +2865,42 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	)
 	assert configure_project.get_task("code").repair_context == {"cycle": 2, "source_failure_task_id": "tests"}
 	assert configure_project.get_task("tests").repair_context == {"cycle": 2, "failure_category": FailureCategory.UNKNOWN.value}
+	queued_project = ProjectState(project_name="Demo", goal="Build demo")
+	queued_task = Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", status=TaskStatus.FAILED)
+	queued_project.add_task(queued_task)
+	logged_events: list[tuple[str, str, dict[str, object]]] = []
+	configured_calls: list[tuple[list[str], dict[str, object]]] = []
+	repair_task_call_args: list[list[str]] = []
+	assert queue_active_cycle_repair(
+		queued_project,
+		queued_task,
+		workflow_resume_policy="resume_failed",
+		active_repair_cycle=lambda _project: {"cycle": 2},
+		has_repair_task_for_cycle=lambda _project, _task_id, _cycle_number: False,
+		configure_repair_attempts=lambda _project, failed_task_ids, cycle: configured_calls.append((failed_task_ids, cycle)),
+		repair_task_ids_for_cycle=lambda _project, failed_task_ids: repair_task_call_args.append(failed_task_ids) or ["tests__repair_1"],
+		log_event=lambda level, event, **details: logged_events.append((level, event, details)),
+	) is True
+	assert configured_calls == [(["tests"], {"cycle": 2})]
+	assert repair_task_call_args == [["tests"]]
+	assert any(
+		event["event"] == "task_repair_chained"
+		and event["task_id"] == "tests"
+		and event["details"]["repair_task_ids"] == ["tests__repair_1"]
+		for event in queued_project.execution_events
+	)
+	assert logged_events == [
+		(
+			"info",
+			"task_repair_chained",
+			{
+				"project_name": "Demo",
+				"task_id": "tests",
+				"repair_task_ids": ["tests__repair_1"],
+				"repair_cycle_count": 0,
+			},
+		)
+	]
 
 
 def test_repair_instruction_owner_mapping_directly():

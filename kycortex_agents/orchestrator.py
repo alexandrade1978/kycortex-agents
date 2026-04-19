@@ -39,12 +39,19 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     annotation_accepts_sequence_input,
+    comparison_required_field,
     call_signature_details,
     call_expression_basename,
     dataclass_field_has_default,
     dataclass_field_is_init_enabled,
+    extract_indirect_required_fields,
+    extract_lookup_field_rules,
+    extract_required_fields,
+    field_selector_name,
+    first_user_parameter,
     has_dataclass_decorator,
     method_binding_kind,
+    parameter_is_iterated,
     self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
@@ -3444,109 +3451,32 @@ class Orchestrator:
         return ""
 
     def _first_user_parameter(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Optional[ast.arg]:
-        positional = [*node.args.posonlyargs, *node.args.args]
-        if positional and positional[0].arg in {"self", "cls"}:
-            positional = positional[1:]
-        return positional[0] if positional else None
+        return first_user_parameter(node)
 
     def _annotation_accepts_sequence_input(self, annotation: str) -> bool:
         return annotation_accepts_sequence_input(annotation)
 
     def _parameter_is_iterated(self, node: ast.FunctionDef | ast.AsyncFunctionDef, parameter_name: str) -> bool:
-        for child in ast.walk(node):
-            if not isinstance(child, ast.For):
-                continue
-            iterator = child.iter
-            if isinstance(iterator, ast.Name) and iterator.id == parameter_name:
-                return True
-        return False
+        return parameter_is_iterated(node, parameter_name)
 
     def _extract_required_fields(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
-        literal_fields: list[str] = []
-        for stmt in ast.walk(node):
-            if not isinstance(stmt, ast.Assign):
-                if not isinstance(stmt, ast.Compare):
-                    continue
-                field_name = self._comparison_required_field(stmt)
-                if field_name and field_name not in literal_fields:
-                    literal_fields.append(field_name)
-                continue
-            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
-                continue
-            if stmt.targets[0].id != "required_fields" or not isinstance(stmt.value, (ast.List, ast.Set, ast.Tuple)):
-                continue
-            fields: list[str] = []
-            for element in stmt.value.elts:
-                if isinstance(element, ast.Constant) and isinstance(element.value, str):
-                    fields.append(element.value)
-            if fields:
-                return fields
-        return literal_fields
+        return extract_required_fields(node)
 
     def _comparison_required_field(self, node: ast.Compare) -> str:
-        if not node.ops or not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
-            return ""
-        comparator = node.comparators[0] if node.comparators else None
-        if not isinstance(comparator, (ast.Name, ast.Attribute, ast.Subscript)):
-            return ""
-        if not any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops):
-            return ""
-        return node.left.value
+        return comparison_required_field(node)
 
     def _extract_indirect_required_fields(
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
         validation_rules: Dict[str, list[str]],
     ) -> list[str]:
-        for child in ast.walk(node):
-            if not isinstance(child, ast.Call):
-                continue
-            callable_name = ""
-            if isinstance(child.func, ast.Name):
-                callable_name = child.func.id
-            elif isinstance(child.func, ast.Attribute):  # pragma: no branch
-                callable_name = child.func.attr
-            if callable_name in validation_rules:
-                return list(validation_rules[callable_name])
-        return []
+        return extract_indirect_required_fields(node, validation_rules)
 
     def _extract_lookup_field_rules(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, list[str]]:
-        dict_key_sets: Dict[str, list[str]] = {}
-        lookup_rules: Dict[str, list[str]] = {}
-
-        for child in ast.walk(node):
-            if isinstance(child, ast.Assign) and len(child.targets) == 1 and isinstance(child.targets[0], ast.Name):
-                if not isinstance(child.value, ast.Dict):
-                    continue
-                literal_keys = [
-                    key.value
-                    for key in child.value.keys
-                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
-                ]
-                if literal_keys:
-                    dict_key_sets[child.targets[0].id] = literal_keys
-
-        for child in ast.walk(node):
-            if not isinstance(child, ast.Subscript) or not isinstance(child.value, ast.Name):
-                continue
-            allowed_values = dict_key_sets.get(child.value.id)
-            if not allowed_values:
-                continue
-            field_name = self._field_selector_name(child.slice)
-            if not field_name:
-                continue
-            lookup_rules[field_name] = list(dict.fromkeys(allowed_values))
-
-        return lookup_rules
+        return extract_lookup_field_rules(node)
 
     def _field_selector_name(self, node: ast.AST) -> str:
-        if isinstance(node, ast.Attribute):
-            return node.attr
-        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
-            return node.slice.value
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            return node.value
-        return ""
+        return field_selector_name(node)
 
     @staticmethod
     def _infer_dict_key_value_examples(tree: ast.AST) -> Dict[str, Dict[str, str]]:

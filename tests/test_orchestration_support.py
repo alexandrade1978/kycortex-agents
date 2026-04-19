@@ -28,12 +28,19 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
 	annotation_accepts_sequence_input,
+	comparison_required_field,
 	call_signature_details,
 	call_expression_basename,
 	dataclass_field_has_default,
 	dataclass_field_is_init_enabled,
+	extract_indirect_required_fields,
+	extract_lookup_field_rules,
+	extract_required_fields,
+	field_selector_name,
+	first_user_parameter,
 	has_dataclass_decorator,
 	method_binding_kind,
+	parameter_is_iterated,
 	self_assigned_attributes,
 )
 from kycortex_agents.orchestration.private_files import (
@@ -532,6 +539,49 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	assert dataclass_field_has_default(ast.parse("field()", mode="eval").body) is False
 	assert dataclass_field_is_init_enabled(ast.parse("field(init=False)", mode="eval").body) is False
 	assert dataclass_field_is_init_enabled(ast.parse("field(default=1)", mode="eval").body) is True
+
+	sequence_node = ast.parse(
+		"def process(self, items):\n"
+		"    for item in items:\n"
+		"        consume(item)\n"
+	).body[0]
+	assert isinstance(sequence_node, ast.FunctionDef)
+	assert first_user_parameter(sequence_node).arg == "items"
+	assert parameter_is_iterated(sequence_node, "items") is True
+	assert parameter_is_iterated(sequence_node, "other") is False
+
+	required_fields_node = ast.parse(
+		"def validate(payload):\n"
+		"    required_fields = ['name', 1, 'email']\n"
+		"    return payload\n"
+	).body[0]
+	assert isinstance(required_fields_node, ast.FunctionDef)
+	assert extract_required_fields(required_fields_node) == ["name", "email"]
+
+	comparison_node = ast.Compare(left=ast.Constant("field"), ops=[ast.In()], comparators=[ast.Name("payload")])
+	assert comparison_required_field(comparison_node) == "field"
+	assert comparison_required_field(ast.Compare(left=ast.Constant("field"), ops=[ast.Eq()], comparators=[ast.Name("payload")])) == ""
+
+	indirect_node = ast.parse(
+		"def validate(payload):\n"
+		"    return helper.validate_request(payload)\n"
+	).body[0]
+	assert isinstance(indirect_node, ast.FunctionDef)
+	assert extract_indirect_required_fields(indirect_node, {"validate_request": ["request_id"]}) == ["request_id"]
+
+	lookup_node = ast.parse(
+		"def score_request(request, payload, selector):\n"
+		"    risk_scores = {'approved': 1, 'denied': 0}\n"
+		"    return risk_scores[request.status] + risk_scores[payload['state']] + risk_scores[selector]\n"
+	).body[0]
+	assert isinstance(lookup_node, ast.FunctionDef)
+	assert extract_lookup_field_rules(lookup_node) == {
+		"status": ["approved", "denied"],
+		"state": ["approved", "denied"],
+	}
+	assert field_selector_name(ast.Subscript(value=ast.Name("payload"), slice=ast.Constant("state"))) == "state"
+	assert field_selector_name(ast.Constant("status")) == "status"
+	assert field_selector_name(ast.Name("selector")) == ""
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

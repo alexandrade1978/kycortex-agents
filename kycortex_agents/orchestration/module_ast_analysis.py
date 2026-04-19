@@ -25,6 +25,23 @@ def annotation_accepts_sequence_input(annotation: str) -> bool:
     )
 
 
+def first_user_parameter(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.arg | None:
+    positional = [*node.args.posonlyargs, *node.args.args]
+    if positional and positional[0].arg in {"self", "cls"}:
+        positional = positional[1:]
+    return positional[0] if positional else None
+
+
+def parameter_is_iterated(node: ast.FunctionDef | ast.AsyncFunctionDef, parameter_name: str) -> bool:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.For):
+            continue
+        iterator = child.iter
+        if isinstance(iterator, ast.Name) and iterator.id == parameter_name:
+            return True
+    return False
+
+
 def call_signature_details(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     *,
@@ -123,13 +140,107 @@ def dataclass_field_is_init_enabled(value: ast.expr | None) -> bool:
     return True
 
 
+def comparison_required_field(node: ast.Compare) -> str:
+    if not node.ops or not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
+        return ""
+    comparator = node.comparators[0] if node.comparators else None
+    if not isinstance(comparator, (ast.Name, ast.Attribute, ast.Subscript)):
+        return ""
+    if not any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops):
+        return ""
+    return node.left.value
+
+
+def extract_required_fields(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    literal_fields: list[str] = []
+    for stmt in ast.walk(node):
+        if not isinstance(stmt, ast.Assign):
+            if not isinstance(stmt, ast.Compare):
+                continue
+            field_name = comparison_required_field(stmt)
+            if field_name and field_name not in literal_fields:
+                literal_fields.append(field_name)
+            continue
+        if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+            continue
+        if stmt.targets[0].id != "required_fields" or not isinstance(stmt.value, (ast.List, ast.Set, ast.Tuple)):
+            continue
+        fields: list[str] = []
+        for element in stmt.value.elts:
+            if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                fields.append(element.value)
+        if fields:
+            return fields
+    return literal_fields
+
+
+def extract_indirect_required_fields(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    validation_rules: Dict[str, list[str]],
+) -> list[str]:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        called_name = call_expression_basename(child.func)
+        if called_name in validation_rules:
+            return list(validation_rules[called_name])
+    return []
+
+
+def field_selector_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+        return node.slice.value
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return ""
+
+
+def extract_lookup_field_rules(node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, list[str]]:
+    dict_key_sets: Dict[str, list[str]] = {}
+    lookup_rules: Dict[str, list[str]] = {}
+
+    for child in ast.walk(node):
+        if isinstance(child, ast.Assign) and len(child.targets) == 1 and isinstance(child.targets[0], ast.Name):
+            if not isinstance(child.value, ast.Dict):
+                continue
+            literal_keys = [
+                key.value
+                for key in child.value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            ]
+            if literal_keys:
+                dict_key_sets[child.targets[0].id] = literal_keys
+
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Subscript) or not isinstance(child.value, ast.Name):
+            continue
+        allowed_values = dict_key_sets.get(child.value.id)
+        if not allowed_values:
+            continue
+        selected_field_name = field_selector_name(child.slice)
+        if not selected_field_name:
+            continue
+        lookup_rules[selected_field_name] = list(dict.fromkeys(allowed_values))
+
+    return lookup_rules
+
+
 __all__ = [
     "annotation_accepts_sequence_input",
+    "comparison_required_field",
     "call_signature_details",
     "call_expression_basename",
     "dataclass_field_has_default",
     "dataclass_field_is_init_enabled",
+    "extract_indirect_required_fields",
+    "extract_lookup_field_rules",
+    "extract_required_fields",
+    "field_selector_name",
+    "first_user_parameter",
     "has_dataclass_decorator",
     "method_binding_kind",
+    "parameter_is_iterated",
     "self_assigned_attributes",
 ]

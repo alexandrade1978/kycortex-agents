@@ -146,6 +146,7 @@ from kycortex_agents.orchestration.task_constraints import (
     compact_architecture_context,
     is_budget_decomposition_planner,
     parse_task_public_contract_surface,
+    repair_requires_budget_decomposition,
     should_compact_architecture_context,
     summary_limit_exceeded,
     task_public_contract_anchor,
@@ -1526,33 +1527,7 @@ class Orchestrator:
         return summary_limit_exceeded(validation_summary, label)
 
     def _repair_requires_budget_decomposition(self, repair_context: Dict[str, Any]) -> bool:
-        failure_category = repair_context.get("failure_category")
-        if failure_category not in {
-            FailureCategory.CODE_VALIDATION.value,
-            FailureCategory.TEST_VALIDATION.value,
-        }:
-            return False
-        validation_summary = repair_context.get("validation_summary")
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return False
-        normalized = validation_summary.lower()
-        if "completion diagnostics:" in normalized and "likely truncated" in normalized:
-            return True
-        if (
-            failure_category == FailureCategory.CODE_VALIDATION.value
-            and "completion diagnostics:" in normalized
-            and "completion limit reached" in normalized
-            and "missing required cli entrypoint" in normalized
-        ):
-            return True
-        if self._summary_limit_exceeded(validation_summary, "Line count"):
-            return True
-        if failure_category == FailureCategory.TEST_VALIDATION.value:
-            return any(
-                self._summary_limit_exceeded(validation_summary, label)
-                for label in ("Top-level test functions", "Fixture count")
-            )
-        return False
+        return repair_requires_budget_decomposition(repair_context)
 
     def _build_budget_decomposition_instruction(self, failure_category: str) -> str:
         return build_budget_decomposition_instruction(failure_category)

@@ -207,6 +207,7 @@ from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
 	is_budget_decomposition_planner,
 	parse_task_public_contract_surface,
+	repair_requires_budget_decomposition,
 	should_compact_architecture_context,
 	summary_limit_exceeded,
 	task_public_contract_anchor,
@@ -2464,6 +2465,24 @@ def test_task_constraint_helpers_parse_limits_and_optional_inputs_directly():
 		"instruction": build_budget_decomposition_instruction(FailureCategory.CODE_VALIDATION.value),
 		"validation_summary": "- Line count: 205 / 200",
 	}
+	assert repair_requires_budget_decomposition(
+		{
+			"failure_category": FailureCategory.CODE_VALIDATION.value,
+			"validation_summary": "- Line count: 205 / 200",
+		}
+	) is True
+	assert repair_requires_budget_decomposition(
+		{
+			"failure_category": FailureCategory.TEST_VALIDATION.value,
+			"validation_summary": "- Fixture count: 2 / 3",
+		}
+	) is False
+	assert repair_requires_budget_decomposition(
+		{
+			"failure_category": FailureCategory.CODE_VALIDATION.value,
+			"validation_summary": "Completion diagnostics:\n- Likely truncated due to token budget",
+		}
+	) is True
 
 
 def test_should_compact_architecture_context_uses_budget_and_repair_signals_directly():

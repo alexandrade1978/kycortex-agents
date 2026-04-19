@@ -258,6 +258,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	failed_task_ids_for_repair,
 	merge_prior_repair_context,
 	privacy_safe_log_fields,
+	repair_task_ids_for_cycle,
 	task_id_collection_count,
 	task_id_count_log_field_name,
 	validate_agent_resolution,
@@ -2836,6 +2837,17 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	failed_project.add_task(Task(id="code__repair_1", title="Repair code", description="Repair code", assigned_to="code_engineer", repair_origin_task_id="code", status=TaskStatus.PENDING.value))
 	failed_project.add_task(Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", status=TaskStatus.FAILED.value))
 	assert failed_task_ids_for_repair(failed_project) == ["tests"]
+	repair_cycle_project = ProjectState(project_name="Demo", goal="Build demo")
+	repair_cycle_project.add_task(Task(id="code", title="Code", description="Code", assigned_to="code_engineer"))
+	repair_cycle_project.add_task(Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", repair_context={"cycle": 1}))
+	assert repair_task_ids_for_cycle(
+		repair_cycle_project,
+		["missing", "tests"],
+		test_failure_requires_code_repair=lambda task: task.id == "tests",
+		upstream_code_task_for_test_failure=lambda project, task: project.get_task("code"),
+		ensure_budget_decomposition_task=lambda _project, _task, _repair_context: None,
+		execution_agent_name=lambda task: task.assigned_to,
+	) == ["code__repair_0", "tests__repair_1"]
 
 
 def test_repair_instruction_owner_mapping_directly():

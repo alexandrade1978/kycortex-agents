@@ -215,6 +215,60 @@ def failed_task_ids_for_repair(project: ProjectState) -> list[str]:
     ]
 
 
+def repair_task_ids_for_cycle(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    *,
+    test_failure_requires_code_repair,
+    upstream_code_task_for_test_failure,
+    ensure_budget_decomposition_task,
+    execution_agent_name,
+) -> list[str]:
+    repair_task_ids: list[str] = []
+    for task_id in failed_task_ids:
+        task = project.get_task(task_id)
+        if task is None:
+            continue
+
+        code_repair_task: Task | None = None
+        if test_failure_requires_code_repair(task):
+            code_task = upstream_code_task_for_test_failure(project, task)
+            if code_task is not None:
+                code_repair_context = code_task.repair_context if isinstance(code_task.repair_context, dict) else {}
+                code_decomposition_task = ensure_budget_decomposition_task(project, code_task, code_repair_context)
+                if code_decomposition_task is not None and code_decomposition_task.id not in repair_task_ids:
+                    repair_task_ids.append(code_decomposition_task.id)
+                code_repair_owner = execution_agent_name(code_task)
+                code_repair_task = project._create_repair_task(code_task.id, code_repair_owner, code_repair_context)
+                if code_repair_task is not None:
+                    if code_repair_task.id not in task.dependencies:
+                        task.dependencies.append(code_repair_task.id)
+                    if code_decomposition_task is not None:
+                        if code_decomposition_task.id not in code_repair_task.dependencies:
+                            code_repair_task.dependencies.append(code_decomposition_task.id)
+                        if isinstance(code_repair_task.repair_context, dict):
+                            code_repair_task.repair_context["budget_decomposition_plan_task_id"] = code_decomposition_task.id
+                    if code_repair_task.id not in repair_task_ids:
+                        repair_task_ids.append(code_repair_task.id)
+
+        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+        decomposition_task = ensure_budget_decomposition_task(project, task, repair_context)
+        if decomposition_task is not None and decomposition_task.id not in repair_task_ids:
+            repair_task_ids.append(decomposition_task.id)
+        repair_owner = execution_agent_name(task)
+        repair_task = project._create_repair_task(task_id, repair_owner, repair_context)
+        if repair_task is not None:
+            if decomposition_task is not None:
+                if decomposition_task.id not in repair_task.dependencies:
+                    repair_task.dependencies.append(decomposition_task.id)
+                if isinstance(repair_task.repair_context, dict):
+                    repair_task.repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
+            if code_repair_task is not None and code_repair_task.id not in repair_task.dependencies:
+                repair_task.dependencies.append(code_repair_task.id)
+            repair_task_ids.append(repair_task.id)
+    return repair_task_ids
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

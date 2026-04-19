@@ -262,6 +262,7 @@ from kycortex_agents.orchestration.workflow_control import (
     override_task,
     pause_workflow,
     privacy_safe_log_fields,
+    repair_task_ids_for_cycle,
     replay_workflow,
     resume_workflow,
     skip_task,
@@ -1878,49 +1879,14 @@ class Orchestrator:
             planned_task_ids.add(task.id)
 
     def _repair_task_ids_for_cycle(self, project: ProjectState, failed_task_ids: list[str]) -> list[str]:
-        repair_task_ids: list[str] = []
-        for task_id in failed_task_ids:
-            task = project.get_task(task_id)
-            if task is None:
-                continue
-
-            code_repair_task: Optional[Task] = None
-            if self._test_failure_requires_code_repair(task):
-                code_task = self._upstream_code_task_for_test_failure(project, task)
-                if code_task is not None:
-                    code_repair_context = code_task.repair_context if isinstance(code_task.repair_context, dict) else {}
-                    code_decomposition_task = self._ensure_budget_decomposition_task(project, code_task, code_repair_context)
-                    if code_decomposition_task is not None and code_decomposition_task.id not in repair_task_ids:
-                        repair_task_ids.append(code_decomposition_task.id)
-                    code_repair_owner = self._execution_agent_name(code_task)
-                    code_repair_task = project._create_repair_task(code_task.id, code_repair_owner, code_repair_context)
-                    if code_repair_task is not None:
-                        if code_repair_task.id not in task.dependencies:
-                            task.dependencies.append(code_repair_task.id)
-                        if code_decomposition_task is not None:
-                            if code_decomposition_task.id not in code_repair_task.dependencies:
-                                code_repair_task.dependencies.append(code_decomposition_task.id)
-                            if isinstance(code_repair_task.repair_context, dict):
-                                code_repair_task.repair_context["budget_decomposition_plan_task_id"] = code_decomposition_task.id
-                        if code_repair_task.id not in repair_task_ids:
-                            repair_task_ids.append(code_repair_task.id)
-
-            repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-            decomposition_task = self._ensure_budget_decomposition_task(project, task, repair_context)
-            if decomposition_task is not None and decomposition_task.id not in repair_task_ids:
-                repair_task_ids.append(decomposition_task.id)
-            repair_owner = self._execution_agent_name(task)
-            repair_task = project._create_repair_task(task_id, repair_owner, repair_context)
-            if repair_task is not None:
-                if decomposition_task is not None:
-                    if decomposition_task.id not in repair_task.dependencies:
-                        repair_task.dependencies.append(decomposition_task.id)
-                    if isinstance(repair_task.repair_context, dict):
-                        repair_task.repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
-                if code_repair_task is not None and code_repair_task.id not in repair_task.dependencies:
-                    repair_task.dependencies.append(code_repair_task.id)
-                repair_task_ids.append(repair_task.id)
-        return repair_task_ids
+        return repair_task_ids_for_cycle(
+            project,
+            failed_task_ids,
+            test_failure_requires_code_repair=self._test_failure_requires_code_repair,
+            upstream_code_task_for_test_failure=self._upstream_code_task_for_test_failure,
+            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+            execution_agent_name=self._execution_agent_name,
+        )
 
     def _failed_task_ids_for_repair(self, project: ProjectState) -> list[str]:
         return failed_task_ids_for_repair(project)

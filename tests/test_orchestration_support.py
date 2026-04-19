@@ -202,6 +202,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	with_uses_pytest_raises,
 )
 from kycortex_agents.orchestration.task_constraints import (
+	build_budget_decomposition_instruction,
+	build_budget_decomposition_task_context,
 	compact_architecture_context,
 	is_budget_decomposition_planner,
 	parse_task_public_contract_surface,
@@ -2435,6 +2437,33 @@ def test_task_constraint_helpers_parse_limits_and_optional_inputs_directly():
 			assigned_to="code_engineer",
 		)
 	) is False
+	assert "next pytest repair" in build_budget_decomposition_instruction(FailureCategory.TEST_VALIDATION.value)
+	assert "next module repair" in build_budget_decomposition_instruction(FailureCategory.CODE_VALIDATION.value)
+	assert build_budget_decomposition_task_context(
+		Task(
+			id="repair_code",
+			title="Repair",
+			description="Fix the module.",
+			assigned_to="code_engineer",
+		),
+		{
+			"cycle": 2,
+			"failure_category": FailureCategory.CODE_VALIDATION.value,
+			"failure_message": "line budget exceeded",
+			"validation_summary": "- Line count: 205 / 200",
+		},
+		"code_engineer",
+	) == {
+		"cycle": 2,
+		"decomposition_mode": "budget_compaction_planner",
+		"decomposition_target_task_id": "repair_code",
+		"decomposition_target_agent": "code_engineer",
+		"decomposition_failure_category": FailureCategory.CODE_VALIDATION.value,
+		"failure_category": FailureCategory.CODE_VALIDATION.value,
+		"failure_message": "line budget exceeded",
+		"instruction": build_budget_decomposition_instruction(FailureCategory.CODE_VALIDATION.value),
+		"validation_summary": "- Line count: 205 / 200",
+	}
 
 
 def test_should_compact_architecture_context_uses_budget_and_repair_signals_directly():

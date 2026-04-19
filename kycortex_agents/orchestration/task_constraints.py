@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.memory.project_state import Task
+from kycortex_agents.types import FailureCategory
 
 
 _LINE_BUDGET_PATTERNS = (
@@ -282,3 +283,34 @@ def summary_limit_exceeded(validation_summary: object, label: str) -> bool:
 def is_budget_decomposition_planner(task: Task) -> bool:
     repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
     return repair_context.get("decomposition_mode") == "budget_compaction_planner"
+
+
+def build_budget_decomposition_instruction(failure_category: str) -> str:
+    if failure_category == FailureCategory.TEST_VALIDATION.value:
+        return (
+            "Produce a compact budget decomposition brief for the next pytest repair. "
+            "Distill only the minimum required imports, scenarios, helper removals, and rewrite order needed to keep the suite under budget while preserving the validated contract."
+        )
+    return (
+        "Produce a compact budget decomposition brief for the next module repair. "
+        "Distill only the minimum required public surface, behaviors, optional cuts, and rewrite order needed to keep the implementation under budget while preserving the validated contract."
+    )
+
+
+def build_budget_decomposition_task_context(
+    task: Task,
+    repair_context: dict[str, Any],
+    execution_agent_name: str,
+) -> dict[str, Any]:
+    failure_category = str(repair_context.get("failure_category") or FailureCategory.UNKNOWN.value)
+    return {
+        "cycle": repair_context.get("cycle"),
+        "decomposition_mode": "budget_compaction_planner",
+        "decomposition_target_task_id": task.id,
+        "decomposition_target_agent": execution_agent_name,
+        "decomposition_failure_category": failure_category,
+        "failure_category": failure_category,
+        "failure_message": repair_context.get("failure_message") or "",
+        "instruction": build_budget_decomposition_instruction(failure_category),
+        "validation_summary": repair_context.get("validation_summary") or "",
+    }

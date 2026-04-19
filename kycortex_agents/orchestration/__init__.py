@@ -154,6 +154,8 @@ from kycortex_agents.orchestration.sandbox_templates import (
 	render_sandbox_sitecustomize,
 )
 from kycortex_agents.orchestration.task_constraints import (
+	build_budget_decomposition_instruction,
+	build_budget_decomposition_task_context,
 	compact_architecture_context,
 	is_budget_decomposition_planner,
 	parse_task_public_contract_surface,
@@ -438,6 +440,8 @@ __all__ = [
 	"evaluate_workflow_acceptance",
 	"observed_failure_categories",
 	"task_acceptance_lists",
+	"build_budget_decomposition_instruction",
+	"build_budget_decomposition_task_context",
 	"is_budget_decomposition_planner",
 	"task_exact_top_level_test_count",
 	"task_fixture_budget",

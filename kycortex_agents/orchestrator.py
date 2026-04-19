@@ -141,6 +141,8 @@ from kycortex_agents.orchestration.sandbox_execution import (
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.task_constraints import (
+    build_budget_decomposition_instruction,
+    build_budget_decomposition_task_context,
     compact_architecture_context,
     is_budget_decomposition_planner,
     parse_task_public_contract_surface,
@@ -1553,33 +1555,18 @@ class Orchestrator:
         return False
 
     def _build_budget_decomposition_instruction(self, failure_category: str) -> str:
-        if failure_category == FailureCategory.TEST_VALIDATION.value:
-            return (
-                "Produce a compact budget decomposition brief for the next pytest repair. "
-                "Distill only the minimum required imports, scenarios, helper removals, and rewrite order needed to keep the suite under budget while preserving the validated contract."
-            )
-        return (
-            "Produce a compact budget decomposition brief for the next module repair. "
-            "Distill only the minimum required public surface, behaviors, optional cuts, and rewrite order needed to keep the implementation under budget while preserving the validated contract."
-        )
+        return build_budget_decomposition_instruction(failure_category)
 
     def _build_budget_decomposition_task_context(
         self,
         task: Task,
         repair_context: Dict[str, Any],
     ) -> Dict[str, Any]:
-        failure_category = str(repair_context.get("failure_category") or FailureCategory.UNKNOWN.value)
-        return {
-            "cycle": repair_context.get("cycle"),
-            "decomposition_mode": "budget_compaction_planner",
-            "decomposition_target_task_id": task.id,
-            "decomposition_target_agent": self._execution_agent_name(task),
-            "decomposition_failure_category": failure_category,
-            "failure_category": failure_category,
-            "failure_message": repair_context.get("failure_message") or "",
-            "instruction": self._build_budget_decomposition_instruction(failure_category),
-            "validation_summary": repair_context.get("validation_summary") or "",
-        }
+        return build_budget_decomposition_task_context(
+            task,
+            repair_context,
+            self._execution_agent_name(task),
+        )
 
     def _ensure_budget_decomposition_task(
         self,

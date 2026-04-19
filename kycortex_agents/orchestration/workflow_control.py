@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
@@ -164,6 +164,30 @@ def replay_workflow(logger: Any, project: ProjectState, *, reason: str = "manual
             replayed_task_ids=list(replayed_task_ids),
         )
     return replayed_task_ids
+
+
+def ensure_budget_decomposition_task(
+    project: ProjectState,
+    task: Task,
+    repair_context: dict[str, Any],
+    *,
+    requires_budget_decomposition: Callable[[dict[str, Any]], bool],
+    build_budget_decomposition_task_context: Callable[[Task, dict[str, Any]], dict[str, Any]],
+) -> Optional[Task]:
+    decomposition_task_id = repair_context.get("budget_decomposition_plan_task_id")
+    if isinstance(decomposition_task_id, str) and decomposition_task_id.strip():
+        existing = project.get_task(decomposition_task_id)
+        if existing is not None:
+            return existing
+    if not requires_budget_decomposition(repair_context):
+        return None
+    decomposition_task = project._create_budget_decomposition_task(
+        task.id,
+        build_budget_decomposition_task_context(task, repair_context),
+    )
+    if decomposition_task is not None:
+        repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
+    return decomposition_task
 
 
 def exit_if_workflow_paused(logger: Any, project: ProjectState) -> bool:

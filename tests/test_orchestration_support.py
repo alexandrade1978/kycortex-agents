@@ -245,6 +245,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 	validation_has_static_issues,
 )
 from kycortex_agents.orchestration.workflow_control import (
+	ensure_budget_decomposition_task,
 	privacy_safe_log_fields,
 	task_id_collection_count,
 	task_id_count_log_field_name,
@@ -2633,6 +2634,47 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert fields == {"task_count": 2, "replayed_task_count": 1, "reason": "manual"}
 	assert task_id_collection_count(["arch", "code"]) == 2
 	assert task_id_collection_count("arch") == 1
+
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	task = Task(
+		id="code",
+		title="Implementation",
+		description="Write one Python module under 80 lines.",
+		assigned_to="code_engineer",
+	)
+	project.add_task(task)
+	repair_context = {
+		"cycle": 1,
+		"failure_category": FailureCategory.CODE_VALIDATION.value,
+		"failure_message": "line budget exceeded",
+		"validation_summary": "- Line count: 205 / 200",
+	}
+
+	decomposition_task = ensure_budget_decomposition_task(
+		project,
+		task,
+		repair_context,
+		requires_budget_decomposition=lambda ctx: True,
+		build_budget_decomposition_task_context=lambda current_task, current_context: build_budget_decomposition_task_context(
+			current_task,
+			current_context,
+			"code_engineer",
+		),
+	)
+	assert decomposition_task is not None
+	assert decomposition_task.id == "code__repair_1__budget_plan"
+	assert repair_context["budget_decomposition_plan_task_id"] == decomposition_task.id
+	assert ensure_budget_decomposition_task(
+		project,
+		task,
+		repair_context,
+		requires_budget_decomposition=lambda ctx: True,
+		build_budget_decomposition_task_context=lambda current_task, current_context: build_budget_decomposition_task_context(
+			current_task,
+			current_context,
+			"code_engineer",
+		),
+	) is decomposition_task
 
 
 def test_repair_instruction_owner_mapping_directly():

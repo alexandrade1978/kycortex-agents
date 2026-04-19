@@ -259,6 +259,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 	validation_has_static_issues,
 )
 from kycortex_agents.orchestration.workflow_control import (
+	ensure_budget_decomposition_task,
 	cancel_workflow,
 	emit_workflow_progress,
 	exit_if_workflow_cancelled,
@@ -439,6 +440,7 @@ __all__ = [
 	"validation_summary_symbols",
 	"validation_summary_has_missing_datetime_import_issue",
 	"validation_summary_has_required_evidence_runtime_issue",
+	"ensure_budget_decomposition_task",
 	"task_id_collection_count",
 	"task_id_count_log_field_name",
 	"validate_agent_resolution",

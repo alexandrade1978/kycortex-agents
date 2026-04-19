@@ -243,6 +243,7 @@ from kycortex_agents.orchestration.validation_analysis import (
     validation_has_static_issues,
 )
 from kycortex_agents.orchestration.workflow_control import (
+    ensure_budget_decomposition_task,
     cancel_workflow,
     emit_workflow_progress,
     exit_if_workflow_cancelled,
@@ -1546,20 +1547,13 @@ class Orchestrator:
         task: Task,
         repair_context: Dict[str, Any],
     ) -> Optional[Task]:
-        decomposition_task_id = repair_context.get("budget_decomposition_plan_task_id")
-        if isinstance(decomposition_task_id, str) and decomposition_task_id.strip():
-            existing = project.get_task(decomposition_task_id)
-            if existing is not None:
-                return existing
-        if not self._repair_requires_budget_decomposition(repair_context):
-            return None
-        decomposition_task = project._create_budget_decomposition_task(
-            task.id,
-            self._build_budget_decomposition_task_context(task, repair_context),
+        return ensure_budget_decomposition_task(
+            project,
+            task,
+            repair_context,
+            requires_budget_decomposition=self._repair_requires_budget_decomposition,
+            build_budget_decomposition_task_context=self._build_budget_decomposition_task_context,
         )
-        if decomposition_task is not None:
-            repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
-        return decomposition_task
 
     def _active_repair_cycle(self, project: ProjectState) -> Optional[Dict[str, Any]]:
         if not project.repair_history:

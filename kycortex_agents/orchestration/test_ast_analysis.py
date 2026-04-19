@@ -498,6 +498,109 @@ def infer_argument_type(
     return ""
 
 
+def call_argument_count(node: ast.Call) -> int:
+    return len(node.args) + sum(1 for keyword in node.keywords if keyword.arg is not None)
+
+
+def infer_expression_type(
+    node: Optional[ast.AST],
+    local_types: Dict[str, str],
+    class_map: Dict[str, Any],
+    function_map: Dict[str, Dict[str, Any]],
+) -> Optional[str]:
+    if isinstance(node, ast.Name):
+        owner_type = local_types.get(node.id)
+        return owner_type if owner_type in class_map else None
+    if isinstance(node, ast.Call):
+        return infer_call_result_type(node, local_types, class_map, function_map)
+    return None
+
+
+def infer_call_result_type(
+    node: Optional[ast.AST],
+    local_types: Dict[str, str],
+    class_map: Dict[str, Any],
+    function_map: Dict[str, Dict[str, Any]],
+) -> Optional[str]:
+    if not isinstance(node, ast.Call):
+        return None
+    if isinstance(node.func, ast.Name):
+        if node.func.id in class_map:
+            return node.func.id
+        function_info = function_map.get(node.func.id)
+        if not isinstance(function_info, dict):
+            return None
+        return_annotation = function_info.get("return_annotation")
+        return return_annotation if isinstance(return_annotation, str) and return_annotation in class_map else None
+    if not isinstance(node.func, ast.Attribute):
+        return None
+    owner_type = infer_expression_type(node.func.value, local_types, class_map, function_map)
+    if owner_type not in class_map:
+        return None
+    method_info = (class_map.get(owner_type, {}).get("method_signatures") or {}).get(node.func.attr)
+    if not isinstance(method_info, dict):
+        return None
+    return_annotation = method_info.get("return_annotation")
+    return return_annotation if isinstance(return_annotation, str) and return_annotation in class_map else None
+
+
+def analyze_typed_test_member_usage(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    local_types: Dict[str, str],
+    class_map: Dict[str, Any],
+    function_map: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> tuple[list[str], list[str]]:
+    invalid_member_refs: set[str] = set()
+    call_arity_mismatches: set[str] = set()
+    resolved_function_map = function_map or {}
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+            owner_type = infer_expression_type(
+                child.func.value,
+                local_types,
+                class_map,
+                resolved_function_map,
+            )
+            if owner_type not in class_map:
+                continue
+            method_info = (class_map.get(owner_type, {}).get("method_signatures") or {}).get(child.func.attr)
+            if not isinstance(method_info, dict):
+                invalid_member_refs.add(f"{owner_type}.{child.func.attr} (line {child.lineno})")
+                continue
+            actual_count = call_argument_count(child)
+            min_expected = method_info.get("min_args")
+            max_expected = method_info.get("max_args")
+            if not isinstance(min_expected, int) or not isinstance(max_expected, int):
+                continue
+            if min_expected <= actual_count <= max_expected:
+                continue
+            if min_expected == max_expected:
+                call_arity_mismatches.add(
+                    f"{owner_type}.{child.func.attr} expects {max_expected} args but test uses {actual_count} at line {child.lineno}"
+                )
+            else:
+                call_arity_mismatches.add(
+                    f"{owner_type}.{child.func.attr} expects {min_expected}-{max_expected} args but test uses {actual_count} at line {child.lineno}"
+                )
+        elif isinstance(child, ast.Attribute):
+            owner_type = infer_expression_type(
+                child.value,
+                local_types,
+                class_map,
+                resolved_function_map,
+            )
+            if owner_type not in class_map:
+                continue
+            class_info = class_map.get(owner_type, {})
+            allowed = set(class_info.get("attributes") or [])
+            if not class_info.get("is_enum"):
+                allowed.update(class_info.get("fields") or [])
+            allowed.update((class_info.get("method_signatures") or {}).keys())
+            if child.attr not in allowed:
+                invalid_member_refs.add(f"{owner_type}.{child.attr} (line {child.lineno})")
+    return sorted(invalid_member_refs), sorted(call_arity_mismatches)
+
+
 def collect_module_defined_names(tree: ast.AST) -> set[str]:
     if not isinstance(tree, ast.Module):
         return set()
@@ -583,7 +686,9 @@ __all__ = [
     "MOCK_ASSERTION_METHODS",
     "ast_contains_node",
     "bound_target_names",
+    "call_argument_count",
     "call_argument_value",
+    "analyze_typed_test_member_usage",
     "collect_local_bindings",
     "collect_local_name_bindings",
     "collect_module_defined_names",
@@ -600,6 +705,8 @@ __all__ = [
     "find_unsupported_mock_assertions",
     "function_argument_names",
     "infer_argument_type",
+    "infer_call_result_type",
+    "infer_expression_type",
     "is_mock_factory_call",
     "is_patch_call",
     "iter_relevant_test_body_nodes",

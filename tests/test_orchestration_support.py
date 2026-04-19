@@ -132,7 +132,9 @@ from kycortex_agents.orchestration.sandbox_templates import (
 	render_sandbox_sitecustomize,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+	analyze_typed_test_member_usage,
 	ast_contains_node,
+	call_argument_count,
 	call_argument_value,
 	collect_local_bindings,
 	collect_local_name_bindings,
@@ -150,6 +152,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	find_unsupported_mock_assertions,
 	function_argument_names,
 	infer_argument_type,
+	infer_call_result_type,
+	infer_expression_type,
 	is_mock_factory_call,
 	is_patch_call,
 	patched_target_name_from_call,
@@ -513,6 +517,38 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 	assert extract_literal_list_items(ast.Name("items"), bindings) is not None
 	assert infer_argument_type(ast.Name("payload"), bindings, "status", class_map) == "str"
 	assert infer_argument_type(ast.parse("{'items': list()}", mode="eval").body, {}, "items", class_map) == "list"
+	assert call_argument_count(request_call) == 2
+
+	typed_class_map = {
+		"Request": {"attributes": ["request_id"], "fields": [], "is_enum": False, "method_signatures": {}},
+		"Service": {
+			"attributes": [],
+			"fields": [],
+			"is_enum": False,
+			"method_signatures": {
+				"fetch": {"min_args": 1, "max_args": 1, "return_annotation": "Request"},
+				"range_fetch": {"min_args": 1, "max_args": 2, "return_annotation": "Request"},
+			},
+		},
+	}
+	function_map = {"build_request": {"return_annotation": "Request"}}
+	test_node = ast.parse(
+		"def test_case():\n"
+		"    request = build_request()\n"
+		"    service = Service()\n"
+		"    returned = service.fetch({'request_id': 'req-1'})\n"
+		"    service.missing()\n"
+		"    service.range_fetch(1, 2, 3)\n"
+		"    assert returned.invalid == 1\n"
+	).body[0]
+	assert isinstance(test_node, ast.FunctionDef)
+	local_types = {"request": "Request", "service": "Service", "returned": "Request"}
+	assert infer_expression_type(ast.Name("service"), local_types, typed_class_map, function_map) == "Service"
+	assert infer_call_result_type(ast.parse("service.fetch()", mode="eval").body, {"service": "Service"}, typed_class_map, function_map) == "Request"
+	assert analyze_typed_test_member_usage(test_node, local_types, typed_class_map, function_map) == (
+		["Request.invalid (line 7)", "Service.missing (line 5)"],
+		["Service.range_fetch expects 1-2 args but test uses 3 at line 6"],
+	)
 
 
 def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():

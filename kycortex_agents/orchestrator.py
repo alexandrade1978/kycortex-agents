@@ -136,7 +136,9 @@ from kycortex_agents.orchestration.task_constraints import (
     task_requires_cli_entrypoint,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+    analyze_typed_test_member_usage,
     ast_contains_node,
+    call_argument_count,
     bound_target_names,
     call_argument_value,
     collect_local_bindings,
@@ -155,6 +157,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     find_unsupported_mock_assertions,
     function_argument_names,
     infer_argument_type,
+    infer_call_result_type,
+    infer_expression_type,
     is_mock_factory_call,
     is_patch_call,
     iter_relevant_test_body_nodes,
@@ -4297,7 +4301,7 @@ class Orchestrator:
         return self_assigned_attributes(node)
 
     def _call_argument_count(self, node: ast.Call) -> int:
-        return len(node.args) + sum(1 for keyword in node.keywords if keyword.arg is not None)
+        return call_argument_count(node)
 
     def _infer_expression_type(
         self,
@@ -4306,12 +4310,7 @@ class Orchestrator:
         class_map: Dict[str, Any],
         function_map: Dict[str, Dict[str, Any]],
     ) -> Optional[str]:
-        if isinstance(node, ast.Name):
-            owner_type = local_types.get(node.id)
-            return owner_type if owner_type in class_map else None
-        if isinstance(node, ast.Call):
-            return self._infer_call_result_type(node, local_types, class_map, function_map)
-        return None
+        return infer_expression_type(node, local_types, class_map, function_map)
 
     def _collect_test_local_types(
         self,
@@ -4372,26 +4371,7 @@ class Orchestrator:
         class_map: Dict[str, Any],
         function_map: Dict[str, Dict[str, Any]],
     ) -> Optional[str]:
-        if not isinstance(node, ast.Call):
-            return None
-        if isinstance(node.func, ast.Name):
-            if node.func.id in class_map:
-                return node.func.id
-            function_info = function_map.get(node.func.id)
-            if not isinstance(function_info, dict):
-                return None
-            return_annotation = function_info.get("return_annotation")
-            return return_annotation if isinstance(return_annotation, str) and return_annotation in class_map else None
-        if not isinstance(node.func, ast.Attribute):
-            return None
-        owner_type = self._infer_expression_type(node.func.value, local_types, class_map, function_map)
-        if owner_type not in class_map:
-            return None
-        method_info = (class_map.get(owner_type, {}).get("method_signatures") or {}).get(node.func.attr)
-        if not isinstance(method_info, dict):
-            return None
-        return_annotation = method_info.get("return_annotation")
-        return return_annotation if isinstance(return_annotation, str) and return_annotation in class_map else None
+        return infer_call_result_type(node, local_types, class_map, function_map)
 
     def _analyze_typed_test_member_usage(
         self,
@@ -4400,55 +4380,7 @@ class Orchestrator:
         class_map: Dict[str, Any],
         function_map: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> tuple[list[str], list[str]]:
-        invalid_member_refs: set[str] = set()
-        call_arity_mismatches: set[str] = set()
-        resolved_function_map = function_map or {}
-        for child in ast.walk(node):
-            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
-                owner_type = self._infer_expression_type(
-                    child.func.value,
-                    local_types,
-                    class_map,
-                    resolved_function_map,
-                )
-                if owner_type not in class_map:
-                    continue
-                method_info = (class_map.get(owner_type, {}).get("method_signatures") or {}).get(child.func.attr)
-                if not isinstance(method_info, dict):
-                    invalid_member_refs.add(f"{owner_type}.{child.func.attr} (line {child.lineno})")
-                    continue
-                actual_count = self._call_argument_count(child)
-                min_expected = method_info.get("min_args")
-                max_expected = method_info.get("max_args")
-                if not isinstance(min_expected, int) or not isinstance(max_expected, int):
-                    continue
-                if min_expected <= actual_count <= max_expected:
-                    continue
-                if min_expected == max_expected:
-                    call_arity_mismatches.add(
-                        f"{owner_type}.{child.func.attr} expects {max_expected} args but test uses {actual_count} at line {child.lineno}"
-                    )
-                else:
-                    call_arity_mismatches.add(
-                        f"{owner_type}.{child.func.attr} expects {min_expected}-{max_expected} args but test uses {actual_count} at line {child.lineno}"
-                    )
-            elif isinstance(child, ast.Attribute):
-                owner_type = self._infer_expression_type(
-                    child.value,
-                    local_types,
-                    class_map,
-                    resolved_function_map,
-                )
-                if owner_type not in class_map:
-                    continue
-                class_info = class_map.get(owner_type, {})
-                allowed = set(class_info.get("attributes") or [])
-                if not class_info.get("is_enum"):
-                    allowed.update(class_info.get("fields") or [])
-                allowed.update((class_info.get("method_signatures") or {}).keys())
-                if child.attr not in allowed:
-                    invalid_member_refs.add(f"{owner_type}.{child.attr} (line {child.lineno})")
-        return sorted(invalid_member_refs), sorted(call_arity_mismatches)
+        return analyze_typed_test_member_usage(node, local_types, class_map, function_map)
 
     def _iter_relevant_test_body_nodes(self, node: ast.AST):
         yield from iter_relevant_test_body_nodes(node)

@@ -252,6 +252,7 @@ from kycortex_agents.orchestration.workflow_control import (
     build_code_repair_context_from_test_failure,
     build_repair_context,
     ensure_budget_decomposition_task,
+    failed_task_ids_for_repair,
     cancel_workflow,
     emit_workflow_progress,
     exit_if_workflow_cancelled,
@@ -1922,19 +1923,7 @@ class Orchestrator:
         return repair_task_ids
 
     def _failed_task_ids_for_repair(self, project: ProjectState) -> list[str]:
-        active_repair_origins = {
-            task.repair_origin_task_id
-            for task in project.tasks
-            if task.repair_origin_task_id
-            and task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}
-        }
-        return [
-            task.id
-            for task in project.tasks
-            if task.status == TaskStatus.FAILED.value
-            and not task.repair_origin_task_id
-            and task.id not in active_repair_origins
-        ]
+        return failed_task_ids_for_repair(project)
 
     def _planned_module_context(
         self,

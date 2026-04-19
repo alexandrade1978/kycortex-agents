@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	build_code_repair_context_from_test_failure,
 	build_repair_context,
 	ensure_budget_decomposition_task,
+	failed_task_ids_for_repair,
 	merge_prior_repair_context,
 	privacy_safe_log_fields,
 	task_id_collection_count,
@@ -2830,6 +2831,11 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	)
 	assert upstream_code_task is not None
 	assert upstream_code_task.id == "code__repair_1"
+	failed_project = ProjectState(project_name="Demo", goal="Build demo")
+	failed_project.add_task(Task(id="code", title="Code", description="Code", assigned_to="code_engineer", status=TaskStatus.FAILED.value))
+	failed_project.add_task(Task(id="code__repair_1", title="Repair code", description="Repair code", assigned_to="code_engineer", repair_origin_task_id="code", status=TaskStatus.PENDING.value))
+	failed_project.add_task(Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", status=TaskStatus.FAILED.value))
+	assert failed_task_ids_for_repair(failed_project) == ["tests"]
 
 
 def test_repair_instruction_owner_mapping_directly():

@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional, cast
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
-from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory
+from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus
 
 
 def log_event(logger: Any, level: str, event: str, **fields: Any) -> None:
@@ -197,6 +197,22 @@ def active_repair_cycle(project: ProjectState) -> dict[str, Any] | None:
     if not isinstance(current_cycle, dict):
         return None
     return current_cycle
+
+
+def failed_task_ids_for_repair(project: ProjectState) -> list[str]:
+    active_repair_origins = {
+        task.repair_origin_task_id
+        for task in project.tasks
+        if task.repair_origin_task_id
+        and task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}
+    }
+    return [
+        task.id
+        for task in project.tasks
+        if task.status == TaskStatus.FAILED.value
+        and not task.repair_origin_task_id
+        and task.id not in active_repair_origins
+    ]
 
 
 def build_repair_context(

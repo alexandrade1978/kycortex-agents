@@ -1,6 +1,11 @@
 import ast
 from dataclasses import dataclass
 
+from kycortex_agents.orchestration.repair_signals import (
+    validation_summary_has_missing_datetime_import_issue,
+    validation_summary_has_required_evidence_runtime_issue,
+)
+
 
 @dataclass(frozen=True)
 class TestRepairSurfaceAnalysis:
@@ -247,6 +252,43 @@ def analyze_test_repair_surface(
     )
 
 
+def qa_repair_should_reuse_failed_test_artifact(
+    validation_summary: object,
+    implementation_code: object = "",
+    failed_artifact_content: object = "",
+) -> bool:
+    if not isinstance(validation_summary, str) or not validation_summary.strip():
+        return True
+
+    analysis = analyze_test_repair_surface(
+        validation_summary,
+        implementation_code,
+        failed_artifact_content,
+    )
+    has_reusable_missing_imports = bool(analysis.undefined_available_module_symbols)
+    has_required_evidence_runtime_issue = validation_summary_has_required_evidence_runtime_issue(
+        validation_summary,
+        failed_artifact_content,
+        implementation_code,
+    )
+    if analysis.helper_alias_names:
+        return False
+    if has_required_evidence_runtime_issue and not has_reusable_missing_imports:
+        return False
+    if validation_summary_has_missing_datetime_import_issue(
+        validation_summary,
+        failed_artifact_content,
+    ) and not has_reusable_missing_imports:
+        return False
+    return not any(
+        validation_summary_symbols(validation_summary, label)
+        for label in (
+            "Tests without assertion-like checks",
+            "Contract overreach signals",
+        )
+    )
+
+
 __all__ = [
     "TestRepairSurfaceAnalysis",
     "analyze_test_repair_surface",
@@ -254,6 +296,7 @@ __all__ = [
     "module_defined_symbol_names",
     "normalized_helper_surface_symbols",
     "previous_valid_test_surface",
+    "qa_repair_should_reuse_failed_test_artifact",
     "validation_summary_helper_alias_names",
     "validation_summary_symbols",
 ]

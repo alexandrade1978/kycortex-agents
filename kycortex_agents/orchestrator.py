@@ -110,11 +110,11 @@ from kycortex_agents.orchestration.repair_signals import (
     validation_summary_has_required_evidence_runtime_issue,
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
-    analyze_test_repair_surface,
     is_helper_alias_like_name,
     module_defined_symbol_names,
     normalized_helper_surface_symbols,
     previous_valid_test_surface,
+    qa_repair_should_reuse_failed_test_artifact,
     validation_summary_helper_alias_names,
     validation_summary_symbols,
 )
@@ -1927,34 +1927,10 @@ class Orchestrator:
         implementation_code: object = "",
         failed_artifact_content: object = "",
     ) -> bool:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return True
-        analysis = analyze_test_repair_surface(
+        return qa_repair_should_reuse_failed_test_artifact(
             validation_summary,
             implementation_code,
             failed_artifact_content,
-        )
-        has_reusable_missing_imports = bool(analysis.undefined_available_module_symbols)
-        has_required_evidence_runtime_issue = self._validation_summary_has_required_evidence_runtime_issue(
-            validation_summary,
-            failed_artifact_content,
-            implementation_code,
-        )
-        if analysis.helper_alias_names:
-            return False
-        if has_required_evidence_runtime_issue and not has_reusable_missing_imports:
-            return False
-        if self._validation_summary_has_missing_datetime_import_issue(
-            validation_summary,
-            failed_artifact_content,
-        ) and not has_reusable_missing_imports:
-            return False
-        return not any(
-            self._validation_summary_symbols(validation_summary, label)
-            for label in (
-                "Tests without assertion-like checks",
-                "Contract overreach signals",
-            )
         )
 
     @staticmethod

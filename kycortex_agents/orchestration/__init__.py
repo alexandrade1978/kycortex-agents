@@ -113,6 +113,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 	module_defined_symbol_names,
 	normalized_helper_surface_symbols,
 	previous_valid_test_surface,
+	qa_repair_should_reuse_failed_test_artifact,
 	validation_summary_helper_alias_names,
 	validation_summary_symbols,
 )
@@ -401,6 +402,7 @@ __all__ = [
 	"module_defined_symbol_names",
 	"normalized_helper_surface_symbols",
 	"previous_valid_test_surface",
+	"qa_repair_should_reuse_failed_test_artifact",
 	"validation_has_blocking_issues",
 	"validation_has_only_warnings",
 	"validation_has_static_issues",

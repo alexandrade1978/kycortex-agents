@@ -109,6 +109,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 	module_defined_symbol_names,
 	normalized_helper_surface_symbols,
 	previous_valid_test_surface,
+	qa_repair_should_reuse_failed_test_artifact,
 	validation_summary_helper_alias_names,
 )
 from kycortex_agents.orchestration.repair_test_runtime import (
@@ -1827,6 +1828,53 @@ def test_repair_surface_helpers_cover_invalid_inputs_and_inline_constructor_call
 	analysis = analyze_test_repair_surface(None)
 	assert analysis.imported_module_symbols == []
 	assert analysis.previous_constructor_keywords == {}
+	assert qa_repair_should_reuse_failed_test_artifact(None) is True
+
+
+def test_qa_repair_should_not_reuse_failed_suite_for_alias_drift_directly():
+	implementation_code = (
+		"class AuditLogger:\n"
+		"    pass\n\n"
+		"class ComplianceIntakeService:\n"
+		"    pass\n"
+	)
+	validation_summary = (
+		"Generated test validation:\n"
+		"- Imported module symbols: ComplianceIntakeService\n"
+		"- Undefined local names: AuditService (line 8)\n"
+		"- Verdict: FAIL"
+	)
+
+	assert not qa_repair_should_reuse_failed_test_artifact(
+		validation_summary,
+		implementation_code,
+	)
+
+
+def test_qa_repair_should_reuse_failed_suite_for_missing_real_module_imports_directly():
+	implementation_code = (
+		"class AuditLogger:\n"
+		"    pass\n\n"
+		"class ComplianceIntakeService:\n"
+		"    pass\n"
+	)
+	validation_summary = (
+		"Generated test validation:\n"
+		"- Imported module symbols: ComplianceIntakeService\n"
+		"- Undefined local names: AuditLogger (line 6)\n"
+		"- Verdict: FAIL"
+	)
+	failed_tests = (
+		"from code_implementation import ComplianceIntakeService\n\n"
+		"def test_happy_path():\n"
+		"    service = ComplianceIntakeService()\n"
+	)
+
+	assert qa_repair_should_reuse_failed_test_artifact(
+		validation_summary,
+		implementation_code,
+		failed_tests,
+	)
 
 
 def test_build_runtime_only_test_repair_lines_handles_helper_runtime_focus_directly():

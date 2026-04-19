@@ -138,6 +138,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	assigned_name_for_call,
 	analyze_typed_test_member_usage,
 	ast_contains_node,
+	behavior_contract_explicitly_limits_score_state_to_valid_requests,
 	batch_call_allows_partial_invalid_items,
 	call_argument_count,
 	call_argument_value,
@@ -152,11 +153,13 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	collect_undefined_local_names,
 	comparison_implies_partial_batch_result,
 	count_test_assertion_like_checks,
+	exact_len_assertion,
 	extract_literal_dict_keys,
 	extract_literal_field_values,
 	extract_literal_list_items,
 	extract_parametrize_argument_names,
 	extract_string_literals,
+	find_contract_overreach_signals,
 	find_unsupported_mock_assertions,
 	function_argument_names,
 	infer_argument_type,
@@ -165,14 +168,19 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	int_constant_value,
 	invalid_outcome_marker_matches,
 	invalid_outcome_subject_matches,
+	is_internal_score_state_target,
+	is_len_call,
 	is_mock_factory_call,
 	is_patch_call,
+	loop_contains_non_batch_call,
 	len_call_matches_batch_result,
 	parent_map,
 	payload_argument_for_validation,
 	patched_target_name_from_call,
 	resolve_bound_value,
+	name_suggests_validation_failure,
 	validate_batch_call,
+	visible_repeated_single_call_batch_sizes,
 	with_uses_pytest_assertion_context,
 	with_uses_pytest_raises,
 )
@@ -637,6 +645,35 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 	assert len_call_matches_batch_result(direct_len, None, direct_len.args[0]) is True
 	assert int_constant_value(ast.Constant("x")) is None
 	assert comparison_implies_partial_batch_result(ast.LtE(), 2, 3) is True
+
+	overreach_function = ast.parse(
+		"def test_validation_failure():\n"
+		"    for item in [{'id': 1}, {'id': 2}]:\n"
+		"        handle_request(item)\n"
+		"    assert len(service.audit_logs) == 3\n"
+		"    assert len(service.get_risk_scores()) == 0\n"
+	).body[0]
+	assert isinstance(overreach_function, ast.FunctionDef)
+	assert name_suggests_validation_failure("test_validation_failure") is True
+	assert is_internal_score_state_target("service.get_risk_scores()") is True
+	assert behavior_contract_explicitly_limits_score_state_to_valid_requests(
+		"Behavior contract:\n- handle_request appends to risk_scores only for valid requests",
+		"service.get_risk_scores()",
+	) is True
+	assert visible_repeated_single_call_batch_sizes(
+		overreach_function,
+		{},
+	) == [2]
+	loop_node = overreach_function.body[0]
+	assert loop_contains_non_batch_call(loop_node) is True
+	audit_assert = overreach_function.body[1]
+	assert isinstance(audit_assert, ast.Assert)
+	assert exact_len_assertion(audit_assert.test) == ("service.audit_logs", 3)
+	assert is_len_call(ast.parse("len(service.audit_logs)", mode="eval").body) is True
+	assert find_contract_overreach_signals(overreach_function, {}, "") == [
+		"exact batch audit length 3 exceeds visible batch size 2 in test_validation_failure (line 4)",
+		"exact validation-failure score-state emptiness assertion on 'service.get_risk_scores()' in test_validation_failure (line 5) assumes rejected input leaves internal score state empty",
+	]
 
 
 def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():

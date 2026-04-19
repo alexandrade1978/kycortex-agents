@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import ast
 import builtins
-from typing import Any, Callable, Dict, Iterator, Optional
+import re
+from typing import Any, Callable, Dict, Iterator, Optional, cast
 
 from kycortex_agents.orchestration.ast_tools import (
     ast_name,
     attribute_chain,
+    callable_name,
     expression_root_name,
     first_call_argument,
     render_expression,
@@ -884,6 +886,159 @@ def comparison_implies_partial_batch_result(
     return False
 
 
+def name_suggests_validation_failure(test_name: str) -> bool:
+    normalized_test_name = test_name.lower()
+    return any(
+        token in normalized_test_name
+        for token in ("validation", "invalid", "reject", "failure", "error")
+    )
+
+
+def is_internal_score_state_target(rendered_target: str) -> bool:
+    normalized_target = rendered_target.replace(" ", "").lower()
+    if "score" not in normalized_target:
+        return False
+    if not ("." in normalized_target or "get_" in normalized_target):
+        return False
+    return bool(
+        re.search(r"\.(?:get_)?(?:risk_)?scores?\b", normalized_target)
+        or any(
+            token in normalized_target
+            for token in (
+                "score_record",
+                "score_records",
+                "score_cache",
+                "score_map",
+            )
+        )
+    )
+
+
+def behavior_contract_explicitly_limits_score_state_to_valid_requests(
+    code_behavior_contract: str,
+    rendered_target: str,
+) -> bool:
+    normalized_target = rendered_target.replace(" ", "").lower()
+    if "risk_score" not in normalized_target:
+        return False
+
+    normalized_contract = code_behavior_contract.lower()
+    if not re.search(r"risk[_ ]scores?", normalized_contract):
+        return False
+
+    return bool(
+        re.search(r"risk[_ ]scores?.*\bonly\b.*\bvalid\b", normalized_contract)
+        or re.search(r"appends?.*risk[_ ]scores?.*\bonly\b.*\bvalid\b", normalized_contract)
+        or re.search(r"only\s+valid\s+requests?.*risk[_ ]scores?", normalized_contract)
+        or re.search(r"valid\s+requests?.*append.*risk[_ ]scores?", normalized_contract)
+    )
+
+
+def is_len_call(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "len"
+        and len(node.args) == 1
+        and not node.keywords
+    )
+
+
+def exact_len_assertion(node: ast.AST) -> Optional[tuple[str, int]]:
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+        return None
+    if not isinstance(node.ops[0], ast.Eq):
+        return None
+
+    left = node.left
+    right = node.comparators[0]
+    if is_len_call(left):
+        compared_value = int_constant_value(right)
+        if compared_value is None:
+            return None
+        left_call = cast(ast.Call, left)
+        return render_expression(left_call.args[0]), compared_value
+    if is_len_call(right):
+        compared_value = int_constant_value(left)
+        if compared_value is None:
+            return None
+        right_call = cast(ast.Call, right)
+        return render_expression(right_call.args[0]), compared_value
+    return None
+
+
+def loop_contains_non_batch_call(node: ast.AST) -> bool:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        called_name = callable_name(child)
+        if not called_name or called_name == "len":
+            continue
+        if "batch" in called_name.lower():
+            continue
+        return True
+    return False
+
+
+def visible_repeated_single_call_batch_sizes(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    bindings: Dict[str, ast.AST],
+) -> list[int]:
+    batch_sizes: list[int] = []
+    for child in ast.walk(node):
+        if not isinstance(child, (ast.For, ast.AsyncFor)):
+            continue
+        batch_items = extract_literal_list_items(child.iter, bindings)
+        if batch_items is None or len(batch_items) <= 1:
+            continue
+        if not loop_contains_non_batch_call(child):
+            continue
+        batch_sizes.append(len(batch_items))
+    return batch_sizes
+
+
+def find_contract_overreach_signals(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    bindings: Dict[str, ast.AST],
+    code_behavior_contract: str = "",
+) -> list[str]:
+    visible_batch_sizes = visible_repeated_single_call_batch_sizes(node, bindings)
+    signals: set[str] = set()
+    largest_batch_size = max(visible_batch_sizes) if visible_batch_sizes else None
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Assert):
+            continue
+        assertion = exact_len_assertion(child.test)
+        if assertion is None:
+            continue
+        asserted_target, compared_value = assertion
+        normalized_target = asserted_target.replace(" ", "").lower()
+        if largest_batch_size is not None and (
+            "audit_log" in normalized_target or "audit_logs" in normalized_target
+        ):
+            if compared_value > largest_batch_size:
+                signals.add(
+                    f"exact batch audit length {compared_value} exceeds visible batch size {largest_batch_size} in {node.name} (line {child.lineno})"
+                )
+
+        if not name_suggests_validation_failure(node.name):
+            continue
+        if compared_value != 0:
+            continue
+        if not is_internal_score_state_target(asserted_target):
+            continue
+        if behavior_contract_explicitly_limits_score_state_to_valid_requests(
+            code_behavior_contract,
+            asserted_target,
+        ):
+            continue
+        signals.add(
+            "exact validation-failure score-state emptiness assertion on "
+            f"'{asserted_target}' in {node.name} (line {child.lineno}) assumes rejected input leaves internal score state empty"
+        )
+    return sorted(signals)
+
+
 def collect_module_defined_names(tree: ast.AST) -> set[str]:
     if not isinstance(tree, ast.Module):
         return set()
@@ -974,6 +1129,7 @@ __all__ = [
     "call_expects_invalid_outcome",
     "call_has_negative_expectation",
     "ast_contains_node",
+    "behavior_contract_explicitly_limits_score_state_to_valid_requests",
     "parent_map",
     "batch_call_allows_partial_invalid_items",
     "bound_target_names",
@@ -989,11 +1145,13 @@ __all__ = [
     "collect_undefined_local_names",
     "comparison_implies_partial_batch_result",
     "count_test_assertion_like_checks",
+    "exact_len_assertion",
     "extract_literal_dict_keys",
     "extract_literal_field_values",
     "extract_literal_list_items",
     "extract_parametrize_argument_names",
     "extract_string_literals",
+    "find_contract_overreach_signals",
     "find_unsupported_mock_assertions",
     "function_argument_names",
     "infer_argument_type",
@@ -1002,15 +1160,20 @@ __all__ = [
     "int_constant_value",
     "invalid_outcome_marker_matches",
     "invalid_outcome_subject_matches",
+    "is_internal_score_state_target",
+    "is_len_call",
     "is_mock_factory_call",
     "is_patch_call",
     "iter_relevant_test_body_nodes",
     "known_type_allows_member",
     "len_call_matches_batch_result",
+    "loop_contains_non_batch_call",
     "payload_argument_for_validation",
     "patched_target_name_from_call",
     "resolve_bound_value",
+    "name_suggests_validation_failure",
     "validate_batch_call",
+    "visible_repeated_single_call_batch_sizes",
     "with_uses_pytest_assertion_context",
     "with_uses_pytest_raises",
     "supports_mock_assertion_target",

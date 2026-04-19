@@ -30,6 +30,9 @@ from kycortex_agents.orchestration.repair_analysis import (
 from kycortex_agents.orchestration.repair_code_validation import (
 	build_code_validation_repair_lines,
 )
+from kycortex_agents.orchestration.repair_test_validation import (
+	build_test_validation_repair_lines,
+)
 from kycortex_agents.orchestration.repair_signals import (
 	content_has_bare_datetime_reference,
 	content_has_incomplete_required_evidence_payload,
@@ -135,6 +138,7 @@ __all__ = [
 	"AcceptanceLane",
 	"TaskAcceptanceLists",
 	"build_code_validation_repair_lines",
+	"build_test_validation_repair_lines",
 	"build_code_repair_instruction_from_test_failure",
 	"build_generated_test_env",
 	"build_sandbox_preexec_fn",

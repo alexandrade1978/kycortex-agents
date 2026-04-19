@@ -63,14 +63,11 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     validation_summary_helper_alias_names,
     validation_summary_symbols,
 )
-from kycortex_agents.orchestration.repair_test_runtime import (
-    build_runtime_only_test_repair_lines,
-)
 from kycortex_agents.orchestration.repair_code_validation import (
     build_code_validation_repair_lines,
 )
-from kycortex_agents.orchestration.repair_test_structure import (
-    build_structural_test_repair_lines,
+from kycortex_agents.orchestration.repair_test_validation import (
+    build_test_validation_repair_lines,
 )
 from kycortex_agents.orchestration.repair_instructions import (
     build_code_repair_instruction_from_test_failure,
@@ -5776,63 +5773,18 @@ class Orchestrator:
 
         if failure_category != FailureCategory.TEST_VALIDATION.value:
             return lines
-
-        if "type mismatches:" in summary_lower and "type mismatches: none" not in summary_lower:
-            lines.append(
-                "PRIORITY: Fix type mismatches before other repairs. When the behavior contract specifies that a parameter must be of type dict, list, int, or another concrete type, every test fixture and call argument must use a value of exactly that type — not a string placeholder."
-            )
-            lines.append(
-                "Replace string placeholders like details='details' with concrete typed values like details={'key': 'value'} when the contract requires dict. Match the exact type constraint from the behavior contract for every flagged parameter."
-            )
-
         implementation_code = context.get("code", "") if isinstance(context, dict) else ""
-        surface_analysis = analyze_test_repair_surface(
-            validation_summary,
-            implementation_code,
-            failed_artifact_content,
-        )
-        imported_module_symbols = surface_analysis.imported_module_symbols
-        undefined_available_module_symbols = surface_analysis.undefined_available_module_symbols
-        helper_alias_names = surface_analysis.helper_alias_names
-        unknown_module_symbols = surface_analysis.unknown_module_symbols
-        previous_member_calls = surface_analysis.previous_member_calls
-        previous_constructor_keywords = surface_analysis.previous_constructor_keywords
-
-        helper_surface_symbols = self._normalized_helper_surface_symbols(
-            repair_context.get("helper_surface_symbols")
-        )
-        if not helper_surface_symbols:
-            helper_surface_symbols = self._normalized_helper_surface_symbols(
-                repair_context.get("helper_surface_usages")
-            )
-        assertionless_tests = self._validation_summary_symbols(
-            validation_summary,
-            "Tests without assertion-like checks",
-        )
         lines.extend(
-            build_structural_test_repair_lines(
-                summary_lower,
-                failed_content_lower,
-                imported_module_symbols,
-                undefined_available_module_symbols,
-                helper_alias_names,
-                unknown_module_symbols,
-                helper_surface_symbols,
-                assertionless_tests,
+            build_test_validation_repair_lines(
+                validation_summary,
+                failed_artifact_content,
+                implementation_code,
+                repair_context.get("helper_surface_symbols"),
+                repair_context.get("helper_surface_usages"),
                 missing_datetime_import_issue,
-                self._implementation_prefers_direct_datetime_import(implementation_code),
-            )
-        )
-        lines.extend(
-            build_runtime_only_test_repair_lines(
-                summary_lower,
-                failed_content_lower,
-                imported_module_symbols,
-                unknown_module_symbols,
-                previous_member_calls,
-                previous_constructor_keywords,
                 required_evidence_runtime_issue,
                 required_evidence_items,
+                self._implementation_prefers_direct_datetime_import(implementation_code),
             )
         )
         return lines

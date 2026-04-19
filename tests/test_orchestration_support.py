@@ -28,6 +28,9 @@ from kycortex_agents.orchestration.repair_analysis import (
 from kycortex_agents.orchestration.repair_code_validation import (
 	build_code_validation_repair_lines,
 )
+from kycortex_agents.orchestration.repair_test_validation import (
+	build_test_validation_repair_lines,
+)
 from kycortex_agents.orchestration.repair_signals import (
 	content_has_incomplete_required_evidence_payload,
 	content_has_matching_datetime_import,
@@ -923,6 +926,73 @@ def test_build_structural_test_repair_lines_handles_payload_and_fixture_constrai
 	assert any("Keep scalar functions scalar" in line for line in lines)
 	assert any("Never define a custom fixture named request." in line for line in lines)
 	assert any("Do not use mock-style assertion bookkeeping" in line for line in lines)
+
+
+def test_build_test_validation_repair_lines_handles_type_mismatch_and_helper_surface_fallback_directly():
+	lines = build_test_validation_repair_lines(
+		validation_summary=(
+			"Generated test validation:\n"
+			"- Type mismatches: details expects dict but test uses str at line 8\n"
+			"- Imported module symbols: ComplianceIntakeService, ComplianceRequest\n"
+			"- Helper surface usages: RiskScoringService (line 33)\n"
+			"- Tests without assertion-like checks: test_happy_path (line 5)\n"
+			"- Verdict: FAIL"
+		),
+		failed_artifact_content=(
+			"from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+			"def test_happy_path():\n"
+			"    service = ComplianceIntakeService()\n"
+			"    request = ComplianceRequest(request_id='req-1', request_type='screening', details='details')\n"
+			"    service.handle_request(request)\n"
+		),
+		implementation_code="class RiskScoringService:\n    pass\n",
+		helper_surface_symbols=[],
+		helper_surface_usages=["RiskScoringService (line 33)"],
+		missing_datetime_import_issue=False,
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+		implementation_prefers_direct_datetime_import=False,
+	)
+
+	assert any("PRIORITY: Fix type mismatches before other repairs" in line for line in lines)
+	assert any("Replace string placeholders like details='details'" in line for line in lines)
+	assert any("references these flagged helper surfaces: RiskScoringService" in line for line in lines)
+	assert any("The validation summary already flagged these hollow top-level tests: test_happy_path (line 5)." in line for line in lines)
+
+
+def test_build_test_validation_repair_lines_composes_available_imports_and_runtime_guidance_directly():
+	lines = build_test_validation_repair_lines(
+		validation_summary=(
+			"Generated test validation:\n"
+			"- Imported module symbols: AuditLog, ComplianceIntakeService, ComplianceRequest\n"
+			"- Undefined local names: datetime (line 18), AuditLogger (line 6)\n"
+			"- Pytest execution: FAIL\n"
+			"- Constructor arity mismatches: none\n"
+			"- Verdict: FAIL"
+		),
+		failed_artifact_content=(
+			"from code_implementation import AuditLog, ComplianceIntakeService, ComplianceRequest\n\n"
+			"def test_happy_path():\n"
+			"    service = ComplianceIntakeService()\n"
+			"    request = ComplianceRequest(request_id='req-1', request_type='screening', details={'source': 'web'}, timestamp=datetime.now())\n"
+			"    service.handle_request(request)\n"
+		),
+		implementation_code=(
+			"from datetime import datetime\n\n"
+			"class AuditLogger:\n"
+			"    pass\n"
+		),
+		helper_surface_symbols=[],
+		helper_surface_usages=[],
+		missing_datetime_import_issue=True,
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+		implementation_prefers_direct_datetime_import=True,
+	)
+
+	assert any("The previous file referenced real module symbols without importing them: AuditLogger." in line for line in lines)
+	assert any("The current implementation already imports `from datetime import datetime`" in line for line in lines)
+	assert any("preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in line for line in lines)
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

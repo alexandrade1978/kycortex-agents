@@ -17,10 +17,12 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration import (
+    ast_name,
     build_code_validation_summary,
     build_dependency_validation_summary,
     build_repair_focus_lines,
     build_test_validation_summary,
+    is_pytest_fixture,
     semantic_output_key,
     summarize_output,
     validate_agent_resolution,
@@ -4461,8 +4463,6 @@ def test_validate_batch_call_accepts_complete_direct_and_nested_items(tmp_path, 
 
 
 def test_is_pytest_fixture_detects_name_attribute_and_call_decorators(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     fixture_functions = ast.parse(
         "@fixture\n"
         "def a():\n"
@@ -4480,12 +4480,10 @@ def test_is_pytest_fixture_detects_name_attribute_and_call_decorators(tmp_path):
         "    return 1\n"
     ).body
 
-    assert [orchestrator._is_pytest_fixture(node) for node in fixture_functions if isinstance(node, ast.FunctionDef)] == [True, True, True, True, False]
+    assert [is_pytest_fixture(node) for node in fixture_functions if isinstance(node, ast.FunctionDef)] == [True, True, True, True, False]
 
 
 def test_is_pytest_fixture_handles_multiple_decorators_before_fixture(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     function_node = parse_function_node(
         "@custom\n"
         "@pytest.fixture(scope='module')\n"
@@ -4493,7 +4491,7 @@ def test_is_pytest_fixture_handles_multiple_decorators_before_fixture(tmp_path):
         "    return 1\n"
     )
 
-    assert orchestrator._is_pytest_fixture(function_node) is True
+    assert is_pytest_fixture(function_node) is True
 
 
 def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pytest(tmp_path):
@@ -5368,12 +5366,10 @@ def test_build_test_validation_summary_omits_execution_lines_when_pytest_did_not
 
 
 def test_ast_name_formats_nested_attributes(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     node = ast.Attribute(value=ast.Attribute(value=ast.Name("pkg"), attr="module"), attr="Class")
 
-    assert orchestrator._ast_name(node) == "pkg.module.Class"
-    assert orchestrator._ast_name(ast.Constant("x")) == "x"
+    assert ast_name(node) == "pkg.module.Class"
+    assert ast_name(ast.Constant("x")) == "x"
 
 
 def test_summarize_output_returns_blank_for_whitespace_and_truncates_first_line(tmp_path):

@@ -22,7 +22,7 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.orchestration.ast_tools import AstNameReplacer
+from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
@@ -2697,7 +2697,7 @@ class Orchestrator:
             constructor_max_args: Optional[int] = None
             methods: list[str] = []
             method_signatures: Dict[str, Dict[str, Any]] = {}
-            bases = [self._ast_name(base) for base in node.bases]
+            bases = [ast_name(base) for base in node.bases]
             is_enum = any(base.endswith("Enum") for base in bases)
             is_dataclass = self._has_dataclass_decorator(node)
 
@@ -3269,7 +3269,7 @@ class Orchestrator:
         for child in ast.walk(node):
             if not isinstance(child, ast.Call):
                 continue
-            constructor_name = self._ast_name(child.func)
+            constructor_name = ast_name(child.func)
             if not constructor_name:
                 continue
             for keyword in child.keywords:
@@ -3343,7 +3343,7 @@ class Orchestrator:
         try:
             return ast.unparse(rendered_expression).strip()
         except Exception:  # pragma: no cover - ast.unparse is available on supported versions
-            return self._ast_name(rendered_expression)
+            return ast_name(rendered_expression)
 
     def _inline_score_helper_expression(
         self,
@@ -3432,7 +3432,7 @@ class Orchestrator:
         first_parameter = self._first_user_parameter(node)
         if first_parameter is None:
             return ""
-        annotation = self._ast_name(first_parameter.annotation) if first_parameter.annotation is not None else ""
+        annotation = ast_name(first_parameter.annotation) if first_parameter.annotation is not None else ""
         if self._annotation_accepts_sequence_input(annotation):
             return f"{node.name} accepts sequence inputs via parameter `{first_parameter.arg}`"
         if self._parameter_is_iterated(node, first_parameter.arg):
@@ -3737,14 +3737,14 @@ class Orchestrator:
         if isinstance(node, ast.Name):
             return [node.id]
         if isinstance(node, ast.Attribute):
-            return [self._ast_name(node)]
+            return [ast_name(node)]
         if isinstance(node, ast.Tuple):
             names: list[str] = []
             for elt in node.elts:
                 if isinstance(elt, ast.Name):
                     names.append(elt.id)
                 elif isinstance(elt, ast.Attribute):
-                    names.append(self._ast_name(elt))
+                    names.append(ast_name(elt))
             return names
         return []
 
@@ -3890,7 +3890,7 @@ class Orchestrator:
         analysis["fixture_count"] = sum(
             1
             for stmt in tree.body
-            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and self._is_pytest_fixture(stmt)
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and is_pytest_fixture(stmt)
         )
 
         imported_symbols: set[str] = set()
@@ -3911,7 +3911,7 @@ class Orchestrator:
                 for alias in node.names:
                     imported_symbols.add(alias.asname or alias.name)
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if self._is_pytest_fixture(node):
+                if is_pytest_fixture(node):
                     defined_fixtures.add(node.name)
                     undefined_local_names.update(
                         self._collect_undefined_local_names(node, module_defined_names)
@@ -4397,7 +4397,7 @@ class Orchestrator:
         if isinstance(field_value, ast.Set):
             return "set"
         if isinstance(field_value, ast.Call):
-            func_name = self._ast_name(field_value.func)
+            func_name = ast_name(field_value.func)
             if func_name in ("dict", "list", "set", "tuple", "str", "int", "float", "bool"):
                 return func_name
         return ""
@@ -4954,7 +4954,7 @@ class Orchestrator:
         keyword_only_params = [arg.arg for arg in keyword_only_args]
         params = [*positional_params, *keyword_only_params]
         param_annotations = [
-            self._ast_name(arg.annotation) if arg.annotation is not None else None
+            ast_name(arg.annotation) if arg.annotation is not None else None
             for arg in [*positional_args, *keyword_only_args]
         ]
         optional_positional = len(node.args.defaults)
@@ -4970,13 +4970,13 @@ class Orchestrator:
             "min_args": min_args,
             "max_args": max_args,
             "accepts_sequence_input": accepts_sequence_input,
-            "return_annotation": self._ast_name(node.returns) if node.returns is not None else None,
+            "return_annotation": ast_name(node.returns) if node.returns is not None else None,
         }
 
     def _method_binding_kind(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
         for decorator in node.decorator_list:
             target = decorator.func if isinstance(decorator, ast.Call) else decorator
-            decorator_name = self._ast_name(target).split(".")[-1]
+            decorator_name = ast_name(target).split(".")[-1]
             if decorator_name == "staticmethod":
                 return "static"
             if decorator_name == "classmethod":
@@ -5525,37 +5525,6 @@ class Orchestrator:
                 )
 
         return violations
-
-    def _is_pytest_fixture(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-        for decorator in node.decorator_list:
-            if isinstance(decorator, ast.Name) and decorator.id == "fixture":
-                return True
-            if isinstance(decorator, ast.Attribute) and decorator.attr == "fixture":
-                return True
-            if isinstance(decorator, ast.Call):
-                func = decorator.func
-                if isinstance(func, ast.Name) and func.id == "fixture":
-                    return True
-                if isinstance(func, ast.Attribute) and func.attr == "fixture":  # pragma: no branch
-                    return True
-        return False
-
-    def _ast_name(self, node: ast.AST) -> str:
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Attribute):
-            return f"{self._ast_name(node.value)}.{node.attr}"
-        if isinstance(node, ast.Subscript):
-            value_name = self._ast_name(node.value)
-            slice_name = self._ast_name(node.slice)
-            if value_name and slice_name:
-                return f"{value_name}[{slice_name}]"
-            return value_name
-        if isinstance(node, ast.Tuple):
-            return ", ".join(filter(None, (self._ast_name(element) for element in node.elts)))
-        if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float, bool)):
-            return str(node.value)
-        return ""
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
         context = self._build_context(task, project)

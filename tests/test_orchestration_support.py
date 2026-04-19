@@ -8,7 +8,7 @@ import pytest
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
-from kycortex_agents.orchestration.ast_tools import AstNameReplacer
+from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
@@ -488,6 +488,16 @@ def test_output_helpers_normalize_and_restore_unredacted_results_directly():
 
 	assert unredacted_agent_result(FakeAgent(), structured).summary == "unredacted"
 	assert unredacted_agent_result(object(), structured) is structured
+
+
+def test_ast_tools_render_names_and_detect_pytest_fixtures_directly():
+	node = ast.Attribute(value=ast.Attribute(value=ast.Name("pkg"), attr="module"), attr="Class")
+	assert ast_name(node) == "pkg.module.Class"
+	assert ast_name(ast.Constant("x")) == "x"
+
+	fixture_function = ast.parse("@pytest.fixture\ndef sample():\n    return 1\n").body[0]
+	assert isinstance(fixture_function, ast.FunctionDef)
+	assert is_pytest_fixture(fixture_function) is True
 
 
 def test_workflow_acceptance_helpers_build_lists_and_zero_budget_safety_directly():

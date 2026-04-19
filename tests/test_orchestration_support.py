@@ -156,8 +156,10 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	infer_expression_type,
 	is_mock_factory_call,
 	is_patch_call,
+	payload_argument_for_validation,
 	patched_target_name_from_call,
 	resolve_bound_value,
+	validate_batch_call,
 	with_uses_pytest_assertion_context,
 	with_uses_pytest_raises,
 )
@@ -549,6 +551,22 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 		["Request.invalid (line 7)", "Service.missing (line 5)"],
 		["Service.range_fetch expects 1-2 args but test uses 3 at line 6"],
 	)
+
+	validation_call = ast.parse("validate_request(payload)", mode="eval").body
+	keyword_batch_call = ast.parse("process_batch(payload=batch)", mode="eval").body
+	batch_call = ast.fix_missing_locations(
+		ast.Call(func=ast.Name("process_batch"), args=[ast.Name("items")], keywords=[])
+	)
+	assert isinstance(validation_call, ast.Call)
+	assert isinstance(keyword_batch_call, ast.Call)
+	assert isinstance(payload_argument_for_validation(validation_call, "validate_request"), ast.Name)
+	assert isinstance(payload_argument_for_validation(keyword_batch_call, "process_batch"), ast.Name)
+	assert validate_batch_call(
+		batch_call,
+		{"items": ast.List(elts=[ast.Dict(keys=[ast.Constant("name")], values=[ast.Constant("Ada")])])},
+		"process_batch",
+		{"fields": ["name", "email"], "request_key": None, "wrapper_key": None},
+	) == ["process_batch batch item missing required fields: email at line 1"]
 
 
 def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():

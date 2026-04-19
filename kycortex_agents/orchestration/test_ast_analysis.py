@@ -601,6 +601,72 @@ def analyze_typed_test_member_usage(
     return sorted(invalid_member_refs), sorted(call_arity_mismatches)
 
 
+def payload_argument_for_validation(node: ast.Call, callable_name: str) -> Optional[ast.expr]:
+    if callable_name == "validate_request":
+        return first_call_argument(node)
+    if len(node.args) >= 2:
+        return node.args[1]
+    if node.keywords:
+        for keyword in node.keywords:
+            if keyword.arg in {"data", "payload", "request", "item"}:
+                return keyword.value
+    return first_call_argument(node)
+
+
+def validate_batch_call(
+    node: ast.Call,
+    bindings: Dict[str, ast.AST],
+    callable_name: str,
+    batch_rule: Dict[str, Any],
+) -> list[str]:
+    violations: list[str] = []
+    batch_arg = first_call_argument(node)
+    batch_items = extract_literal_list_items(batch_arg, bindings)
+    if batch_items is None:
+        return violations
+
+    required_fields = batch_rule.get("fields") or []
+    request_key = batch_rule.get("request_key")
+    wrapper_key = batch_rule.get("wrapper_key")
+    for item in batch_items:
+        resolved_item = resolve_bound_value(item, bindings)
+        if not isinstance(resolved_item, ast.Dict):
+            violations.append(
+                f"{callable_name} expects dict-like batch items, but test uses {type(resolved_item).__name__} at line {getattr(item, 'lineno', node.lineno)}"
+            )
+            continue
+
+        item_keys = extract_literal_dict_keys(resolved_item, bindings) or set()
+        if request_key and request_key not in item_keys:
+            violations.append(
+                f"{callable_name} batch item missing required key: {request_key} at line {getattr(item, 'lineno', node.lineno)}"
+            )
+        if wrapper_key:
+            nested_keys = extract_literal_dict_keys(
+                ast.Subscript(value=resolved_item, slice=ast.Constant(value=wrapper_key)),
+                bindings,
+            )
+            if nested_keys is None:
+                violations.append(
+                    f"{callable_name} batch item missing nested payload `{wrapper_key}` at line {getattr(item, 'lineno', node.lineno)}"
+                )
+                continue
+            missing_nested_fields = [field for field in required_fields if field not in nested_keys]
+            if missing_nested_fields:
+                violations.append(
+                    f"{callable_name} batch item nested `{wrapper_key}` missing required fields: {', '.join(missing_nested_fields)} at line {getattr(item, 'lineno', node.lineno)}"
+                )
+            continue
+
+        missing_fields = [field for field in required_fields if field not in item_keys]
+        if missing_fields:
+            violations.append(
+                f"{callable_name} batch item missing required fields: {', '.join(missing_fields)} at line {getattr(item, 'lineno', node.lineno)}"
+            )
+
+    return violations
+
+
 def collect_module_defined_names(tree: ast.AST) -> set[str]:
     if not isinstance(tree, ast.Module):
         return set()
@@ -711,8 +777,10 @@ __all__ = [
     "is_patch_call",
     "iter_relevant_test_body_nodes",
     "known_type_allows_member",
+    "payload_argument_for_validation",
     "patched_target_name_from_call",
     "resolve_bound_value",
+    "validate_batch_call",
     "with_uses_pytest_assertion_context",
     "with_uses_pytest_raises",
     "supports_mock_assertion_target",

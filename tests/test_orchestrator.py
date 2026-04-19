@@ -18,11 +18,16 @@ from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientErr
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration import (
     ast_name,
+    attribute_chain,
     build_code_validation_summary,
     build_dependency_validation_summary,
     build_repair_focus_lines,
     build_test_validation_summary,
+    callable_name,
+    expression_root_name,
+    first_call_argument,
     is_pytest_fixture,
+    render_expression,
     semantic_output_key,
     summarize_output,
     validate_agent_resolution,
@@ -3819,15 +3824,18 @@ def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(t
     bindings = orchestrator._collect_local_bindings(function_node)
 
     assert isinstance(bindings["payload"], ast.Dict)
-    assert orchestrator._callable_name(call_nodes[0]) == "validate_request"
-    assert orchestrator._callable_name(call_nodes[1]) == "process_request"
-    assert orchestrator._callable_name(ast.Call(func=ast.Lambda(args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]), body=ast.Constant(None)), args=[], keywords=[])) == ""
-    assert isinstance(orchestrator._first_call_argument(call_nodes[1]), ast.Constant)
-    first_keyword_arg = orchestrator._first_call_argument(
+    assert callable_name(call_nodes[0]) == "validate_request"
+    assert callable_name(call_nodes[1]) == "process_request"
+    assert callable_name(ast.Call(func=ast.Lambda(args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]), body=ast.Constant(None)), args=[], keywords=[])) == ""
+    assert isinstance(first_call_argument(call_nodes[1]), ast.Constant)
+    first_keyword_arg = first_call_argument(
         ast.Call(func=ast.Name("process_request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Name("payload"))])
     )
     assert isinstance(first_keyword_arg, ast.Name)
     assert first_keyword_arg.id == "payload"
+    assert attribute_chain(call_nodes[0].func) == "service.validate_request"
+    assert expression_root_name(call_nodes[0].func) == "service"
+    assert render_expression(call_nodes[0]) == "service.validate_request(payload)"
     assert isinstance(orchestrator._payload_argument_for_validation(call_nodes[0], "validate_request"), ast.Name)
     assert isinstance(orchestrator._payload_argument_for_validation(call_nodes[1], "process_request"), ast.Name)
     keyword_only_call = ast.Call(func=ast.Name("process_request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Name("payload"))])

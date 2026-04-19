@@ -23,7 +23,16 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
-from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
+from kycortex_agents.orchestration.ast_tools import (
+    AstNameReplacer,
+    ast_name,
+    attribute_chain,
+    callable_name,
+    expression_root_name,
+    first_call_argument,
+    is_pytest_fixture,
+    render_expression,
+)
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
@@ -2104,7 +2113,7 @@ class Orchestrator:
             if field_keyword is not None and self._ast_is_empty_literal(field_keyword.value):
                 return rendered_call, False
 
-            class_name = self._callable_name(call)
+            class_name = callable_name(call)
             if field_keyword is None and class_name and self._class_field_uses_empty_default(
                 failed_artifact_content,
                 class_name,
@@ -4162,8 +4171,8 @@ class Orchestrator:
             for child in ast.walk(node):
                 if not isinstance(child, ast.Call):
                     continue
-                callable_name = self._callable_name(child)
-                if not callable_name:
+                called_name = callable_name(child)
+                if not called_name:
                     continue
                 negative_expectation = self._call_has_negative_expectation(child, parent_map)
                 invalid_outcome_expectation = negative_expectation or self._call_expects_invalid_outcome(
@@ -4172,18 +4181,18 @@ class Orchestrator:
                     parent_map,
                 )
 
-                if callable_name in validation_rules:
-                    payload_arg = self._payload_argument_for_validation(child, callable_name)
+                if called_name in validation_rules:
+                    payload_arg = self._payload_argument_for_validation(child, called_name)
                     payload_node = self._resolve_bound_value(payload_arg, bindings)
                     payload_keys = self._extract_literal_dict_keys(payload_node, bindings, class_map)
                     if payload_keys is not None:
-                        missing_fields = [field for field in validation_rules[callable_name] if field not in payload_keys]
+                        missing_fields = [field for field in validation_rules[called_name] if field not in payload_keys]
                         if missing_fields and not invalid_outcome_expectation:  # pragma: no branch
                             payload_violations.add(
-                                f"{callable_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
+                                f"{called_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
                             )
 
-                if callable_name in field_value_rules:
+                if called_name in field_value_rules:
                     payload_arg = self._payload_argument_for_validation(child, callable_name)
                     payload_node = self._resolve_bound_value(payload_arg, bindings)
                     for field_name, allowed_values in field_value_rules[callable_name].items():
@@ -4214,7 +4223,7 @@ class Orchestrator:
                     continue
 
                 if callable_name in function_names and "batch" not in callable_name:
-                    sequence_arg = self._first_call_argument(child)
+                    sequence_arg = first_call_argument(child)
                     sequence_node = self._resolve_bound_value(sequence_arg, bindings)
                     if isinstance(sequence_node, ast.List):
                         non_batch_calls.add(
@@ -4344,13 +4353,13 @@ class Orchestrator:
             for child in ast.walk(node):
                 if not isinstance(child, ast.Call):
                     continue
-                callable_name = self._callable_name(child)
-                if not callable_name or callable_name not in type_constraint_rules:
+                called_name = callable_name(child)
+                if not called_name or called_name not in type_constraint_rules:
                     continue
                 if self._call_has_negative_expectation(child, parent_map):
                     continue
-                constraints = type_constraint_rules[callable_name]
-                payload_arg = self._payload_argument_for_validation(child, callable_name)
+                constraints = type_constraint_rules[called_name]
+                payload_arg = self._payload_argument_for_validation(child, called_name)
                 payload_node = self._resolve_bound_value(payload_arg, bindings)
                 for field_name, allowed_types in constraints.items():
                     observed_type = self._infer_argument_type(
@@ -4429,7 +4438,7 @@ class Orchestrator:
         parent_map: Dict[ast.AST, ast.AST],
     ) -> bool:
         result_name = self._assigned_name_for_call(call_node, parent_map)
-        payload_arg = self._first_call_argument(call_node)
+        payload_arg = first_call_argument(call_node)
         payload_name = payload_arg.id if isinstance(payload_arg, ast.Name) else None
 
         for child in ast.walk(test_node):
@@ -4508,7 +4517,7 @@ class Orchestrator:
         bindings: Dict[str, ast.AST],
         parent_map: Dict[ast.AST, ast.AST],
     ) -> bool:
-        batch_items = self._extract_literal_list_items(self._first_call_argument(call_node), bindings)
+        batch_items = self._extract_literal_list_items(first_call_argument(call_node), bindings)
         if batch_items is None or len(batch_items) <= 1:
             return False
 
@@ -4703,10 +4712,10 @@ class Orchestrator:
         for child in ast.walk(node):
             if not isinstance(child, ast.Call):
                 continue
-            callable_name = self._callable_name(child)
-            if not callable_name or callable_name == "len":
+            called_name = callable_name(child)
+            if not called_name or called_name == "len":
                 continue
-            if "batch" in callable_name.lower():
+            if "batch" in called_name.lower():
                 continue
             return True
         return False
@@ -4724,13 +4733,13 @@ class Orchestrator:
             if compared_value is None:
                 return None
             left_call = cast(ast.Call, left)
-            return self._render_expression(left_call.args[0]), compared_value
+            return render_expression(left_call.args[0]), compared_value
         if self._is_len_call(right):
             compared_value = self._int_constant_value(left)
             if compared_value is None:
                 return None
             right_call = cast(ast.Call, right)
-            return self._render_expression(right_call.args[0]), compared_value
+            return render_expression(right_call.args[0]), compared_value
         return None
 
     def _is_len_call(self, node: ast.AST) -> bool:
@@ -4765,8 +4774,8 @@ class Orchestrator:
             context_expr = item.context_expr
             if not isinstance(context_expr, ast.Call):
                 continue
-            callable_name = self._callable_name(context_expr)
-            if callable_name == "raises":
+            called_name = callable_name(context_expr)
+            if called_name == "raises":
                 return True
         return False
 
@@ -4775,8 +4784,8 @@ class Orchestrator:
             context_expr = item.context_expr
             if not isinstance(context_expr, ast.Call):
                 continue
-            callable_name = self._callable_name(context_expr)
-            if callable_name in {"raises", "warns", "deprecated_call"}:
+            called_name = callable_name(context_expr)
+            if called_name in {"raises", "warns", "deprecated_call"}:
                 return True
         return False
 
@@ -5069,7 +5078,7 @@ class Orchestrator:
                 continue
             if self._supports_mock_assertion_target(target_node, mock_bindings, patched_targets):
                 continue
-            issues.add(f"{self._render_expression(child)} (line {getattr(child, 'lineno', '?')})")
+            issues.add(f"{render_expression(child)} (line {getattr(child, 'lineno', '?')})")
 
         return sorted(issues)
 
@@ -5122,8 +5131,8 @@ class Orchestrator:
         mock_bindings: set[str],
         patched_targets: set[str],
     ) -> bool:
-        target_name = self._attribute_chain(node)
-        root_name = self._expression_root_name(node)
+        target_name = attribute_chain(node)
+        root_name = expression_root_name(node)
         if root_name and (root_name in mock_bindings or root_name.startswith("mock")):
             return True
         if target_name and target_name in patched_targets:
@@ -5154,7 +5163,7 @@ class Orchestrator:
     def _is_mock_factory_call(self, node: ast.AST) -> bool:
         if not isinstance(node, ast.Call):
             return False
-        callable_name = self._attribute_chain(node.func)
+        callable_name = attribute_chain(node.func)
         if not callable_name:
             return False
         return callable_name in {"Mock", "MagicMock", "AsyncMock", "create_autospec"} or any(
@@ -5170,7 +5179,7 @@ class Orchestrator:
     def _is_patch_call(self, node: ast.AST) -> bool:
         if not isinstance(node, ast.Call):
             return False
-        callable_name = self._attribute_chain(node.func)
+        callable_name = attribute_chain(node.func)
         if not callable_name:
             return False
         return (
@@ -5181,7 +5190,7 @@ class Orchestrator:
         )
 
     def _patched_target_name_from_call(self, node: ast.Call) -> Optional[str]:
-        callable_name = self._attribute_chain(node.func)
+        callable_name = attribute_chain(node.func)
         if not callable_name:
             return None
         if callable_name == "patch.object" or callable_name.endswith(".patch.object"):
@@ -5193,7 +5202,7 @@ class Orchestrator:
                         target_node = keyword.value
                     elif keyword.arg in {"attribute", "name", "attr"}:
                         attribute_node = keyword.value
-            target_name = self._attribute_chain(target_node) if target_node is not None else ""
+            target_name = attribute_chain(target_node) if target_node is not None else ""
             if (
                 target_name
                 and isinstance(attribute_node, ast.Constant)
@@ -5201,7 +5210,7 @@ class Orchestrator:
             ):
                 return f"{target_name}.{attribute_node.value}"
             return None
-        target_node = self._first_call_argument(node)
+        target_node = first_call_argument(node)
         if isinstance(target_node, ast.Constant) and isinstance(target_node.value, str):
             return target_node.value
         return None
@@ -5310,61 +5319,16 @@ class Orchestrator:
             return names
         return set()
 
-    def _callable_name(self, node: ast.Call) -> str:
-        if isinstance(node.func, ast.Name):
-            return node.func.id
-        if isinstance(node.func, ast.Attribute):
-            return node.func.attr
-        return ""
-
-    def _attribute_chain(self, node: Optional[ast.AST]) -> str:
-        if node is None:
-            return ""
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Attribute):
-            base = self._attribute_chain(node.value)
-            return f"{base}.{node.attr}" if base else node.attr
-        if isinstance(node, ast.Call):
-            base = self._attribute_chain(node.func)
-            return f"{base}()" if base else ""
-        return ""
-
-    def _expression_root_name(self, node: ast.AST) -> Optional[str]:
-        current = node
-        while isinstance(current, ast.Attribute):
-            current = current.value
-        if isinstance(current, ast.Call):
-            current = current.func
-            while isinstance(current, ast.Attribute):
-                current = current.value
-        if isinstance(current, ast.Name):
-            return current.id
-        return None
-
-    def _render_expression(self, node: ast.AST) -> str:
-        try:
-            return ast.unparse(node)
-        except Exception:  # pragma: no cover - ast.unparse is available on supported versions
-            return self._attribute_chain(node) or node.__class__.__name__
-
-    def _first_call_argument(self, node: ast.Call) -> Optional[ast.expr]:
-        if node.args:
-            return node.args[0]
-        if node.keywords:
-            return node.keywords[0].value
-        return None
-
     def _payload_argument_for_validation(self, node: ast.Call, callable_name: str) -> Optional[ast.expr]:
         if callable_name == "validate_request":
-            return self._first_call_argument(node)
+            return first_call_argument(node)
         if len(node.args) >= 2:
             return node.args[1]
         if node.keywords:
             for keyword in node.keywords:
                 if keyword.arg in {"data", "payload", "request", "item"}:
                     return keyword.value
-        return self._first_call_argument(node)
+        return first_call_argument(node)
 
     def _resolve_bound_value(
         self,
@@ -5480,7 +5444,7 @@ class Orchestrator:
         batch_rule: Dict[str, Any],
     ) -> list[str]:
         violations: list[str] = []
-        batch_arg = self._first_call_argument(node)
+        batch_arg = first_call_argument(node)
         batch_items = self._extract_literal_list_items(batch_arg, bindings)
         if batch_items is None:
             return violations

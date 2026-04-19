@@ -9,7 +9,16 @@ import pytest
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
-from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
+from kycortex_agents.orchestration.ast_tools import (
+	AstNameReplacer,
+	ast_name,
+	attribute_chain,
+	callable_name,
+	expression_root_name,
+	first_call_argument,
+	is_pytest_fixture,
+	render_expression,
+)
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
@@ -586,6 +595,14 @@ def test_ast_tools_render_names_and_detect_pytest_fixtures_directly():
 	fixture_function = ast.parse("@pytest.fixture\ndef sample():\n    return 1\n").body[0]
 	assert isinstance(fixture_function, ast.FunctionDef)
 	assert is_pytest_fixture(fixture_function) is True
+
+	call_node = ast.Call(func=ast.Attribute(value=ast.Name("service"), attr="validate_request"), args=[ast.Constant("payload")], keywords=[])
+	keyword_only_call = ast.Call(func=ast.Name("process_request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Name("payload"))])
+	assert callable_name(call_node) == "validate_request"
+	assert attribute_chain(call_node.func) == "service.validate_request"
+	assert expression_root_name(call_node.func) == "service"
+	assert render_expression(call_node) == "service.validate_request('payload')"
+	assert isinstance(first_call_argument(keyword_only_call), ast.Name)
 
 
 def test_workflow_acceptance_helpers_build_lists_and_zero_budget_safety_directly():

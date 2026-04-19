@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ast
 import copy
-from typing import Mapping
+from typing import Mapping, Optional
 
 
 class AstNameReplacer(ast.NodeTransformer):
@@ -51,3 +51,53 @@ def is_pytest_fixture(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
             if isinstance(func, ast.Attribute) and func.attr == "fixture":  # pragma: no branch
                 return True
     return False
+
+
+def callable_name(node: ast.Call) -> str:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return ""
+
+
+def attribute_chain(node: Optional[ast.AST]) -> str:
+    if node is None:
+        return ""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = attribute_chain(node.value)
+        return f"{base}.{node.attr}" if base else node.attr
+    if isinstance(node, ast.Call):
+        base = attribute_chain(node.func)
+        return f"{base}()" if base else ""
+    return ""
+
+
+def expression_root_name(node: ast.AST) -> Optional[str]:
+    current = node
+    while isinstance(current, ast.Attribute):
+        current = current.value
+    if isinstance(current, ast.Call):
+        current = current.func
+        while isinstance(current, ast.Attribute):
+            current = current.value
+    if isinstance(current, ast.Name):
+        return current.id
+    return None
+
+
+def render_expression(node: ast.AST) -> str:
+    try:
+        return ast.unparse(node)
+    except Exception:  # pragma: no cover - ast.unparse is available on supported versions
+        return attribute_chain(node) or node.__class__.__name__
+
+
+def first_call_argument(node: ast.Call) -> Optional[ast.expr]:
+    if node.args:
+        return node.args[0]
+    if node.keywords:
+        return node.keywords[0].value
+    return None

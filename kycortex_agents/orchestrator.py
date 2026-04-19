@@ -134,6 +134,7 @@ from kycortex_agents.orchestration.workflow_control import (
     skip_task,
     task_id_collection_count,
     task_id_count_log_field_name,
+    validate_agent_resolution,
 )
 from kycortex_agents.providers.base import (
     redact_sensitive_data,
@@ -5598,13 +5599,6 @@ class Orchestrator:
             return agent.run_with_input(agent_input)
         return agent.run(agent_input.task_description, agent_input.context)
 
-    def _validate_agent_resolution(self, project: ProjectState) -> None:
-        for task in project.tasks:
-            if not self.registry.has(task.assigned_to):
-                raise AgentExecutionError(
-                    f"Task '{task.id}' is assigned to unknown agent '{task.assigned_to}'"
-                )
-
     def _task_acceptance_lists(self, project: ProjectState, acceptance_policy: str) -> TaskAcceptanceLists:
         if acceptance_policy == "required_tasks":
             evaluated_tasks = [task for task in project.tasks if task.required_for_acceptance]
@@ -5696,7 +5690,7 @@ class Orchestrator:
         if self._exit_if_workflow_cancelled(project):
             return
         project.execution_plan()
-        self._validate_agent_resolution(project)
+        validate_agent_resolution(self.registry, project)
         project.repair_max_cycles = self.config.workflow_max_repair_cycles
         resumed_task_ids = project.resume_interrupted_tasks()
         failed_task_ids = self._failed_task_ids_for_repair(project)

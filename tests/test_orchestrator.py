@@ -23,6 +23,7 @@ from kycortex_agents.orchestration import (
     build_test_validation_summary,
     semantic_output_key,
     summarize_output,
+    validate_agent_resolution,
 )
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
@@ -5748,7 +5749,7 @@ def test_validate_agent_resolution_accepts_known_registry(tmp_path):
     project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
     orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": RecordingAgent("ok")}))
 
-    assert orchestrator._validate_agent_resolution(project) is None
+    assert validate_agent_resolution(orchestrator.registry, project) is None
 
 
 def test_execute_workflow_marks_failed_when_runnable_tasks_raise_definition_error(tmp_path, monkeypatch):

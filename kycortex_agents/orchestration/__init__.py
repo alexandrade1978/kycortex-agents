@@ -139,6 +139,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	skip_task,
 	task_id_collection_count,
 	task_id_count_log_field_name,
+	validate_agent_resolution,
 )
 
 __all__ = [
@@ -238,6 +239,7 @@ __all__ = [
 	"validation_summary_has_required_evidence_runtime_issue",
 	"task_id_collection_count",
 	"task_id_count_log_field_name",
+	"validate_agent_resolution",
 	"task_exact_top_level_test_count",
 	"task_fixture_budget",
 	"task_line_budget",

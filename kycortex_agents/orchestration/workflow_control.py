@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional, cast
 
+from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
 from kycortex_agents.types import AgentOutput
@@ -193,3 +194,11 @@ def exit_if_workflow_cancelled(logger: Any, project: ProjectState) -> bool:
         terminal_outcome=project.terminal_outcome,
     )
     return True
+
+
+def validate_agent_resolution(registry: Any, project: ProjectState) -> None:
+    for task in project.tasks:
+        if not registry.has(task.assigned_to):
+            raise AgentExecutionError(
+                f"Task '{task.id}' is assigned to unknown agent '{task.assigned_to}'"
+            )

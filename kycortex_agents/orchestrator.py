@@ -49,11 +49,13 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     dict_accessed_keys_from_tree,
     direct_return_expression,
     example_from_default,
+    extract_batch_rule,
     extract_indirect_required_fields,
     extract_lookup_field_rules,
     extract_required_fields,
     extract_sequence_input_rule,
     extract_type_constraints,
+    extract_valid_literal_examples,
     field_selector_name,
     first_user_parameter,
     has_dataclass_decorator,
@@ -3470,86 +3472,14 @@ class Orchestrator:
 
     def _extract_valid_literal_examples(self, raw_content: str) -> Dict[str, str]:
         """Extract sample dict/list literals from top-level constant assignments."""
-        examples: Dict[str, str] = {}
-        try:
-            tree = ast.parse(raw_content)
-        except SyntaxError:
-            return examples
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
-                continue
-            target = node.targets[0]
-            if not isinstance(target, ast.Name):
-                continue
-            name_lower = target.id.lower()
-            if not any(
-                keyword in name_lower
-                for keyword in ("default", "sample", "example", "valid", "template")
-            ):
-                continue
-            if isinstance(node.value, (ast.Dict, ast.List)):
-                try:
-                    examples[target.id] = ast.unparse(node.value)
-                except Exception:
-                    pass
-        return examples
+        return extract_valid_literal_examples(raw_content)
 
     def _extract_batch_rule(
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
         validation_rules: Dict[str, list[str]],
     ) -> str:
-        if "batch" not in node.name:
-            return ""
-        for child in ast.walk(node):
-            if not isinstance(child, ast.For) or not isinstance(child.target, ast.Name):
-                continue
-            iter_var = child.target.id
-            for nested in ast.walk(child):
-                if not isinstance(nested, ast.Call):
-                    continue
-                callable_name = ""
-                if isinstance(nested.func, ast.Name):
-                    callable_name = nested.func.id
-                elif isinstance(nested.func, ast.Attribute):  # pragma: no branch
-                    callable_name = nested.func.attr
-                if callable_name != "intake_request":
-                    continue
-                required_fields = validation_rules.get(callable_name) or []
-                if len(nested.args) < 2:
-                    continue
-                payload_arg = nested.args[1]
-                request_id_arg = nested.args[0]
-                if isinstance(payload_arg, ast.Name) and payload_arg.id == iter_var:
-                    batch_fields = list(required_fields)
-                    if isinstance(request_id_arg, ast.Subscript) and isinstance(request_id_arg.slice, ast.Constant):
-                        request_key = request_id_arg.slice.value
-                        if isinstance(request_key, str):  # pragma: no branch
-                            batch_fields = [request_key, *batch_fields]
-                    if batch_fields:
-                        return (
-                            f"{node.name} expects each batch item to include: {', '.join(dict.fromkeys(batch_fields))}"
-                        )
-                if (
-                    isinstance(payload_arg, ast.Subscript)
-                    and isinstance(payload_arg.value, ast.Name)
-                    and payload_arg.value.id == iter_var
-                    and isinstance(payload_arg.slice, ast.Constant)
-                    and isinstance(payload_arg.slice.value, str)
-                ):
-                    wrapper_key = payload_arg.slice.value
-                    batch_fields = list(required_fields)
-                    if isinstance(request_id_arg, ast.Subscript) and isinstance(request_id_arg.slice, ast.Constant):
-                        request_key = request_id_arg.slice.value
-                        if isinstance(request_key, str):  # pragma: no branch
-                            return (
-                                f"{node.name} expects each batch item to include key `{request_key}` and nested `{wrapper_key}` fields: {', '.join(batch_fields)}"
-                            )
-                    if batch_fields:
-                        return (
-                            f"{node.name} expects nested `{wrapper_key}` fields: {', '.join(batch_fields)}"
-                        )
-        return ""
+        return extract_batch_rule(node, validation_rules)
 
     def _analyze_test_module(
         self,

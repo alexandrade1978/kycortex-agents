@@ -38,11 +38,13 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	dict_accessed_keys_from_tree,
 	direct_return_expression,
 	example_from_default,
+	extract_batch_rule,
 	extract_indirect_required_fields,
 	extract_lookup_field_rules,
 	extract_required_fields,
 	extract_sequence_input_rule,
 	extract_type_constraints,
+	extract_valid_literal_examples,
 	field_selector_name,
 	first_user_parameter,
 	has_dataclass_decorator,
@@ -668,6 +670,36 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 		"data": ["dict"],
 		"field": ["str", "int"],
 	}
+
+	literal_examples = extract_valid_literal_examples(
+		"DEFAULT_PROFILE = {'name': 'Ada'}\n"
+		"sample_items = ['one']\n"
+		"ignored_value = 3\n"
+	)
+	assert literal_examples == {
+		"DEFAULT_PROFILE": "{'name': 'Ada'}",
+		"sample_items": "['one']",
+	}
+	assert extract_valid_literal_examples("def broken(:\n    pass") == {}
+
+	batch_node = ast.parse(
+		"def process_batch(items):\n"
+		"    for item in items:\n"
+		"        intake_request(item['request_id'], item['payload'])\n"
+	).body[0]
+	assert isinstance(batch_node, ast.FunctionDef)
+	assert (
+		extract_batch_rule(batch_node, {"intake_request": ["name", "email"]})
+		== "process_batch expects each batch item to include key `request_id` and nested `payload` fields: name, email"
+	)
+
+	empty_batch_node = ast.parse(
+		"def process_items(items):\n"
+		"    for item in items:\n"
+		"        intake_request(item['request_id'], item)\n"
+	).body[0]
+	assert isinstance(empty_batch_node, ast.FunctionDef)
+	assert extract_batch_rule(empty_batch_node, {"intake_request": ["name"]}) == ""
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

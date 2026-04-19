@@ -68,8 +68,14 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_file_permissions,
 )
 from kycortex_agents.orchestration.repair_analysis import (
+	ast_is_empty_literal,
+	attribute_is_field_reference,
+	class_field_uses_empty_default,
+	compare_mentions_invalid_literal,
 	duplicate_constructor_explicit_rewrite_hint,
+	invalid_outcome_audit_return_details,
 	invalid_outcome_missing_audit_trail_details,
+	is_len_of_field_reference,
 	missing_import_nameerror_details,
 	missing_object_attribute_details,
 	nested_payload_wrapper_field_validation_details,
@@ -77,6 +83,8 @@ from kycortex_agents.orchestration.repair_analysis import (
 	render_name_list,
 	required_field_list_from_failed_artifact,
 	suggest_declared_attribute_replacement,
+	test_function_targets_invalid_path,
+	test_requires_non_empty_result_field,
 )
 from kycortex_agents.orchestration.repair_code_validation import (
 	build_code_validation_repair_lines,
@@ -1663,6 +1671,26 @@ def test_duplicate_constructor_rewrite_hint_and_invalid_audit_detection_work_dir
 	) == (
 		["test_validation_failure"],
 		"audit_log",
+		"TriageOutcome(outcome='invalid', risk_score=0.0)",
+		True,
+	)
+
+	invalid_assert = ast.parse("result.outcome == 'invalid'", mode="eval").body
+	assert isinstance(invalid_assert, ast.Compare)
+	assert compare_mentions_invalid_literal(invalid_assert) is True
+	invalid_test = ast.parse(
+		"def test_validation_failure():\n"
+		"    assert result.outcome == 'invalid'\n"
+		"    assert len(result.audit_log) > 0\n"
+	).body[0]
+	assert isinstance(invalid_test, ast.FunctionDef)
+	assert test_function_targets_invalid_path(invalid_test) is True
+	assert attribute_is_field_reference(ast.parse("result.audit_log", mode="eval").body, "audit_log") is True
+	assert is_len_of_field_reference(ast.parse("len(result.audit_log)", mode="eval").body, "audit_log") is True
+	assert test_requires_non_empty_result_field(invalid_test, "audit_log") is True
+	assert ast_is_empty_literal(ast.Dict(keys=[], values=[])) is True
+	assert class_field_uses_empty_default(invalid_path_code, "TriageOutcome", "audit_log") is True
+	assert invalid_outcome_audit_return_details(invalid_path_code, "audit_log") == (
 		"TriageOutcome(outcome='invalid', risk_score=0.0)",
 		True,
 	)

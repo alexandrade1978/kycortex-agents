@@ -337,6 +337,56 @@ def invalid_outcome_missing_audit_trail_details(
 	return matching_tests, field_name, invalid_return_call, omitted_field
 
 
+def compare_mentions_invalid_literal(node: ast.Compare) -> bool:
+	return _compare_mentions_invalid_literal(node)
+
+
+def test_function_targets_invalid_path(
+	node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+	return _test_function_targets_invalid_path(node)
+
+
+setattr(test_function_targets_invalid_path, "__test__", False)
+
+
+def attribute_is_field_reference(node: ast.AST, field_name: str) -> bool:
+	return _attribute_is_field_reference(node, field_name)
+
+
+def is_len_of_field_reference(node: ast.AST, field_name: str) -> bool:
+	return _is_len_of_field_reference(node, field_name)
+
+
+def test_requires_non_empty_result_field(
+	node: ast.FunctionDef | ast.AsyncFunctionDef,
+	field_name: str,
+) -> bool:
+	return _test_requires_non_empty_result_field(node, field_name)
+
+
+setattr(test_requires_non_empty_result_field, "__test__", False)
+
+
+def ast_is_empty_literal(node: ast.AST | None) -> bool:
+	return _ast_is_empty_literal(node)
+
+
+def class_field_uses_empty_default(
+	failed_artifact_content: object,
+	class_name: str,
+	field_name: str,
+) -> bool:
+	return _class_field_uses_empty_default(failed_artifact_content, class_name, field_name)
+
+
+def invalid_outcome_audit_return_details(
+	failed_artifact_content: object,
+	field_name: str,
+) -> Optional[tuple[str, bool]]:
+	return _invalid_outcome_audit_return_details(failed_artifact_content, field_name)
+
+
 def duplicate_constructor_argument_details(
 	validation_summary: object,
 ) -> Optional[tuple[str, str]]:

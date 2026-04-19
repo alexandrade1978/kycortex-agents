@@ -72,6 +72,10 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
+    ast_is_empty_literal,
+    attribute_is_field_reference,
+    class_field_uses_empty_default,
+    compare_mentions_invalid_literal,
     dataclass_default_order_repair_examples,
     class_field_annotations_from_failed_artifact,
     class_field_names_from_failed_artifact,
@@ -82,7 +86,9 @@ from kycortex_agents.orchestration.repair_analysis import (
     duplicate_constructor_explicit_rewrite_hint,
     first_non_import_line_with_name,
     internal_constructor_strictness_details,
+    invalid_outcome_audit_return_details,
     invalid_outcome_missing_audit_trail_details,
+    is_len_of_field_reference,
     missing_import_nameerror_details,
     missing_object_attribute_details,
     missing_required_constructor_details,
@@ -91,6 +97,8 @@ from kycortex_agents.orchestration.repair_analysis import (
     render_name_list,
     required_field_list_from_failed_artifact,
     suggest_declared_attribute_replacement,
+    test_function_targets_invalid_path,
+    test_requires_non_empty_result_field,
 )
 from kycortex_agents.orchestration.repair_signals import (
     content_has_bare_datetime_reference,
@@ -2019,40 +2027,22 @@ class Orchestrator:
 
     @staticmethod
     def _compare_mentions_invalid_literal(node: ast.Compare) -> bool:
-        values = [node.left, *node.comparators]
-        return any(
-            isinstance(value, ast.Constant)
-            and isinstance(value.value, str)
-            and value.value.strip().lower() == "invalid"
-            for value in values
-        )
+        return compare_mentions_invalid_literal(node)
 
     @classmethod
     def _test_function_targets_invalid_path(
         cls,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
     ) -> bool:
-        name_lower = node.name.lower()
-        if any(token in name_lower for token in ("invalid", "validation", "reject", "error", "failure")):
-            return True
-        for child in ast.walk(node):
-            if isinstance(child, ast.Compare) and cls._compare_mentions_invalid_literal(child):
-                return True
-        return False
+        return test_function_targets_invalid_path(node)
 
     @staticmethod
     def _attribute_is_field_reference(node: ast.AST, field_name: str) -> bool:
-        return isinstance(node, ast.Attribute) and node.attr == field_name
+        return attribute_is_field_reference(node, field_name)
 
     @classmethod
     def _is_len_of_field_reference(cls, node: ast.AST, field_name: str) -> bool:
-        return (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "len"
-            and len(node.args) == 1
-            and cls._attribute_is_field_reference(node.args[0], field_name)
-        )
+        return is_len_of_field_reference(node, field_name)
 
     @classmethod
     def _test_requires_non_empty_result_field(
@@ -2060,41 +2050,11 @@ class Orchestrator:
         node: ast.FunctionDef | ast.AsyncFunctionDef,
         field_name: str,
     ) -> bool:
-        for child in ast.walk(node):
-            if not isinstance(child, ast.Assert):
-                continue
-            test_expr = child.test
-            if cls._attribute_is_field_reference(test_expr, field_name):
-                return True
-            if not isinstance(test_expr, ast.Compare):
-                continue
-            if cls._is_len_of_field_reference(test_expr.left, field_name):
-                return True
-            if any(cls._is_len_of_field_reference(comparator, field_name) for comparator in test_expr.comparators):
-                return True
-            if cls._attribute_is_field_reference(test_expr.left, field_name) or any(
-                cls._attribute_is_field_reference(comparator, field_name)
-                for comparator in test_expr.comparators
-            ):
-                return True
-        return False
+        return test_requires_non_empty_result_field(node, field_name)
 
     @staticmethod
     def _ast_is_empty_literal(node: ast.AST | None) -> bool:
-        if node is None:
-            return False
-        if isinstance(node, ast.Constant):
-            return node.value in {"", None}
-        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-            return len(node.elts) == 0
-        if isinstance(node, ast.Dict):
-            return len(node.keys) == 0
-        if isinstance(node, ast.Call):
-            if node.args or node.keywords:
-                return False
-            if isinstance(node.func, ast.Name) and node.func.id in {"str", "list", "tuple", "set", "dict"}:
-                return True
-        return False
+        return ast_is_empty_literal(node)
 
     @classmethod
     def _class_field_uses_empty_default(
@@ -2103,65 +2063,14 @@ class Orchestrator:
         class_name: str,
         field_name: str,
     ) -> bool:
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return False
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return False
-
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef) or node.name != class_name:
-                continue
-            for statement in node.body:
-                if not isinstance(statement, ast.AnnAssign):
-                    continue
-                if isinstance(statement.target, ast.Name) and statement.target.id == field_name:
-                    return cls._ast_is_empty_literal(statement.value)
-            return False
-        return False
+        return class_field_uses_empty_default(failed_artifact_content, class_name, field_name)
 
     def _invalid_outcome_audit_return_details(
         self,
         failed_artifact_content: object,
         field_name: str,
     ) -> Optional[tuple[str, bool]]:
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return None
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return None
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Return) or not isinstance(node.value, ast.Call):
-                continue
-            call = node.value
-            outcome_keyword = next((keyword for keyword in call.keywords if keyword.arg == "outcome"), None)
-            if outcome_keyword is None:
-                continue
-            if not (
-                isinstance(outcome_keyword.value, ast.Constant)
-                and isinstance(outcome_keyword.value.value, str)
-                and outcome_keyword.value.value.strip().lower() == "invalid"
-            ):
-                continue
-
-            rendered_call = ast.unparse(call).strip()
-            field_keyword = next((keyword for keyword in call.keywords if keyword.arg == field_name), None)
-            if field_keyword is not None and self._ast_is_empty_literal(field_keyword.value):
-                return rendered_call, False
-
-            class_name = callable_name(call)
-            if field_keyword is None and class_name and self._class_field_uses_empty_default(
-                failed_artifact_content,
-                class_name,
-                field_name,
-            ):
-                return rendered_call, True
-        return None
+        return invalid_outcome_audit_return_details(failed_artifact_content, field_name)
 
     def _invalid_outcome_missing_audit_trail_details(
         self,

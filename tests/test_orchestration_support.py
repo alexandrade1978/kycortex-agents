@@ -199,6 +199,7 @@ from kycortex_agents.orchestration.task_constraints import (
 	parse_task_public_contract_surface,
 	should_compact_architecture_context,
 	task_public_contract_anchor,
+	task_public_contract_preflight,
 	task_exact_top_level_test_count,
 	task_fixture_budget,
 	task_line_budget,
@@ -2470,6 +2471,44 @@ def test_task_public_contract_anchor_extracts_bullets_and_indented_continuations
 		"- Required CLI entrypoint: main()"
 	)
 	assert task_public_contract_anchor("No anchor here") == ""
+
+
+def test_task_public_contract_preflight_reports_missing_surfaces_directly():
+	task = Task(
+		id="code",
+		title="Implementation",
+		description=(
+			"Build the service.\n\n"
+			"Public contract anchor:\n"
+			"- Public facade: ComplianceIntakeService\n"
+			"- Primary request model: ComplianceRequest(request_id, request_type)\n"
+			"- Required workflow: ComplianceIntakeService.handle_request(request)\n"
+		),
+		assigned_to="code_engineer",
+	)
+	code_analysis = {
+		"syntax_ok": True,
+		"classes": {
+			"ComplianceRequest": {
+				"constructor_params": ["request_id", "request_type"],
+				"constructor_min_args": 2,
+			},
+		},
+		"functions": [],
+		"has_main_guard": False,
+	}
+
+	preflight = task_public_contract_preflight(task, code_analysis)
+
+	assert preflight is not None
+	assert preflight["public_facade"] == "ComplianceIntakeService"
+	assert preflight["primary_request_model"] == "ComplianceRequest(request_id, request_type)"
+	assert preflight["required_surfaces"] == ["ComplianceIntakeService.handle_request(request)"]
+	assert preflight["issues"] == [
+		"missing public facade ComplianceIntakeService",
+		"missing required surface ComplianceIntakeService.handle_request",
+	]
+	assert preflight["passed"] is False
 
 
 def test_workflow_control_log_helpers_minimize_task_ids_directly():

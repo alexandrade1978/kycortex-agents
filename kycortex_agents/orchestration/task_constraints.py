@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.memory.project_state import Task
@@ -86,6 +86,104 @@ def task_public_contract_anchor(task_description: str) -> str:
             continue
         break
     return "\n".join(anchor_lines)
+
+
+def task_public_contract_preflight(
+    task: Optional[Task],
+    code_analysis: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    if task is None or not code_analysis.get("syntax_ok", True):
+        return None
+
+    anchor = task_public_contract_anchor(task.description)
+    if not anchor:
+        return None
+
+    class_map = code_analysis.get("classes") or {}
+    function_map = {
+        item["name"]: item
+        for item in code_analysis.get("functions") or []
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    issues: list[str] = []
+    public_facade = ""
+    primary_request_model = ""
+    required_surfaces: list[str] = []
+
+    for line in anchor.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+
+        label, separator, surface = stripped[2:].partition(":")
+        if not separator:
+            continue
+
+        normalized_label = label.strip().lower()
+        normalized_surface = surface.strip()
+        if not normalized_surface:
+            continue
+
+        if normalized_label == "public facade":
+            public_facade = normalized_surface
+            if normalized_surface not in class_map:
+                issues.append(f"missing public facade {normalized_surface}")
+            continue
+
+        if normalized_label == "primary request model":
+            primary_request_model = normalized_surface
+            _, model_name, expected_params = parse_task_public_contract_surface(normalized_surface)
+            class_info = class_map.get(model_name)
+            if not isinstance(class_info, dict):
+                issues.append(f"missing primary request model {model_name}")
+                continue
+
+            actual_params = list(class_info.get("constructor_params") or [])
+            min_required_params = class_info.get("constructor_min_args")
+            expected_prefix = actual_params[: len(expected_params)]
+            if expected_params and expected_prefix != expected_params:
+                issues.append(
+                    f"primary request model {model_name} must start with constructor fields ({', '.join(expected_params)})"
+                )
+                continue
+            if isinstance(min_required_params, int) and min_required_params > len(expected_params):
+                issues.append(
+                    f"primary request model {model_name} requires additional constructor fields beyond ({', '.join(expected_params)})"
+                )
+            continue
+
+        required_surfaces.append(normalized_surface)
+        owner_name, callable_name, expected_params = parse_task_public_contract_surface(normalized_surface)
+        if owner_name:
+            class_info = class_map.get(owner_name)
+            method_signatures = (class_info or {}).get("method_signatures") or {}
+            method_info = method_signatures.get(callable_name) if isinstance(method_signatures, dict) else None
+            if not isinstance(class_info, dict) or not isinstance(method_info, dict):
+                issues.append(f"missing required surface {owner_name}.{callable_name}")
+            continue
+
+        function_info = function_map.get(callable_name)
+        if not isinstance(function_info, dict):
+            issues.append(f"missing required surface {callable_name}")
+            continue
+        actual_params = list(function_info.get("params") or [])
+        if expected_params and actual_params[: len(expected_params)] != expected_params:
+            issues.append(
+                f"required surface {callable_name} must expose parameters ({', '.join(expected_params)})"
+            )
+            continue
+        if callable_name == "main" and "__main__" in normalized_surface and not code_analysis.get("has_main_guard", False):
+            issues.append("missing required surface main guard")
+
+    return {
+        "anchor_present": True,
+        "anchor": anchor,
+        "public_facade": public_facade,
+        "primary_request_model": primary_request_model,
+        "required_surfaces": required_surfaces,
+        "issues": issues,
+        "passed": not issues,
+    }
 
 
 def should_compact_architecture_context(

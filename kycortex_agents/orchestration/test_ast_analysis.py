@@ -52,17 +52,27 @@ def collect_parametrized_argument_names(
             or (isinstance(parent, ast.Name) and parent.id == "mark")
         ):
             continue
-        argnames_node = first_call_argument(decorator)
-        if isinstance(argnames_node, ast.Constant) and isinstance(argnames_node.value, str):
-            return {name.strip() for name in argnames_node.value.split(",") if name.strip()}
-        if isinstance(argnames_node, (ast.List, ast.Tuple)):
-            return {
-                element.value.strip()
-                for element in argnames_node.elts
-                if isinstance(element, ast.Constant)
-                and isinstance(element.value, str)
-                and element.value.strip()
-            }
+        return extract_parametrize_argument_names(decorator)
+    return set()
+
+
+def extract_parametrize_argument_names(decorator: ast.Call) -> set[str]:
+    argnames_node: Optional[ast.AST] = decorator.args[0] if decorator.args else None
+    if argnames_node is None:
+        for keyword in decorator.keywords:
+            if keyword.arg == "argnames":
+                argnames_node = keyword.value
+                break
+    if isinstance(argnames_node, ast.Constant) and isinstance(argnames_node.value, str):
+        return {name.strip() for name in argnames_node.value.split(",") if name.strip()}
+    if isinstance(argnames_node, (ast.List, ast.Tuple)):
+        return {
+            element.value.strip()
+            for element in argnames_node.elts
+            if isinstance(element, ast.Constant)
+            and isinstance(element.value, str)
+            and element.value.strip()
+        }
     return set()
 
 
@@ -342,6 +352,7 @@ __all__ = [
     "collect_parametrized_argument_names",
     "collect_test_local_types",
     "collect_undefined_local_names",
+    "extract_parametrize_argument_names",
     "find_unsupported_mock_assertions",
     "function_argument_names",
     "is_mock_factory_call",

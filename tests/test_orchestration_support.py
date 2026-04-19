@@ -100,6 +100,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	collect_parametrized_argument_names,
 	collect_test_local_types,
 	collect_undefined_local_names,
+	extract_parametrize_argument_names,
 	find_unsupported_mock_assertions,
 	function_argument_names,
 	is_mock_factory_call,
@@ -350,6 +351,13 @@ def test_test_ast_analysis_helpers_collect_parametrized_names_and_bindings_direc
 	assert collect_parametrized_argument_names(function_node) == {"item", "expected"}
 	bindings = collect_local_name_bindings(function_node)
 	assert {"item", "other_fixture", "expected", "first", "rest", "alias", "total", "log"}.issubset(bindings)
+	keyword_decorator = ast.parse(
+		"@pytest.mark.parametrize(argnames='left, right', argvalues=[(1, 2)])\n"
+		"def test_keyword(left, right):\n"
+		"    return left + right\n"
+	).body[0].decorator_list[0]
+	assert isinstance(keyword_decorator, ast.Call)
+	assert extract_parametrize_argument_names(keyword_decorator) == {"left", "right"}
 
 
 def test_test_ast_analysis_helpers_detect_undefined_names_patch_targets_and_mocks_directly():

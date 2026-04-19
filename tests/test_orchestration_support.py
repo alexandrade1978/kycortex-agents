@@ -8,7 +8,7 @@ import pytest
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
-from kycortex_agents.orchestration.agent_runtime import execute_agent
+from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
@@ -202,6 +202,63 @@ def test_execute_agent_prefers_execute_then_run_with_input_then_run_directly():
 	assert execute_agent(ExecuteAgent(), agent_input) == "execute"
 	assert execute_agent(RunWithInputAgent(), agent_input) == "run_with_input"
 	assert execute_agent(RunAgent(), agent_input) == "run"
+
+
+def test_build_agent_input_uses_repair_defaults_directly():
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	task = Task(
+		id="repair",
+		title="Repair architecture",
+		description="Repair the architecture",
+		assigned_to="architect",
+		repair_context={
+			"instruction": "",
+			"failure_category": "",
+			"failure_message": "   ",
+			"validation_summary": "   ",
+		},
+	)
+
+	agent_input = build_agent_input(task, project, {}, repair_focus_lines=[])
+
+	assert "Repair objective:" in agent_input.task_description
+	assert "Repair the previous failure." in agent_input.task_description
+	assert f"Previous failure category: {FailureCategory.UNKNOWN.value}" in agent_input.task_description
+	assert "Previous failure message:" not in agent_input.task_description
+	assert "Validation summary:" not in agent_input.task_description
+
+
+def test_build_agent_input_includes_source_failure_metadata_directly():
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	task = Task(
+		id="code",
+		title="Implementation",
+		description="Write code",
+		assigned_to="code_engineer",
+		repair_context={
+			"cycle": 1,
+			"failure_category": FailureCategory.CODE_VALIDATION.value,
+			"source_failure_task_id": "tests",
+			"source_failure_category": FailureCategory.TEST_VALIDATION.value,
+			"instruction": "Repair the generated Python module.",
+			"failure_message": "module import failed",
+			"validation_summary": "Generated test validation:\n- Verdict: FAIL",
+		},
+	)
+
+	agent_input = build_agent_input(
+		task,
+		project,
+		{"budget_decomposition_brief": "Stay within the budget."},
+		repair_focus_lines=["Repair the failing import first."],
+	)
+
+	assert "Source failure task: tests" in agent_input.task_description
+	assert "Source failure category: test_validation" in agent_input.task_description
+	assert "Previous failure message: module import failed" in agent_input.task_description
+	assert "Budget decomposition brief:" in agent_input.task_description
+	assert "Repair priorities:" in agent_input.task_description
+	assert "- Repair the failing import first." in agent_input.task_description
 
 
 def test_artifact_persistence_support_rejects_symlink_escape(tmp_path):

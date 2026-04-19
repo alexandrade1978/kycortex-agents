@@ -1,6 +1,6 @@
 """Internal orchestration support modules used to slim the Orchestrator facade."""
 
-from kycortex_agents.orchestration.agent_runtime import execute_agent
+from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
@@ -150,6 +150,7 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 
 __all__ = [
 	"execute_agent",
+	"build_agent_input",
 	"AstNameReplacer",
 	"ast_name",
 	"is_pytest_fixture",

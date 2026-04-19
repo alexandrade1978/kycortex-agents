@@ -79,7 +79,6 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
-    artifact_type_for_failure_category,
     ast_is_empty_literal,
     attribute_is_field_reference,
     class_field_uses_empty_default,
@@ -93,6 +92,7 @@ from kycortex_agents.orchestration.repair_analysis import (
     duplicate_constructor_argument_details,
     duplicate_constructor_explicit_rewrite_hint,
     failing_pytest_test_names,
+    failed_artifact_content_for_category,
     first_non_import_line_with_name,
     internal_constructor_strictness_details,
     invalid_outcome_audit_return_details,
@@ -1960,8 +1960,7 @@ class Orchestrator:
         return True
 
     def _failed_artifact_content_for_category(self, task: Task, failure_category: str) -> str:
-        artifact_type = artifact_type_for_failure_category(failure_category)
-        return self._failed_artifact_content(task, artifact_type)
+        return failed_artifact_content_for_category(task.output, task.output_payload, failure_category)
 
     def _configure_repair_attempts(self, project: ProjectState, failed_task_ids: list[str], cycle: Dict[str, Any]) -> None:
         planned_task_ids: set[str] = set()

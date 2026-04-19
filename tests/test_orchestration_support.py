@@ -82,6 +82,7 @@ from kycortex_agents.orchestration.repair_analysis import (
 	class_field_uses_empty_default,
 	compare_mentions_invalid_literal,
 	failing_pytest_test_names,
+	failed_artifact_content_for_category,
 	duplicate_constructor_explicit_rewrite_hint,
 	invalid_outcome_audit_return_details,
 	invalid_outcome_missing_audit_trail_details,
@@ -2714,6 +2715,19 @@ def test_repair_instruction_owner_mapping_directly():
 	assert artifact_type_for_failure_category(FailureCategory.TEST_VALIDATION.value) == ArtifactType.TEST
 	assert artifact_type_for_failure_category(FailureCategory.DEPENDENCY_VALIDATION.value) == ArtifactType.CONFIG
 	assert artifact_type_for_failure_category(FailureCategory.UNKNOWN.value) is None
+	assert failed_artifact_content_for_category(
+		"fallback",
+		{
+			"raw_content": "raw fallback",
+			"artifacts": [{"artifact_type": ArtifactType.CONFIG.value, "content": "requests>=2.0"}],
+		},
+		FailureCategory.DEPENDENCY_VALIDATION.value,
+	) == "requests>=2.0"
+	assert failed_artifact_content_for_category(
+		"fallback",
+		{"raw_content": "raw fallback", "artifacts": None},
+		FailureCategory.UNKNOWN.value,
+	) == "raw fallback"
 	assert task_id_collection_count(None) == 0
 	assert task_id_collection_count(3) is None
 	assert task_id_count_log_field_name("task_ids") == "task_count"

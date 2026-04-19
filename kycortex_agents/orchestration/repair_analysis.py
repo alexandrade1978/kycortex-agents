@@ -6,6 +6,7 @@ import ast
 import re
 from typing import Optional
 
+from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.types import ArtifactType, FailureCategory
 
 
@@ -17,6 +18,15 @@ def artifact_type_for_failure_category(failure_category: str) -> ArtifactType | 
 	if failure_category == FailureCategory.DEPENDENCY_VALIDATION.value:
 		return ArtifactType.CONFIG
 	return None
+
+
+def failed_artifact_content_for_category(
+	output: object,
+	output_payload: object,
+	failure_category: str,
+) -> str:
+	artifact_type = artifact_type_for_failure_category(failure_category)
+	return failed_artifact_content(output, output_payload, artifact_type)
 
 
 def first_non_import_line_with_name(content: object, symbol_name: str) -> str:

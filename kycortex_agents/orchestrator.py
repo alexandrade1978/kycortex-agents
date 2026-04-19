@@ -119,6 +119,7 @@ from kycortex_agents.orchestration.repair_signals import (
     validation_summary_has_required_evidence_runtime_issue,
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
+    failed_test_requires_code_repair,
     is_helper_alias_like_name,
     module_defined_symbol_names,
     normalized_helper_surface_symbols,
@@ -1378,41 +1379,13 @@ class Orchestrator:
         return fallback_message
 
     def _test_failure_requires_code_repair(self, task: Task) -> bool:
-        if AgentRegistry.normalize_key(task.assigned_to) != "qa_tester":
-            return False
-        if task.last_error_category != FailureCategory.TEST_VALIDATION.value:
-            return False
-
-        validation = self._validation_payload(task)
-        if not validation:
-            return False
-
-        test_execution = validation.get("test_execution")
-        if not isinstance(test_execution, dict):
-            return False
-        if not test_execution.get("ran") or test_execution.get("returncode") in (None, 0):
-            return False
-
-        failure_origin = validation.get("pytest_failure_origin")
-        if not isinstance(failure_origin, str) or not failure_origin:
-            failure_origin = self._pytest_failure_origin(
-                test_execution,
-                validation.get("module_filename") if isinstance(validation.get("module_filename"), str) else None,
-                validation.get("test_filename") if isinstance(validation.get("test_filename"), str) else None,
-            )
-
-        if failure_origin == "tests" and self._pytest_contract_overreach_signals(test_execution):
-            return False
-
-        if failure_origin == "code_under_test":
-            return True
-
-        if self._test_validation_has_blocking_issues(validation):
-            return False
-
-        return (
-            failure_origin == "tests"
-            and self._pytest_failure_is_semantic_assertion_mismatch(test_execution)
+        return failed_test_requires_code_repair(
+            task,
+            self._validation_payload(task),
+            pytest_failure_origin=self._pytest_failure_origin,
+            pytest_contract_overreach_signals=self._pytest_contract_overreach_signals,
+            test_validation_has_blocking_issues=self._test_validation_has_blocking_issues,
+            pytest_failure_is_semantic_assertion_mismatch=self._pytest_failure_is_semantic_assertion_mismatch,
         )
 
     def _upstream_code_task_for_test_failure(self, project: ProjectState, task: Task) -> Optional[Task]:

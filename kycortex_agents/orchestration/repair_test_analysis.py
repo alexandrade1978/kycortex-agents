@@ -1,10 +1,13 @@
 import ast
 from dataclasses import dataclass
 
+from kycortex_agents.agents.registry import AgentRegistry
+from kycortex_agents.memory.project_state import Task
 from kycortex_agents.orchestration.repair_signals import (
     validation_summary_has_missing_datetime_import_issue,
     validation_summary_has_required_evidence_runtime_issue,
 )
+from kycortex_agents.types import FailureCategory
 
 
 @dataclass(frozen=True)
@@ -120,6 +123,48 @@ def validation_summary_helper_alias_names(
         for name in undefined_names
         if name.lower() not in module_defined_symbols and is_helper_alias_like_name(name)
     ]
+
+
+def failed_test_requires_code_repair(
+    task: Task,
+    validation_payload: object,
+    *,
+    pytest_failure_origin,
+    pytest_contract_overreach_signals,
+    test_validation_has_blocking_issues,
+    pytest_failure_is_semantic_assertion_mismatch,
+) -> bool:
+    if AgentRegistry.normalize_key(task.assigned_to) != "qa_tester":
+        return False
+    if task.last_error_category != FailureCategory.TEST_VALIDATION.value:
+        return False
+    if not isinstance(validation_payload, dict) or not validation_payload:
+        return False
+
+    test_execution = validation_payload.get("test_execution")
+    if not isinstance(test_execution, dict):
+        return False
+    if not test_execution.get("ran") or test_execution.get("returncode") in (None, 0):
+        return False
+
+    failure_origin = validation_payload.get("pytest_failure_origin")
+    if not isinstance(failure_origin, str) or not failure_origin:
+        failure_origin = pytest_failure_origin(
+            test_execution,
+            validation_payload.get("module_filename") if isinstance(validation_payload.get("module_filename"), str) else None,
+            validation_payload.get("test_filename") if isinstance(validation_payload.get("test_filename"), str) else None,
+        )
+
+    if failure_origin == "tests" and pytest_contract_overreach_signals(test_execution):
+        return False
+
+    if failure_origin == "code_under_test":
+        return True
+
+    if test_validation_has_blocking_issues(validation_payload):
+        return False
+
+    return failure_origin == "tests" and pytest_failure_is_semantic_assertion_mismatch(test_execution)
 
 
 def _append_unique_mapping_value(mapping: dict[str, list[str]], key: str, value: str) -> None:

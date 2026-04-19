@@ -94,6 +94,18 @@ from kycortex_agents.orchestration.sandbox_templates import (
 	render_generated_test_runner,
 	render_sandbox_sitecustomize,
 )
+from kycortex_agents.orchestration.test_ast_analysis import (
+	collect_local_name_bindings,
+	collect_mock_support,
+	collect_parametrized_argument_names,
+	collect_test_local_types,
+	collect_undefined_local_names,
+	find_unsupported_mock_assertions,
+	function_argument_names,
+	is_mock_factory_call,
+	is_patch_call,
+	patched_target_name_from_call,
+)
 from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
 	should_compact_architecture_context,
@@ -320,6 +332,69 @@ def test_ast_name_replacer_rewrites_names_in_expression():
 	).visit(expression)
 
 	assert ast.unparse(ast.fix_missing_locations(rewritten)) == "10 + baz"
+
+
+def test_test_ast_analysis_helpers_collect_parametrized_names_and_bindings_directly():
+	function_node = ast.parse(
+		"@pytest.mark.parametrize('item, expected', [('a', 1)])\n"
+		"def test_case(item, other_fixture):\n"
+		"    first, *rest = [1, 2, 3]\n"
+		"    with helper() as alias:\n"
+		"        total = first\n"
+		"    import logging as log\n"
+		"    return alias, rest, total, log, expected\n"
+	).body[0]
+	assert isinstance(function_node, ast.FunctionDef)
+
+	assert function_argument_names(function_node) == {"item", "other_fixture"}
+	assert collect_parametrized_argument_names(function_node) == {"item", "expected"}
+	bindings = collect_local_name_bindings(function_node)
+	assert {"item", "other_fixture", "expected", "first", "rest", "alias", "total", "log"}.issubset(bindings)
+
+
+def test_test_ast_analysis_helpers_detect_undefined_names_patch_targets_and_mocks_directly():
+	function_node = ast.parse(
+		"def test_case(mocker):\n"
+		"    from unittest.mock import MagicMock, patch\n"
+		"    mock_logger = MagicMock()\n"
+		"    patched = patch('logging.getLogger')\n"
+		"    with patch.object(logger, 'info') as patched_info:\n"
+		"        assert mock_logger.info.call_count == 0\n"
+		"    return missing_name\n"
+	).body[0]
+	assert isinstance(function_node, ast.FunctionDef)
+
+	undefined_names = collect_undefined_local_names(function_node, set())
+	assert undefined_names == ["logger (line 5)", "missing_name (line 7)"]
+	mock_bindings, patched_targets = collect_mock_support(function_node)
+	assert {"mocker", "mock_logger", "patched", "patched_info"}.issubset(mock_bindings)
+	assert patched_targets == {"logger.info", "logging.getLogger"}
+	assert is_mock_factory_call(ast.parse("MagicMock()", mode="eval").body) is True
+	assert is_patch_call(ast.parse("patch.object(logger, 'info')", mode="eval").body) is True
+	patch_call = ast.parse("patch.object(logger, 'info')", mode="eval").body
+	assert isinstance(patch_call, ast.Call)
+	assert patched_target_name_from_call(patch_call) == "logger.info"
+
+
+def test_test_ast_analysis_helpers_find_unsupported_mock_assertions_and_local_types_directly():
+	function_node = ast.parse(
+		"def test_case():\n"
+		"    service = Service()\n"
+		"    assert logging.getLogger().info.call_count == 1\n"
+	).body[0]
+	assert isinstance(function_node, ast.FunctionDef)
+	local_types = collect_test_local_types(
+		function_node,
+		{"Service": {"method_signatures": {}, "attributes": [], "fields": [], "is_enum": False}},
+		{},
+		lambda node, local_types, class_map, function_map: "Service"
+		if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Service"
+		else None,
+	)
+	assert local_types == {"service": "Service"}
+	assert find_unsupported_mock_assertions(function_node, local_types, {}) == [
+		"logging.getLogger().info.call_count (line 3)"
+	]
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

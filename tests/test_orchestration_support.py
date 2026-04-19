@@ -60,7 +60,9 @@ from kycortex_agents.orchestration.repair_signals import (
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
 	analyze_test_repair_surface,
+	is_helper_alias_like_name,
 	module_defined_symbol_names,
+	normalized_helper_surface_symbols,
 	previous_valid_test_surface,
 	validation_summary_helper_alias_names,
 )
@@ -603,6 +605,11 @@ def test_ast_tools_render_names_and_detect_pytest_fixtures_directly():
 	assert expression_root_name(call_node.func) == "service"
 	assert render_expression(call_node) == "service.validate_request('payload')"
 	assert isinstance(first_call_argument(keyword_only_call), ast.Name)
+	assert ast_name(ast.Subscript(value=ast.Name("Payload"), slice=ast.Constant(None))) == "Payload"
+	assert callable_name(ast.Call(func=ast.Lambda(args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]), body=ast.Constant(None)), args=[], keywords=[])) == ""
+	assert attribute_chain(ast.Constant(1)) == ""
+	assert expression_root_name(ast.Constant(1)) is None
+	assert first_call_argument(ast.Call(func=ast.Name("noop"), args=[], keywords=[])) is None
 
 
 def test_workflow_acceptance_helpers_build_lists_and_zero_budget_safety_directly():
@@ -660,6 +667,41 @@ def test_validate_agent_resolution_raises_for_unknown_registry_entry_directly():
 		validate_agent_resolution(EmptyRegistry(), project)
 
 
+def test_private_file_hardening_raises_agent_error_on_chmod_failure(tmp_path, monkeypatch):
+	artifact_path = tmp_path / "artifact.txt"
+	artifact_path.write_text("secret", encoding="utf-8")
+
+	def fail_chmod(_self: object, _mode: int) -> None:
+		raise OSError("denied")
+
+	monkeypatch.setattr(type(artifact_path), "chmod", fail_chmod)
+
+	with pytest.raises(AgentExecutionError, match="could not harden file permissions"):
+		harden_private_file_permissions(artifact_path)
+
+
+def test_private_directory_hardening_raises_agent_error_on_chmod_failure(tmp_path, monkeypatch):
+	directory_path = tmp_path / "artifacts"
+	directory_path.mkdir()
+
+	def fail_chmod(_self: object, _mode: int) -> None:
+		raise OSError("denied")
+
+	monkeypatch.setattr(type(directory_path), "chmod", fail_chmod)
+
+	with pytest.raises(AgentExecutionError, match="could not harden directory permissions"):
+		harden_private_directory_permissions(directory_path)
+
+
+def test_private_permission_hardening_skips_non_posix_and_attribute_chain_handles_none(tmp_path, monkeypatch):
+	monkeypatch.setattr(os, "name", "nt", raising=False)
+
+	harden_private_file_permissions(tmp_path / "missing.txt")
+	harden_private_directory_permissions(tmp_path / "missing-dir")
+
+	assert attribute_chain(None) == ""
+
+
 def test_build_repair_instruction_specializes_missing_import_directly():
 	instruction = build_repair_instruction(
 		"code-task",
@@ -695,6 +737,55 @@ def test_build_repair_instruction_uses_pytest_warning_focus_directly():
 
 	assert "type mismatches in test arguments" in instruction
 	assert "Use the correct argument types" in instruction
+
+
+def test_build_repair_instruction_covers_missing_import_plain_class_and_warning_only_variants_directly():
+	instruction = build_repair_instruction(
+		"code-task",
+		"code_validation",
+		last_error="NameError: name 'logging' is not defined",
+		failed_code="logger = build_logger()",
+		validation={},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: ("logging", "logger = build_logger()"),
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: False,
+	)
+
+	assert "Do not return that line unchanged" in instruction
+	assert "logger = build_logger()" in instruction
+
+	plain_class_instruction = build_repair_instruction(
+		"code-task",
+		"code_validation",
+		last_error="AttributeError: 'Field' object has no attribute 'append'",
+		failed_code="class AuditService:\n    audit_history = field(default_factory=list)\n",
+		validation={},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: None,
+		plain_class_field_default_factory_details=lambda error, code: ("AuditService", "audit_history"),
+		test_validation_has_only_warnings=lambda validation: False,
+	)
+
+	assert "AuditService.audit_history" in plain_class_instruction
+	assert "Initialize self.audit_history inside __init__" in plain_class_instruction
+
+	warning_only_instruction = build_repair_instruction(
+		"tests-task",
+		"test_validation",
+		last_error="",
+		failed_code="",
+		validation={
+			"test_analysis": {"type_mismatches": []},
+			"test_execution": {"ran": True, "returncode": 1, "summary": "1 failed"},
+		},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: None,
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: True,
+	)
+
+	assert "Focus on the actual pytest failure details" in warning_only_instruction
 
 
 def test_build_code_repair_instruction_from_test_failure_handles_duplicate_constructor_binding_directly():
@@ -736,6 +827,66 @@ def test_build_code_repair_instruction_from_test_failure_uses_generic_strictness
 
 	assert "ComplianceRequest(...) still requires details, status" in instruction
 	assert "validator only requires request_id" in instruction
+
+
+def test_build_code_repair_instruction_from_test_failure_covers_remaining_branch_variants_directly():
+	missing_attribute_instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: None,
+		duplicate_constructor_argument_call_hint=lambda summary, code: None,
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: None,
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: ("VendorProfile", "audit_log", []),
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: None,
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: None,
+		internal_constructor_strictness_details=lambda summary, code: None,
+	)
+
+	assert "that attribute is not defined on the returned object" in missing_attribute_instruction
+	assert "VendorProfile must declare audit_log" in missing_attribute_instruction
+
+	invalid_outcome_instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: None,
+		duplicate_constructor_argument_call_hint=lambda summary, code: None,
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: None,
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: None,
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: None,
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: (
+			["test_invalid_path"],
+			"audit_log",
+			"TriageOutcome(outcome='invalid', audit_log='')",
+			False,
+		),
+		internal_constructor_strictness_details=lambda summary, code: None,
+	)
+
+	assert "returns TriageOutcome(outcome='invalid', audit_log='') with an empty audit_log" in invalid_outcome_instruction
+
+	strictness_instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: None,
+		duplicate_constructor_argument_call_hint=lambda summary, code: None,
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: None,
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: None,
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: None,
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: None,
+		internal_constructor_strictness_details=lambda summary, code: ("ComplianceRequest", ["details"], []),
+	)
+
+	assert "makes ComplianceRequest(...) require details" in strictness_instruction
+	assert "instead of demanding new input fields" in strictness_instruction
 
 
 def test_missing_import_nameerror_details_extracts_symbol_and_line_directly():
@@ -906,6 +1057,12 @@ def test_module_defined_symbol_names_and_helper_alias_detection_work_directly():
 	assert validation_summary_helper_alias_names(validation_summary, implementation_code) == ["AuditLogger"]
 
 
+def test_repair_test_analysis_helpers_cover_duplicate_blank_and_non_string_inputs_directly():
+	assert normalized_helper_surface_symbols([1, "AuditLogger (line 2)", "AuditLogger (line 4)", " "]) == ["AuditLogger"]
+	assert module_defined_symbol_names("def validate_request():\n    return True\n\ndef validate_request():\n    return False\n") == ["validate_request"]
+	assert is_helper_alias_like_name("   ") is False
+
+
 def test_previous_valid_test_surface_extracts_member_calls_and_constructor_keywords_directly():
 	failed_tests = (
 		"from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
@@ -958,6 +1115,26 @@ def test_analyze_test_repair_surface_collects_reusable_imports_and_alias_drift_d
 	assert analysis.undefined_available_module_symbols == ["AuditLogger"]
 	assert analysis.helper_alias_names == ["AuditService"]
 	assert analysis.previous_member_calls == {"ComplianceIntakeService": ["handle_request"]}
+
+
+def test_repair_surface_helpers_cover_invalid_inputs_and_inline_constructor_calls_directly():
+	assert validation_summary_helper_alias_names(None, "") == []
+	assert previous_valid_test_surface("def broken(:\n", ["ComplianceRequest"]) == ({}, {})
+
+	member_calls, constructor_keywords = previous_valid_test_surface(
+		(
+			"from code_implementation import ComplianceRequest\n\n"
+			"def test_inline_call():\n"
+			"    ComplianceRequest(request_id='req-1').validate_request()\n"
+		),
+		["ComplianceRequest"],
+	)
+
+	assert member_calls == {"ComplianceRequest": ["validate_request"]}
+	assert constructor_keywords == {"ComplianceRequest": ["request_id"]}
+	analysis = analyze_test_repair_surface(None)
+	assert analysis.imported_module_symbols == []
+	assert analysis.previous_constructor_keywords == {}
 
 
 def test_build_runtime_only_test_repair_lines_handles_helper_runtime_focus_directly():
@@ -1067,6 +1244,58 @@ def test_build_code_validation_repair_lines_handles_nested_payload_and_timezone_
 	assert any("Normalize every datetime comparison to one timezone convention before comparing timestamps." in line for line in lines)
 
 
+def test_build_code_validation_repair_lines_covers_remaining_guidance_variants_directly():
+	lines = build_code_validation_repair_lines(
+		summary_lower=(
+			"generated code validation:\n"
+			"- task public contract: fail\n"
+			"- pytest failed: assertionerror: assert true is false\n"
+			"- import summary: name 'field' is not defined\n"
+			"- import summary: likely truncated\n"
+			"- pytest failure details: failed tests_tests.py::test_happy_path - valueerror: invalid request\n"
+			"- typeerror: request object is not subscriptable\n"
+			"- nameerror: datetime is missing\n"
+		),
+		failed_content_lower="required_fields = {'request_id'}\nreturn required_fields.issubset(request.payload)\nreturn datetime.datetime.now()\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=None,
+		duplicate_constructor_call_hint="",
+		duplicate_constructor_explicit_rewrite_hint="",
+		missing_attribute_details=("AuditResult", "audit_log", []),
+		nested_payload_wrapper_details=("payload", ["request_id", "payload"], None),
+		constructor_strictness_details=("ComplianceRequest", ["details", "status"], []),
+		plain_class_field_details=("AuditService", "history"),
+		missing_import_details=("timezone", None),
+	)
+
+	assert any("Treat the task public contract anchor as exact" in line for line in lines)
+	assert any("If you keep .audit_log in the rewritten module, declare it on AuditResult" in line for line in lines)
+	assert any("Do not make ComplianceRequest(...) additionally require details and status" in line for line in lines)
+	assert any("import field explicitly from dataclasses" in line for line in lines)
+	assert any("because timezone is referenced before it is imported" in line for line in lines)
+	assert any("AuditService.history with field(...) on a non-dataclass class" in line for line in lines)
+	assert any("rewrite the full module from the top instead of patching a partial tail" in line for line in lines)
+
+
+def test_build_code_validation_repair_lines_covers_non_module_qualified_missing_import_directly():
+	lines = build_code_validation_repair_lines(
+		summary_lower="generated code validation:\n- module import: fail\n",
+		failed_content_lower="logger = build_logger()\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=None,
+		duplicate_constructor_call_hint="",
+		duplicate_constructor_explicit_rewrite_hint="",
+		missing_attribute_details=None,
+		nested_payload_wrapper_details=None,
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=("logging", "logger = build_logger()"),
+	)
+
+	assert any("references logging before it is imported" in line for line in lines)
+	assert any("logger = build_logger()" in line for line in lines)
+
+
 def test_build_runtime_only_test_repair_lines_handles_return_shape_and_did_not_raise_directly():
 	lines = build_runtime_only_test_repair_lines(
 		summary_lower=(
@@ -1132,6 +1361,45 @@ def test_build_structural_test_repair_lines_handles_alias_drift_and_missing_impo
 	assert any("The previous file referenced real module symbols without importing them: AuditLogger." in line for line in lines)
 	assert any("undefined helper or collaborator aliases outside the documented import surface: AuditLogger" in line for line in lines)
 	assert any("The current implementation already imports `from datetime import datetime`" in line for line in lines)
+
+
+def test_build_structural_test_repair_lines_warns_on_helper_alias_near_match_pairs_directly():
+	lines = build_structural_test_repair_lines(
+		summary_lower="generated test validation:\n- undefined local names: AuditLogger\n",
+		failed_content_lower="",
+		imported_module_symbols=["AuditLoggerService"],
+		undefined_available_module_symbols=[],
+		helper_alias_names=["AuditLogger"],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=[],
+		missing_datetime_import_issue=False,
+		implementation_prefers_direct_datetime_import=False,
+	)
+
+	assert any("AuditLogger -> AuditLoggerService" in line for line in lines)
+
+
+def test_build_structural_test_repair_lines_handles_invalid_member_references_and_exact_alias_match_directly():
+	lines = build_structural_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- undefined local names: AuditLogger\n"
+			"- invalid member references: ComplianceIntakeService.submit, ComplianceIntakeService.submit_batch\n"
+		),
+		failed_content_lower="",
+		imported_module_symbols=["AuditLogger", "ComplianceIntakeService"],
+		undefined_available_module_symbols=[],
+		helper_alias_names=["AuditLogger"],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=[],
+		missing_datetime_import_issue=False,
+		implementation_prefers_direct_datetime_import=False,
+	)
+
+	assert any("invalid member references are reported" in line for line in lines)
+	assert any("invalid-member list is empty" in line for line in lines)
 
 
 def test_build_structural_test_repair_lines_handles_payload_and_fixture_constraints_directly():

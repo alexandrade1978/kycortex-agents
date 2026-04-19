@@ -4227,7 +4227,7 @@ class Orchestrator:
                     sequence_node = self._resolve_bound_value(sequence_arg, bindings)
                     if isinstance(sequence_node, ast.List):
                         non_batch_calls.add(
-                            f"{callable_name} does not accept batch/list inputs at line {child.lineno}"
+                            f"{called_name} does not accept batch/list inputs at line {child.lineno}"
                         )
 
         return sorted(payload_violations), sorted(non_batch_calls)
@@ -4370,7 +4370,7 @@ class Orchestrator:
                     allowed_lower = {t.lower() for t in allowed_types}
                     if observed_type.lower() not in allowed_lower:
                         mismatches.add(
-                            f"{callable_name} passes {observed_type} for `{field_name}` (expected {', '.join(allowed_types)}) at line {child.lineno}"
+                            f"{called_name} passes {observed_type} for `{field_name}` (expected {', '.join(allowed_types)}) at line {child.lineno}"
                         )
         return sorted(mismatches)
 

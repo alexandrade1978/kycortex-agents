@@ -4082,6 +4082,80 @@ def test_payload_and_binding_resolution_helpers_cover_keyword_and_depth_paths(tm
     assert isinstance(resolved, ast.Dict)
 
 
+def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional_paths(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    validate_request({'details': ('a', 'b')})\n"
+        "    with pytest.raises(ValueError):\n"
+        "        validate_request({'details': {'a', 'b'}})\n"
+        "    score_request(Request(data={'details': ['ok']}))\n"
+    )
+    class_map = {"Request": {"constructor_params": ["status", "data"]}}
+
+    mismatches = orchestrator._analyze_test_type_mismatches(
+        tree,
+        {
+            "validate_request": {"details": ["dict"]},
+            "score_request": {"details": ["dict"]},
+        },
+        class_map,
+    )
+
+    assert mismatches == [
+        "validate_request passes tuple for `details` (expected dict) at line 2"
+    ]
+    assert orchestrator._infer_argument_type(
+        ast.Dict(keys=[ast.Constant("details")], values=[ast.Tuple(elts=[ast.Constant("a")])]),
+        {},
+        "details",
+        class_map,
+    ) == "tuple"
+    assert orchestrator._infer_argument_type(
+        ast.Dict(keys=[ast.Constant("details")], values=[ast.Set(elts=[ast.Constant("a")])]),
+        {},
+        "details",
+        class_map,
+    ) == "set"
+    assert orchestrator._infer_argument_type(
+        ast.Dict(keys=[ast.Constant("details")], values=[ast.Call(func=ast.Name("dict"), args=[], keywords=[])]),
+        {},
+        "details",
+        class_map,
+    ) == "dict"
+
+
+def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_paths(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    orchestrator = Orchestrator(config)
+    tree = ast.parse(
+        "def test_invalid_case():\n"
+        "    payload = {'status': 'invalid'}\n"
+        "    with pytest.raises(ValueError):\n"
+        "        validate_request(payload)\n"
+        "    result = validate_request(payload)\n"
+        "    assert payload.status == 'Invalid'\n"
+    )
+    test_node = tree.body[0]
+    assert isinstance(test_node, ast.FunctionDef)
+    call_nodes = [
+        node
+        for node in ast.walk(test_node)
+        if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+    ]
+    parent_map = orchestrator._parent_map(tree)
+
+    negative_call = next(node for node in call_nodes if node.lineno == 4)
+    followup_call = next(node for node in call_nodes if node.lineno == 5)
+
+    assert orchestrator._call_has_negative_expectation(negative_call, parent_map) is True
+    assert orchestrator._call_expects_invalid_outcome(test_node, followup_call, parent_map) is True
+    with_node = parse_with_node("with pytest.raises(ValueError):\n    validate_request(data)\n")
+    assert orchestrator._with_uses_pytest_raises(with_node) is True
+    assert orchestrator._with_uses_pytest_assertion_context(with_node) is True
+
+
 def test_literal_dict_and_field_value_helpers_cover_subscript_call_and_fallback_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)

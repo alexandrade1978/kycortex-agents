@@ -4193,17 +4193,17 @@ class Orchestrator:
                             )
 
                 if called_name in field_value_rules:
-                    payload_arg = self._payload_argument_for_validation(child, callable_name)
+                    payload_arg = self._payload_argument_for_validation(child, called_name)
                     payload_node = self._resolve_bound_value(payload_arg, bindings)
-                    for field_name, allowed_values in field_value_rules[callable_name].items():
+                    for field_name, allowed_values in field_value_rules[called_name].items():
                         observed_values = self._extract_literal_field_values(payload_node, bindings, field_name, class_map)
                         invalid_values = [value for value in observed_values if value not in allowed_values]
                         if invalid_values and not invalid_outcome_expectation:
                             payload_violations.add(
-                                f"{callable_name} field `{field_name}` uses unsupported values: {', '.join(invalid_values)} at line {child.lineno}"
+                                f"{called_name} field `{field_name}` uses unsupported values: {', '.join(invalid_values)} at line {child.lineno}"
                             )
 
-                if callable_name in batch_rules:
+                if called_name in batch_rules:
                     batch_allows_partial_invalid = self._batch_call_allows_partial_invalid_items(
                         node,
                         child,
@@ -4213,16 +4213,16 @@ class Orchestrator:
                     batch_violations = [] if negative_expectation or batch_allows_partial_invalid else self._validate_batch_call(
                         child,
                         bindings,
-                        callable_name,
-                        batch_rules[callable_name],
+                        called_name,
+                        batch_rules[called_name],
                     )
                     payload_violations.update(batch_violations)
                     continue
 
-                if callable_name in sequence_input_functions:
+                if called_name in sequence_input_functions:
                     continue
 
-                if callable_name in function_names and "batch" not in callable_name:
+                if called_name in function_names and "batch" not in called_name:
                     sequence_arg = first_call_argument(child)
                     sequence_node = self._resolve_bound_value(sequence_arg, bindings)
                     if isinstance(sequence_node, ast.List):

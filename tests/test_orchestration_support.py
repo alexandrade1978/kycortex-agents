@@ -29,6 +29,7 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
 	annotation_accepts_sequence_input,
 	callable_parameter_names,
+	collect_isinstance_calls,
 	comparison_required_field,
 	call_signature_details,
 	call_expression_basename,
@@ -41,10 +42,13 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	extract_lookup_field_rules,
 	extract_required_fields,
 	extract_sequence_input_rule,
+	extract_type_constraints,
 	field_selector_name,
 	first_user_parameter,
 	has_dataclass_decorator,
 	infer_dict_key_value_examples,
+	isinstance_subject_name,
+	isinstance_type_names,
 	method_binding_kind,
 	parameter_is_iterated,
 	self_assigned_attributes,
@@ -636,6 +640,33 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	)
 	assert dict_accessed_keys_from_tree(access_tree) == {
 		"details": ["count", "status", "active"],
+	}
+
+	isinstance_call = ast.parse("isinstance(payload['count'], int)", mode="eval").body
+	assert isinstance(isinstance_call, ast.Call)
+	assert isinstance_subject_name(isinstance_call.args[0]) == "count"
+	assert isinstance_type_names(isinstance_call.args[1]) == ["int"]
+
+	attribute_call = ast.parse("isinstance(item.value, (str, model.Score))", mode="eval").body
+	assert isinstance(attribute_call, ast.Call)
+	assert isinstance_subject_name(attribute_call.args[0]) == "value"
+	assert isinstance_type_names(attribute_call.args[1]) == ["str", "model.Score"]
+
+	compound_test = ast.parse("not isinstance(data, dict) or helper.isinstance(payload.get('field'), str)", mode="eval").body
+	collected_calls: list[ast.Call] = []
+	collect_isinstance_calls(compound_test, collected_calls)
+	assert len(collected_calls) == 2
+
+	constraint_node = ast.parse(
+		"def validate(data, payload):\n"
+		"    if not isinstance(data, dict):\n"
+		"        raise TypeError('bad')\n"
+		"    assert helper.isinstance(payload.get('field'), (str, int))\n"
+	).body[0]
+	assert isinstance(constraint_node, ast.FunctionDef)
+	assert extract_type_constraints(constraint_node) == {
+		"data": ["dict"],
+		"field": ["str", "int"],
 	}
 
 

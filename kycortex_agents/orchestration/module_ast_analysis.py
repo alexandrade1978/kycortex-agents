@@ -192,6 +192,78 @@ def dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
     return merged
 
 
+def isinstance_subject_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        return node.attr
+    if (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.slice, ast.Constant)
+        and isinstance(node.slice.value, str)
+    ):
+        return node.slice.value
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+            return node.args[0].value
+    return ""
+
+
+def isinstance_type_names(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.Name):
+        return [node.id]
+    if isinstance(node, ast.Attribute):
+        return [ast_name(node)]
+    if isinstance(node, ast.Tuple):
+        names: list[str] = []
+        for element in node.elts:
+            if isinstance(element, ast.Name):
+                names.append(element.id)
+            elif isinstance(element, ast.Attribute):
+                names.append(ast_name(element))
+        return names
+    return []
+
+
+def collect_isinstance_calls(node: ast.AST, result: list[ast.Call]) -> None:
+    if isinstance(node, ast.Call):
+        func = node.func
+        if (isinstance(func, ast.Name) and func.id == "isinstance") or (
+            isinstance(func, ast.Attribute) and func.attr == "isinstance"
+        ):
+            result.append(node)
+            return
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        collect_isinstance_calls(node.operand, result)
+    elif isinstance(node, ast.BoolOp):
+        for value in node.values:
+            collect_isinstance_calls(value, result)
+
+
+def extract_type_constraints(node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, list[str]]:
+    constraints: Dict[str, list[str]] = {}
+    for child in ast.walk(node):
+        if not isinstance(child, (ast.If, ast.Assert)):
+            continue
+        isinstance_calls: list[ast.Call] = []
+        collect_isinstance_calls(child.test, isinstance_calls)
+        for call in isinstance_calls:
+            if len(call.args) < 2:
+                continue
+            field_name = isinstance_subject_name(call.args[0])
+            if not field_name:
+                continue
+            type_names = isinstance_type_names(call.args[1])
+            if not type_names:
+                continue
+            existing = constraints.get(field_name) or []
+            for type_name in type_names:
+                if type_name not in existing:
+                    existing.append(type_name)
+            constraints[field_name] = existing
+    return constraints
+
+
 def call_signature_details(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     *,
@@ -388,14 +460,18 @@ __all__ = [
     "dict_accessed_keys_from_tree",
     "direct_return_expression",
     "example_from_default",
+    "collect_isinstance_calls",
     "extract_indirect_required_fields",
     "extract_lookup_field_rules",
     "extract_required_fields",
     "extract_sequence_input_rule",
+    "extract_type_constraints",
     "field_selector_name",
     "first_user_parameter",
     "has_dataclass_decorator",
     "infer_dict_key_value_examples",
+    "isinstance_subject_name",
+    "isinstance_type_names",
     "method_binding_kind",
     "parameter_is_iterated",
     "self_assigned_attributes",

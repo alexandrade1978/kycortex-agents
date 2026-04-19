@@ -40,6 +40,7 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
     annotation_accepts_sequence_input,
     callable_parameter_names,
+    collect_isinstance_calls,
     comparison_required_field,
     call_signature_details,
     call_expression_basename,
@@ -52,10 +53,13 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     extract_lookup_field_rules,
     extract_required_fields,
     extract_sequence_input_rule,
+    extract_type_constraints,
     field_selector_name,
     first_user_parameter,
     has_dataclass_decorator,
     infer_dict_key_value_examples,
+    isinstance_subject_name,
+    isinstance_type_names,
     method_binding_kind,
     parameter_is_iterated,
     self_assigned_attributes,
@@ -3453,73 +3457,16 @@ class Orchestrator:
         node: ast.FunctionDef | ast.AsyncFunctionDef,
     ) -> Dict[str, list[str]]:
         """Extract isinstance() type checks from if-guards and raise blocks."""
-        constraints: Dict[str, list[str]] = {}
-        for child in ast.walk(node):
-            if not isinstance(child, (ast.If, ast.Assert)):
-                continue
-            isinstance_calls: list[ast.Call] = []
-            test_node = child.test if isinstance(child, ast.If) else child.test
-            self._collect_isinstance_calls(test_node, isinstance_calls)
-            for call in isinstance_calls:
-                if len(call.args) < 2:
-                    continue
-                field_name = self._isinstance_subject_name(call.args[0])
-                if not field_name:
-                    continue
-                type_names = self._isinstance_type_names(call.args[1])
-                if not type_names:
-                    continue
-                existing = constraints.get(field_name) or []
-                for type_name in type_names:
-                    if type_name not in existing:
-                        existing.append(type_name)
-                constraints[field_name] = existing
-        return constraints
+        return extract_type_constraints(node)
 
     def _collect_isinstance_calls(self, node: ast.AST, result: list[ast.Call]) -> None:
-        if isinstance(node, ast.Call):
-            func = node.func
-            if (isinstance(func, ast.Name) and func.id == "isinstance") or (
-                isinstance(func, ast.Attribute) and func.attr == "isinstance"
-            ):
-                result.append(node)
-                return
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            self._collect_isinstance_calls(node.operand, result)
-        elif isinstance(node, ast.BoolOp):
-            for value in node.values:
-                self._collect_isinstance_calls(value, result)
+        collect_isinstance_calls(node, result)
 
     def _isinstance_subject_name(self, node: ast.AST) -> str:
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            return node.attr
-        if (
-            isinstance(node, ast.Subscript)
-            and isinstance(node.slice, ast.Constant)
-            and isinstance(node.slice.value, str)
-        ):
-            return node.slice.value
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
-            if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-                return node.args[0].value
-        return ""
+        return isinstance_subject_name(node)
 
     def _isinstance_type_names(self, node: ast.AST) -> list[str]:
-        if isinstance(node, ast.Name):
-            return [node.id]
-        if isinstance(node, ast.Attribute):
-            return [ast_name(node)]
-        if isinstance(node, ast.Tuple):
-            names: list[str] = []
-            for elt in node.elts:
-                if isinstance(elt, ast.Name):
-                    names.append(elt.id)
-                elif isinstance(elt, ast.Attribute):
-                    names.append(ast_name(elt))
-            return names
-        return []
+        return isinstance_type_names(node)
 
     def _extract_valid_literal_examples(self, raw_content: str) -> Dict[str, str]:
         """Extract sample dict/list literals from top-level constant assignments."""

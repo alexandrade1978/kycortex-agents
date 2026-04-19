@@ -252,6 +252,7 @@ from kycortex_agents.orchestration.workflow_control import (
     exit_if_workflow_cancelled,
     exit_if_workflow_paused,
     log_event,
+    merge_prior_repair_context,
     override_task,
     pause_workflow,
     privacy_safe_log_fields,
@@ -1572,40 +1573,7 @@ class Orchestrator:
         return repair_context
 
     def _merge_prior_repair_context(self, task: Task, repair_context: Dict[str, Any]) -> None:
-        if not isinstance(repair_context, dict) or not task.repair_origin_task_id:
-            return
-
-        prior_repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-        if not prior_repair_context:
-            return
-
-        current_instruction = str(repair_context.get("instruction") or "").strip()
-        prior_instruction = str(prior_repair_context.get("instruction") or "").strip()
-        if prior_instruction and prior_instruction not in current_instruction:
-            merged_instruction_parts = [current_instruction] if current_instruction else []
-            merged_instruction_parts.append(
-                f"Also preserve and fully satisfy the prior unresolved repair objective from {task.repair_origin_task_id}: {prior_instruction}"
-            )
-            repair_context["instruction"] = " ".join(merged_instruction_parts).strip()
-
-        current_validation_summary = str(repair_context.get("validation_summary") or "").strip()
-        prior_validation_summary = str(prior_repair_context.get("validation_summary") or "").strip()
-        if prior_validation_summary and prior_validation_summary not in current_validation_summary:
-            merged_validation_parts = [current_validation_summary] if current_validation_summary else []
-            merged_validation_parts.extend(
-                [
-                    "",
-                    "Prior unresolved repair context:",
-                    f"- Prior failure category: {prior_repair_context.get('failure_category') or FailureCategory.UNKNOWN.value}",
-                ]
-            )
-            if prior_instruction:
-                merged_validation_parts.append(f"- Prior repair objective: {prior_instruction}")
-            merged_validation_parts.extend([
-                "- Prior validation summary:",
-                prior_validation_summary,
-            ])
-            repair_context["validation_summary"] = "\n".join(merged_validation_parts).strip()
+        merge_prior_repair_context(task, repair_context)
 
     def _test_repair_helper_surface_usages(self, task: Task, failure_category: str) -> list[str]:
         return helper_surface_usages_for_test_repair(self._validation_payload(task), failure_category)

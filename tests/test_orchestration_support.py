@@ -250,6 +250,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 from kycortex_agents.orchestration.workflow_control import (
 	active_repair_cycle,
 	ensure_budget_decomposition_task,
+	merge_prior_repair_context,
 	privacy_safe_log_fields,
 	task_id_collection_count,
 	task_id_count_log_field_name,
@@ -2705,6 +2706,25 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert active_repair_cycle(project) is None
 	project.repair_history.append({"cycle": 1, "failed_task_ids": ["code"]})
 	assert active_repair_cycle(project) == {"cycle": 1, "failed_task_ids": ["code"]}
+	repair_task = Task(
+		id="code__repair_1",
+		title="Repair implementation",
+		description="Repair code",
+		assigned_to="code_engineer",
+		repair_origin_task_id="code",
+		repair_context={
+			"failure_category": FailureCategory.CODE_VALIDATION.value,
+			"instruction": "Keep constructor bindings unique.",
+			"validation_summary": "TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'",
+		},
+	)
+	merged_context = {
+		"instruction": "Repair the generated Python module by reordering any dataclass fields.",
+		"validation_summary": "Generated code validation failed",
+	}
+	merge_prior_repair_context(repair_task, merged_context)
+	assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in merged_context["instruction"]
+	assert "Prior unresolved repair context:" in merged_context["validation_summary"]
 
 
 def test_repair_instruction_owner_mapping_directly():

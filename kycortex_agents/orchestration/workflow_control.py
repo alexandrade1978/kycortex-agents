@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional, cast
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
-from kycortex_agents.types import AgentOutput
+from kycortex_agents.types import AgentOutput, FailureCategory
 
 
 def log_event(logger: Any, level: str, event: str, **fields: Any) -> None:
@@ -197,6 +197,43 @@ def active_repair_cycle(project: ProjectState) -> dict[str, Any] | None:
     if not isinstance(current_cycle, dict):
         return None
     return current_cycle
+
+
+def merge_prior_repair_context(task: Task, repair_context: dict[str, Any]) -> None:
+    if not isinstance(repair_context, dict) or not task.repair_origin_task_id:
+        return
+
+    prior_repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    if not prior_repair_context:
+        return
+
+    current_instruction = str(repair_context.get("instruction") or "").strip()
+    prior_instruction = str(prior_repair_context.get("instruction") or "").strip()
+    if prior_instruction and prior_instruction not in current_instruction:
+        merged_instruction_parts = [current_instruction] if current_instruction else []
+        merged_instruction_parts.append(
+            f"Also preserve and fully satisfy the prior unresolved repair objective from {task.repair_origin_task_id}: {prior_instruction}"
+        )
+        repair_context["instruction"] = " ".join(merged_instruction_parts).strip()
+
+    current_validation_summary = str(repair_context.get("validation_summary") or "").strip()
+    prior_validation_summary = str(prior_repair_context.get("validation_summary") or "").strip()
+    if prior_validation_summary and prior_validation_summary not in current_validation_summary:
+        merged_validation_parts = [current_validation_summary] if current_validation_summary else []
+        merged_validation_parts.extend(
+            [
+                "",
+                "Prior unresolved repair context:",
+                f"- Prior failure category: {prior_repair_context.get('failure_category') or FailureCategory.UNKNOWN.value}",
+            ]
+        )
+        if prior_instruction:
+            merged_validation_parts.append(f"- Prior repair objective: {prior_instruction}")
+        merged_validation_parts.extend([
+            "- Prior validation summary:",
+            prior_validation_summary,
+        ])
+        repair_context["validation_summary"] = "\n".join(merged_validation_parts).strip()
 
 
 def exit_if_workflow_paused(logger: Any, project: ProjectState) -> bool:

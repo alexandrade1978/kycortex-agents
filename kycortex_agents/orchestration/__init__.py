@@ -264,6 +264,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 from kycortex_agents.orchestration.workflow_control import (
 	active_repair_cycle,
 	ensure_budget_decomposition_task,
+	merge_prior_repair_context,
 	cancel_workflow,
 	emit_workflow_progress,
 	exit_if_workflow_cancelled,
@@ -449,6 +450,7 @@ __all__ = [
 	"validation_summary_has_required_evidence_runtime_issue",
 	"active_repair_cycle",
 	"ensure_budget_decomposition_task",
+	"merge_prior_repair_context",
 	"task_id_collection_count",
 	"task_id_count_log_field_name",
 	"validate_agent_resolution",

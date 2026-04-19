@@ -68,6 +68,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
+	artifact_type_for_failure_category,
 	ast_is_empty_literal,
 	attribute_is_field_reference,
 	class_field_annotations_from_failed_artifact,
@@ -346,6 +347,7 @@ __all__ = [
 	"build_sandbox_preexec_fn",
 	"build_repair_instruction",
 	"repair_owner_for_category",
+	"artifact_type_for_failure_category",
 	"ast_is_empty_literal",
 	"attribute_is_field_reference",
 	"class_field_annotations_from_failed_artifact",

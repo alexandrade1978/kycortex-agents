@@ -6,6 +6,18 @@ import ast
 import re
 from typing import Optional
 
+from kycortex_agents.types import ArtifactType, FailureCategory
+
+
+def artifact_type_for_failure_category(failure_category: str) -> ArtifactType | None:
+	if failure_category == FailureCategory.CODE_VALIDATION.value:
+		return ArtifactType.CODE
+	if failure_category == FailureCategory.TEST_VALIDATION.value:
+		return ArtifactType.TEST
+	if failure_category == FailureCategory.DEPENDENCY_VALIDATION.value:
+		return ArtifactType.CONFIG
+	return None
+
 
 def first_non_import_line_with_name(content: object, symbol_name: str) -> str:
 	if not isinstance(content, str) or not content.strip() or not symbol_name:

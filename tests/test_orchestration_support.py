@@ -75,6 +75,7 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_file_permissions,
 )
 from kycortex_agents.orchestration.repair_analysis import (
+	artifact_type_for_failure_category,
 	ast_is_empty_literal,
 	attribute_is_field_reference,
 	class_field_uses_empty_default,
@@ -2639,6 +2640,10 @@ def test_repair_instruction_owner_mapping_directly():
 	assert repair_owner_for_category("architect", FailureCategory.TEST_VALIDATION.value) == "qa_tester"
 	assert repair_owner_for_category("architect", FailureCategory.DEPENDENCY_VALIDATION.value) == "dependency_manager"
 	assert repair_owner_for_category("architect", FailureCategory.UNKNOWN.value) == "architect"
+	assert artifact_type_for_failure_category(FailureCategory.CODE_VALIDATION.value) == ArtifactType.CODE
+	assert artifact_type_for_failure_category(FailureCategory.TEST_VALIDATION.value) == ArtifactType.TEST
+	assert artifact_type_for_failure_category(FailureCategory.DEPENDENCY_VALIDATION.value) == ArtifactType.CONFIG
+	assert artifact_type_for_failure_category(FailureCategory.UNKNOWN.value) is None
 	assert task_id_collection_count(None) == 0
 	assert task_id_collection_count(3) is None
 	assert task_id_count_log_field_name("task_ids") == "task_count"

@@ -199,6 +199,42 @@ def active_repair_cycle(project: ProjectState) -> dict[str, Any] | None:
     return current_cycle
 
 
+def build_repair_context(
+    task: Task,
+    cycle: dict[str, Any],
+    *,
+    repair_owner_for_category: Callable[[Task, str], str],
+    build_repair_instruction: Callable[[Task, str], str],
+    build_repair_validation_summary: Callable[[Task, str], str],
+    failed_artifact_content_for_category: Callable[[Task, str], str],
+    test_repair_helper_surface_usages: Callable[[Task, str], list[str]],
+    normalized_helper_surface_symbols: Callable[[object], list[str]],
+    merge_prior_repair_context: Callable[[Task, dict[str, Any]], None],
+) -> dict[str, Any]:
+    failure_category = task.last_error_category or FailureCategory.UNKNOWN.value
+    repair_context: dict[str, Any] = {
+        "cycle": cycle.get("cycle"),
+        "failure_category": failure_category,
+        "failure_message": task.last_error or task.output or "",
+        "failure_error_type": task.last_error_type,
+        "repair_owner": repair_owner_for_category(task, failure_category),
+        "original_assigned_to": task.assigned_to,
+        "instruction": build_repair_instruction(task, failure_category),
+        "validation_summary": build_repair_validation_summary(task, failure_category),
+        "failed_output": task.output or "",
+        "failed_artifact_content": failed_artifact_content_for_category(task, failure_category),
+        "provider_call": task.last_provider_call,
+    }
+    helper_surface_usages = test_repair_helper_surface_usages(task, failure_category)
+    if helper_surface_usages:
+        repair_context["helper_surface_usages"] = helper_surface_usages
+        repair_context["helper_surface_symbols"] = normalized_helper_surface_symbols(
+            helper_surface_usages
+        )
+    merge_prior_repair_context(task, repair_context)
+    return repair_context
+
+
 def merge_prior_repair_context(task: Task, repair_context: dict[str, Any]) -> None:
     if not isinstance(repair_context, dict) or not task.repair_origin_task_id:
         return

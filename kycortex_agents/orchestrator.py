@@ -246,6 +246,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 )
 from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
+    build_repair_context,
     ensure_budget_decomposition_task,
     cancel_workflow,
     emit_workflow_progress,
@@ -1549,28 +1550,17 @@ class Orchestrator:
         return active_repair_cycle(project)
 
     def _build_repair_context(self, task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
-        failure_category = task.last_error_category or FailureCategory.UNKNOWN.value
-        repair_context = {
-            "cycle": cycle.get("cycle"),
-            "failure_category": failure_category,
-            "failure_message": task.last_error or task.output or "",
-            "failure_error_type": task.last_error_type,
-            "repair_owner": self._repair_owner_for_category(task, failure_category),
-            "original_assigned_to": task.assigned_to,
-            "instruction": self._build_repair_instruction(task, failure_category),
-            "validation_summary": self._build_repair_validation_summary(task, failure_category),
-            "failed_output": task.output or "",
-            "failed_artifact_content": self._failed_artifact_content_for_category(task, failure_category),
-            "provider_call": task.last_provider_call,
-        }
-        helper_surface_usages = self._test_repair_helper_surface_usages(task, failure_category)
-        if helper_surface_usages:
-            repair_context["helper_surface_usages"] = helper_surface_usages
-            repair_context["helper_surface_symbols"] = self._normalized_helper_surface_symbols(
-                helper_surface_usages
-            )
-        self._merge_prior_repair_context(task, repair_context)
-        return repair_context
+        return build_repair_context(
+            task,
+            cycle,
+            repair_owner_for_category=self._repair_owner_for_category,
+            build_repair_instruction=self._build_repair_instruction,
+            build_repair_validation_summary=self._build_repair_validation_summary,
+            failed_artifact_content_for_category=self._failed_artifact_content_for_category,
+            test_repair_helper_surface_usages=self._test_repair_helper_surface_usages,
+            normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
+            merge_prior_repair_context=self._merge_prior_repair_context,
+        )
 
     def _merge_prior_repair_context(self, task: Task, repair_context: Dict[str, Any]) -> None:
         merge_prior_repair_context(task, repair_context)

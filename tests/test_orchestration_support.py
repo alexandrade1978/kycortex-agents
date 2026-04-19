@@ -249,6 +249,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 )
 from kycortex_agents.orchestration.workflow_control import (
 	active_repair_cycle,
+	build_repair_context,
 	ensure_budget_decomposition_task,
 	merge_prior_repair_context,
 	privacy_safe_log_fields,
@@ -2711,6 +2712,7 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		title="Repair implementation",
 		description="Repair code",
 		assigned_to="code_engineer",
+		last_error_category=FailureCategory.CODE_VALIDATION.value,
 		repair_origin_task_id="code",
 		repair_context={
 			"failure_category": FailureCategory.CODE_VALIDATION.value,
@@ -2725,6 +2727,22 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	merge_prior_repair_context(repair_task, merged_context)
 	assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in merged_context["instruction"]
 	assert "Prior unresolved repair context:" in merged_context["validation_summary"]
+	built_context = build_repair_context(
+		repair_task,
+		{"cycle": 2},
+		repair_owner_for_category=lambda current_task, failure_category: f"owner:{failure_category}:{current_task.assigned_to}",
+		build_repair_instruction=lambda current_task, failure_category: f"instruction:{failure_category}:{current_task.id}",
+		build_repair_validation_summary=lambda current_task, failure_category: f"summary:{failure_category}:{current_task.id}",
+		failed_artifact_content_for_category=lambda current_task, failure_category: f"artifact:{failure_category}:{current_task.id}",
+		test_repair_helper_surface_usages=lambda current_task, failure_category: ["RiskScoringService"] if failure_category == FailureCategory.CODE_VALIDATION.value else [],
+		normalized_helper_surface_symbols=lambda values: [str(item).split(" (line ", 1)[0] for item in values] if isinstance(values, list) else [],
+		merge_prior_repair_context=merge_prior_repair_context,
+	)
+	assert built_context["cycle"] == 2
+	assert built_context["repair_owner"] == "owner:code_validation:code_engineer"
+	assert built_context["failed_artifact_content"] == "artifact:code_validation:code__repair_1"
+	assert built_context["helper_surface_symbols"] == ["RiskScoringService"]
+	assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in built_context["instruction"]
 
 
 def test_repair_instruction_owner_mapping_directly():

@@ -2,12 +2,12 @@ import ast
 from dataclasses import dataclass
 
 from kycortex_agents.agents.registry import AgentRegistry
-from kycortex_agents.memory.project_state import Task
+from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.repair_signals import (
     validation_summary_has_missing_datetime_import_issue,
     validation_summary_has_required_evidence_runtime_issue,
 )
-from kycortex_agents.types import FailureCategory
+from kycortex_agents.types import ArtifactType, FailureCategory
 
 
 @dataclass(frozen=True)
@@ -165,6 +165,54 @@ def failed_test_requires_code_repair(
         return False
 
     return failure_origin == "tests" and pytest_failure_is_semantic_assertion_mismatch(test_execution)
+
+
+def imported_code_task_for_failed_test(
+    project: ProjectState,
+    task: Task,
+    *,
+    failed_artifact_content,
+    python_import_roots,
+    default_module_name_for_task,
+) -> Task | None:
+    import_roots = python_import_roots(
+        failed_artifact_content(task, ArtifactType.TEST)
+    )
+    if not import_roots:
+        return None
+
+    preferred_task: Task | None = None
+    for existing_task in reversed(project.tasks):
+        if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
+            continue
+        module_name = default_module_name_for_task(existing_task)
+        if not module_name or module_name not in import_roots:
+            continue
+        if existing_task.repair_origin_task_id:
+            return existing_task
+        if preferred_task is None:
+            preferred_task = existing_task
+    return preferred_task
+
+
+def upstream_code_task_for_test_failure(
+    project: ProjectState,
+    task: Task,
+    *,
+    imported_code_task_for_failed_test,
+) -> Task | None:
+    imported_code_task = imported_code_task_for_failed_test(project, task)
+    preferred_dependency: Task | None = None
+    for dependency_id in reversed(task.dependencies):
+        dependency = project.get_task(dependency_id)
+        if dependency is None:
+            continue
+        if AgentRegistry.normalize_key(dependency.assigned_to) == "code_engineer":
+            if dependency.repair_origin_task_id:
+                return dependency
+            if preferred_dependency is None:
+                preferred_dependency = dependency
+    return imported_code_task or preferred_dependency
 
 
 def _append_unique_mapping_value(mapping: dict[str, list[str]], key: str, value: str) -> None:

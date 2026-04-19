@@ -117,12 +117,14 @@ from kycortex_agents.orchestration.repair_signals import (
 from kycortex_agents.orchestration.repair_test_analysis import (
 	analyze_test_repair_surface,
 	failed_test_requires_code_repair,
+	imported_code_task_for_failed_test,
 	is_helper_alias_like_name,
 	module_defined_symbol_names,
 	normalized_helper_surface_symbols,
 	previous_valid_test_surface,
 	qa_repair_should_reuse_failed_test_artifact,
 	helper_surface_usages_for_test_repair,
+	upstream_code_task_for_test_failure,
 	validation_summary_helper_alias_names,
 )
 from kycortex_agents.orchestration.repair_test_runtime import (
@@ -2801,6 +2803,33 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		test_validation_has_blocking_issues=lambda _validation: False,
 		pytest_failure_is_semantic_assertion_mismatch=lambda _execution: True,
 	) is False
+	lookup_project = ProjectState(project_name="Demo", goal="Build demo")
+	lookup_project.add_task(Task(id="code", title="Code", description="Code", assigned_to="code_engineer"))
+	lookup_project.add_task(Task(id="code__repair_1", title="Repair code", description="Repair code", assigned_to="code_engineer", repair_origin_task_id="code"))
+	lookup_test_task = Task(
+		id="tests",
+		title="Tests",
+		description="Tests",
+		assigned_to="qa_tester",
+		dependencies=["code"],
+	)
+	lookup_project.add_task(lookup_test_task)
+	imported_code_task = imported_code_task_for_failed_test(
+		lookup_project,
+		lookup_test_task,
+		failed_artifact_content=lambda _task, _artifact_type: "from code_implementation import run",
+		python_import_roots=lambda _content: {"code_implementation"},
+		default_module_name_for_task=lambda current_task: "code_implementation" if current_task.id in {"code", "code__repair_1"} else None,
+	)
+	assert imported_code_task is not None
+	assert imported_code_task.id == "code__repair_1"
+	upstream_code_task = upstream_code_task_for_test_failure(
+		lookup_project,
+		lookup_test_task,
+		imported_code_task_for_failed_test=lambda _project, _task: imported_code_task,
+	)
+	assert upstream_code_task is not None
+	assert upstream_code_task.id == "code__repair_1"
 
 
 def test_repair_instruction_owner_mapping_directly():

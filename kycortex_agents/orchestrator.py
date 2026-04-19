@@ -120,12 +120,14 @@ from kycortex_agents.orchestration.repair_signals import (
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
     failed_test_requires_code_repair,
+    imported_code_task_for_failed_test,
     is_helper_alias_like_name,
     module_defined_symbol_names,
     normalized_helper_surface_symbols,
     previous_valid_test_surface,
     qa_repair_should_reuse_failed_test_artifact,
     helper_surface_usages_for_test_repair,
+    upstream_code_task_for_test_failure,
     validation_summary_helper_alias_names,
     validation_summary_symbols,
 )
@@ -1389,42 +1391,24 @@ class Orchestrator:
         )
 
     def _upstream_code_task_for_test_failure(self, project: ProjectState, task: Task) -> Optional[Task]:
-        imported_code_task = self._imported_code_task_for_failed_test(project, task)
-        preferred_dependency: Optional[Task] = None
-        for dependency_id in reversed(task.dependencies):
-            dependency = project.get_task(dependency_id)
-            if dependency is None:
-                continue
-            if AgentRegistry.normalize_key(dependency.assigned_to) == "code_engineer":
-                if dependency.repair_origin_task_id:
-                    return dependency
-                if preferred_dependency is None:
-                    preferred_dependency = dependency
-        return imported_code_task or preferred_dependency
+        return upstream_code_task_for_test_failure(
+            project,
+            task,
+            imported_code_task_for_failed_test=self._imported_code_task_for_failed_test,
+        )
 
     @staticmethod
     def _python_import_roots(raw_content: object) -> set[str]:
         return python_import_roots(raw_content)
 
     def _imported_code_task_for_failed_test(self, project: ProjectState, task: Task) -> Optional[Task]:
-        import_roots = self._python_import_roots(
-            self._failed_artifact_content(task, ArtifactType.TEST)
+        return imported_code_task_for_failed_test(
+            project,
+            task,
+            failed_artifact_content=self._failed_artifact_content,
+            python_import_roots=self._python_import_roots,
+            default_module_name_for_task=self._default_module_name_for_task,
         )
-        if not import_roots:
-            return None
-
-        preferred_task: Optional[Task] = None
-        for existing_task in reversed(project.tasks):
-            if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
-                continue
-            module_name = self._default_module_name_for_task(existing_task)
-            if not module_name or module_name not in import_roots:
-                continue
-            if existing_task.repair_origin_task_id:
-                return existing_task
-            if preferred_task is None:
-                preferred_task = existing_task
-        return preferred_task
 
     def _build_code_repair_context_from_test_failure(
         self,

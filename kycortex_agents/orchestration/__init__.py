@@ -9,6 +9,7 @@ from kycortex_agents.orchestration.ast_tools import (
 	expression_root_name,
 	first_call_argument,
 	is_pytest_fixture,
+	python_import_roots,
 	render_expression,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
@@ -276,6 +277,7 @@ __all__ = [
 	"expression_root_name",
 	"first_call_argument",
 	"is_pytest_fixture",
+	"python_import_roots",
 	"render_expression",
 	"ArtifactPersistenceSupport",
 	"AcceptanceEvaluation",

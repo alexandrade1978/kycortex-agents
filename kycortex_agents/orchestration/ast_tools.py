@@ -101,3 +101,29 @@ def first_call_argument(node: ast.Call) -> Optional[ast.expr]:
     if node.keywords:
         return node.keywords[0].value
     return None
+
+
+def python_import_roots(raw_content: object) -> set[str]:
+    if not isinstance(raw_content, str) or not raw_content.strip():
+        return set()
+
+    try:
+        tree = ast.parse(raw_content)
+    except SyntaxError:
+        return set()
+
+    import_roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root_name = alias.name.split(".", 1)[0]
+                if root_name:
+                    import_roots.add(root_name)
+            continue
+        if isinstance(node, ast.ImportFrom):
+            if node.level:
+                continue
+            module_name = (node.module or "").split(".", 1)[0]
+            if module_name:
+                import_roots.add(module_name)
+    return import_roots

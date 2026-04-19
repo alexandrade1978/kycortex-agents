@@ -26,6 +26,7 @@ from kycortex_agents.orchestration.ast_tools import (
     callable_name,
     first_call_argument,
     is_pytest_fixture,
+    python_import_roots,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
@@ -1439,29 +1440,7 @@ class Orchestrator:
 
     @staticmethod
     def _python_import_roots(raw_content: object) -> set[str]:
-        if not isinstance(raw_content, str) or not raw_content.strip():
-            return set()
-
-        try:
-            tree = ast.parse(raw_content)
-        except SyntaxError:
-            return set()
-
-        import_roots: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    root_name = alias.name.split(".", 1)[0]
-                    if root_name:
-                        import_roots.add(root_name)
-                continue
-            if isinstance(node, ast.ImportFrom):
-                if node.level:
-                    continue
-                module_name = (node.module or "").split(".", 1)[0]
-                if module_name:
-                    import_roots.add(module_name)
-        return import_roots
+        return python_import_roots(raw_content)
 
     def _imported_code_task_for_failed_test(self, project: ProjectState, task: Task) -> Optional[Task]:
         import_roots = self._python_import_roots(

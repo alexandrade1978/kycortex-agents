@@ -17,6 +17,7 @@ from kycortex_agents.orchestration.ast_tools import (
 	expression_root_name,
 	first_call_argument,
 	is_pytest_fixture,
+	python_import_roots,
 	render_expression,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
@@ -1218,6 +1219,14 @@ def test_build_test_validation_summary_reports_warning_override_and_pytest_detai
 	assert "Constructor arity mismatches (warning): MyClass (line 5)" in summary
 	assert "Pytest execution: PASS" in summary
 	assert summary.endswith("- Verdict: PASS (warnings overridden by pytest)")
+
+
+def test_python_import_roots_collects_top_level_imports_directly():
+	code = "import os\nimport json.decoder\nfrom pathlib import Path\nfrom . import sibling\n"
+
+	assert python_import_roots(code) == {"os", "json", "pathlib"}
+	assert python_import_roots("") == set()
+	assert python_import_roots(42) == set()
 
 
 def test_build_dependency_validation_summary_formats_failures_directly():

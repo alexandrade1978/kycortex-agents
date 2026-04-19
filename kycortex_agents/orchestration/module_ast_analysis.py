@@ -42,6 +42,32 @@ def parameter_is_iterated(node: ast.FunctionDef | ast.AsyncFunctionDef, paramete
     return False
 
 
+def direct_return_expression(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.expr | None:
+    for statement in node.body:
+        if isinstance(statement, ast.Return) and statement.value is not None:
+            return statement.value
+    return None
+
+
+def callable_parameter_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    positional = [*node.args.posonlyargs, *node.args.args]
+    if positional and positional[0].arg in {"self", "cls"}:
+        positional = positional[1:]
+    return [argument.arg for argument in positional]
+
+
+def extract_sequence_input_rule(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    parameter = first_user_parameter(node)
+    if parameter is None:
+        return ""
+    annotation = ast_name(parameter.annotation) if parameter.annotation is not None else ""
+    if annotation_accepts_sequence_input(annotation):
+        return f"{node.name} accepts sequence inputs via parameter `{parameter.arg}`"
+    if parameter_is_iterated(node, parameter.arg):
+        return f"{node.name} accepts sequence inputs via parameter `{parameter.arg}`"
+    return ""
+
+
 def call_signature_details(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     *,
@@ -229,14 +255,17 @@ def extract_lookup_field_rules(node: ast.FunctionDef | ast.AsyncFunctionDef) -> 
 
 __all__ = [
     "annotation_accepts_sequence_input",
+    "callable_parameter_names",
     "comparison_required_field",
     "call_signature_details",
     "call_expression_basename",
     "dataclass_field_has_default",
     "dataclass_field_is_init_enabled",
+    "direct_return_expression",
     "extract_indirect_required_fields",
     "extract_lookup_field_rules",
     "extract_required_fields",
+    "extract_sequence_input_rule",
     "field_selector_name",
     "first_user_parameter",
     "has_dataclass_decorator",

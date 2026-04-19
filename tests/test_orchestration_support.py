@@ -28,14 +28,17 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
 	annotation_accepts_sequence_input,
+	callable_parameter_names,
 	comparison_required_field,
 	call_signature_details,
 	call_expression_basename,
 	dataclass_field_has_default,
 	dataclass_field_is_init_enabled,
+	direct_return_expression,
 	extract_indirect_required_fields,
 	extract_lookup_field_rules,
 	extract_required_fields,
+	extract_sequence_input_rule,
 	field_selector_name,
 	first_user_parameter,
 	has_dataclass_decorator,
@@ -582,6 +585,31 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	assert field_selector_name(ast.Subscript(value=ast.Name("payload"), slice=ast.Constant("state"))) == "state"
 	assert field_selector_name(ast.Constant("status")) == "status"
 	assert field_selector_name(ast.Name("selector")) == ""
+
+	returning_node = ast.parse(
+		"def build(self, payload, *, strict=False):\n"
+		"    return payload\n"
+	).body[0]
+	assert isinstance(returning_node, ast.FunctionDef)
+	returned_expression = direct_return_expression(returning_node)
+	assert isinstance(returned_expression, ast.Name)
+	assert returned_expression.id == "payload"
+	assert callable_parameter_names(returning_node) == ["payload"]
+	assert extract_sequence_input_rule(returning_node) == ""
+
+	annotated_sequence_node = ast.parse(
+		"def handle(items: list[str]):\n"
+		"    return len(items)\n"
+	).body[0]
+	iterated_sequence_node = ast.parse(
+		"def handle(items):\n"
+		"    for item in items:\n"
+		"        consume(item)\n"
+	).body[0]
+	assert isinstance(annotated_sequence_node, ast.FunctionDef)
+	assert isinstance(iterated_sequence_node, ast.FunctionDef)
+	assert extract_sequence_input_rule(annotated_sequence_node) == "handle accepts sequence inputs via parameter `items`"
+	assert extract_sequence_input_rule(iterated_sequence_node) == "handle accepts sequence inputs via parameter `items`"
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

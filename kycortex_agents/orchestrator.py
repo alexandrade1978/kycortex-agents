@@ -39,14 +39,17 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     annotation_accepts_sequence_input,
+    callable_parameter_names,
     comparison_required_field,
     call_signature_details,
     call_expression_basename,
     dataclass_field_has_default,
     dataclass_field_is_init_enabled,
+    direct_return_expression,
     extract_indirect_required_fields,
     extract_lookup_field_rules,
     extract_required_fields,
+    extract_sequence_input_rule,
     field_selector_name,
     first_user_parameter,
     has_dataclass_decorator,
@@ -3428,27 +3431,13 @@ class Orchestrator:
         return call_expression_basename(node)
 
     def _direct_return_expression(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Optional[ast.expr]:
-        for statement in node.body:
-            if isinstance(statement, ast.Return) and statement.value is not None:
-                return statement.value
-        return None
+        return direct_return_expression(node)
 
     def _callable_parameter_names(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
-        positional = [*node.args.posonlyargs, *node.args.args]
-        if positional and positional[0].arg in {"self", "cls"}:
-            positional = positional[1:]
-        return [argument.arg for argument in positional]
+        return callable_parameter_names(node)
 
     def _extract_sequence_input_rule(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-        first_parameter = self._first_user_parameter(node)
-        if first_parameter is None:
-            return ""
-        annotation = ast_name(first_parameter.annotation) if first_parameter.annotation is not None else ""
-        if self._annotation_accepts_sequence_input(annotation):
-            return f"{node.name} accepts sequence inputs via parameter `{first_parameter.arg}`"
-        if self._parameter_is_iterated(node, first_parameter.arg):
-            return f"{node.name} accepts sequence inputs via parameter `{first_parameter.arg}`"
-        return ""
+        return extract_sequence_input_rule(node)
 
     def _first_user_parameter(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Optional[ast.arg]:
         return first_user_parameter(node)

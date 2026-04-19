@@ -42,6 +42,9 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 from kycortex_agents.orchestration.repair_test_runtime import (
 	build_runtime_only_test_repair_lines,
 )
+from kycortex_agents.orchestration.repair_test_structure import (
+	build_structural_test_repair_lines,
+)
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
@@ -762,6 +765,77 @@ def test_build_runtime_only_test_repair_lines_handles_return_shape_and_did_not_r
 	assert any("wrapped object return shape" in line for line in lines)
 	assert any("rebuild that scenario around an input that actually violates the current validator or contract" in line for line in lines)
 	assert any("reserve pytest.raises only for an input that the current validator demonstrably rejects" in line for line in lines)
+
+
+def test_build_structural_test_repair_lines_handles_budget_and_assertionless_guidance_directly():
+	lines = build_structural_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- line count: 206/150\n"
+			"- top-level test functions: 14/7 max\n"
+			"- fixture count: 4/3\n"
+			"- tests without assertion-like checks: test_happy_path (line 5), test_batch_processing (line 16)\n"
+		),
+		failed_content_lower="",
+		imported_module_symbols=[],
+		undefined_available_module_symbols=[],
+		helper_alias_names=[],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=["test_happy_path (line 5)", "test_batch_processing (line 16)"],
+		missing_datetime_import_issue=False,
+		implementation_prefers_direct_datetime_import=False,
+	)
+
+	assert any("Reduce scope aggressively: target 3 to 4 top-level tests" in line for line in lines)
+	assert any("The validation summary already flagged these hollow top-level tests" in line for line in lines)
+	assert any("discard the current pytest skeleton and rewrite the entire suite from scratch" in line for line in lines)
+
+
+def test_build_structural_test_repair_lines_handles_alias_drift_and_missing_imports_directly():
+	lines = build_structural_test_repair_lines(
+		summary_lower="generated test validation:\n- undefined local names: datetime (line 10), auditlogger (line 6)\n- pytest execution: fail\n",
+		failed_content_lower="timestamp=request.timestamp",
+		imported_module_symbols=["AuditLog", "ComplianceIntakeService", "ComplianceRequest"],
+		undefined_available_module_symbols=["AuditLogger"],
+		helper_alias_names=["AuditLogger"],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=[],
+		missing_datetime_import_issue=True,
+		implementation_prefers_direct_datetime_import=True,
+	)
+
+	assert any("timestamp=fixed_time instead of timestamp=request.timestamp" in line for line in lines)
+	assert any("The previous file referenced real module symbols without importing them: AuditLogger." in line for line in lines)
+	assert any("undefined helper or collaborator aliases outside the documented import surface: AuditLogger" in line for line in lines)
+	assert any("The current implementation already imports `from datetime import datetime`" in line for line in lines)
+
+
+def test_build_structural_test_repair_lines_handles_payload_and_fixture_constraints_directly():
+	lines = build_structural_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- payload contract violations: get_logs payload missing required fields: action, record_id at line 14\n"
+			"- non-batch sequence calls: score_request does not accept batch/list inputs at line 46\n"
+			"- reserved fixture names: request (line 5)\n"
+			"- unsupported mock assertions: mock.assert_called_once() without patch\n"
+		),
+		failed_content_lower="",
+		imported_module_symbols=[],
+		undefined_available_module_symbols=[],
+		helper_alias_names=[],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=[],
+		missing_datetime_import_issue=False,
+		implementation_prefers_direct_datetime_import=False,
+	)
+
+	assert any("provide every required field or omit that optional payload entirely" in line for line in lines)
+	assert any("Keep scalar functions scalar" in line for line in lines)
+	assert any("Never define a custom fixture named request." in line for line in lines)
+	assert any("Do not use mock-style assertion bookkeeping" in line for line in lines)
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

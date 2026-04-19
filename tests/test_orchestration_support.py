@@ -198,6 +198,7 @@ from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
 	parse_task_public_contract_surface,
 	should_compact_architecture_context,
+	task_public_contract_anchor,
 	task_exact_top_level_test_count,
 	task_fixture_budget,
 	task_line_budget,
@@ -2449,6 +2450,26 @@ def test_parse_task_public_contract_surface_handles_owners_defaults_and_markers_
 		"not a callable surface",
 		[],
 	)
+
+
+def test_task_public_contract_anchor_extracts_bullets_and_indented_continuations_directly():
+	description = (
+		"Implement the workflow.\n\n"
+		"Public contract anchor:\n"
+		"- Public facade: ComplianceIntakeService\n"
+		"- Required workflow: ComplianceIntakeService.handle_request(request)\n"
+		"  Keep the same public entrypoint name.\n"
+		"- Required CLI entrypoint: main()\n\n"
+		"Additional notes here.\n"
+	)
+
+	assert task_public_contract_anchor(description) == (
+		"- Public facade: ComplianceIntakeService\n"
+		"- Required workflow: ComplianceIntakeService.handle_request(request)\n"
+		"  Keep the same public entrypoint name.\n"
+		"- Required CLI entrypoint: main()"
+	)
+	assert task_public_contract_anchor("No anchor here") == ""
 
 
 def test_workflow_control_log_helpers_minimize_task_ids_directly():

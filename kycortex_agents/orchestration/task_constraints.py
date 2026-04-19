@@ -63,6 +63,31 @@ def parse_task_public_contract_surface(surface: str) -> tuple[Optional[str], str
     return match.group("owner"), match.group("name"), args
 
 
+def task_public_contract_anchor(task_description: str) -> str:
+    if not isinstance(task_description, str) or not task_description.strip():
+        return ""
+
+    lines = [line.rstrip() for line in task_description.splitlines()]
+    collecting = False
+    anchor_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not collecting:
+            if stripped == "Public contract anchor:":
+                collecting = True
+            continue
+        if not stripped:
+            break
+        if stripped.startswith("- "):
+            anchor_lines.append(stripped)
+            continue
+        if line.startswith((" ", "\t")):
+            anchor_lines.append(line.rstrip())
+            continue
+        break
+    return "\n".join(anchor_lines)
+
+
 def should_compact_architecture_context(
     task: Optional[Task],
     task_public_contract_anchor: str,

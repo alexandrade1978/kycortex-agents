@@ -138,6 +138,7 @@ from kycortex_agents.orchestration.task_constraints import (
     compact_architecture_context,
     parse_task_public_contract_surface,
     should_compact_architecture_context,
+    task_public_contract_anchor,
     task_exact_top_level_test_count,
     task_fixture_budget,
     task_line_budget,
@@ -2321,28 +2322,7 @@ class Orchestrator:
         return self._default_module_name_for_task(current_task)
 
     def _task_public_contract_anchor(self, task_description: str) -> str:
-        if not isinstance(task_description, str) or not task_description.strip():
-            return ""
-
-        lines = [line.rstrip() for line in task_description.splitlines()]
-        collecting = False
-        anchor_lines: list[str] = []
-        for line in lines:
-            stripped = line.strip()
-            if not collecting:
-                if stripped == "Public contract anchor:":
-                    collecting = True
-                continue
-            if not stripped:
-                break
-            if stripped.startswith("- "):
-                anchor_lines.append(stripped)
-                continue
-            if line.startswith((" ", "\t")):
-                anchor_lines.append(line.rstrip())
-                continue
-            break
-        return "\n".join(anchor_lines)
+        return task_public_contract_anchor(task_description)
 
     def _code_artifact_context(
         self,

@@ -25,6 +25,9 @@ from kycortex_agents.orchestration.repair_analysis import (
 	required_field_list_from_failed_artifact,
 	suggest_declared_attribute_replacement,
 )
+from kycortex_agents.orchestration.repair_code_validation import (
+	build_code_validation_repair_lines,
+)
 from kycortex_agents.orchestration.repair_signals import (
 	content_has_incomplete_required_evidence_payload,
 	content_has_matching_datetime_import,
@@ -743,6 +746,90 @@ def test_build_runtime_only_test_repair_lines_handles_helper_runtime_focus_direc
 	assert any("collapse the suite to exactly three tests" in line for line in lines)
 	assert any("Delete standalone score_request, log_audit, and extra invalid-case tests" in line for line in lines)
 	assert any("When behavior is uncertain, prefer stable invariants" in line for line in lines)
+
+
+def test_build_code_validation_repair_lines_handles_constructor_and_attribute_guidance_directly():
+	lines = build_code_validation_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- pytest execution: fail\n"
+			"- pytest failure details: failed tests_tests.py::test_happy_path - typeerror: vendorprofile.__init__() got multiple values for argument 'vendor_id'\n"
+		),
+		failed_content_lower="return vendorprofile(vendor_id, **request.details)\nreturn profile.expired_certifications\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=("VendorProfile", "vendor_id"),
+		duplicate_constructor_call_hint="VendorProfile(vendor_id, **request.details)",
+		duplicate_constructor_explicit_rewrite_hint=(
+			"VendorProfile(vendor_id=vendor_id, service_category=request.details['service_category'], "
+			"due_diligence_evidence=request.details['due_diligence_evidence'], "
+			"is_sanctioned=request.details.get('is_sanctioned', False))"
+		),
+		missing_attribute_details=("VendorProfile", "expired_certifications", ["certifications", "incidents"]),
+		nested_payload_wrapper_details=None,
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=None,
+	)
+
+	assert any("got multiple values for argument 'vendor_id'" in line for line in lines)
+	assert any("VendorProfile(vendor_id, **request.details)" in line for line in lines)
+	assert any("VendorProfile currently defines certifications and incidents" in line for line in lines)
+	assert any("Prefer replacing .expired_certifications with .certifications" in line for line in lines)
+
+
+def test_build_code_validation_repair_lines_handles_dataclass_import_and_line_budget_directly():
+	lines = build_code_validation_repair_lines(
+		summary_lower=(
+			"generated code validation:\n"
+			"- module import: fail\n"
+			"- import summary: typeerror: non-default argument 'details' follows default argument\n"
+			"- import summary: nameerror: name 'logging' is not defined\n"
+			"- line count: 312/300\n"
+			"- verdict: fail\n"
+		),
+		failed_content_lower="logger = logging.getlogger(__name__)\n",
+		dataclass_order_examples=[
+			"The current failed artifact still has this ordering bug in ReviewAction. Rewrite it as ReviewAction(action_id, action_type, details, timestamp=field(default_factory=datetime.now))."
+		],
+		duplicate_constructor_argument_details=None,
+		duplicate_constructor_call_hint="",
+		duplicate_constructor_explicit_rewrite_hint="",
+		missing_attribute_details=None,
+		nested_payload_wrapper_details=None,
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=("logging", "logger = logging.getLogger(__name__)"),
+	)
+
+	assert any("reorder the fields so every required non-default field appears before any field with a default" in line for line in lines)
+	assert any("ReviewAction(action_id, action_type, details, timestamp=field(default_factory=datetime.now))" in line for line in lines)
+	assert any("add `import logging` before first use" in line for line in lines)
+	assert any("Rewrite the full module smaller and leave clear headroom below the reported line ceiling" in line for line in lines)
+
+
+def test_build_code_validation_repair_lines_handles_nested_payload_and_timezone_guidance_directly():
+	lines = build_code_validation_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- pytest execution: fail\n"
+			"- pytest failure details: failed tests_tests.py::test_batch_processing - valueerror: invalid return case\n"
+			"- pytest failure details: failed tests_tests.py::test_risk_scoring_with_certifications - typeerror: can't compare offset-naive and offset-aware datetimes\n"
+		),
+		failed_content_lower="required_fields = {'request_id', 'request_type', 'details'}\nreturn required_fields.issubset(request.details)\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=None,
+		duplicate_constructor_call_hint="",
+		duplicate_constructor_explicit_rewrite_hint="",
+		missing_attribute_details=None,
+		nested_payload_wrapper_details=("details", ["request_id", "request_type", "details"], "return required_fields.issubset(request.details)"),
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=None,
+	)
+
+	assert any("treats request_id, request_type, and details as required keys inside request.details" in line for line in lines)
+	assert any("Do not return the broken validation line `return required_fields.issubset(request.details)` unchanged" in line for line in lines)
+	assert any("Normalize every datetime comparison to one timezone convention before comparing timestamps." in line for line in lines)
 
 
 def test_build_runtime_only_test_repair_lines_handles_return_shape_and_did_not_raise_directly():

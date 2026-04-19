@@ -14,7 +14,6 @@ try:
 except ImportError:  # pragma: no cover - non-POSIX fallback
     resource = None  # type: ignore[assignment]
 
-from kycortex_agents.agents.dependency_manager import extract_requirement_name, is_provenance_unsafe_requirement
 from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
@@ -29,6 +28,11 @@ from kycortex_agents.orchestration.ast_tools import (
     python_import_roots,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.dependency_analysis import (
+    analyze_dependency_manifest,
+    normalize_import_name,
+    normalize_package_name,
+)
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
     semantic_output_key,
@@ -270,15 +274,6 @@ from kycortex_agents.types import (
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
-
-_THIRD_PARTY_PACKAGE_ALIASES = {
-    "bs4": "beautifulsoup4",
-    "cv2": "opencv-python",
-    "crypto": "pycryptodome",
-    "pil": "pillow",
-    "sklearn": "scikit-learn",
-    "yaml": "pyyaml",
-}
 
 _STDLIB_MODULES = set(getattr(sys, "stdlib_module_names", set()))
 _PYTEST_BUILTIN_FIXTURES = {
@@ -2328,51 +2323,13 @@ class Orchestrator:
         return {}
 
     def _analyze_dependency_manifest(self, manifest_content: str, code_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        declared_packages: list[str] = []
-        normalized_declared_packages: set[str] = set()
-        provenance_violations: list[str] = []
-        for raw_line in manifest_content.splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            package_name = extract_requirement_name(line)
-            if not package_name:
-                if is_provenance_unsafe_requirement(line):
-                    provenance_violations.append(line)
-                continue
-            declared_packages.append(package_name)
-            normalized_declared_packages.add(self._normalize_package_name(package_name))
-            if is_provenance_unsafe_requirement(line):
-                provenance_violations.append(line)
-
-        required_imports = sorted(code_analysis.get("third_party_imports") or []) if isinstance(code_analysis, dict) else []
-        normalized_required_imports = {self._normalize_import_name(module_name) for module_name in required_imports}
-        missing_manifest_entries = [
-            module_name
-            for module_name in required_imports
-            if self._normalize_import_name(module_name) not in normalized_declared_packages
-        ]
-        unused_manifest_entries = [
-            package_name
-            for package_name in declared_packages
-            if self._normalize_package_name(package_name) not in normalized_required_imports
-        ]
-        return {
-            "required_imports": required_imports,
-            "declared_packages": declared_packages,
-            "missing_manifest_entries": missing_manifest_entries,
-            "unused_manifest_entries": unused_manifest_entries,
-            "provenance_violations": provenance_violations,
-            "is_valid": not missing_manifest_entries and not provenance_violations,
-        }
+        return analyze_dependency_manifest(manifest_content, code_analysis)
 
     def _normalize_package_name(self, package_name: str) -> str:
-        return package_name.strip().lower().replace("-", "_")
+        return normalize_package_name(package_name)
 
     def _normalize_import_name(self, module_name: str) -> str:
-        normalized_name = module_name.strip().lower().replace("-", "_")
-        package_name = _THIRD_PARTY_PACKAGE_ALIASES.get(normalized_name, normalized_name)
-        return self._normalize_package_name(package_name)
+        return normalize_import_name(module_name)
 
     def _build_code_outline(self, raw_content: str) -> str:
         if not raw_content.strip():

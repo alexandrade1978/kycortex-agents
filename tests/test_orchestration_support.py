@@ -21,6 +21,11 @@ from kycortex_agents.orchestration.ast_tools import (
 	render_expression,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.dependency_analysis import (
+	analyze_dependency_manifest,
+	normalize_import_name,
+	normalize_package_name,
+)
 from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
 	semantic_output_key,
@@ -1227,6 +1232,19 @@ def test_python_import_roots_collects_top_level_imports_directly():
 	assert python_import_roots(code) == {"os", "json", "pathlib"}
 	assert python_import_roots("") == set()
 	assert python_import_roots(42) == set()
+
+
+def test_dependency_analysis_helpers_normalize_and_flag_provenance_directly():
+	analysis = analyze_dependency_manifest(
+		"requests @ https://example.com/requests.whl\nPyYAML>=6.0",
+		{"third_party_imports": ["requests", "yaml"]},
+	)
+
+	assert normalize_package_name("scikit-learn") == "scikit_learn"
+	assert normalize_import_name("yaml") == "pyyaml"
+	assert analysis["declared_packages"] == ["requests", "PyYAML"]
+	assert analysis["missing_manifest_entries"] == []
+	assert analysis["provenance_violations"] == ["requests @ https://example.com/requests.whl"]
 
 
 def test_build_dependency_validation_summary_formats_failures_directly():

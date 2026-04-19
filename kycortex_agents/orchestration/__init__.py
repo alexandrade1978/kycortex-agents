@@ -13,6 +13,11 @@ from kycortex_agents.orchestration.ast_tools import (
 	render_expression,
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.dependency_analysis import (
+	analyze_dependency_manifest,
+	normalize_import_name,
+	normalize_package_name,
+)
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
@@ -280,10 +285,13 @@ __all__ = [
 	"python_import_roots",
 	"render_expression",
 	"ArtifactPersistenceSupport",
+	"analyze_dependency_manifest",
 	"AcceptanceEvaluation",
 	"AcceptanceLane",
 	"TaskAcceptanceLists",
 	"normalize_agent_result",
+	"normalize_import_name",
+	"normalize_package_name",
 	"semantic_output_key",
 	"summarize_output",
 	"unredacted_agent_result",

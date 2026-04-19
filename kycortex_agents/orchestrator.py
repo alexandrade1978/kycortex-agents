@@ -175,6 +175,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     iter_relevant_test_body_nodes,
     known_type_allows_member,
     len_call_matches_batch_result,
+    parent_map,
     payload_argument_for_validation,
     patched_target_name_from_call,
     resolve_bound_value,
@@ -3903,11 +3904,7 @@ class Orchestrator:
         return infer_argument_type(payload_node, bindings, field_name, class_map)
 
     def _parent_map(self, root: ast.AST) -> Dict[ast.AST, ast.AST]:
-        return {
-            child: parent
-            for parent in ast.walk(root)
-            for child in ast.iter_child_nodes(parent)
-        }
+        return parent_map(root)
 
     def _call_has_negative_expectation(self, node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> bool:
         return call_has_negative_expectation(node, parent_map)

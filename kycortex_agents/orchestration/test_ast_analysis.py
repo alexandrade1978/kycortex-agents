@@ -348,6 +348,14 @@ def ast_contains_node(root: ast.AST, target: ast.AST) -> bool:
     return any(candidate is target for candidate in ast.walk(root))
 
 
+def parent_map(root: ast.AST) -> Dict[ast.AST, ast.AST]:
+    return {
+        child: parent
+        for parent in ast.walk(root)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+
 def collect_local_bindings(node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, ast.AST]:
     bindings: Dict[str, ast.AST] = {}
     for stmt in node.body:
@@ -966,6 +974,7 @@ __all__ = [
     "call_expects_invalid_outcome",
     "call_has_negative_expectation",
     "ast_contains_node",
+    "parent_map",
     "batch_call_allows_partial_invalid_items",
     "bound_target_names",
     "call_argument_count",

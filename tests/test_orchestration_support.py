@@ -168,6 +168,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	is_mock_factory_call,
 	is_patch_call,
 	len_call_matches_batch_result,
+	parent_map,
 	payload_argument_for_validation,
 	patched_target_name_from_call,
 	resolve_bound_value,
@@ -595,12 +596,12 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 		for node in ast.walk(test_case)
 		if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
 	]
-	parent_map = {child: parent for parent in ast.walk(negative_tree) for child in ast.iter_child_nodes(parent)}
+	negative_parent_map = parent_map(negative_tree)
 	negative_call = next(node for node in call_nodes if node.lineno == 4)
 	followup_call = next(node for node in call_nodes if node.lineno == 5)
-	assert call_has_negative_expectation(negative_call, parent_map) is True
-	assert call_expects_invalid_outcome(test_case, followup_call, parent_map) is True
-	assert assigned_name_for_call(followup_call, parent_map) == "result"
+	assert call_has_negative_expectation(negative_call, negative_parent_map) is True
+	assert call_expects_invalid_outcome(test_case, followup_call, negative_parent_map) is True
+	assert assigned_name_for_call(followup_call, negative_parent_map) == "result"
 	assert invalid_outcome_subject_matches(ast.parse("result.status", mode="eval").body, "result", None) is True
 	assert invalid_outcome_marker_matches(ast.Constant("Pending")) is True
 	false_compare = ast.parse("assert False == validate_request(data)").body[0]
@@ -622,7 +623,7 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 	partial_call = partial_function.body[0]
 	assert isinstance(partial_call, ast.Assign)
 	assert isinstance(partial_call.value, ast.Call)
-	partial_parent_map = {child: parent for parent in ast.walk(partial_tree) for child in ast.iter_child_nodes(parent)}
+	partial_parent_map = parent_map(partial_tree)
 	assert batch_call_allows_partial_invalid_items(
 		partial_function,
 		partial_call.value,

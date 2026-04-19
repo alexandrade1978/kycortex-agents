@@ -667,6 +667,131 @@ def validate_batch_call(
     return violations
 
 
+def assert_expects_false(node: ast.Assert, call_node: ast.Call) -> bool:
+    test = node.test
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return ast_contains_node(test.operand, call_node)
+    if not isinstance(test, ast.Compare):
+        return False
+
+    def false_constant(item: ast.AST) -> bool:
+        return isinstance(item, ast.Constant) and item.value is False
+
+    if ast_contains_node(test.left, call_node):
+        return any(false_constant(comparator) for comparator in test.comparators) and any(
+            isinstance(op, (ast.Is, ast.Eq)) for op in test.ops
+        )
+    if any(ast_contains_node(comparator, call_node) for comparator in test.comparators):
+        return false_constant(test.left) and any(isinstance(op, (ast.Is, ast.Eq)) for op in test.ops)
+    return False
+
+
+def call_has_negative_expectation(node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> bool:
+    current: Optional[ast.AST] = node
+    while current is not None:
+        parent = parent_map.get(current)
+        if parent is None:
+            return False
+        if isinstance(parent, ast.Assert) and assert_expects_false(parent, node):
+            return True
+        if isinstance(parent, (ast.With, ast.AsyncWith)) and with_uses_pytest_raises(parent):
+            return True
+        current = parent
+    return False
+
+
+def invalid_outcome_subject_matches(
+    node: ast.AST,
+    result_name: Optional[str],
+    payload_name: Optional[str],
+) -> bool:
+    if result_name and isinstance(node, ast.Name) and node.id == result_name:
+        return True
+    if (
+        result_name is not None
+        and isinstance(node, ast.Attribute)
+        and node.attr in {"status", "state", "outcome", "result", "valid", "is_valid", "success", "accepted"}
+        and isinstance(node.value, ast.Name)
+        and node.value.id == result_name
+    ):
+        return True
+    return (
+        payload_name is not None
+        and isinstance(node, ast.Attribute)
+        and node.attr in {"status", "state", "outcome", "result", "valid", "is_valid", "success", "accepted"}
+        and isinstance(node.value, ast.Name)
+        and node.value.id == payload_name
+    )
+
+
+def invalid_outcome_marker_matches(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Constant):
+        return False
+    if node.value is False or node.value is None:
+        return True
+    return isinstance(node.value, str) and node.value.strip().lower() in {
+        "invalid",
+        "failed",
+        "error",
+        "pending",
+        "rejected",
+        "reject",
+    }
+
+
+def assert_expects_invalid_outcome(
+    node: ast.AST,
+    result_name: Optional[str],
+    payload_name: Optional[str],
+) -> bool:
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return invalid_outcome_subject_matches(node.operand, result_name, payload_name)
+
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+        return False
+    if not isinstance(node.ops[0], (ast.Eq, ast.Is)):
+        return False
+
+    left = node.left
+    right = node.comparators[0]
+    return (
+        invalid_outcome_subject_matches(left, result_name, payload_name)
+        and invalid_outcome_marker_matches(right)
+    ) or (
+        invalid_outcome_subject_matches(right, result_name, payload_name)
+        and invalid_outcome_marker_matches(left)
+    )
+
+
+def assigned_name_for_call(
+    call_node: ast.Call,
+    parent_map: Dict[ast.AST, ast.AST],
+) -> Optional[str]:
+    parent = parent_map.get(call_node)
+    if isinstance(parent, ast.Assign) and len(parent.targets) == 1 and isinstance(parent.targets[0], ast.Name):
+        return parent.targets[0].id
+    if isinstance(parent, ast.AnnAssign) and isinstance(parent.target, ast.Name):
+        return parent.target.id
+    return None
+
+
+def call_expects_invalid_outcome(
+    test_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    call_node: ast.Call,
+    parent_map: Dict[ast.AST, ast.AST],
+) -> bool:
+    result_name = assigned_name_for_call(call_node, parent_map)
+    payload_arg = first_call_argument(call_node)
+    payload_name = payload_arg.id if isinstance(payload_arg, ast.Name) else None
+
+    for child in ast.walk(test_node):
+        if not isinstance(child, ast.Assert) or getattr(child, "lineno", 0) <= getattr(call_node, "lineno", 0):
+            continue
+        if assert_expects_invalid_outcome(child.test, result_name, payload_name):
+            return True
+    return False
+
+
 def collect_module_defined_names(tree: ast.AST) -> set[str]:
     if not isinstance(tree, ast.Module):
         return set()
@@ -750,6 +875,11 @@ def count_test_assertion_like_checks(node: ast.FunctionDef | ast.AsyncFunctionDe
 __all__ = [
     "MOCK_ASSERTION_ATTRIBUTES",
     "MOCK_ASSERTION_METHODS",
+    "assert_expects_false",
+    "assert_expects_invalid_outcome",
+    "assigned_name_for_call",
+    "call_expects_invalid_outcome",
+    "call_has_negative_expectation",
     "ast_contains_node",
     "bound_target_names",
     "call_argument_count",
@@ -773,6 +903,8 @@ __all__ = [
     "infer_argument_type",
     "infer_call_result_type",
     "infer_expression_type",
+    "invalid_outcome_marker_matches",
+    "invalid_outcome_subject_matches",
     "is_mock_factory_call",
     "is_patch_call",
     "iter_relevant_test_body_nodes",

@@ -132,10 +132,15 @@ from kycortex_agents.orchestration.sandbox_templates import (
 	render_sandbox_sitecustomize,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+	assert_expects_false,
+	assert_expects_invalid_outcome,
+	assigned_name_for_call,
 	analyze_typed_test_member_usage,
 	ast_contains_node,
 	call_argument_count,
 	call_argument_value,
+	call_expects_invalid_outcome,
+	call_has_negative_expectation,
 	collect_local_bindings,
 	collect_local_name_bindings,
 	collect_module_defined_names,
@@ -154,6 +159,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	infer_argument_type,
 	infer_call_result_type,
 	infer_expression_type,
+	invalid_outcome_marker_matches,
+	invalid_outcome_subject_matches,
 	is_mock_factory_call,
 	is_patch_call,
 	payload_argument_for_validation,
@@ -567,6 +574,38 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 		"process_batch",
 		{"fields": ["name", "email"], "request_key": None, "wrapper_key": None},
 	) == ["process_batch batch item missing required fields: email at line 1"]
+
+	negative_tree = ast.parse(
+		"def test_invalid_case():\n"
+		"    payload = {'status': 'invalid'}\n"
+		"    with pytest.raises(ValueError):\n"
+		"        validate_request(payload)\n"
+		"    result = validate_request(payload)\n"
+		"    assert payload.status == 'Invalid'\n"
+	)
+	test_case = negative_tree.body[0]
+	assert isinstance(test_case, ast.FunctionDef)
+	call_nodes = [
+		node
+		for node in ast.walk(test_case)
+		if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+	]
+	parent_map = {child: parent for parent in ast.walk(negative_tree) for child in ast.iter_child_nodes(parent)}
+	negative_call = next(node for node in call_nodes if node.lineno == 4)
+	followup_call = next(node for node in call_nodes if node.lineno == 5)
+	assert call_has_negative_expectation(negative_call, parent_map) is True
+	assert call_expects_invalid_outcome(test_case, followup_call, parent_map) is True
+	assert assigned_name_for_call(followup_call, parent_map) == "result"
+	assert invalid_outcome_subject_matches(ast.parse("result.status", mode="eval").body, "result", None) is True
+	assert invalid_outcome_marker_matches(ast.Constant("Pending")) is True
+	false_compare = ast.parse("assert False == validate_request(data)").body[0]
+	assert isinstance(false_compare, ast.Assert)
+	assert isinstance(false_compare.test, ast.Compare)
+	assert isinstance(false_compare.test.comparators[0], ast.Call)
+	assert assert_expects_false(false_compare, false_compare.test.comparators[0]) is True
+	invalid_status_assert = ast.parse("assert request.status == 'Invalid'").body[0]
+	assert isinstance(invalid_status_assert, ast.Assert)
+	assert assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
 
 
 def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():

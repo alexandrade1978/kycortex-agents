@@ -136,11 +136,16 @@ from kycortex_agents.orchestration.task_constraints import (
     task_requires_cli_entrypoint,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+    assert_expects_false,
+    assert_expects_invalid_outcome,
+    assigned_name_for_call,
     analyze_typed_test_member_usage,
     ast_contains_node,
     call_argument_count,
     bound_target_names,
     call_argument_value,
+    call_expects_invalid_outcome,
+    call_has_negative_expectation,
     collect_local_bindings,
     collect_local_name_bindings,
     collect_module_defined_names,
@@ -159,6 +164,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     infer_argument_type,
     infer_call_result_type,
     infer_expression_type,
+    invalid_outcome_marker_matches,
+    invalid_outcome_subject_matches,
     is_mock_factory_call,
     is_patch_call,
     iter_relevant_test_body_nodes,
@@ -3898,17 +3905,7 @@ class Orchestrator:
         }
 
     def _call_has_negative_expectation(self, node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> bool:
-        current: Optional[ast.AST] = node
-        while current is not None:
-            parent = parent_map.get(current)
-            if parent is None:
-                return False
-            if isinstance(parent, ast.Assert) and self._assert_expects_false(parent, node):
-                return True
-            if isinstance(parent, (ast.With, ast.AsyncWith)) and self._with_uses_pytest_raises(parent):
-                return True
-            current = parent
-        return False
+        return call_has_negative_expectation(node, parent_map)
 
     def _call_expects_invalid_outcome(
         self,
@@ -3916,16 +3913,7 @@ class Orchestrator:
         call_node: ast.Call,
         parent_map: Dict[ast.AST, ast.AST],
     ) -> bool:
-        result_name = self._assigned_name_for_call(call_node, parent_map)
-        payload_arg = first_call_argument(call_node)
-        payload_name = payload_arg.id if isinstance(payload_arg, ast.Name) else None
-
-        for child in ast.walk(test_node):
-            if not isinstance(child, ast.Assert) or getattr(child, "lineno", 0) <= getattr(call_node, "lineno", 0):
-                continue
-            if self._assert_expects_invalid_outcome(child.test, result_name, payload_name):
-                return True
-        return False
+        return call_expects_invalid_outcome(test_node, call_node, parent_map)
 
     def _assert_expects_invalid_outcome(
         self,
@@ -3933,23 +3921,7 @@ class Orchestrator:
         result_name: Optional[str],
         payload_name: Optional[str],
     ) -> bool:
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            return self._invalid_outcome_subject_matches(node.operand, result_name, payload_name)
-
-        if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
-            return False
-        if not isinstance(node.ops[0], (ast.Eq, ast.Is)):
-            return False
-
-        left = node.left
-        right = node.comparators[0]
-        return (
-            self._invalid_outcome_subject_matches(left, result_name, payload_name)
-            and self._invalid_outcome_marker_matches(right)
-        ) or (
-            self._invalid_outcome_subject_matches(right, result_name, payload_name)
-            and self._invalid_outcome_marker_matches(left)
-        )
+        return assert_expects_invalid_outcome(node, result_name, payload_name)
 
     def _invalid_outcome_subject_matches(
         self,
@@ -3957,37 +3929,10 @@ class Orchestrator:
         result_name: Optional[str],
         payload_name: Optional[str],
     ) -> bool:
-        if result_name and isinstance(node, ast.Name) and node.id == result_name:
-            return True
-        if (
-            result_name is not None
-            and isinstance(node, ast.Attribute)
-            and node.attr in {"status", "state", "outcome", "result", "valid", "is_valid", "success", "accepted"}
-            and isinstance(node.value, ast.Name)
-            and node.value.id == result_name
-        ):
-            return True
-        return (
-            payload_name is not None
-            and isinstance(node, ast.Attribute)
-            and node.attr in {"status", "state", "outcome", "result", "valid", "is_valid", "success", "accepted"}
-            and isinstance(node.value, ast.Name)
-            and node.value.id == payload_name
-        )
+        return invalid_outcome_subject_matches(node, result_name, payload_name)
 
     def _invalid_outcome_marker_matches(self, node: ast.AST) -> bool:
-        if not isinstance(node, ast.Constant):
-            return False
-        if node.value is False or node.value is None:
-            return True
-        return isinstance(node.value, str) and node.value.strip().lower() in {
-            "invalid",
-            "failed",
-            "error",
-            "pending",
-            "rejected",
-            "reject",
-        }
+        return invalid_outcome_marker_matches(node)
 
     def _batch_call_allows_partial_invalid_items(
         self,
@@ -4010,12 +3955,7 @@ class Orchestrator:
         return False
 
     def _assigned_name_for_call(self, call_node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> Optional[str]:
-        parent = parent_map.get(call_node)
-        if isinstance(parent, ast.Assign) and len(parent.targets) == 1 and isinstance(parent.targets[0], ast.Name):
-            return parent.targets[0].id
-        if isinstance(parent, ast.AnnAssign) and isinstance(parent.target, ast.Name):
-            return parent.target.id
-        return None
+        return assigned_name_for_call(call_node, parent_map)
 
     def _assert_limits_batch_result(
         self,
@@ -4231,22 +4171,7 @@ class Orchestrator:
         )
 
     def _assert_expects_false(self, node: ast.Assert, call_node: ast.Call) -> bool:
-        test = node.test
-        if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
-            return self._ast_contains_node(test.operand, call_node)
-        if not isinstance(test, ast.Compare):
-            return False
-
-        def false_constant(item: ast.AST) -> bool:
-            return isinstance(item, ast.Constant) and item.value is False
-
-        if self._ast_contains_node(test.left, call_node):
-            return any(false_constant(comparator) for comparator in test.comparators) and any(
-                isinstance(op, (ast.Is, ast.Eq)) for op in test.ops
-            )
-        if any(self._ast_contains_node(comparator, call_node) for comparator in test.comparators):
-            return false_constant(test.left) and any(isinstance(op, (ast.Is, ast.Eq)) for op in test.ops)
-        return False
+        return assert_expects_false(node, call_node)
 
     def _with_uses_pytest_raises(self, node: ast.With | ast.AsyncWith) -> bool:
         return with_uses_pytest_raises(node)

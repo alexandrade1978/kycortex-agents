@@ -72,6 +72,7 @@ from kycortex_agents.orchestration.repair_analysis import (
 	attribute_is_field_reference,
 	class_field_uses_empty_default,
 	compare_mentions_invalid_literal,
+	failing_pytest_test_names,
 	duplicate_constructor_explicit_rewrite_hint,
 	invalid_outcome_audit_return_details,
 	invalid_outcome_missing_audit_trail_details,
@@ -1875,6 +1876,21 @@ def test_qa_repair_should_reuse_failed_suite_for_missing_real_module_imports_dir
 		implementation_code,
 		failed_tests,
 	)
+
+
+def test_failing_pytest_test_names_deduplicates_directly():
+	validation_summary = (
+		"Generated test validation:\n"
+		"- Pytest failure details: FAILED tests_tests.py::test_happy_path - AssertionError; "
+		"FAILED tests_tests.py::test_batch_processing - AssertionError; "
+		"FAILED tests_tests.py::test_happy_path - AssertionError\n"
+		"- Verdict: FAIL"
+	)
+
+	assert failing_pytest_test_names(validation_summary) == [
+		"test_happy_path",
+		"test_batch_processing",
+	]
 
 
 def test_build_runtime_only_test_repair_lines_handles_helper_runtime_focus_directly():

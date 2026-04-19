@@ -84,6 +84,7 @@ from kycortex_agents.orchestration.repair_analysis import (
     duplicate_constructor_argument_call_hint,
     duplicate_constructor_argument_details,
     duplicate_constructor_explicit_rewrite_hint,
+    failing_pytest_test_names,
     first_non_import_line_with_name,
     internal_constructor_strictness_details,
     invalid_outcome_audit_return_details,
@@ -1997,9 +1998,7 @@ class Orchestrator:
 
     @staticmethod
     def _failing_pytest_test_names(validation_summary: object) -> list[str]:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return []
-        return list(dict.fromkeys(re.findall(r"::([A-Za-z_][A-Za-z0-9_]*)\b", validation_summary)))
+        return failing_pytest_test_names(validation_summary)
 
     @staticmethod
     def _compare_mentions_invalid_literal(node: ast.Compare) -> bool:

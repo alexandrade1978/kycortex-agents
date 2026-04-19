@@ -341,6 +341,10 @@ def compare_mentions_invalid_literal(node: ast.Compare) -> bool:
 	return _compare_mentions_invalid_literal(node)
 
 
+def failing_pytest_test_names(validation_summary: object) -> list[str]:
+	return _failing_pytest_test_names(validation_summary)
+
+
 def test_function_targets_invalid_path(
 	node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:

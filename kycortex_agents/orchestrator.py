@@ -250,6 +250,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
     build_code_repair_context_from_test_failure,
+    configure_repair_attempts,
     build_repair_context,
     ensure_budget_decomposition_task,
     failed_task_ids_for_repair,
@@ -1852,31 +1853,16 @@ class Orchestrator:
         return failed_artifact_content_for_category(task.output, task.output_payload, failure_category)
 
     def _configure_repair_attempts(self, project: ProjectState, failed_task_ids: list[str], cycle: Dict[str, Any]) -> None:
-        planned_task_ids: set[str] = set()
-        for failed_task_id in failed_task_ids:
-            task = project.get_task(failed_task_id)
-            if task is None:
-                continue
-
-            if self._test_failure_requires_code_repair(task):
-                code_task = self._upstream_code_task_for_test_failure(project, task)
-                if code_task is not None and code_task.id not in planned_task_ids:
-                    code_repair_context = self._build_code_repair_context_from_test_failure(code_task, task, cycle)
-                    decomposition_task = self._ensure_budget_decomposition_task(project, code_task, code_repair_context)
-                    if decomposition_task is not None:
-                        code_repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
-                    project._plan_task_repair(code_task.id, code_repair_context)
-                    planned_task_ids.add(code_task.id)
-
-            if task.id in planned_task_ids:
-                continue
-
-            repair_context = self._build_repair_context(task, cycle)
-            decomposition_task = self._ensure_budget_decomposition_task(project, task, repair_context)
-            if decomposition_task is not None:
-                repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
-            project._plan_task_repair(task.id, repair_context)
-            planned_task_ids.add(task.id)
+        configure_repair_attempts(
+            project,
+            failed_task_ids,
+            cycle,
+            test_failure_requires_code_repair=self._test_failure_requires_code_repair,
+            upstream_code_task_for_test_failure=self._upstream_code_task_for_test_failure,
+            build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
+            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+            build_repair_context=self._build_repair_context,
+        )
 
     def _repair_task_ids_for_cycle(self, project: ProjectState, failed_task_ids: list[str]) -> list[str]:
         return repair_task_ids_for_cycle(

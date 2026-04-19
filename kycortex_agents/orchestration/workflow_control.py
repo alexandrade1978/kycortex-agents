@@ -269,6 +269,44 @@ def repair_task_ids_for_cycle(
     return repair_task_ids
 
 
+def configure_repair_attempts(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    cycle: dict[str, Any],
+    *,
+    test_failure_requires_code_repair,
+    upstream_code_task_for_test_failure,
+    build_code_repair_context_from_test_failure,
+    ensure_budget_decomposition_task,
+    build_repair_context,
+) -> None:
+    planned_task_ids: set[str] = set()
+    for failed_task_id in failed_task_ids:
+        task = project.get_task(failed_task_id)
+        if task is None:
+            continue
+
+        if test_failure_requires_code_repair(task):
+            code_task = upstream_code_task_for_test_failure(project, task)
+            if code_task is not None and code_task.id not in planned_task_ids:
+                code_repair_context = build_code_repair_context_from_test_failure(code_task, task, cycle)
+                decomposition_task = ensure_budget_decomposition_task(project, code_task, code_repair_context)
+                if decomposition_task is not None:
+                    code_repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
+                project._plan_task_repair(code_task.id, code_repair_context)
+                planned_task_ids.add(code_task.id)
+
+        if task.id in planned_task_ids:
+            continue
+
+        repair_context = build_repair_context(task, cycle)
+        decomposition_task = ensure_budget_decomposition_task(project, task, repair_context)
+        if decomposition_task is not None:
+            repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
+        project._plan_task_repair(task.id, repair_context)
+        planned_task_ids.add(task.id)
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

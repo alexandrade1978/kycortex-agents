@@ -253,6 +253,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 from kycortex_agents.orchestration.workflow_control import (
 	active_repair_cycle,
 	build_code_repair_context_from_test_failure,
+	configure_repair_attempts,
 	build_repair_context,
 	ensure_budget_decomposition_task,
 	failed_task_ids_for_repair,
@@ -2848,6 +2849,21 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		ensure_budget_decomposition_task=lambda _project, _task, _repair_context: None,
 		execution_agent_name=lambda task: task.assigned_to,
 	) == ["code__repair_0", "tests__repair_1"]
+	configure_project = ProjectState(project_name="Demo", goal="Build demo")
+	configure_project.add_task(Task(id="code", title="Code", description="Code", assigned_to="code_engineer"))
+	configure_project.add_task(Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester"))
+	configure_repair_attempts(
+		configure_project,
+		["tests"],
+		{"cycle": 2},
+		test_failure_requires_code_repair=lambda task: task.id == "tests",
+		upstream_code_task_for_test_failure=lambda project, task: project.get_task("code"),
+		build_code_repair_context_from_test_failure=lambda code_task, test_task, cycle: {"cycle": cycle.get("cycle"), "source_failure_task_id": test_task.id},
+		ensure_budget_decomposition_task=lambda _project, _task, _repair_context: None,
+		build_repair_context=lambda task, cycle: {"cycle": cycle.get("cycle"), "failure_category": FailureCategory.UNKNOWN.value},
+	)
+	assert configure_project.get_task("code").repair_context == {"cycle": 2, "source_failure_task_id": "tests"}
+	assert configure_project.get_task("tests").repair_context == {"cycle": 2, "failure_category": FailureCategory.UNKNOWN.value}
 
 
 def test_repair_instruction_owner_mapping_directly():

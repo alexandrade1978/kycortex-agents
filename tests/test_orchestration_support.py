@@ -26,6 +26,12 @@ from kycortex_agents.orchestration.output_helpers import (
 	summarize_output,
 	unredacted_agent_result,
 )
+from kycortex_agents.orchestration.module_ast_analysis import (
+	annotation_accepts_sequence_input,
+	call_signature_details,
+	method_binding_kind,
+	self_assigned_attributes,
+)
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
@@ -465,6 +471,48 @@ def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_ch
 	).body[0]
 	assert isinstance(function_node, ast.FunctionDef)
 	assert count_test_assertion_like_checks(function_node) == 4
+
+
+def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_assignments():
+	assert annotation_accepts_sequence_input("Sequence[int]") is True
+	assert annotation_accepts_sequence_input("str") is False
+
+	function_node = ast.parse(
+		"def handle(self, payload: list[str], *, strict: bool = False) -> int:\n"
+		"    return len(payload)\n"
+	).body[0]
+	assert isinstance(function_node, ast.FunctionDef)
+	signature = call_signature_details(function_node, skip_first_param=True)
+	assert signature == {
+		"params": ["payload", "strict"],
+		"param_annotations": ["list[str]", "bool"],
+		"min_args": 1,
+		"max_args": 2,
+		"accepts_sequence_input": True,
+		"return_annotation": "int",
+	}
+
+	staticmethod_node = ast.parse(
+		"@staticmethod\n"
+		"def build(value: str) -> str:\n"
+		"    return value\n"
+	).body[0]
+	classmethod_node = ast.parse(
+		"@decorators.classmethod()\n"
+		"def make(cls, value: str) -> str:\n"
+		"    return value\n"
+	).body[0]
+	instance_node = ast.parse(
+		"def save(self, value: str) -> None:\n"
+		"    self.value = value\n"
+	).body[0]
+	assert isinstance(staticmethod_node, ast.FunctionDef)
+	assert isinstance(classmethod_node, ast.FunctionDef)
+	assert isinstance(instance_node, ast.FunctionDef)
+	assert method_binding_kind(staticmethod_node) == "static"
+	assert method_binding_kind(classmethod_node) == "class"
+	assert method_binding_kind(instance_node) == "instance"
+	assert self_assigned_attributes(instance_node) == ["value"]
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

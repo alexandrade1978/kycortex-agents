@@ -23,6 +23,12 @@ from kycortex_agents.orchestration.output_helpers import (
 	summarize_output,
 	unredacted_agent_result,
 )
+from kycortex_agents.orchestration.module_ast_analysis import (
+	annotation_accepts_sequence_input,
+	call_signature_details,
+	method_binding_kind,
+	self_assigned_attributes,
+)
 from kycortex_agents.orchestration.repair_analysis import (
 	class_field_annotations_from_failed_artifact,
 	class_field_names_from_failed_artifact,
@@ -201,6 +207,10 @@ __all__ = [
 	"semantic_output_key",
 	"summarize_output",
 	"unredacted_agent_result",
+	"annotation_accepts_sequence_input",
+	"call_signature_details",
+	"method_binding_kind",
+	"self_assigned_attributes",
 	"build_code_validation_repair_lines",
 	"build_repair_focus_lines",
 	"build_test_validation_repair_lines",

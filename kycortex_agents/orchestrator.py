@@ -138,9 +138,11 @@ from kycortex_agents.orchestration.task_constraints import (
 from kycortex_agents.orchestration.test_ast_analysis import (
     assert_expects_false,
     assert_expects_invalid_outcome,
+    assert_limits_batch_result,
     assigned_name_for_call,
     analyze_typed_test_member_usage,
     ast_contains_node,
+    batch_call_allows_partial_invalid_items,
     call_argument_count,
     bound_target_names,
     call_argument_value,
@@ -153,6 +155,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     collect_parametrized_argument_names,
     collect_test_local_types,
     collect_undefined_local_names,
+    comparison_implies_partial_batch_result,
     count_test_assertion_like_checks,
     extract_literal_dict_keys,
     extract_literal_field_values,
@@ -164,12 +167,14 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     infer_argument_type,
     infer_call_result_type,
     infer_expression_type,
+    int_constant_value,
     invalid_outcome_marker_matches,
     invalid_outcome_subject_matches,
     is_mock_factory_call,
     is_patch_call,
     iter_relevant_test_body_nodes,
     known_type_allows_member,
+    len_call_matches_batch_result,
     payload_argument_for_validation,
     patched_target_name_from_call,
     resolve_bound_value,
@@ -3941,18 +3946,7 @@ class Orchestrator:
         bindings: Dict[str, ast.AST],
         parent_map: Dict[ast.AST, ast.AST],
     ) -> bool:
-        batch_items = self._extract_literal_list_items(first_call_argument(call_node), bindings)
-        if batch_items is None or len(batch_items) <= 1:
-            return False
-
-        result_name = self._assigned_name_for_call(call_node, parent_map)
-        batch_size = len(batch_items)
-        for child in ast.walk(test_node):
-            if not isinstance(child, ast.Assert):
-                continue
-            if self._assert_limits_batch_result(child.test, result_name, call_node, batch_size):
-                return True
-        return False
+        return batch_call_allows_partial_invalid_items(test_node, call_node, bindings, parent_map)
 
     def _assigned_name_for_call(self, call_node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> Optional[str]:
         return assigned_name_for_call(call_node, parent_map)
@@ -3964,25 +3958,7 @@ class Orchestrator:
         call_node: ast.Call,
         batch_size: int,
     ) -> bool:
-        if not isinstance(test, ast.Compare) or len(test.ops) != 1 or len(test.comparators) != 1:
-            return False
-        op = test.ops[0]
-
-        if self._len_call_matches_batch_result(test.left, result_name, call_node):
-            compared_value = self._int_constant_value(test.comparators[0])
-            return self._comparison_implies_partial_batch_result(op, compared_value, batch_size)
-
-        if self._len_call_matches_batch_result(test.comparators[0], result_name, call_node):
-            compared_value = self._int_constant_value(test.left)
-            reversed_op = {
-                ast.Lt: ast.Gt,
-                ast.LtE: ast.GtE,
-                ast.Gt: ast.Lt,
-                ast.GtE: ast.LtE,
-            }.get(type(op), type(op))
-            return self._comparison_implies_partial_batch_result(reversed_op(), compared_value, batch_size)
-
-        return False
+        return assert_limits_batch_result(test, result_name, call_node, batch_size)
 
     def _len_call_matches_batch_result(
         self,
@@ -3990,19 +3966,10 @@ class Orchestrator:
         result_name: Optional[str],
         call_node: ast.Call,
     ) -> bool:
-        if not isinstance(node, ast.Call):
-            return False
-        if not isinstance(node.func, ast.Name) or node.func.id != "len" or len(node.args) != 1:
-            return False
-        candidate = node.args[0]
-        if result_name is not None and isinstance(candidate, ast.Name) and candidate.id == result_name:
-            return True
-        return candidate is call_node
+        return len_call_matches_batch_result(node, result_name, call_node)
 
     def _int_constant_value(self, node: ast.AST) -> Optional[int]:
-        if isinstance(node, ast.Constant) and isinstance(node.value, int):
-            return node.value
-        return None
+        return int_constant_value(node)
 
     def _comparison_implies_partial_batch_result(
         self,
@@ -4010,15 +3977,7 @@ class Orchestrator:
         compared_value: Optional[int],
         batch_size: int,
     ) -> bool:
-        if compared_value is None:
-            return False
-        if isinstance(op, ast.Eq):
-            return compared_value < batch_size
-        if isinstance(op, ast.Lt):
-            return compared_value <= batch_size
-        if isinstance(op, ast.LtE):
-            return compared_value < batch_size
-        return False
+        return comparison_implies_partial_batch_result(op, compared_value, batch_size)
 
     @staticmethod
     def _test_name_suggests_validation_failure(test_name: str) -> bool:

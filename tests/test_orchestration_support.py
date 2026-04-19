@@ -134,9 +134,11 @@ from kycortex_agents.orchestration.sandbox_templates import (
 from kycortex_agents.orchestration.test_ast_analysis import (
 	assert_expects_false,
 	assert_expects_invalid_outcome,
+	assert_limits_batch_result,
 	assigned_name_for_call,
 	analyze_typed_test_member_usage,
 	ast_contains_node,
+	batch_call_allows_partial_invalid_items,
 	call_argument_count,
 	call_argument_value,
 	call_expects_invalid_outcome,
@@ -148,6 +150,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	collect_parametrized_argument_names,
 	collect_test_local_types,
 	collect_undefined_local_names,
+	comparison_implies_partial_batch_result,
 	count_test_assertion_like_checks,
 	extract_literal_dict_keys,
 	extract_literal_field_values,
@@ -159,10 +162,12 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	infer_argument_type,
 	infer_call_result_type,
 	infer_expression_type,
+	int_constant_value,
 	invalid_outcome_marker_matches,
 	invalid_outcome_subject_matches,
 	is_mock_factory_call,
 	is_patch_call,
+	len_call_matches_batch_result,
 	payload_argument_for_validation,
 	patched_target_name_from_call,
 	resolve_bound_value,
@@ -606,6 +611,31 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 	invalid_status_assert = ast.parse("assert request.status == 'Invalid'").body[0]
 	assert isinstance(invalid_status_assert, ast.Assert)
 	assert assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
+
+	partial_tree = ast.parse(
+		"def test_batch():\n"
+		"    result = process_batch([1, 2, 3])\n"
+		"    assert 1 > len(result)\n"
+	)
+	partial_function = partial_tree.body[0]
+	assert isinstance(partial_function, ast.FunctionDef)
+	partial_call = partial_function.body[0]
+	assert isinstance(partial_call, ast.Assign)
+	assert isinstance(partial_call.value, ast.Call)
+	partial_parent_map = {child: parent for parent in ast.walk(partial_tree) for child in ast.iter_child_nodes(parent)}
+	assert batch_call_allows_partial_invalid_items(
+		partial_function,
+		partial_call.value,
+		{},
+		partial_parent_map,
+	) is True
+	assert assert_limits_batch_result(ast.parse("1 > len(result)", mode="eval").body, "result", partial_call.value, 3) is True
+	direct_len = ast.parse("len(process_batch(requests))", mode="eval").body
+	assert isinstance(direct_len, ast.Call)
+	assert isinstance(direct_len.args[0], ast.Call)
+	assert len_call_matches_batch_result(direct_len, None, direct_len.args[0]) is True
+	assert int_constant_value(ast.Constant("x")) is None
+	assert comparison_implies_partial_batch_result(ast.LtE(), 2, 3) is True
 
 
 def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():

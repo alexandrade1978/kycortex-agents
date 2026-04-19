@@ -792,6 +792,90 @@ def call_expects_invalid_outcome(
     return False
 
 
+def batch_call_allows_partial_invalid_items(
+    test_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    call_node: ast.Call,
+    bindings: Dict[str, ast.AST],
+    parent_map: Dict[ast.AST, ast.AST],
+) -> bool:
+    batch_items = extract_literal_list_items(first_call_argument(call_node), bindings)
+    if batch_items is None or len(batch_items) <= 1:
+        return False
+
+    result_name = assigned_name_for_call(call_node, parent_map)
+    batch_size = len(batch_items)
+    for child in ast.walk(test_node):
+        if not isinstance(child, ast.Assert):
+            continue
+        if assert_limits_batch_result(child.test, result_name, call_node, batch_size):
+            return True
+    return False
+
+
+def assert_limits_batch_result(
+    test: ast.AST,
+    result_name: Optional[str],
+    call_node: ast.Call,
+    batch_size: int,
+) -> bool:
+    if not isinstance(test, ast.Compare) or len(test.ops) != 1 or len(test.comparators) != 1:
+        return False
+    op = test.ops[0]
+
+    if len_call_matches_batch_result(test.left, result_name, call_node):
+        compared_value = int_constant_value(test.comparators[0])
+        return comparison_implies_partial_batch_result(op, compared_value, batch_size)
+
+    if len_call_matches_batch_result(test.comparators[0], result_name, call_node):
+        compared_value = int_constant_value(test.left)
+        reversed_op = {
+            ast.Lt: ast.Gt,
+            ast.LtE: ast.GtE,
+            ast.Gt: ast.Lt,
+            ast.GtE: ast.LtE,
+        }.get(type(op), type(op))
+        return comparison_implies_partial_batch_result(reversed_op(), compared_value, batch_size)
+
+    return False
+
+
+def len_call_matches_batch_result(
+    node: ast.AST,
+    result_name: Optional[str],
+    call_node: ast.Call,
+) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    if not isinstance(node.func, ast.Name) or node.func.id != "len" or len(node.args) != 1:
+        return False
+    candidate = node.args[0]
+    if result_name is not None and isinstance(candidate, ast.Name) and candidate.id == result_name:
+        return True
+    return candidate is call_node
+
+
+def int_constant_value(node: ast.AST) -> Optional[int]:
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return node.value
+    return None
+
+
+def comparison_implies_partial_batch_result(
+    op: ast.cmpop,
+    compared_value: Optional[int],
+    batch_size: int,
+) -> bool:
+    if compared_value is None:
+        return False
+    if isinstance(op, ast.Eq):
+        return compared_value < batch_size
+    if isinstance(op, ast.Lt):
+        return compared_value <= batch_size
+    if isinstance(op, ast.LtE):
+        return compared_value < batch_size
+    return False
+
+
 def collect_module_defined_names(tree: ast.AST) -> set[str]:
     if not isinstance(tree, ast.Module):
         return set()
@@ -877,10 +961,12 @@ __all__ = [
     "MOCK_ASSERTION_METHODS",
     "assert_expects_false",
     "assert_expects_invalid_outcome",
+    "assert_limits_batch_result",
     "assigned_name_for_call",
     "call_expects_invalid_outcome",
     "call_has_negative_expectation",
     "ast_contains_node",
+    "batch_call_allows_partial_invalid_items",
     "bound_target_names",
     "call_argument_count",
     "call_argument_value",
@@ -892,6 +978,7 @@ __all__ = [
     "collect_parametrized_argument_names",
     "collect_test_local_types",
     "collect_undefined_local_names",
+    "comparison_implies_partial_batch_result",
     "count_test_assertion_like_checks",
     "extract_literal_dict_keys",
     "extract_literal_field_values",
@@ -903,12 +990,14 @@ __all__ = [
     "infer_argument_type",
     "infer_call_result_type",
     "infer_expression_type",
+    "int_constant_value",
     "invalid_outcome_marker_matches",
     "invalid_outcome_subject_matches",
     "is_mock_factory_call",
     "is_patch_call",
     "iter_relevant_test_body_nodes",
     "known_type_allows_member",
+    "len_call_matches_batch_result",
     "payload_argument_for_validation",
     "patched_target_name_from_call",
     "resolve_bound_value",

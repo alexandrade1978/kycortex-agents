@@ -22,6 +22,7 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration.agent_runtime import execute_agent
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
@@ -330,7 +331,7 @@ class Orchestrator:
         project.start_task(task.id)
         normalized_output: Optional[AgentOutput] = None
         try:
-            output = self._execute_agent(agent, agent_input)
+            output = execute_agent(agent, agent_input)
             normalized_output = normalize_agent_result(output)
             normalized_output = unredacted_agent_result(agent, normalized_output)
             normalized_output = self._sanitize_output_provider_call_metadata(normalized_output)
@@ -5560,13 +5561,6 @@ class Orchestrator:
             project_goal=redact_sensitive_text(project.goal),
             context=context,
         )
-
-    def _execute_agent(self, agent: Any, agent_input: AgentInput) -> Any:
-        if hasattr(agent, "execute"):
-            return agent.execute(agent_input)
-        if hasattr(agent, "run_with_input"):
-            return agent.run_with_input(agent_input)
-        return agent.run(agent_input.task_description, agent_input.context)
 
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""

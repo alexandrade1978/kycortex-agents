@@ -8,6 +8,7 @@ import pytest
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.orchestration.agent_runtime import execute_agent
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer, ast_name, is_pytest_fixture
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.output_helpers import (
@@ -127,7 +128,7 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 	task_acceptance_lists,
 )
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -164,13 +165,43 @@ def test_artifact_persistence_support_redacts_and_updates_relative_path(tmp_path
 	]
 
 	support.persist_artifacts(artifacts)
-
 	persisted_path = tmp_path / "output" / "reports" / "final_draft.md"
 	persisted_content = persisted_path.read_text(encoding="utf-8")
 
 	assert artifacts[0].path == "reports/final_draft.md"
 	assert artifacts[0].content == persisted_content
 	assert persisted_content == "Authorization: Bearer [REDACTED]"
+
+
+def test_execute_agent_prefers_execute_then_run_with_input_then_run_directly():
+	agent_input = AgentInput(
+		task_id="task-1",
+		task_title="Task",
+		task_description="Do work",
+		project_name="Demo",
+		project_goal="Build demo",
+		context={"key": "value"},
+	)
+
+	class ExecuteAgent:
+		def execute(self, received_input: AgentInput) -> str:
+			assert received_input is agent_input
+			return "execute"
+
+	class RunWithInputAgent:
+		def run_with_input(self, received_input: AgentInput) -> str:
+			assert received_input is agent_input
+			return "run_with_input"
+
+	class RunAgent:
+		def run(self, task_description: str, context: dict[str, object]) -> str:
+			assert task_description == "Do work"
+			assert context == {"key": "value"}
+			return "run"
+
+	assert execute_agent(ExecuteAgent(), agent_input) == "execute"
+	assert execute_agent(RunWithInputAgent(), agent_input) == "run_with_input"
+	assert execute_agent(RunAgent(), agent_input) == "run"
 
 
 def test_artifact_persistence_support_rejects_symlink_escape(tmp_path):

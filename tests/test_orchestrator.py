@@ -18,6 +18,7 @@ from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientErr
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration import (
     build_code_validation_summary,
+    build_dependency_validation_summary,
     build_repair_focus_lines,
     build_test_validation_summary,
 )
@@ -2550,9 +2551,9 @@ def test_build_generated_test_env_strips_additional_prefix_markers(tmp_path, mon
 
 def test_build_dependency_validation_summary_formats_failures_and_passes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_dependency_validation_summary(
+    summary = build_dependency_validation_summary(
         {
             "required_imports": ["requests"],
             "declared_packages": ["urllib3"],

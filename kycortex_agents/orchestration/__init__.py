@@ -94,6 +94,7 @@ from kycortex_agents.orchestration.task_constraints import (
 )
 from kycortex_agents.orchestration.validation_reporting import (
 	build_code_validation_summary,
+	build_dependency_validation_summary,
 	build_test_validation_summary,
 	completion_diagnostics_from_provider_call,
 	completion_diagnostics_summary,
@@ -151,6 +152,7 @@ __all__ = [
 	"class_field_names_from_failed_artifact",
 	"BLOCKING_TEST_ISSUE_KEYS",
 	"build_code_validation_summary",
+	"build_dependency_validation_summary",
 	"build_test_validation_summary",
 	"build_runtime_only_test_repair_lines",
 	"build_structural_test_repair_lines",

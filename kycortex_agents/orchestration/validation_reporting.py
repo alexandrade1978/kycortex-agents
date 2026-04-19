@@ -221,6 +221,27 @@ def build_code_validation_summary(
 	return "\n".join(lines)
 
 
+def build_dependency_validation_summary(dependency_analysis: Dict[str, Any]) -> str:
+	lines = ["Dependency manifest validation:"]
+	lines.append(
+		f"- Required third-party imports: {', '.join(dependency_analysis.get('required_imports') or ['none'])}"
+	)
+	lines.append(
+		f"- Declared packages: {', '.join(dependency_analysis.get('declared_packages') or ['none'])}"
+	)
+	lines.append(
+		f"- Missing manifest entries: {', '.join(dependency_analysis.get('missing_manifest_entries') or ['none'])}"
+	)
+	lines.append(
+		f"- Unused manifest entries: {', '.join(dependency_analysis.get('unused_manifest_entries') or ['none'])}"
+	)
+	lines.append(
+		f"- Provenance violations: {', '.join(dependency_analysis.get('provenance_violations') or ['none'])}"
+	)
+	lines.append(f"- Verdict: {'PASS' if dependency_analysis.get('is_valid') else 'FAIL'}")
+	return "\n".join(lines)
+
+
 def build_test_validation_summary(
 	test_analysis: Dict[str, Any],
 	test_execution: Optional[Dict[str, Any]] = None,

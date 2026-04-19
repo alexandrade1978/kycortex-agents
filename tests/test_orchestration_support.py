@@ -87,6 +87,7 @@ from kycortex_agents.orchestration.task_constraints import (
 )
 from kycortex_agents.orchestration.validation_reporting import (
 	build_code_validation_summary,
+	build_dependency_validation_summary,
 	build_test_validation_summary,
 	completion_diagnostics_from_provider_call,
 	completion_diagnostics_summary,
@@ -429,6 +430,28 @@ def test_build_test_validation_summary_reports_warning_override_and_pytest_detai
 	assert "Constructor arity mismatches (warning): MyClass (line 5)" in summary
 	assert "Pytest execution: PASS" in summary
 	assert summary.endswith("- Verdict: PASS (warnings overridden by pytest)")
+
+
+def test_build_dependency_validation_summary_formats_failures_directly():
+	summary = build_dependency_validation_summary(
+		{
+			"required_imports": ["requests"],
+			"declared_packages": ["urllib3"],
+			"missing_manifest_entries": ["requests"],
+			"unused_manifest_entries": ["urllib3"],
+			"is_valid": False,
+		}
+	)
+
+	assert summary == (
+		"Dependency manifest validation:\n"
+		"- Required third-party imports: requests\n"
+		"- Declared packages: urllib3\n"
+		"- Missing manifest entries: requests\n"
+		"- Unused manifest entries: urllib3\n"
+		"- Provenance violations: none\n"
+		"- Verdict: FAIL"
+	)
 
 
 def test_build_repair_instruction_specializes_missing_import_directly():

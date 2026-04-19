@@ -90,6 +90,7 @@ from kycortex_agents.orchestration.task_constraints import (
 )
 from kycortex_agents.orchestration.validation_reporting import (
     build_code_validation_summary,
+    build_dependency_validation_summary,
     build_test_validation_summary,
     completion_diagnostics_from_provider_call,
     completion_diagnostics_summary,
@@ -1417,7 +1418,7 @@ class Orchestrator:
         if failure_category == FailureCategory.DEPENDENCY_VALIDATION.value:
             dependency_analysis = validation.get("dependency_analysis")
             if isinstance(dependency_analysis, dict):
-                return self._build_dependency_validation_summary(dependency_analysis)
+                return build_dependency_validation_summary(dependency_analysis)
         return fallback_message
 
     def _test_failure_requires_code_repair(self, task: Task) -> bool:
@@ -2549,7 +2550,7 @@ class Orchestrator:
                 "dependency_manifest": task.output or "",
                 "dependency_manifest_path": artifact_path,
                 "dependency_analysis": dependency_analysis,
-                "dependency_validation_summary": self._build_dependency_validation_summary(dependency_analysis),
+                "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
             }
         return {}
 
@@ -2591,26 +2592,6 @@ class Orchestrator:
             "provenance_violations": provenance_violations,
             "is_valid": not missing_manifest_entries and not provenance_violations,
         }
-
-    def _build_dependency_validation_summary(self, dependency_analysis: Dict[str, Any]) -> str:
-        lines = ["Dependency manifest validation:"]
-        lines.append(
-            f"- Required third-party imports: {', '.join(dependency_analysis.get('required_imports') or ['none'])}"
-        )
-        lines.append(
-            f"- Declared packages: {', '.join(dependency_analysis.get('declared_packages') or ['none'])}"
-        )
-        lines.append(
-            f"- Missing manifest entries: {', '.join(dependency_analysis.get('missing_manifest_entries') or ['none'])}"
-        )
-        lines.append(
-            f"- Unused manifest entries: {', '.join(dependency_analysis.get('unused_manifest_entries') or ['none'])}"
-        )
-        lines.append(
-            f"- Provenance violations: {', '.join(dependency_analysis.get('provenance_violations') or ['none'])}"
-        )
-        lines.append(f"- Verdict: {'PASS' if dependency_analysis.get('is_valid') else 'FAIL'}")
-        return "\n".join(lines)
 
     def _normalize_package_name(self, package_name: str) -> str:
         return package_name.strip().lower().replace("-", "_")

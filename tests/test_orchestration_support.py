@@ -28,6 +28,9 @@ from kycortex_agents.orchestration.repair_analysis import (
 from kycortex_agents.orchestration.repair_code_validation import (
 	build_code_validation_repair_lines,
 )
+from kycortex_agents.orchestration.repair_focus import (
+	build_repair_focus_lines,
+)
 from kycortex_agents.orchestration.repair_test_validation import (
 	build_test_validation_repair_lines,
 )
@@ -993,6 +996,56 @@ def test_build_test_validation_repair_lines_composes_available_imports_and_runti
 	assert any("The previous file referenced real module symbols without importing them: AuditLogger." in line for line in lines)
 	assert any("The current implementation already imports `from datetime import datetime`" in line for line in lines)
 	assert any("preserve its valid imports, constructor shapes, fixture payload structure, and scenario skeleton" in line for line in lines)
+
+
+def test_build_repair_focus_lines_dispatches_code_validation_directly():
+	lines = build_repair_focus_lines(
+		repair_context={
+			"failure_category": "code_validation",
+			"validation_summary": (
+				"Generated code validation:\n"
+				"- Module import: FAIL\n"
+				"- Import summary: NameError: name 'logging' is not defined\n"
+				"- Verdict: FAIL"
+			),
+			"failed_artifact_content": (
+				"from dataclasses import dataclass\n\n"
+				"logger = logging.getLogger(__name__)\n"
+			),
+		},
+		context={},
+	)
+
+	assert any("logger = logging.getLogger(__name__)" in line for line in lines)
+	assert any("import logging" in line for line in lines)
+
+
+def test_build_repair_focus_lines_dispatches_test_validation_directly():
+	lines = build_repair_focus_lines(
+		repair_context={
+			"failure_category": "test_validation",
+			"validation_summary": (
+				"Generated test validation:\n"
+				"- Type mismatches: details expects dict but test uses str at line 8\n"
+				"- Imported module symbols: ComplianceIntakeService, ComplianceRequest\n"
+				"- Helper surface usages: RiskScoringService (line 33)\n"
+				"- Tests without assertion-like checks: test_happy_path (line 5)\n"
+				"- Verdict: FAIL"
+			),
+			"failed_artifact_content": (
+				"from code_implementation import ComplianceIntakeService, ComplianceRequest\n\n"
+				"def test_happy_path():\n"
+				"    service = ComplianceIntakeService()\n"
+				"    request = ComplianceRequest(request_id='req-1', request_type='screening', details='details')\n"
+				"    service.handle_request(request)\n"
+			),
+			"helper_surface_usages": ["RiskScoringService (line 33)"],
+		},
+		context={"code": "class RiskScoringService:\n    pass\n"},
+	)
+
+	assert any("PRIORITY: Fix type mismatches before other repairs" in line for line in lines)
+	assert any("references these flagged helper surfaces: RiskScoringService" in line for line in lines)
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases_directly():

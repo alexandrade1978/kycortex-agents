@@ -26,6 +26,7 @@ from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
 from kycortex_agents.orchestration.repair_analysis import (
+    dataclass_default_order_repair_examples,
     class_field_annotations_from_failed_artifact,
     class_field_names_from_failed_artifact,
     default_value_for_annotation,
@@ -63,11 +64,8 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     validation_summary_helper_alias_names,
     validation_summary_symbols,
 )
-from kycortex_agents.orchestration.repair_code_validation import (
-    build_code_validation_repair_lines,
-)
-from kycortex_agents.orchestration.repair_test_validation import (
-    build_test_validation_repair_lines,
+from kycortex_agents.orchestration.repair_focus import (
+    build_repair_focus_lines,
 )
 from kycortex_agents.orchestration.repair_instructions import (
     build_code_repair_instruction_from_test_failure,
@@ -1923,64 +1921,7 @@ class Orchestrator:
         self,
         failed_artifact_content: object,
     ) -> list[str]:
-        if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
-            return []
-
-        try:
-            tree = ast.parse(failed_artifact_content)
-        except SyntaxError:
-            return []
-
-        lines: list[str] = []
-        for node in tree.body:
-            if not isinstance(node, ast.ClassDef) or not self._has_dataclass_decorator(node):
-                continue
-
-            field_entries: list[tuple[str, ast.AST | None]] = []
-            for statement in node.body:
-                if not isinstance(statement, ast.AnnAssign):
-                    continue
-                if not isinstance(statement.target, ast.Name):
-                    continue
-                field_entries.append((statement.target.id, statement.value))
-
-            if not field_entries:
-                continue
-
-            required_fields: list[str] = []
-            default_fields: list[tuple[str, ast.AST]] = []
-            offending_required_fields: list[str] = []
-            seen_default = False
-            for field_name, default_value in field_entries:
-                if default_value is None:
-                    required_fields.append(field_name)
-                    if seen_default:
-                        offending_required_fields.append(field_name)
-                    continue
-                seen_default = True
-                default_fields.append((field_name, default_value))
-
-            if not offending_required_fields or not default_fields:
-                continue
-
-            rendered_signature = ", ".join(
-                [
-                    *required_fields,
-                    *[
-                        f"{field_name}={ast.unparse(default_value)}"
-                        for field_name, default_value in default_fields
-                    ],
-                ]
-            )
-            offending_fields = ", ".join(offending_required_fields)
-            lines.append(
-                "The current failed artifact still has this ordering bug in "
-                f"{node.name}: move required field(s) {offending_fields} ahead of every defaulted field and implement {node.name}({rendered_signature})."
-            )
-            if len(lines) >= 2:
-                break
-
-        return lines
+        return dataclass_default_order_repair_examples(failed_artifact_content)
 
     @staticmethod
     def _render_name_list(names: list[str]) -> str:
@@ -5696,98 +5637,7 @@ class Orchestrator:
         repair_context: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
     ) -> list[str]:
-        failure_category = repair_context.get("failure_category")
-        validation_summary = repair_context.get("validation_summary")
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return []
-
-        failed_artifact_content = repair_context.get("failed_artifact_content")
-        failed_content_lower = (
-            failed_artifact_content.lower()
-            if isinstance(failed_artifact_content, str)
-            else ""
-        )
-        missing_datetime_import_issue = self._validation_summary_has_missing_datetime_import_issue(
-            validation_summary,
-            failed_artifact_content,
-        )
-        required_evidence_runtime_issue = self._validation_summary_has_required_evidence_runtime_issue(
-            validation_summary,
-            failed_artifact_content,
-            context.get("code", "") if isinstance(context, dict) else "",
-        )
-        dataclass_order_examples = self._dataclass_default_order_repair_examples(
-            failed_artifact_content,
-        )
-        duplicate_constructor_argument_details = self._duplicate_constructor_argument_details(
-            validation_summary,
-        )
-        duplicate_constructor_call_hint = self._duplicate_constructor_argument_call_hint(
-            validation_summary,
-            failed_artifact_content,
-        )
-        duplicate_constructor_explicit_rewrite_hint = self._duplicate_constructor_explicit_rewrite_hint(
-            validation_summary,
-            failed_artifact_content,
-        )
-        missing_attribute_details = self._missing_object_attribute_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-        nested_payload_wrapper_details = self._nested_payload_wrapper_field_validation_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-        constructor_strictness_details = self._internal_constructor_strictness_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-        plain_class_field_details = self._plain_class_field_default_factory_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-        required_evidence_items = self._implementation_required_evidence_items(
-            context.get("code", "") if isinstance(context, dict) else ""
-        )
-        missing_import_details = self._missing_import_nameerror_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-        summary_lower = validation_summary.lower()
-        lines: list[str] = []
-        if failure_category == FailureCategory.CODE_VALIDATION.value:
-            return build_code_validation_repair_lines(
-                summary_lower,
-                failed_content_lower,
-                dataclass_order_examples,
-                duplicate_constructor_argument_details,
-                duplicate_constructor_call_hint,
-                duplicate_constructor_explicit_rewrite_hint,
-                missing_attribute_details,
-                nested_payload_wrapper_details,
-                constructor_strictness_details,
-                plain_class_field_details,
-                missing_import_details,
-            )
-
-        if failure_category != FailureCategory.TEST_VALIDATION.value:
-            return lines
-        implementation_code = context.get("code", "") if isinstance(context, dict) else ""
-        lines.extend(
-            build_test_validation_repair_lines(
-                validation_summary,
-                failed_artifact_content,
-                implementation_code,
-                repair_context.get("helper_surface_symbols"),
-                repair_context.get("helper_surface_usages"),
-                missing_datetime_import_issue,
-                required_evidence_runtime_issue,
-                required_evidence_items,
-                self._implementation_prefers_direct_datetime_import(implementation_code),
-            )
-        )
-        return lines
+        return build_repair_focus_lines(repair_context, context)
 
     def _execute_agent(self, agent: Any, agent_input: AgentInput) -> Any:
         if hasattr(agent, "execute"):

@@ -172,6 +172,69 @@ def nested_payload_wrapper_field_validation_details(
 	return container_name, offending_fields, validation_line
 
 
+def dataclass_default_order_repair_examples(
+	failed_artifact_content: object,
+) -> list[str]:
+	if not isinstance(failed_artifact_content, str) or not failed_artifact_content.strip():
+		return []
+
+	try:
+		tree = ast.parse(failed_artifact_content)
+	except SyntaxError:
+		return []
+
+	lines: list[str] = []
+	for node in tree.body:
+		if not isinstance(node, ast.ClassDef) or not _has_dataclass_decorator(node):
+			continue
+
+		field_entries: list[tuple[str, ast.AST | None]] = []
+		for statement in node.body:
+			if not isinstance(statement, ast.AnnAssign):
+				continue
+			if not isinstance(statement.target, ast.Name):
+				continue
+			field_entries.append((statement.target.id, statement.value))
+
+		if not field_entries:
+			continue
+
+		required_fields: list[str] = []
+		default_fields: list[tuple[str, ast.AST]] = []
+		offending_required_fields: list[str] = []
+		seen_default = False
+		for field_name, default_value in field_entries:
+			if default_value is None:
+				required_fields.append(field_name)
+				if seen_default:
+					offending_required_fields.append(field_name)
+				continue
+			seen_default = True
+			default_fields.append((field_name, default_value))
+
+		if not offending_required_fields or not default_fields:
+			continue
+
+		rendered_signature = ", ".join(
+			[
+				*required_fields,
+				*[
+					f"{field_name}={ast.unparse(default_value)}"
+					for field_name, default_value in default_fields
+				],
+			],
+		)
+		offending_fields = ", ".join(offending_required_fields)
+		lines.append(
+			"The current failed artifact still has this ordering bug in "
+			f"{node.name}: move required field(s) {offending_fields} ahead of every defaulted field and implement {node.name}({rendered_signature})."
+		)
+		if len(lines) >= 2:
+			break
+
+	return lines
+
+
 def internal_constructor_strictness_details(
 	validation_summary: object,
 	failed_artifact_content: object,

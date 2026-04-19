@@ -95,7 +95,10 @@ from kycortex_agents.orchestration.sandbox_templates import (
 	render_sandbox_sitecustomize,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+	ast_contains_node,
+	collect_local_bindings,
 	collect_local_name_bindings,
+	collect_module_defined_names,
 	collect_mock_support,
 	collect_parametrized_argument_names,
 	collect_test_local_types,
@@ -406,6 +409,32 @@ def test_test_ast_analysis_helpers_find_unsupported_mock_assertions_and_local_ty
 	assert find_unsupported_mock_assertions(function_node, local_types, {}) == [
 		"logging.getLogger().info.call_count (line 3)"
 	]
+
+
+def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly():
+	function_node = ast.parse(
+		"def test_case():\n"
+		"    payload = {'status': 'approved'}\n"
+		"    typed_payload: dict = payload\n"
+	).body[0]
+	assert isinstance(function_node, ast.FunctionDef)
+	bindings = collect_local_bindings(function_node)
+	assert set(bindings) == {"payload", "typed_payload"}
+	assert isinstance(bindings["payload"], ast.Dict)
+
+	module_tree = ast.parse(
+		"from pkg import *\n"
+		"import os as operating_system\n"
+		"value = 1\n"
+		"annotated: int = 2\n"
+		"holder.value: int = 3\n"
+	)
+	assert collect_module_defined_names(ast.Constant(1)) == set()
+	assert collect_module_defined_names(module_tree) == {"operating_system", "value", "annotated"}
+
+	call_tree = ast.parse("service.validate(payload)", mode="eval").body
+	inner_name = next(node for node in ast.walk(call_tree) if isinstance(node, ast.Name) and node.id == "payload")
+	assert ast_contains_node(call_tree, inner_name) is True
 
 
 def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():

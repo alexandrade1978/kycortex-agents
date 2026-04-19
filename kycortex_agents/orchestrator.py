@@ -101,8 +101,11 @@ from kycortex_agents.orchestration.task_constraints import (
     task_requires_cli_entrypoint,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+    ast_contains_node,
     bound_target_names,
+    collect_local_bindings,
     collect_local_name_bindings,
+    collect_module_defined_names,
     collect_mock_support,
     collect_parametrized_argument_names,
     collect_test_local_types,
@@ -4785,35 +4788,13 @@ class Orchestrator:
         return count_test_assertion_like_checks(node)
 
     def _ast_contains_node(self, root: ast.AST, target: ast.AST) -> bool:
-        return any(candidate is target for candidate in ast.walk(root))
+        return ast_contains_node(root, target)
 
     def _collect_local_bindings(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, ast.AST]:
-        bindings: Dict[str, ast.AST] = {}
-        for stmt in node.body:
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
-                bindings[stmt.targets[0].id] = stmt.value
-            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value is not None:
-                bindings[stmt.target.id] = stmt.value
-        return bindings
+        return collect_local_bindings(node)
 
     def _collect_module_defined_names(self, tree: ast.AST) -> set[str]:
-        if not isinstance(tree, ast.Module):
-            return set()
-
-        names: set[str] = set()
-        for stmt in tree.body:
-            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                names.add(stmt.name)
-            elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
-                for alias in stmt.names:
-                    if alias.name != "*":
-                        names.add(alias.asname or alias.name.split(".")[0])
-            elif isinstance(stmt, ast.Assign):
-                for target in stmt.targets:
-                    names.update(self._bound_target_names(target))
-            elif isinstance(stmt, ast.AnnAssign):
-                names.update(self._bound_target_names(stmt.target))
-        return names
+        return collect_module_defined_names(tree)
 
     def _function_argument_names(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
         return function_argument_names(node)

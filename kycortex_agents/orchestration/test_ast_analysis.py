@@ -343,6 +343,40 @@ def find_unsupported_mock_assertions(
     return sorted(issues)
 
 
+def ast_contains_node(root: ast.AST, target: ast.AST) -> bool:
+    return any(candidate is target for candidate in ast.walk(root))
+
+
+def collect_local_bindings(node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, ast.AST]:
+    bindings: Dict[str, ast.AST] = {}
+    for stmt in node.body:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            bindings[stmt.targets[0].id] = stmt.value
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value is not None:
+            bindings[stmt.target.id] = stmt.value
+    return bindings
+
+
+def collect_module_defined_names(tree: ast.AST) -> set[str]:
+    if not isinstance(tree, ast.Module):
+        return set()
+
+    names: set[str] = set()
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(stmt.name)
+        elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
+            for alias in stmt.names:
+                if alias.name != "*":
+                    names.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                names.update(bound_target_names(target))
+        elif isinstance(stmt, ast.AnnAssign):
+            names.update(bound_target_names(stmt.target))
+    return names
+
+
 def with_uses_pytest_raises(node: ast.With | ast.AsyncWith) -> bool:
     for item in node.items:
         context_expr = item.context_expr
@@ -406,8 +440,11 @@ def count_test_assertion_like_checks(node: ast.FunctionDef | ast.AsyncFunctionDe
 __all__ = [
     "MOCK_ASSERTION_ATTRIBUTES",
     "MOCK_ASSERTION_METHODS",
+    "ast_contains_node",
     "bound_target_names",
+    "collect_local_bindings",
     "collect_local_name_bindings",
+    "collect_module_defined_names",
     "collect_mock_support",
     "collect_parametrized_argument_names",
     "collect_test_local_types",

@@ -148,6 +148,7 @@ from kycortex_agents.orchestration.sandbox_templates import (
 )
 from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
+	parse_task_public_contract_surface,
 	should_compact_architecture_context,
 	task_exact_top_level_test_count,
 	task_fixture_budget,
@@ -338,6 +339,7 @@ __all__ = [
 	"build_structural_test_repair_lines",
 	"cancel_workflow",
 	"compact_architecture_context",
+	"parse_task_public_contract_surface",
 	"completion_diagnostics_from_provider_call",
 	"completion_diagnostics_summary",
 	"completion_hit_limit",

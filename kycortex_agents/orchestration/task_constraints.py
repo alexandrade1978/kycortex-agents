@@ -39,6 +39,30 @@ def task_requires_cli_entrypoint(task: Optional[Task]) -> bool:
     return any(keyword in description for keyword in ("cli", "entrypoint", "__main__", "command-line"))
 
 
+def parse_task_public_contract_surface(surface: str) -> tuple[Optional[str], str, list[str]]:
+    normalized_surface = surface.strip()
+    match = re.match(
+        r"^(?:(?P<owner>[A-Za-z_][A-Za-z0-9_]*)\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>[^)]*)\)",
+        normalized_surface,
+    )
+    if not match:
+        return None, normalized_surface, []
+
+    args_text = match.group("args").strip()
+    args: list[str] = []
+    if args_text:
+        for part in args_text.split(","):
+            cleaned = part.strip()
+            if not cleaned:
+                continue
+            cleaned = cleaned.split("=", 1)[0].strip()
+            cleaned = cleaned.split(":", 1)[0].strip()
+            cleaned = cleaned.lstrip("*")
+            if cleaned and cleaned not in {"/", "*"}:
+                args.append(cleaned)
+    return match.group("owner"), match.group("name"), args
+
+
 def should_compact_architecture_context(
     task: Optional[Task],
     task_public_contract_anchor: str,

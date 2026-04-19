@@ -136,6 +136,7 @@ from kycortex_agents.orchestration.sandbox_execution import (
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.task_constraints import (
     compact_architecture_context,
+    parse_task_public_contract_surface,
     should_compact_architecture_context,
     task_exact_top_level_test_count,
     task_fixture_budget,
@@ -645,27 +646,7 @@ class Orchestrator:
         }
 
     def _parse_task_public_contract_surface(self, surface: str) -> tuple[Optional[str], str, list[str]]:
-        normalized_surface = surface.strip()
-        match = re.match(
-            r"^(?:(?P<owner>[A-Za-z_][A-Za-z0-9_]*)\.)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>[^)]*)\)",
-            normalized_surface,
-        )
-        if not match:
-            return None, normalized_surface, []
-
-        args_text = match.group("args").strip()
-        args: list[str] = []
-        if args_text:
-            for part in args_text.split(","):
-                cleaned = part.strip()
-                if not cleaned:
-                    continue
-                cleaned = cleaned.split("=", 1)[0].strip()
-                cleaned = cleaned.split(":", 1)[0].strip()
-                cleaned = cleaned.lstrip("*")
-                if cleaned and cleaned not in {"/", "*"}:
-                    args.append(cleaned)
-        return match.group("owner"), match.group("name"), args
+        return parse_task_public_contract_surface(surface)
 
     def _execute_generated_module_import(self, module_filename: str, code_content: str) -> Dict[str, Any]:
         return execute_generated_module_import(

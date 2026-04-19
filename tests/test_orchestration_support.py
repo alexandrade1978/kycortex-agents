@@ -196,6 +196,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 )
 from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
+	parse_task_public_contract_surface,
 	should_compact_architecture_context,
 	task_exact_top_level_test_count,
 	task_fixture_budget,
@@ -2432,6 +2433,22 @@ def test_compact_architecture_context_builds_low_budget_and_repair_summaries_dir
 	assert repair_summary.startswith("Repair-focused architecture summary:")
 	assert "Do not copy illustrative code blocks over the failing implementation" in repair_summary
 	assert "prefer the existing failing module, the validation summary, and the cited pytest details" in repair_summary
+
+
+def test_parse_task_public_contract_surface_handles_owners_defaults_and_markers_directly():
+	assert parse_task_public_contract_surface(
+		"ComplianceIntakeService.handle_request(request: ComplianceRequest, *, audit: bool = True)"
+	) == ("ComplianceIntakeService", "handle_request", ["request", "audit"])
+	assert parse_task_public_contract_surface("main() -> None with __main__ guard") == (
+		None,
+		"main",
+		[],
+	)
+	assert parse_task_public_contract_surface("not a callable surface") == (
+		None,
+		"not a callable surface",
+		[],
+	)
 
 
 def test_workflow_control_log_helpers_minimize_task_ids_directly():

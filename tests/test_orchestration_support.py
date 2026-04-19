@@ -129,6 +129,7 @@ from kycortex_agents.orchestration.repair_test_structure import (
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
+	repair_owner_for_category,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
 	execute_generated_module_import,
@@ -2631,6 +2632,13 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert fields == {"task_count": 2, "replayed_task_count": 1, "reason": "manual"}
 	assert task_id_collection_count(["arch", "code"]) == 2
 	assert task_id_collection_count("arch") == 1
+
+
+def test_repair_instruction_owner_mapping_directly():
+	assert repair_owner_for_category("architect", FailureCategory.CODE_VALIDATION.value) == "code_engineer"
+	assert repair_owner_for_category("architect", FailureCategory.TEST_VALIDATION.value) == "qa_tester"
+	assert repair_owner_for_category("architect", FailureCategory.DEPENDENCY_VALIDATION.value) == "dependency_manager"
+	assert repair_owner_for_category("architect", FailureCategory.UNKNOWN.value) == "architect"
 	assert task_id_collection_count(None) == 0
 	assert task_id_collection_count(3) is None
 	assert task_id_count_log_field_name("task_ids") == "task_count"

@@ -134,6 +134,7 @@ from kycortex_agents.orchestration.repair_test_structure import (
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_repair_instruction,
+	repair_owner_for_category,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
 	execute_generated_module_import,
@@ -344,6 +345,7 @@ __all__ = [
 	"build_generated_test_env",
 	"build_sandbox_preexec_fn",
 	"build_repair_instruction",
+	"repair_owner_for_category",
 	"ast_is_empty_literal",
 	"attribute_is_field_reference",
 	"class_field_annotations_from_failed_artifact",

@@ -7,6 +7,15 @@ from typing import Any, Callable, Dict, Optional, Sequence
 from kycortex_agents.types import FailureCategory
 
 
+def repair_owner_for_category(task_assigned_to: str, failure_category: str) -> str:
+	owner_by_category = {
+		FailureCategory.CODE_VALIDATION.value: "code_engineer",
+		FailureCategory.TEST_VALIDATION.value: "qa_tester",
+		FailureCategory.DEPENDENCY_VALIDATION.value: "dependency_manager",
+	}
+	return owner_by_category.get(failure_category, task_assigned_to)
+
+
 def build_repair_instruction(
 	task_id: str,
 	failure_category: str,

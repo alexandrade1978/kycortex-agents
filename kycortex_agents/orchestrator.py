@@ -131,6 +131,7 @@ from kycortex_agents.orchestration.repair_focus import (
 from kycortex_agents.orchestration.repair_instructions import (
     build_code_repair_instruction_from_test_failure,
     build_repair_instruction,
+    repair_owner_for_category,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
     execute_generated_module_import,
@@ -1231,12 +1232,7 @@ class Orchestrator:
         )
 
     def _repair_owner_for_category(self, task: Task, failure_category: str) -> str:
-        owner_by_category = {
-            FailureCategory.CODE_VALIDATION.value: "code_engineer",
-            FailureCategory.TEST_VALIDATION.value: "qa_tester",
-            FailureCategory.DEPENDENCY_VALIDATION.value: "dependency_manager",
-        }
-        return owner_by_category.get(failure_category, task.assigned_to)
+        return repair_owner_for_category(task.assigned_to, failure_category)
 
     def _validation_payload(self, task: Task) -> Dict[str, Any]:
         if not isinstance(task.output_payload, dict):

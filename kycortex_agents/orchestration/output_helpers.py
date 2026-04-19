@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from kycortex_agents.agents.registry import AgentRegistry
+from kycortex_agents.types import AgentOutput
 
 
 def summarize_output(raw_content: str) -> str:
@@ -42,3 +43,19 @@ def semantic_output_key(assigned_to: str, task_title: str) -> Optional[str]:
 	if "legal" in title_key or "license" in title_key:
 		return "legal"
 	return None
+
+
+def normalize_agent_result(result: object) -> AgentOutput:
+	if isinstance(result, AgentOutput):
+		return result
+	rendered = str(result)
+	return AgentOutput(summary=summarize_output(rendered), raw_content=rendered)
+
+
+def unredacted_agent_result(agent: object, result: AgentOutput) -> AgentOutput:
+	getter = getattr(agent, "_consume_last_unredacted_output", None)
+	if callable(getter):
+		unredacted = getter()
+		if isinstance(unredacted, AgentOutput):
+			return unredacted
+	return result

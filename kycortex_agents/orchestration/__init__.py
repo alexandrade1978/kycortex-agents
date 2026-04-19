@@ -7,7 +7,12 @@ from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
 )
-from kycortex_agents.orchestration.output_helpers import semantic_output_key, summarize_output
+from kycortex_agents.orchestration.output_helpers import (
+	normalize_agent_result,
+	semantic_output_key,
+	summarize_output,
+	unredacted_agent_result,
+)
 from kycortex_agents.orchestration.repair_analysis import (
 	class_field_annotations_from_failed_artifact,
 	class_field_names_from_failed_artifact,
@@ -142,8 +147,10 @@ __all__ = [
 	"AcceptanceEvaluation",
 	"AcceptanceLane",
 	"TaskAcceptanceLists",
+	"normalize_agent_result",
 	"semantic_output_key",
 	"summarize_output",
+	"unredacted_agent_result",
 	"build_code_validation_repair_lines",
 	"build_repair_focus_lines",
 	"build_test_validation_repair_lines",

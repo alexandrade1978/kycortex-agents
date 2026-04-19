@@ -10,7 +10,12 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
-from kycortex_agents.orchestration.output_helpers import semantic_output_key, summarize_output
+from kycortex_agents.orchestration.output_helpers import (
+	normalize_agent_result,
+	semantic_output_key,
+	summarize_output,
+	unredacted_agent_result,
+)
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
@@ -461,6 +466,22 @@ def test_output_helpers_summarize_and_classify_titles_directly():
 	assert len(summarize_output("x" * 200)) == 120
 	assert semantic_output_key("unknown", "Architecture Review") == "architecture"
 	assert semantic_output_key("unknown", "Misc Task") is None
+
+
+def test_output_helpers_normalize_and_restore_unredacted_results_directly():
+	normalized = normalize_agent_result("  first line  \nsecond line")
+	assert normalized.summary == "first line"
+	assert normalized.raw_content == "  first line  \nsecond line"
+
+	structured = AgentOutput(summary="ready", raw_content="RAW")
+	assert normalize_agent_result(structured) is structured
+
+	class FakeAgent:
+		def _consume_last_unredacted_output(self):
+			return AgentOutput(summary="unredacted", raw_content="SECRET")
+
+	assert unredacted_agent_result(FakeAgent(), structured).summary == "unredacted"
+	assert unredacted_agent_result(object(), structured) is structured
 
 
 def test_build_repair_instruction_specializes_missing_import_directly():

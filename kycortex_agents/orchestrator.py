@@ -25,7 +25,12 @@ from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
-from kycortex_agents.orchestration.output_helpers import semantic_output_key, summarize_output
+from kycortex_agents.orchestration.output_helpers import (
+    normalize_agent_result,
+    semantic_output_key,
+    summarize_output,
+    unredacted_agent_result,
+)
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
     class_field_annotations_from_failed_artifact,
@@ -325,8 +330,8 @@ class Orchestrator:
         normalized_output: Optional[AgentOutput] = None
         try:
             output = self._execute_agent(agent, agent_input)
-            normalized_output = self._normalize_agent_result(output)
-            normalized_output = self._unredacted_agent_result(agent, normalized_output)
+            normalized_output = normalize_agent_result(output)
+            normalized_output = unredacted_agent_result(agent, normalized_output)
             normalized_output = self._sanitize_output_provider_call_metadata(normalized_output)
             self._validate_task_output(task, agent_input.context, normalized_output)
             self._persist_artifacts(normalized_output.artifacts)
@@ -5592,19 +5597,6 @@ class Orchestrator:
         if hasattr(agent, "run_with_input"):
             return agent.run_with_input(agent_input)
         return agent.run(agent_input.task_description, agent_input.context)
-
-    def _normalize_agent_result(self, result: Any) -> AgentOutput:
-        if isinstance(result, AgentOutput):
-            return result
-        return AgentOutput(summary=summarize_output(result), raw_content=result)
-
-    def _unredacted_agent_result(self, agent: Any, result: AgentOutput) -> AgentOutput:
-        getter = getattr(agent, "_consume_last_unredacted_output", None)
-        if callable(getter):
-            unredacted = getter()
-            if isinstance(unredacted, AgentOutput):
-                return unredacted
-        return result
 
     def _validate_agent_resolution(self, project: ProjectState) -> None:
         for task in project.tasks:

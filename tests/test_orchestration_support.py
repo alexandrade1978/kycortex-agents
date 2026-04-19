@@ -39,9 +39,12 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	direct_return_expression,
 	example_from_default,
 	extract_batch_rule,
+	extract_class_definition_style,
+	extract_constructor_storage_rule,
 	extract_indirect_required_fields,
 	extract_lookup_field_rules,
 	extract_required_fields,
+	extract_return_type_annotation,
 	extract_sequence_input_rule,
 	extract_type_constraints,
 	extract_valid_literal_examples,
@@ -700,6 +703,45 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	).body[0]
 	assert isinstance(empty_batch_node, ast.FunctionDef)
 	assert extract_batch_rule(empty_batch_node, {"intake_request": ["name"]}) == ""
+
+	dataclass_node = ast.parse(
+		"@dataclass\n"
+		"class RiskRecord:\n"
+		"    score: int\n"
+	).body[0]
+	manual_class_node = ast.parse(
+		"class ManualRisk:\n"
+		"    def __init__(self, payload):\n"
+		"        self.payload = payload\n"
+	).body[0]
+	assert isinstance(dataclass_node, ast.ClassDef)
+	assert isinstance(manual_class_node, ast.ClassDef)
+	assert extract_class_definition_style(dataclass_node) == "RiskRecord is defined as a @dataclass"
+	assert extract_class_definition_style(manual_class_node) == "ManualRisk uses manual __init__"
+
+	annotated_method = ast.parse(
+		"def export(payload) -> dict[str, int]:\n"
+		"    return payload\n"
+	).body[0]
+	hidden_method = ast.parse(
+		"def _hidden() -> str:\n"
+		"    return 'x'\n"
+	).body[0]
+	assert isinstance(annotated_method, ast.FunctionDef)
+	assert isinstance(hidden_method, ast.FunctionDef)
+	assert extract_return_type_annotation(None, annotated_method) == "export returns dict[str, int]"
+	assert extract_return_type_annotation("RiskService", annotated_method) == "RiskService.export returns dict[str, int]"
+	assert extract_return_type_annotation(None, hidden_method) == ""
+
+	constructor_rule_node = ast.parse(
+		"def build(payload):\n"
+		"    return RiskResult(score=1, data=payload)\n"
+	).body[0]
+	assert isinstance(constructor_rule_node, ast.FunctionDef)
+	assert (
+		extract_constructor_storage_rule(constructor_rule_node)
+		== "build stores full payload in returned RiskResult.data"
+	)
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

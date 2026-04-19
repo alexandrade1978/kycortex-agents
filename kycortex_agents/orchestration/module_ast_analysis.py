@@ -343,6 +343,60 @@ def extract_batch_rule(
     return ""
 
 
+def extract_class_definition_style(node: ast.ClassDef) -> str:
+    class_name = node.name
+    for decorator in node.decorator_list:
+        decorator_name = call_expression_basename(decorator.func) if isinstance(decorator, ast.Call) else call_expression_basename(decorator)
+        if decorator_name == "dataclass":
+            return f"{class_name} is defined as a @dataclass"
+    for base in node.bases:
+        base_name = call_expression_basename(base)
+        if base_name == "BaseModel":
+            return f"{class_name} is defined as a pydantic BaseModel"
+        if base_name in {"TypedDict", "NamedTuple"}:
+            return f"{class_name} is defined as a {base_name}"
+    for statement in node.body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)) and statement.name == "__init__":
+            return f"{class_name} uses manual __init__"
+    return ""
+
+
+def extract_return_type_annotation(
+    class_name: str | None,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> str:
+    if node.name.startswith("_") or node.returns is None:
+        return ""
+    try:
+        annotation = ast.unparse(node.returns)
+    except Exception:
+        return ""
+    if not annotation or annotation == "None":
+        return ""
+    qualified_name = f"{class_name}.{node.name}" if class_name else node.name
+    return f"{qualified_name} returns {annotation}"
+
+
+def extract_constructor_storage_rule(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    first_parameter = first_user_parameter(node)
+    if first_parameter is None:
+        return ""
+
+    source_name = first_parameter.arg
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        constructor_name = ast_name(child.func)
+        if not constructor_name:
+            continue
+        for keyword in child.keywords:
+            if keyword.arg != "data":
+                continue
+            if isinstance(keyword.value, ast.Name) and keyword.value.id == source_name:
+                return f"{node.name} stores full {source_name} in returned {constructor_name}.data"
+    return ""
+
+
 def call_signature_details(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     *,
@@ -540,10 +594,13 @@ __all__ = [
     "direct_return_expression",
     "example_from_default",
     "collect_isinstance_calls",
+    "extract_class_definition_style",
+    "extract_constructor_storage_rule",
     "extract_batch_rule",
     "extract_indirect_required_fields",
     "extract_lookup_field_rules",
     "extract_required_fields",
+    "extract_return_type_annotation",
     "extract_sequence_input_rule",
     "extract_type_constraints",
     "extract_valid_literal_examples",

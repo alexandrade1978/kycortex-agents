@@ -50,9 +50,12 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     direct_return_expression,
     example_from_default,
     extract_batch_rule,
+    extract_class_definition_style,
+    extract_constructor_storage_rule,
     extract_indirect_required_fields,
     extract_lookup_field_rules,
     extract_required_fields,
+    extract_return_type_annotation,
     extract_sequence_input_rule,
     extract_type_constraints,
     extract_valid_literal_examples,
@@ -3212,69 +3215,15 @@ class Orchestrator:
     @staticmethod
     def _extract_class_definition_style(node: ast.ClassDef) -> str:
         """Return a human-readable description of how the class is defined."""
-        class_name = node.name
-        for decorator in node.decorator_list:
-            decorator_name = ""
-            if isinstance(decorator, ast.Name):
-                decorator_name = decorator.id
-            elif isinstance(decorator, ast.Attribute):
-                decorator_name = decorator.attr
-            elif isinstance(decorator, ast.Call):
-                if isinstance(decorator.func, ast.Name):
-                    decorator_name = decorator.func.id
-                elif isinstance(decorator.func, ast.Attribute):
-                    decorator_name = decorator.func.attr
-            if decorator_name == "dataclass":
-                return f"{class_name} is defined as a @dataclass"
-        for base in node.bases:
-            base_name = ""
-            if isinstance(base, ast.Name):
-                base_name = base.id
-            elif isinstance(base, ast.Attribute):
-                base_name = base.attr
-            if base_name == "BaseModel":
-                return f"{class_name} is defined as a pydantic BaseModel"
-            if base_name in ("TypedDict", "NamedTuple"):
-                return f"{class_name} is defined as a {base_name}"
-        for stmt in node.body:
-            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == "__init__":
-                return f"{class_name} uses manual __init__"
-        return ""
+        return extract_class_definition_style(node)
 
     @staticmethod
     def _extract_return_type_annotation(class_name: str | None, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
         """Return a description of the return type annotation if present."""
-        if node.name.startswith("_"):
-            return ""
-        if node.returns is None:
-            return ""
-        try:
-            annotation = ast.unparse(node.returns)
-        except Exception:
-            return ""
-        if not annotation or annotation in ("None",):
-            return ""
-        qualified_name = f"{class_name}.{node.name}" if class_name else node.name
-        return f"{qualified_name} returns {annotation}"
+        return extract_return_type_annotation(class_name, node)
 
     def _extract_constructor_storage_rule(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-        first_parameter = self._first_user_parameter(node)
-        if first_parameter is None:
-            return ""
-
-        source_name = first_parameter.arg
-        for child in ast.walk(node):
-            if not isinstance(child, ast.Call):
-                continue
-            constructor_name = ast_name(child.func)
-            if not constructor_name:
-                continue
-            for keyword in child.keywords:
-                if keyword.arg != "data":
-                    continue
-                if isinstance(keyword.value, ast.Name) and keyword.value.id == source_name:
-                    return f"{node.name} stores full {source_name} in returned {constructor_name}.data"
-        return ""
+        return extract_constructor_storage_rule(node)
 
     def _extract_score_derivation_rule(
         self,

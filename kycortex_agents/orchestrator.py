@@ -41,6 +41,7 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     annotation_accepts_sequence_input,
+    build_code_outline,
     callable_parameter_names,
     collect_isinstance_calls,
     comparison_required_field,
@@ -2332,11 +2333,7 @@ class Orchestrator:
         return normalize_import_name(module_name)
 
     def _build_code_outline(self, raw_content: str) -> str:
-        if not raw_content.strip():
-            return ""
-        pattern = re.compile(r"^(class\s+\w+.*|def\s+\w+.*|async\s+def\s+\w+.*)$")
-        outline_lines = [line.strip() for line in raw_content.splitlines() if pattern.match(line.strip())]
-        return "\n".join(outline_lines[:40])
+        return build_code_outline(raw_content)
 
     def _analyze_python_module(self, raw_content: str) -> Dict[str, Any]:
         analysis: Dict[str, Any] = {

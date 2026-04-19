@@ -1,5 +1,6 @@
 import ast
 import copy
+import re
 from typing import Any, Dict
 
 from kycortex_agents.orchestration.ast_tools import AstNameReplacer
@@ -56,6 +57,14 @@ def callable_parameter_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> li
     if positional and positional[0].arg in {"self", "cls"}:
         positional = positional[1:]
     return [argument.arg for argument in positional]
+
+
+def build_code_outline(raw_content: str) -> str:
+    if not raw_content.strip():
+        return ""
+    pattern = re.compile(r"^(class\s+\w+.*|def\s+\w+.*|async\s+def\s+\w+.*)$")
+    outline_lines = [line.strip() for line in raw_content.splitlines() if pattern.match(line.strip())]
+    return "\n".join(outline_lines[:40])
 
 
 def extract_sequence_input_rule(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
@@ -717,6 +726,7 @@ def extract_lookup_field_rules(node: ast.FunctionDef | ast.AsyncFunctionDef) -> 
 
 __all__ = [
     "annotation_accepts_sequence_input",
+    "build_code_outline",
     "callable_parameter_names",
     "comparison_required_field",
     "call_signature_details",

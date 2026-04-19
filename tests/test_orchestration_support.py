@@ -34,6 +34,7 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
 	annotation_accepts_sequence_input,
+	build_code_outline,
 	callable_parameter_names,
 	collect_isinstance_calls,
 	comparison_required_field,
@@ -728,6 +729,8 @@ def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_ch
 def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_assignments():
 	assert annotation_accepts_sequence_input("Sequence[int]") is True
 	assert annotation_accepts_sequence_input("str") is False
+	assert build_code_outline("\nclass Example:\n    pass\n\ndef run():\n    return 1\n") == "class Example:\ndef run():"
+	assert build_code_outline("   ") == ""
 
 	function_node = ast.parse(
 		"def handle(self, payload: list[str], *, strict: bool = False) -> int:\n"

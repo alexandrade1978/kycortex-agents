@@ -16,7 +16,11 @@ from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.orchestration import build_repair_focus_lines, build_test_validation_summary
+from kycortex_agents.orchestration import (
+    build_code_validation_summary,
+    build_repair_focus_lines,
+    build_test_validation_summary,
+)
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
@@ -1984,18 +1988,18 @@ def test_failed_artifact_content_skips_invalid_entries_and_falls_back_to_raw_con
 
 def test_build_code_validation_summary_omits_optional_fields_when_missing(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_validation_summary({"syntax_ok": True, "third_party_imports": []}, "")
+    summary = build_code_validation_summary({"syntax_ok": True, "third_party_imports": []}, "")
 
     assert summary == "Generated code validation:\n- Syntax OK: yes\n- Third-party imports: none"
 
 
 def test_build_code_validation_summary_includes_line_count_and_cli_requirement(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_validation_summary(
+    summary = build_code_validation_summary(
         {
             "syntax_ok": True,
             "third_party_imports": [],
@@ -2013,9 +2017,9 @@ def test_build_code_validation_summary_includes_line_count_and_cli_requirement(t
 
 def test_build_code_validation_summary_includes_line_count_without_budget(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_validation_summary(
+    summary = build_code_validation_summary(
         {"syntax_ok": True, "line_count": 12, "third_party_imports": []},
         "",
     )
@@ -2025,9 +2029,9 @@ def test_build_code_validation_summary_includes_line_count_without_budget(tmp_pa
 
 def test_build_code_validation_summary_includes_import_validation(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_validation_summary(
+    summary = build_code_validation_summary(
         {"syntax_ok": True, "third_party_imports": []},
         "",
         import_validation={
@@ -2043,9 +2047,9 @@ def test_build_code_validation_summary_includes_import_validation(tmp_path):
 
 def test_build_code_validation_summary_includes_task_public_contract_preflight(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_validation_summary(
+    summary = build_code_validation_summary(
         {"syntax_ok": True, "third_party_imports": []},
         "",
         task_public_contract_preflight={
@@ -17129,9 +17133,9 @@ def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
 
 def test_build_code_validation_summary_includes_completion_diagnostics(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_validation_summary(
+    summary = build_code_validation_summary(
         {
             "syntax_ok": False,
             "syntax_error": "'[' was never closed at line 96",
@@ -17207,9 +17211,9 @@ def test_completion_diagnostics_marks_structurally_incomplete_output_as_truncate
 
 def test_build_code_validation_summary_describes_structural_truncation(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_validation_summary(
+    summary = build_code_validation_summary(
         {
             "syntax_ok": False,
             "syntax_error": "'[' was never closed at line 96",

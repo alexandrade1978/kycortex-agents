@@ -1388,22 +1388,6 @@ class Orchestrator:
         """Return *True* when the test has static findings but all are WARNING-level."""
         return validation_has_only_warnings(validation)
 
-    def _build_code_validation_summary(
-        self,
-        code_analysis: Dict[str, Any],
-        fallback_message: str,
-        completion_diagnostics: Optional[Dict[str, Any]] = None,
-        import_validation: Optional[Dict[str, Any]] = None,
-        task_public_contract_preflight: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        return build_code_validation_summary(
-            code_analysis,
-            fallback_message,
-            completion_diagnostics,
-            import_validation,
-            task_public_contract_preflight,
-        )
-
     def _build_repair_validation_summary(self, task: Task, failure_category: str) -> str:
         validation = self._validation_payload(task)
         fallback_message = task.last_error or task.output or ""
@@ -1413,7 +1397,7 @@ class Orchestrator:
                 completion_diagnostics = validation.get("completion_diagnostics")
                 import_validation = validation.get("import_validation")
                 task_public_contract_preflight = validation.get("task_public_contract_preflight")
-                return self._build_code_validation_summary(
+                return build_code_validation_summary(
                     code_analysis,
                     fallback_message,
                     completion_diagnostics if isinstance(completion_diagnostics, dict) else None,

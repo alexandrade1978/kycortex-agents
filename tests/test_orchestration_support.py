@@ -119,9 +119,15 @@ from kycortex_agents.orchestration.workflow_control import (
 	privacy_safe_log_fields,
 	task_id_collection_count,
 	task_id_count_log_field_name,
+	validate_agent_resolution,
 )
-from kycortex_agents.memory.project_state import Task
-from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy
+from kycortex_agents.orchestration.workflow_acceptance import (
+	evaluate_workflow_acceptance,
+	observed_failure_categories,
+	task_acceptance_lists,
+)
+from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -482,6 +488,61 @@ def test_output_helpers_normalize_and_restore_unredacted_results_directly():
 
 	assert unredacted_agent_result(FakeAgent(), structured).summary == "unredacted"
 	assert unredacted_agent_result(object(), structured) is structured
+
+
+def test_workflow_acceptance_helpers_build_lists_and_zero_budget_safety_directly():
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	project.add_task(
+		Task(
+			id="code",
+			title="Implementation",
+			description="Implement",
+			assigned_to="code_engineer",
+			required_for_acceptance=True,
+		)
+	)
+	project.add_task(
+		Task(
+			id="docs",
+			title="Documentation",
+			description="Document",
+			assigned_to="docs_writer",
+		)
+	)
+	project.tasks[0].status = TaskStatus.DONE.value
+	project.tasks[1].status = TaskStatus.FAILED.value
+	project.tasks[1].last_error_category = FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+
+	required_lists = task_acceptance_lists(project, "required_tasks")
+	assert required_lists["evaluated_task_ids"] == ["code"]
+	assert required_lists["completed_task_ids"] == ["code"]
+
+	observed_categories = observed_failure_categories(project)
+	assert observed_categories == {FailureCategory.SANDBOX_SECURITY_VIOLATION.value}
+
+	evaluation = evaluate_workflow_acceptance(
+		project,
+		"required_tasks",
+		frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value}),
+	)
+	assert evaluation["accepted"] is False
+	assert evaluation["failed_lane_ids"] == ["real_workflow", "safety"]
+	assert evaluation["acceptance_lanes"]["productivity"]["accepted"] is True
+	assert evaluation["acceptance_lanes"]["safety"]["zero_budget_failure_categories"] == [
+		FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+	]
+
+
+def test_validate_agent_resolution_raises_for_unknown_registry_entry_directly():
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	project.add_task(Task(id="arch", title="Architecture", description="Design", assigned_to="architect"))
+
+	class EmptyRegistry:
+		def has(self, _assigned_to: str) -> bool:
+			return False
+
+	with pytest.raises(AgentExecutionError, match="unknown agent 'architect'"):
+		validate_agent_resolution(EmptyRegistry(), project)
 
 
 def test_build_repair_instruction_specializes_missing_import_directly():

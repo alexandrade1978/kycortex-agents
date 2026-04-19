@@ -141,6 +141,11 @@ from kycortex_agents.orchestration.workflow_control import (
 	task_id_count_log_field_name,
 	validate_agent_resolution,
 )
+from kycortex_agents.orchestration.workflow_acceptance import (
+	evaluate_workflow_acceptance,
+	observed_failure_categories,
+	task_acceptance_lists,
+)
 
 __all__ = [
 	"AstNameReplacer",
@@ -240,6 +245,9 @@ __all__ = [
 	"task_id_collection_count",
 	"task_id_count_log_field_name",
 	"validate_agent_resolution",
+	"evaluate_workflow_acceptance",
+	"observed_failure_categories",
+	"task_acceptance_lists",
 	"task_exact_top_level_test_count",
 	"task_fixture_budget",
 	"task_line_budget",

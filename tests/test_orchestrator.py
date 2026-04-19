@@ -16,6 +16,7 @@ from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration import build_repair_focus_lines
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
@@ -15042,7 +15043,7 @@ def test_build_agent_input_reuses_real_module_symbol_suite_and_adds_missing_impo
         )
     )
 
-    repair_focus_lines = orchestrator._repair_focus_lines(
+    repair_focus_lines = build_repair_focus_lines(
         require_task(project, "tests").repair_context,
         {"code": code_content},
     )
@@ -16988,7 +16989,7 @@ def test_build_repair_instruction_specializes_missing_import_nameerror_failures(
 
 def test_repair_focus_lines_specialize_missing_import_nameerror_failures(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     repair_context = {
         "failure_category": FailureCategory.CODE_VALIDATION.value,
         "validation_summary": (
@@ -17004,7 +17005,7 @@ def test_repair_focus_lines_specialize_missing_import_nameerror_failures(tmp_pat
         ),
     }
 
-    lines = orchestrator._repair_focus_lines(repair_context, {})
+    lines = build_repair_focus_lines(repair_context, {})
 
     assert any("logger = logging.getLogger(__name__)" in line for line in lines)
     assert any("import logging" in line for line in lines)

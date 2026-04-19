@@ -5618,7 +5618,7 @@ class Orchestrator:
             budget_decomposition_brief = context.get("budget_decomposition_brief")
             if isinstance(budget_decomposition_brief, str) and budget_decomposition_brief.strip():
                 repair_lines.extend(["", "Budget decomposition brief:", budget_decomposition_brief])
-            repair_focus_lines = self._repair_focus_lines(repair_context, context)
+            repair_focus_lines = build_repair_focus_lines(repair_context, context)
             if repair_focus_lines:
                 repair_lines.extend(["", "Repair priorities:"])
                 repair_lines.extend(f"- {line}" for line in repair_focus_lines)
@@ -5631,13 +5631,6 @@ class Orchestrator:
             project_goal=redact_sensitive_text(project.goal),
             context=context,
         )
-
-    def _repair_focus_lines(
-        self,
-        repair_context: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
-    ) -> list[str]:
-        return build_repair_focus_lines(repair_context, context)
 
     def _execute_agent(self, agent: Any, agent_input: AgentInput) -> Any:
         if hasattr(agent, "execute"):

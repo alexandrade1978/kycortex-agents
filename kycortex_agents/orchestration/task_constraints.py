@@ -263,3 +263,17 @@ def task_fixture_budget(task: Optional[Task]) -> Optional[int]:
     if match is None:
         return None
     return int(match.group(1))
+
+
+def summary_limit_exceeded(validation_summary: object, label: str) -> bool:
+    if not isinstance(validation_summary, str) or not validation_summary.strip():
+        return False
+    pattern = rf"^- {re.escape(label)}:\s*(\d+)\s*/\s*(\d+)"
+    for line in validation_summary.splitlines():
+        match = re.match(pattern, line.strip(), re.IGNORECASE)
+        if match is None:
+            continue
+        actual = int(match.group(1))
+        limit = int(match.group(2))
+        return actual > limit
+    return False

@@ -205,6 +205,7 @@ from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
 	parse_task_public_contract_surface,
 	should_compact_architecture_context,
+	summary_limit_exceeded,
 	task_public_contract_anchor,
 	task_public_contract_preflight,
 	task_exact_top_level_test_count,
@@ -2413,6 +2414,9 @@ def test_task_constraint_helpers_parse_limits_and_optional_inputs_directly():
 	assert task_fixture_budget(task) == 3
 	assert task_line_budget(None) is None
 	assert task_requires_cli_entrypoint(None) is False
+	assert summary_limit_exceeded("- Line count: 205 / 200", "Line count") is True
+	assert summary_limit_exceeded("- Fixture count: 2 / 3", "Fixture count") is False
+	assert summary_limit_exceeded("", "Line count") is False
 
 
 def test_should_compact_architecture_context_uses_budget_and_repair_signals_directly():

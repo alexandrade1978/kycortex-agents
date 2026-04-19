@@ -144,6 +144,7 @@ from kycortex_agents.orchestration.task_constraints import (
     compact_architecture_context,
     parse_task_public_contract_surface,
     should_compact_architecture_context,
+    summary_limit_exceeded,
     task_public_contract_anchor,
     task_public_contract_preflight,
     task_exact_top_level_test_count,
@@ -1520,17 +1521,7 @@ class Orchestrator:
 
     @staticmethod
     def _summary_limit_exceeded(validation_summary: object, label: str) -> bool:
-        if not isinstance(validation_summary, str) or not validation_summary.strip():
-            return False
-        pattern = rf"^- {re.escape(label)}:\s*(\d+)\s*/\s*(\d+)"
-        for line in validation_summary.splitlines():
-            match = re.match(pattern, line.strip(), re.IGNORECASE)
-            if match is None:
-                continue
-            actual = int(match.group(1))
-            limit = int(match.group(2))
-            return actual > limit
-        return False
+        return summary_limit_exceeded(validation_summary, label)
 
     def _repair_requires_budget_decomposition(self, repair_context: Dict[str, Any]) -> bool:
         failure_category = repair_context.get("failure_category")

@@ -44,18 +44,23 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	extract_indirect_required_fields,
 	extract_lookup_field_rules,
 	extract_required_fields,
+	extract_score_derivation_rule,
 	extract_return_type_annotation,
 	extract_sequence_input_rule,
 	extract_type_constraints,
 	extract_valid_literal_examples,
+	expand_local_name_aliases,
 	field_selector_name,
 	first_user_parameter,
+	function_returns_score_value,
 	has_dataclass_decorator,
 	infer_dict_key_value_examples,
+	inline_score_helper_expression,
 	isinstance_subject_name,
 	isinstance_type_names,
 	method_binding_kind,
 	parameter_is_iterated,
+	render_score_expression,
 	self_assigned_attributes,
 )
 from kycortex_agents.orchestration.private_files import (
@@ -741,6 +746,41 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	assert (
 		extract_constructor_storage_rule(constructor_rule_node)
 		== "build stores full payload in returned RiskResult.data"
+	)
+
+	helper_node = ast.parse(
+		"def base_score(payload):\n"
+		"    factor = payload['weight']\n"
+		"    return factor * 2\n"
+	).body[0]
+	score_node = ast.parse(
+		"def derive_score(payload):\n"
+		"    score = base_score(payload)\n"
+		"    return score\n"
+	).body[0]
+	assert isinstance(helper_node, ast.FunctionDef)
+	assert isinstance(score_node, ast.FunctionDef)
+	assert function_returns_score_value(score_node) is True
+
+	helper_call = ast.parse("base_score(payload)", mode="eval").body
+	assert isinstance(helper_call, ast.Call)
+	inlined = inline_score_helper_expression(helper_call, {"base_score": helper_node})
+	assert render_score_expression(inlined, {"base_score": helper_node}) == "payload['weight'] * 2"
+
+	aliased_expression = ast.parse("derived", mode="eval").body
+	alias_node = ast.parse(
+		"def derive_score(payload):\n"
+		"    base = payload['weight']\n"
+		"    derived = base * 3\n"
+		"    return derived\n"
+	).body[0]
+	assert isinstance(aliased_expression, ast.Name)
+	assert isinstance(alias_node, ast.FunctionDef)
+	assert render_score_expression(expand_local_name_aliases(aliased_expression, alias_node), {}) == "payload['weight'] * 3"
+
+	assert (
+		extract_score_derivation_rule(score_node, {"base_score": helper_node})
+		== "derive_score derives score from payload['weight'] * 2"
 	)
 
 

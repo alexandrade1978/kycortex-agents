@@ -1,6 +1,8 @@
 import ast
+import copy
 from typing import Any, Dict
 
+from kycortex_agents.orchestration.ast_tools import AstNameReplacer
 from kycortex_agents.orchestration.ast_tools import ast_name
 
 
@@ -397,6 +399,137 @@ def extract_constructor_storage_rule(node: ast.FunctionDef | ast.AsyncFunctionDe
     return ""
 
 
+def function_returns_score_value(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Return) and isinstance(child.value, ast.Name) and child.value.id == "score":
+            return True
+        if not isinstance(child, ast.Call):
+            continue
+        if any(
+            keyword.arg == "score" and isinstance(keyword.value, ast.Name) and keyword.value.id == "score"
+            for keyword in child.keywords
+        ):
+            return True
+        if child.args and isinstance(child.args[0], ast.Name) and child.args[0].id == "score":
+            return True
+    return False
+
+
+def expand_local_name_aliases(
+    expression: ast.expr,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> ast.expr:
+    replacements: dict[str, ast.expr] = {}
+    for statement in node.body:
+        if isinstance(statement, ast.Return):
+            break
+        if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+            continue
+        target = statement.targets[0]
+        if not isinstance(target, ast.Name):
+            continue
+        expanded_value = AstNameReplacer(replacements).visit(copy.deepcopy(statement.value))
+        if isinstance(expanded_value, ast.expr):
+            replacements[target.id] = ast.fix_missing_locations(expanded_value)
+
+    if not replacements:
+        return expression
+
+    expanded_expression = AstNameReplacer(replacements).visit(copy.deepcopy(expression))
+    if isinstance(expanded_expression, ast.expr):
+        return ast.fix_missing_locations(expanded_expression)
+    return expression
+
+
+def inline_score_helper_expression(
+    expression: ast.expr,
+    function_map: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+) -> ast.expr:
+    if not isinstance(expression, ast.Call):
+        return expression
+
+    helper_name = call_expression_basename(expression.func)
+    if not helper_name:
+        return expression
+    helper_node = function_map.get(helper_name)
+    if helper_node is None:
+        return expression
+
+    helper_return_expression = direct_return_expression(helper_node)
+    if helper_return_expression is None:
+        return expression
+    helper_return_expression = expand_local_name_aliases(helper_return_expression, helper_node)
+
+    parameter_names = callable_parameter_names(helper_node)
+    replacements: dict[str, ast.expr] = {}
+    for parameter_name, argument in zip(parameter_names, expression.args):
+        replacements[parameter_name] = argument
+    for keyword in expression.keywords:
+        if keyword.arg is None or keyword.arg not in parameter_names:
+            continue
+        replacements[keyword.arg] = keyword.value
+
+    if not replacements:
+        return expression
+
+    replacer = AstNameReplacer(replacements)
+    inlined_expression = replacer.visit(copy.deepcopy(helper_return_expression))
+    if isinstance(inlined_expression, ast.expr):
+        return ast.fix_missing_locations(inlined_expression)
+    return expression
+
+
+def render_score_expression(
+    expression: ast.expr,
+    function_map: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+) -> str:
+    rendered_expression = inline_score_helper_expression(expression, function_map)
+    try:
+        return ast.unparse(rendered_expression).strip()
+    except Exception:
+        return ast_name(rendered_expression)
+
+
+def extract_score_derivation_rule(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    function_map: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+) -> str:
+    score_expression_node: ast.expr | None = None
+
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Assign) or len(child.targets) != 1:
+            continue
+        target = child.targets[0]
+        if isinstance(target, ast.Name) and target.id == "score":
+            score_expression_node = child.value
+            break
+
+    if score_expression_node is not None:
+        if not function_returns_score_value(node):
+            return ""
+        score_expression = render_score_expression(
+            expand_local_name_aliases(score_expression_node, node),
+            function_map,
+        )
+        if not score_expression:
+            return ""
+        return f"{node.name} derives score from {score_expression}"
+
+    if "score" not in node.name.lower():
+        return ""
+
+    return_expression = direct_return_expression(node)
+    if return_expression is None:
+        return ""
+    score_expression = render_score_expression(
+        expand_local_name_aliases(return_expression, node),
+        function_map,
+    )
+    if not score_expression:
+        return ""
+    return f"{node.name} derives score from {score_expression}"
+
+
 def call_signature_details(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     *,
@@ -600,17 +733,22 @@ __all__ = [
     "extract_indirect_required_fields",
     "extract_lookup_field_rules",
     "extract_required_fields",
+    "extract_score_derivation_rule",
     "extract_return_type_annotation",
     "extract_sequence_input_rule",
     "extract_type_constraints",
     "extract_valid_literal_examples",
+    "expand_local_name_aliases",
     "field_selector_name",
     "first_user_parameter",
+    "function_returns_score_value",
     "has_dataclass_decorator",
     "infer_dict_key_value_examples",
+    "inline_score_helper_expression",
     "isinstance_subject_name",
     "isinstance_type_names",
     "method_binding_kind",
     "parameter_is_iterated",
+    "render_score_expression",
     "self_assigned_attributes",
 ]

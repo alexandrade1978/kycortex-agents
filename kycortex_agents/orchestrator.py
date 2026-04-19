@@ -1425,7 +1425,7 @@ class Orchestrator:
             test_execution = validation.get("test_execution")
             if isinstance(test_analysis, dict):
                 completion_diagnostics = validation.get("completion_diagnostics")
-                return self._build_test_validation_summary(
+                return build_test_validation_summary(
                     test_analysis,
                     test_execution if isinstance(test_execution, dict) else None,
                     completion_diagnostics if isinstance(completion_diagnostics, dict) else None,
@@ -2536,7 +2536,7 @@ class Orchestrator:
                 "tests_artifact_path": artifact_path,
                 "test_analysis": test_analysis,
                 "test_execution": test_execution if isinstance(test_execution, dict) else None,
-                "test_validation_summary": self._build_test_validation_summary(
+                "test_validation_summary": build_test_validation_summary(
                     test_analysis,
                     test_execution if isinstance(test_execution, dict) else None,
                 ),
@@ -5567,18 +5567,6 @@ class Orchestrator:
                 if isinstance(func, ast.Attribute) and func.attr == "fixture":  # pragma: no branch
                     return True
         return False
-
-    def _build_test_validation_summary(
-        self,
-        test_analysis: Dict[str, Any],
-        test_execution: Optional[Dict[str, Any]] = None,
-        completion_diagnostics: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        return build_test_validation_summary(
-            test_analysis,
-            test_execution,
-            completion_diagnostics,
-        )
 
     def _ast_name(self, node: ast.AST) -> str:
         if isinstance(node, ast.Name):

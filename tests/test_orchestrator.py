@@ -16,7 +16,7 @@ from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.orchestration import build_repair_focus_lines
+from kycortex_agents.orchestration import build_repair_focus_lines, build_test_validation_summary
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
 from kycortex_agents.providers.ollama_provider import OllamaProvider
@@ -4490,9 +4490,9 @@ def test_is_pytest_fixture_handles_multiple_decorators_before_fixture(tmp_path):
 
 def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pytest(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    syntax_summary = orchestrator._build_test_validation_summary(
+    syntax_summary = build_test_validation_summary(
         {
             "syntax_ok": False,
             "syntax_error": "invalid syntax",
@@ -4512,11 +4512,11 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
         },
     )
 
-    unavailable_summary = orchestrator._build_test_validation_summary(
+    unavailable_summary = build_test_validation_summary(
         {"syntax_ok": True},
         {"available": False, "summary": "pytest missing"},
     )
-    failed_summary = orchestrator._build_test_validation_summary(
+    failed_summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "imported_module_symbols": ["add"],
@@ -4551,9 +4551,9 @@ def test_build_test_validation_summary_handles_syntax_unavailable_and_failed_pyt
 
 def test_build_test_validation_summary_includes_exact_limits_and_fixture_budget(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    exact_summary = orchestrator._build_test_validation_summary(
+    exact_summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 2,
@@ -4562,7 +4562,7 @@ def test_build_test_validation_summary_includes_exact_limits_and_fixture_budget(
             "fixture_budget": 1,
         }
     )
-    max_summary = orchestrator._build_test_validation_summary(
+    max_summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 2,
@@ -4579,9 +4579,9 @@ def test_build_test_validation_summary_includes_exact_limits_and_fixture_budget(
 
 def test_build_test_validation_summary_reports_assertion_strength_failures(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 2,
@@ -4598,9 +4598,9 @@ def test_build_test_validation_summary_reports_assertion_strength_failures(tmp_p
 
 def test_build_test_validation_summary_reports_contract_overreach_signals(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -4628,9 +4628,9 @@ def test_build_test_validation_summary_reports_contract_overreach_signals(tmp_pa
 
 def test_build_test_validation_summary_reports_runtime_contract_overreach_from_membership_assertion(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -4654,9 +4654,9 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_m
 
 def test_build_test_validation_summary_reports_runtime_contract_overreach_from_extended_status_vocabulary(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -4680,9 +4680,9 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_e
 
 def test_build_test_validation_summary_reports_runtime_contract_overreach_from_plain_straight_through_label(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -4706,9 +4706,9 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_p
 
 def test_build_test_validation_summary_reports_runtime_contract_overreach_from_returns_action_labels(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -4732,9 +4732,9 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_r
 
 def test_build_test_validation_summary_reports_runtime_contract_overreach_from_plain_fraud_label(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -4758,9 +4758,9 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_p
 
 def test_build_test_validation_summary_reports_runtime_contract_overreach_from_return_shape_attribute_assumption(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -4784,9 +4784,9 @@ def test_build_test_validation_summary_reports_runtime_contract_overreach_from_r
 
 def test_build_test_validation_summary_reports_runtime_contract_overreach_from_action_map_key_assumption(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {
             "syntax_ok": True,
             "top_level_test_count": 1,
@@ -5348,9 +5348,9 @@ def test_build_code_behavior_contract_reports_sequence_accepting_functions(tmp_p
 
 def test_build_test_validation_summary_omits_execution_lines_when_pytest_did_not_run(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_test_validation_summary(
+    summary = build_test_validation_summary(
         {"syntax_ok": True},
         {"available": True, "ran": False, "summary": "not-run"},
     )
@@ -17732,61 +17732,61 @@ class TestBuildTestValidationSummarySeverity:
         return Orchestrator(config)
 
     def test_summary_contains_blocking_annotation(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         test_analysis = {
             "syntax_ok": True,
             "missing_function_imports": ["helper"],
             "undefined_fixtures": ["db"],
         }
-        summary = orch._build_test_validation_summary(test_analysis)
+        summary = build_test_validation_summary(test_analysis)
         assert "(blocking)" in summary
         assert "Missing function imports (blocking): helper" in summary
         assert "Undefined test fixtures (blocking): db" in summary
 
     def test_summary_contains_warning_annotation(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         test_analysis = {
             "syntax_ok": True,
             "constructor_arity_mismatches": ["MyClass (line 5)"],
             "type_mismatches": ["str vs int"],
         }
-        summary = orch._build_test_validation_summary(test_analysis)
+        summary = build_test_validation_summary(test_analysis)
         assert "(warning)" in summary
         assert "Constructor arity mismatches (warning): MyClass (line 5)" in summary
         assert "Type mismatches (warning): str vs int" in summary
 
     def test_summary_verdict_pass_when_warnings_overridden_by_pytest(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         test_analysis = {
             "syntax_ok": True,
             "constructor_arity_mismatches": ["MyClass (line 5)"],
         }
         test_execution = {"ran": True, "returncode": 0, "summary": "1 passed"}
-        summary = orch._build_test_validation_summary(test_analysis, test_execution)
+        summary = build_test_validation_summary(test_analysis, test_execution)
         assert "PASS (warnings overridden by pytest)" in summary
 
     def test_summary_verdict_fail_without_pytest_confirmation(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         test_analysis = {
             "syntax_ok": True,
             "constructor_arity_mismatches": ["MyClass (line 5)"],
         }
-        summary = orch._build_test_validation_summary(test_analysis)
+        summary = build_test_validation_summary(test_analysis)
         assert "FAIL (warnings without pytest confirmation)" in summary
 
     def test_summary_verdict_fail_for_blocking_issues(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         test_analysis = {
             "syntax_ok": True,
             "missing_function_imports": ["helper"],
         }
-        summary = orch._build_test_validation_summary(test_analysis)
+        summary = build_test_validation_summary(test_analysis)
         assert "Verdict: FAIL" in summary
 
     def test_summary_verdict_pass_for_clean_analysis(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         test_analysis = {"syntax_ok": True}
         test_execution = {"ran": True, "returncode": 0, "summary": "1 passed"}
-        summary = orch._build_test_validation_summary(test_analysis, test_execution)
+        summary = build_test_validation_summary(test_analysis, test_execution)
         assert "Verdict: PASS" in summary
         assert "warnings" not in summary.split("Verdict:")[-1]

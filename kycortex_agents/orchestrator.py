@@ -101,14 +101,13 @@ from kycortex_agents.orchestration.task_constraints import (
     task_requires_cli_entrypoint,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
-    MOCK_ASSERTION_ATTRIBUTES as _MOCK_ASSERTION_ATTRIBUTES,
-    MOCK_ASSERTION_METHODS as _MOCK_ASSERTION_METHODS,
     bound_target_names,
     collect_local_name_bindings,
     collect_mock_support,
     collect_parametrized_argument_names,
     collect_test_local_types,
     collect_undefined_local_names,
+    count_test_assertion_like_checks,
     extract_parametrize_argument_names,
     find_unsupported_mock_assertions,
     function_argument_names,
@@ -117,6 +116,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     iter_relevant_test_body_nodes,
     known_type_allows_member,
     patched_target_name_from_call,
+    with_uses_pytest_assertion_context,
+    with_uses_pytest_raises,
     supports_mock_assertion_target,
 )
 from kycortex_agents.orchestration.validation_reporting import (
@@ -4775,53 +4776,13 @@ class Orchestrator:
         return False
 
     def _with_uses_pytest_raises(self, node: ast.With | ast.AsyncWith) -> bool:
-        for item in node.items:
-            context_expr = item.context_expr
-            if not isinstance(context_expr, ast.Call):
-                continue
-            called_name = callable_name(context_expr)
-            if called_name == "raises":
-                return True
-        return False
+        return with_uses_pytest_raises(node)
 
     def _with_uses_pytest_assertion_context(self, node: ast.With | ast.AsyncWith) -> bool:
-        for item in node.items:
-            context_expr = item.context_expr
-            if not isinstance(context_expr, ast.Call):
-                continue
-            called_name = callable_name(context_expr)
-            if called_name in {"raises", "warns", "deprecated_call"}:
-                return True
-        return False
+        return with_uses_pytest_assertion_context(node)
 
     def _count_test_assertion_like_checks(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
-        assertion_like_count = 0
-        mock_bindings, patched_targets = self._collect_mock_support(node)
-
-        for child in ast.walk(node):
-            if isinstance(child, ast.Assert):
-                assertion_like_count += 1
-                continue
-            if isinstance(child, (ast.With, ast.AsyncWith)) and self._with_uses_pytest_assertion_context(child):
-                assertion_like_count += 1
-                continue
-
-            target_node: Optional[ast.AST] = None
-            if isinstance(child, ast.Attribute) and child.attr in _MOCK_ASSERTION_ATTRIBUTES:
-                target_node = child.value
-            elif (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Attribute)
-                and child.func.attr in _MOCK_ASSERTION_METHODS
-            ):
-                target_node = child.func.value
-
-            if target_node is None:
-                continue
-            if self._supports_mock_assertion_target(target_node, mock_bindings, patched_targets):
-                assertion_like_count += 1
-
-        return assertion_like_count
+        return count_test_assertion_like_checks(node)
 
     def _ast_contains_node(self, root: ast.AST, target: ast.AST) -> bool:
         return any(candidate is target for candidate in ast.walk(root))

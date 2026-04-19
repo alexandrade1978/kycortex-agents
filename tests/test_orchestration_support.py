@@ -100,12 +100,15 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	collect_parametrized_argument_names,
 	collect_test_local_types,
 	collect_undefined_local_names,
+	count_test_assertion_like_checks,
 	extract_parametrize_argument_names,
 	find_unsupported_mock_assertions,
 	function_argument_names,
 	is_mock_factory_call,
 	is_patch_call,
 	patched_target_name_from_call,
+	with_uses_pytest_assertion_context,
+	with_uses_pytest_raises,
 )
 from kycortex_agents.orchestration.task_constraints import (
 	compact_architecture_context,
@@ -403,6 +406,36 @@ def test_test_ast_analysis_helpers_find_unsupported_mock_assertions_and_local_ty
 	assert find_unsupported_mock_assertions(function_node, local_types, {}) == [
 		"logging.getLogger().info.call_count (line 3)"
 	]
+
+
+def test_test_ast_analysis_helpers_detect_pytest_assertion_contexts_and_count_checks_directly():
+	with_node = ast.parse(
+		"with pytest.raises(ValueError):\n"
+		"    validate_request(data)\n"
+	).body[0]
+	assert isinstance(with_node, ast.With)
+	assert with_uses_pytest_raises(with_node) is True
+	assert with_uses_pytest_assertion_context(with_node) is True
+
+	warns_node = ast.parse(
+		"with pytest.warns(UserWarning):\n"
+		"    emit_warning()\n"
+	).body[0]
+	assert isinstance(warns_node, ast.With)
+	assert with_uses_pytest_raises(warns_node) is False
+	assert with_uses_pytest_assertion_context(warns_node) is True
+
+	function_node = ast.parse(
+		"def test_case():\n"
+		"    mock_logger = MagicMock()\n"
+		"    assert True\n"
+		"    with pytest.raises(ValueError):\n"
+		"        explode()\n"
+		"    mock_logger.info('ok')\n"
+		"    assert mock_logger.info.call_count == 1\n"
+	).body[0]
+	assert isinstance(function_node, ast.FunctionDef)
+	assert count_test_assertion_like_checks(function_node) == 4
 
 
 def test_render_sandbox_sitecustomize_returns_dedented_script():

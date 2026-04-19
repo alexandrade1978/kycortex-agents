@@ -117,6 +117,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	collect_parametrized_argument_names,
 	collect_test_local_types,
 	collect_undefined_local_names,
+	count_test_assertion_like_checks,
 	extract_parametrize_argument_names,
 	find_unsupported_mock_assertions,
 	function_argument_names,
@@ -125,6 +126,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 	iter_relevant_test_body_nodes,
 	known_type_allows_member,
 	patched_target_name_from_call,
+	with_uses_pytest_assertion_context,
+	with_uses_pytest_raises,
 	supports_mock_assertion_target,
 )
 from kycortex_agents.orchestration.validation_reporting import (
@@ -299,6 +302,7 @@ __all__ = [
 	"collect_parametrized_argument_names",
 	"collect_test_local_types",
 	"collect_undefined_local_names",
+	"count_test_assertion_like_checks",
 	"extract_parametrize_argument_names",
 	"find_unsupported_mock_assertions",
 	"function_argument_names",
@@ -307,6 +311,8 @@ __all__ = [
 	"iter_relevant_test_body_nodes",
 	"known_type_allows_member",
 	"patched_target_name_from_call",
+	"with_uses_pytest_assertion_context",
+	"with_uses_pytest_raises",
 	"supports_mock_assertion_target",
 	"WARNING_TEST_ISSUE_KEYS",
 	"write_generated_import_runner",

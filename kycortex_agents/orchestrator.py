@@ -1885,18 +1885,6 @@ class Orchestrator:
     def _implementation_prefers_direct_datetime_import(implementation_code: object) -> bool:
         return implementation_prefers_direct_datetime_import(implementation_code)
 
-    @staticmethod
-    def _string_literal_sequence(node: ast.AST | None) -> list[str]:
-        if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-            return []
-
-        values: list[str] = []
-        for element in node.elts:
-            if not isinstance(element, ast.Constant) or not isinstance(element.value, str):
-                return []
-            values.append(element.value)
-        return values
-
     def _implementation_required_evidence_items(self, implementation_code: object) -> list[str]:
         return implementation_required_evidence_items(implementation_code)
 

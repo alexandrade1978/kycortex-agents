@@ -245,6 +245,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 	validation_has_static_issues,
 )
 from kycortex_agents.orchestration.workflow_control import (
+	active_repair_cycle,
 	ensure_budget_decomposition_task,
 	privacy_safe_log_fields,
 	task_id_collection_count,
@@ -2675,6 +2676,9 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			"code_engineer",
 		),
 	) is decomposition_task
+	assert active_repair_cycle(project) is None
+	project.repair_history.append({"cycle": 1, "failed_task_ids": ["code"]})
+	assert active_repair_cycle(project) == {"cycle": 1, "failed_task_ids": ["code"]}
 
 
 def test_repair_instruction_owner_mapping_directly():

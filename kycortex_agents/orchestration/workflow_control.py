@@ -190,6 +190,15 @@ def ensure_budget_decomposition_task(
     return decomposition_task
 
 
+def active_repair_cycle(project: ProjectState) -> dict[str, Any] | None:
+    if not project.repair_history:
+        return None
+    current_cycle = project.repair_history[-1]
+    if not isinstance(current_cycle, dict):
+        return None
+    return current_cycle
+
+
 def exit_if_workflow_paused(logger: Any, project: ProjectState) -> bool:
     if not project.is_workflow_paused():
         return False

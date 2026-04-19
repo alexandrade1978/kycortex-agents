@@ -243,6 +243,7 @@ from kycortex_agents.orchestration.validation_analysis import (
     validation_has_static_issues,
 )
 from kycortex_agents.orchestration.workflow_control import (
+    active_repair_cycle,
     ensure_budget_decomposition_task,
     cancel_workflow,
     emit_workflow_progress,
@@ -1556,12 +1557,7 @@ class Orchestrator:
         )
 
     def _active_repair_cycle(self, project: ProjectState) -> Optional[Dict[str, Any]]:
-        if not project.repair_history:
-            return None
-        current_cycle = project.repair_history[-1]
-        if not isinstance(current_cycle, dict):
-            return None
-        return current_cycle
+        return active_repair_cycle(project)
 
     def _build_repair_context(self, task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
         failure_category = task.last_error_category or FailureCategory.UNKNOWN.value

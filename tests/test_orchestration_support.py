@@ -90,7 +90,10 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	render_score_expression,
 	self_assigned_attributes,
 )
-from kycortex_agents.orchestration.test_ast_analysis import analyze_test_behavior_contracts
+from kycortex_agents.orchestration.test_ast_analysis import (
+	analyze_test_behavior_contracts,
+	analyze_test_type_mismatches,
+)
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
@@ -697,6 +700,30 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
 		"validate_request payload missing required fields: email at line 2",
 	]
 	assert non_batch_calls == ["helper does not accept batch/list inputs at line 4"]
+
+
+def test_analyze_test_type_mismatches_reports_only_non_negative_type_mismatches():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    validate_request({'details': ('a', 'b')})\n"
+		"    with pytest.raises(ValueError):\n"
+		"        validate_request({'details': {'a', 'b'}})\n"
+		"    score_request(Request(data={'details': ['ok']}))\n"
+	)
+	class_map = {"Request": {"constructor_params": ["status", "data"]}}
+
+	mismatches = analyze_test_type_mismatches(
+		tree,
+		{
+			"validate_request": {"details": ["dict"]},
+			"score_request": {"details": ["dict"]},
+		},
+		class_map,
+	)
+
+	assert mismatches == [
+		"validate_request passes tuple for `details` (expected dict) at line 2"
+	]
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

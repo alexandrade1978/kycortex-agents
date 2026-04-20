@@ -905,6 +905,44 @@ def analyze_test_behavior_contracts(
     return sorted(payload_violations), sorted(non_batch_calls)
 
 
+def analyze_test_type_mismatches(
+    tree: ast.AST,
+    type_constraint_rules: Dict[str, Dict[str, list[str]]],
+    class_map: Dict[str, Any],
+) -> list[str]:
+    if not type_constraint_rules:
+        return []
+    mismatches: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
+            continue
+        bindings = collect_local_bindings(node)
+        node_parent_map = parent_map(node)
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
+                continue
+            called_name = callable_name(child)
+            if not called_name or called_name not in type_constraint_rules:
+                continue
+            if call_has_negative_expectation(child, node_parent_map):
+                continue
+            constraints = type_constraint_rules[called_name]
+            payload_arg = payload_argument_for_validation(child, called_name)
+            payload_node = resolve_bound_value(payload_arg, bindings)
+            for field_name, allowed_types in constraints.items():
+                observed_type = infer_argument_type(
+                    payload_node, bindings, field_name, class_map,
+                )
+                if not observed_type:
+                    continue
+                allowed_lower = {t.lower() for t in allowed_types}
+                if observed_type.lower() not in allowed_lower:
+                    mismatches.add(
+                        f"{called_name} passes {observed_type} for `{field_name}` (expected {', '.join(allowed_types)}) at line {child.lineno}"
+                    )
+    return sorted(mismatches)
+
+
 def assert_limits_batch_result(
     test: ast.AST,
     result_name: Optional[str],

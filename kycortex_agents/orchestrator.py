@@ -21,7 +21,6 @@ from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientErr
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
 from kycortex_agents.orchestration.ast_tools import (
-    callable_name,
     is_pytest_fixture,
     python_import_roots,
 )
@@ -184,6 +183,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     assert_limits_batch_result,
     assigned_name_for_call,
     analyze_test_behavior_contracts,
+    analyze_test_type_mismatches,
     analyze_typed_test_member_usage,
     ast_contains_node,
     behavior_contract_explicitly_limits_score_state_to_valid_requests,
@@ -2555,37 +2555,7 @@ class Orchestrator:
         type_constraint_rules: Dict[str, Dict[str, list[str]]],
         class_map: Dict[str, Any],
     ) -> list[str]:
-        if not type_constraint_rules:
-            return []
-        mismatches: set[str] = set()
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
-                continue
-            bindings = self._collect_local_bindings(node)
-            parent_map = self._parent_map(node)
-            for child in ast.walk(node):
-                if not isinstance(child, ast.Call):
-                    continue
-                called_name = callable_name(child)
-                if not called_name or called_name not in type_constraint_rules:
-                    continue
-                if self._call_has_negative_expectation(child, parent_map):
-                    continue
-                constraints = type_constraint_rules[called_name]
-                payload_arg = self._payload_argument_for_validation(child, called_name)
-                payload_node = self._resolve_bound_value(payload_arg, bindings)
-                for field_name, allowed_types in constraints.items():
-                    observed_type = self._infer_argument_type(
-                        payload_node, bindings, field_name, class_map,
-                    )
-                    if not observed_type:
-                        continue
-                    allowed_lower = {t.lower() for t in allowed_types}
-                    if observed_type.lower() not in allowed_lower:
-                        mismatches.add(
-                            f"{called_name} passes {observed_type} for `{field_name}` (expected {', '.join(allowed_types)}) at line {child.lineno}"
-                        )
-        return sorted(mismatches)
+        return analyze_test_type_mismatches(tree, type_constraint_rules, class_map)
 
     def _infer_argument_type(
         self,

@@ -344,7 +344,7 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 	task_acceptance_lists,
 )
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, AgentOutput, AgentView, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskResult, TaskStatus, WorkflowOutcome
+from kycortex_agents.types import AgentInput, AgentOutput, AgentView, AgentViewArtifactRecord, AgentViewDecisionRecord, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskResult, TaskStatus, WorkflowOutcome
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -634,12 +634,19 @@ def test_build_task_context_base_applies_planned_module_aliases_directly():
 	task = SimpleNamespace(id="code", title="Implement", description="desc", assigned_to="code_engineer")
 	project = SimpleNamespace(goal="ship", project_name="demo", phase="build")
 	snapshot = {"decisions": ["d1"], "artifacts": ["a1"], "workflow_status": "running"}
+	agent_view = AgentView(
+		project_name="demo",
+		goal="ship",
+		decisions=[AgentViewDecisionRecord(topic="decision-topic", decision="d1", rationale="because")],
+		artifacts=[AgentViewArtifactRecord(name="artifact.py", artifact_type=ArtifactType.CODE, content="print('ok')")],
+	)
 
 	ctx = build_task_context_base(
 		task,
 		project,
 		execution_agent_name="code_engineer",
 		provider_max_tokens=4096,
+		agent_view=agent_view,
 		agent_view_snapshot=snapshot,
 		planned_module_context={
 			"planned_module_name": "code_implementation",
@@ -650,8 +657,8 @@ def test_build_task_context_base_applies_planned_module_aliases_directly():
 	assert ctx["goal"] == "ship"
 	assert ctx["provider_max_tokens"] == 4096
 	assert ctx["snapshot"] is snapshot
-	assert ctx["decisions"] == ["d1"]
-	assert ctx["artifacts"] == ["a1"]
+	assert [decision.topic for decision in ctx["decisions"]] == ["decision-topic"]
+	assert [artifact.name for artifact in ctx["artifacts"]] == ["artifact.py"]
 	assert ctx["module_name"] == "code_implementation"
 	assert ctx["module_filename"] == "code_implementation.py"
 

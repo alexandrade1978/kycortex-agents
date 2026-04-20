@@ -30,10 +30,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
     normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
-    build_agent_view_artifacts,
-    build_agent_view_decisions,
     build_agent_view_runtime,
-    build_agent_view_task_results,
     build_task_context_runtime,
     direct_dependency_ids,
     task_dependency_closure_ids,
@@ -95,10 +92,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
-    ast_is_empty_literal,
-    attribute_is_field_reference,
     class_field_uses_empty_default,
-    compare_mentions_invalid_literal,
     dataclass_default_order_repair_examples,
     class_field_annotations_from_failed_artifact,
     class_field_names_from_failed_artifact,
@@ -113,7 +107,6 @@ from kycortex_agents.orchestration.repair_analysis import (
     internal_constructor_strictness_details,
     invalid_outcome_audit_return_details,
     invalid_outcome_missing_audit_trail_details,
-    is_len_of_field_reference,
     missing_import_nameerror_details,
     missing_object_attribute_details,
     missing_required_constructor_details,
@@ -122,8 +115,6 @@ from kycortex_agents.orchestration.repair_analysis import (
     render_name_list,
     required_field_list_from_failed_artifact,
     suggest_declared_attribute_replacement,
-    test_function_targets_invalid_path,
-    test_requires_non_empty_result_field,
 )
 from kycortex_agents.orchestration.repair_signals import (
     content_has_bare_datetime_reference,
@@ -164,15 +155,12 @@ from kycortex_agents.orchestration.sandbox_execution import (
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.task_constraints import (
-    build_budget_decomposition_instruction,
     build_budget_decomposition_task_context,
     compact_architecture_context,
     is_budget_decomposition_planner,
-    parse_task_public_contract_surface,
     repair_requires_budget_decomposition,
     should_compact_architecture_context,
-    summary_limit_exceeded,
-    task_public_contract_anchor,
+    task_public_contract_anchor as extract_task_public_contract_anchor,
     task_public_contract_preflight,
     task_exact_top_level_test_count,
     task_fixture_budget,
@@ -246,10 +234,7 @@ from kycortex_agents.orchestration.validation_reporting import (
     build_repair_validation_summary,
     build_test_validation_summary,
     completion_diagnostics_from_provider_call,
-    completion_diagnostics_summary,
-    completion_hit_limit,
     completion_validation_issue,
-    looks_structurally_truncated,
 )
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
@@ -262,12 +247,10 @@ from kycortex_agents.orchestration.validation_runtime import (
 )
 from kycortex_agents.orchestration.validation_analysis import (
     pytest_contract_overreach_signals,
-    pytest_failure_details,
     pytest_failure_is_semantic_assertion_mismatch,
     pytest_failure_origin,
     validation_has_blocking_issues,
     validation_has_only_warnings,
-    validation_has_static_issues,
 )
 from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
@@ -310,21 +293,13 @@ from kycortex_agents.orchestration.workflow_control import (
 from kycortex_agents.orchestration.workflow_acceptance import evaluate_workflow_acceptance
 from kycortex_agents.providers.base import (
     redact_sensitive_data,
-    sanitize_provider_call_metadata,
 )
 from kycortex_agents.types import (
-    AgentView,
-    AgentViewArtifactRecord,
-    AgentViewDecisionRecord,
-    AgentViewTaskResult,
     AgentInput,
     AgentOutput,
     ArtifactRecord,
     ArtifactType,
-    ExecutionSandboxPolicy,
     FailureCategory,
-    ProjectSnapshot,
-    TaskResult,
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -451,21 +426,21 @@ class Orchestrator:
             output = execute_agent(agent, agent_input)
             normalized_output = normalize_agent_result(output)
             normalized_output = unredacted_agent_result(agent, normalized_output)
-            normalized_output = self._sanitize_output_provider_call_metadata(normalized_output)
+            normalized_output = sanitize_output_provider_call_metadata(normalized_output)
             self._validate_task_output(task, agent_input.context, normalized_output)
             self._persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:
                 project.add_decision_record(decision)
             for artifact in normalized_output.artifacts:
                 project.add_artifact_record(artifact)
-            provider_call = self._provider_call_metadata(agent, normalized_output)
+            provider_call = provider_call_metadata(agent, normalized_output)
             project.complete_task(task.id, normalized_output, provider_call=provider_call)
         except Exception as exc:
             failure_category = self._classify_task_failure(task, exc)
             project.fail_task(
                 task.id,
                 exc,
-                provider_call=self._provider_call_metadata(agent, normalized_output),
+                provider_call=provider_call_metadata(agent, normalized_output),
                 output=normalized_output,
                 error_category=failure_category,
             )
@@ -481,7 +456,7 @@ class Orchestrator:
                     error_type=type(exc).__name__,
                 )
             else:
-                provider_call = self._provider_call_metadata(agent, normalized_output)
+                provider_call = provider_call_metadata(agent, normalized_output)
                 self._log_event(
                     "error",
                     "task_failed",
@@ -529,28 +504,18 @@ class Orchestrator:
     def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
         validate_code_output_runtime(
             output,
-            self._task_line_budget(task),
-            self._task_requires_cli_entrypoint(task),
+            task_line_budget(task),
+            task_requires_cli_entrypoint(task),
             self._should_validate_code_content,
             self._analyze_python_module,
             self._output_line_count,
-            lambda code_analysis: self._task_public_contract_preflight(task, code_analysis),
+            lambda code_analysis: task_public_contract_preflight(task, code_analysis),
             self._completion_diagnostics_from_output,
             self._artifact_filename,
             self._execute_generated_module_import,
             self._record_output_validation,
-            self._completion_validation_issue,
+            completion_validation_issue,
         )
-
-    def _task_public_contract_preflight(
-        self,
-        task: Optional[Task],
-        code_analysis: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
-        return task_public_contract_preflight(task, code_analysis)
-
-    def _parse_task_public_contract_surface(self, surface: str) -> tuple[Optional[str], str, list[str]]:
-        return parse_task_public_contract_surface(surface)
 
     def _execute_generated_module_import(self, module_filename: str, code_content: str) -> Dict[str, Any]:
         return execute_generated_module_import(
@@ -560,21 +525,29 @@ class Orchestrator:
             python_executable=sys.executable,
             host_env=os.environ,
             subprocess_run=subprocess.run,
-            sanitize_filename=self._sanitize_generated_filename,
-            write_import_runner_fn=self._write_generated_import_runner,
-            build_env_fn=self._build_generated_test_env,
-            build_preexec_fn=self._sandbox_preexec_fn,
-            redact_result=self._redact_validation_execution_result,
+            sanitize_filename=sanitize_generated_filename,
+            write_import_runner_fn=write_generated_import_runner,
+            build_env_fn=lambda tmp_path, sandbox_policy: build_generated_test_env(
+                tmp_path,
+                sandbox_policy,
+                host_env=os.environ,
+            ),
+            build_preexec_fn=lambda sandbox_policy: build_sandbox_preexec_fn(
+                sandbox_policy,
+                os_module=os,
+                resource_module=resource,
+            ),
+            redact_result=redact_validation_execution_result,
         )
 
     def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:
         validate_test_output_runtime(
             context,
             output,
-            self._task_line_budget(task),
-            self._task_exact_top_level_test_count(task),
-            self._task_max_top_level_test_count(task),
-            self._task_fixture_budget(task),
+            task_line_budget(task),
+            task_exact_top_level_test_count(task),
+            task_max_top_level_test_count(task),
+            task_fixture_budget(task),
             QATesterAgent._finalize_generated_test_suite,
             self._should_validate_test_content,
             self._analyze_test_module,
@@ -582,9 +555,9 @@ class Orchestrator:
             self._output_line_count,
             self._execute_generated_tests,
             self._completion_diagnostics_from_output,
-            self._pytest_failure_origin,
+            pytest_failure_origin,
             self._record_output_validation,
-            self._completion_validation_issue,
+            completion_validation_issue,
             summarize_output,
         )
         # If only warnings and pytest passed → accept (warnings are false positives)
@@ -594,30 +567,12 @@ class Orchestrator:
             return 0
         return len(raw_content.splitlines())
 
-    def _task_line_budget(self, task: Optional[Task]) -> Optional[int]:
-        return task_line_budget(task)
-
-    def _task_requires_cli_entrypoint(self, task: Optional[Task]) -> bool:
-        return task_requires_cli_entrypoint(task)
-
     def _should_compact_architecture_context(self, task: Optional[Task], task_public_contract_anchor: str) -> bool:
         execution_agent_name = self._execution_agent_name(task) if task is not None else None
         return should_compact_architecture_context(task, task_public_contract_anchor, execution_agent_name, self.config.max_tokens)
 
-    def _compact_architecture_context(self, task: Task, task_public_contract_anchor: str) -> str:
-        return compact_architecture_context(task, task_public_contract_anchor)
-
-    def _task_exact_top_level_test_count(self, task: Optional[Task]) -> Optional[int]:
-        return task_exact_top_level_test_count(task)
-
-    def _task_max_top_level_test_count(self, task: Optional[Task]) -> Optional[int]:
-        return task_max_top_level_test_count(task)
-
-    def _task_fixture_budget(self, task: Optional[Task]) -> Optional[int]:
-        return task_fixture_budget(task)
-
     def _classify_task_failure(self, task: Task, exc: Exception) -> str:
-        normalized_role = AgentRegistry.normalize_key(self._execution_agent_name(task))
+        normalized_role = (task.assigned_to or "").strip().lower()
         if isinstance(exc, WorkflowDefinitionError):
             return FailureCategory.WORKFLOW_DEFINITION.value
         if isinstance(exc, ProviderTransientError):
@@ -707,79 +662,24 @@ class Orchestrator:
             host_env=os.environ,
             pytest_spec_finder=importlib.util.find_spec,
             subprocess_run=subprocess.run,
-            sanitize_filename=self._sanitize_generated_filename,
-            write_test_runner_fn=self._write_generated_test_runner,
-            build_env_fn=self._build_generated_test_env,
-            build_preexec_fn=self._sandbox_preexec_fn,
-            summarize_output=self._summarize_pytest_output,
-            redact_result=self._redact_validation_execution_result,
+            sanitize_filename=sanitize_generated_filename,
+            write_test_runner_fn=write_generated_test_runner,
+            build_env_fn=lambda tmp_path, sandbox_policy: build_generated_test_env(
+                tmp_path,
+                sandbox_policy,
+                host_env=os.environ,
+            ),
+            build_preexec_fn=lambda sandbox_policy: build_sandbox_preexec_fn(
+                sandbox_policy,
+                os_module=os,
+                resource_module=resource,
+            ),
+            summarize_output=summarize_pytest_output,
+            redact_result=redact_validation_execution_result,
         )
 
-    def _build_generated_test_env(
-        self,
-        tmp_path: Path,
-        sandbox_policy: ExecutionSandboxPolicy,
-    ) -> Dict[str, str]:
-        return build_generated_test_env(tmp_path, sandbox_policy, host_env=os.environ)
-
-    def _write_generated_test_runner(
-        self,
-        tmp_path: Path,
-        test_filename: str,
-        sandbox_enabled: bool,
-    ) -> Path:
-        return write_generated_test_runner(tmp_path, test_filename, sandbox_enabled)
-
-    def _write_generated_import_runner(
-        self,
-        tmp_path: Path,
-        module_filename: str,
-        sandbox_enabled: bool,
-    ) -> Path:
-        return write_generated_import_runner(tmp_path, module_filename, sandbox_enabled)
-
-    def _sanitize_generated_filename(self, filename: str, default_filename: str) -> str:
-        return sanitize_generated_filename(filename, default_filename)
-
-    def _sandbox_preexec_fn(self, sandbox_policy: ExecutionSandboxPolicy):
-        return build_sandbox_preexec_fn(sandbox_policy, os_module=os, resource_module=resource)
-
-    def _summarize_pytest_output(self, stdout: str, stderr: str, returncode: int) -> str:
-        return summarize_pytest_output(stdout, stderr, returncode)
-
-    @staticmethod
-    def _redact_validation_execution_result(result: Dict[str, Any]) -> Dict[str, Any]:
-        return redact_validation_execution_result(result)
-
-    def _sanitize_provider_call_metadata(self, provider_call: Dict[str, Any]) -> Dict[str, Any]:
-        return sanitize_provider_call_metadata(provider_call)
-
-    def _sanitize_output_provider_call_metadata(self, output: AgentOutput) -> AgentOutput:
-        return sanitize_output_provider_call_metadata(output)
-
-    def _provider_call_metadata(self, agent: Any, output: Optional[AgentOutput] = None) -> Optional[Dict[str, Any]]:
-        return provider_call_metadata(agent, output)
-
     def _persist_artifacts(self, artifacts: list[ArtifactRecord]) -> None:
-        self._artifact_persistence_support().persist_artifacts(artifacts)
-
-    def _resolve_artifact_output_path(self, artifact: ArtifactRecord) -> Path:
-        return self._artifact_persistence_support().resolve_artifact_output_path(artifact)
-
-    def _validate_artifact_output_path(self, target_path: Path) -> None:
-        self._artifact_persistence_support().validate_artifact_output_path(target_path)
-
-    def _sanitize_artifact_relative_path(self, artifact_path: str) -> Path:
-        return self._artifact_persistence_support().sanitize_artifact_relative_path(artifact_path)
-
-    def _artifact_record_path(self, target_path: Path) -> str:
-        return self._artifact_persistence_support().artifact_record_path(target_path)
-
-    def _default_artifact_path(self, artifact: ArtifactRecord) -> str:
-        return self._artifact_persistence_support().default_artifact_path(artifact)
-
-    def _artifact_persistence_support(self) -> ArtifactPersistenceSupport:
-        return ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub)
+        ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(artifacts)
 
     @staticmethod
     def _agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:
@@ -800,95 +700,6 @@ class Orchestrator:
             if key in repair_context
         }
 
-    def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
-        return build_task_context_runtime(
-            task,
-            project,
-            provider_max_tokens=self.config.max_tokens,
-            build_agent_view=self._build_agent_view,
-            task_dependency_closure_ids=self._task_dependency_closure_ids,
-            execution_agent_name=self._execution_agent_name,
-            planned_module_context=lambda current_project, visible_task_ids, current_task: self._planned_module_context(
-                current_project,
-                visible_task_ids,
-                current_task=current_task,
-            ),
-            task_public_contract_anchor=self._task_public_contract_anchor,
-            should_compact_architecture_context=self._should_compact_architecture_context,
-            compact_architecture_context=self._compact_architecture_context,
-            task_context_output=self._task_context_output,
-            is_budget_decomposition_planner=self._is_budget_decomposition_planner,
-            semantic_output_key=semantic_output_key,
-            normalize_assigned_to=AgentRegistry.normalize_key,
-            code_artifact_context=self._code_artifact_context,
-            dependency_artifact_context=self._dependency_artifact_context,
-            test_artifact_context=self._test_artifact_context,
-            agent_visible_repair_context=self._agent_visible_repair_context,
-            normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
-            qa_repair_should_reuse_failed_test_artifact=self._qa_repair_should_reuse_failed_test_artifact,
-            redact_sensitive_data=redact_sensitive_data,
-        )
-
-    def _task_dependency_closure_ids(self, task: Task, project: ProjectState) -> set[str]:
-        return task_dependency_closure_ids(task, project)
-
-    @staticmethod
-    def _direct_dependency_ids(task: Task) -> set[str]:
-        return direct_dependency_ids(task)
-
-    def _build_agent_view(self, task: Task, project: ProjectState, snapshot: ProjectSnapshot) -> AgentView:
-        return build_agent_view_runtime(
-            task,
-            project,
-            snapshot,
-            task_dependency_closure_ids=self._task_dependency_closure_ids,
-            direct_dependency_ids=self._direct_dependency_ids,
-        )
-
-    @staticmethod
-    def _agent_view_task_results(
-        task_results: Dict[str, TaskResult],
-        visible_task_ids: set[str],
-    ) -> Dict[str, AgentViewTaskResult]:
-        return build_agent_view_task_results(task_results, visible_task_ids)
-
-    @staticmethod
-    def _agent_view_decisions(decisions: list[Any]) -> list[AgentViewDecisionRecord]:
-        return build_agent_view_decisions(decisions)
-
-    @staticmethod
-    def _agent_view_artifacts(
-        artifacts: list[Any],
-        visible_task_ids: set[str],
-        direct_dependency_ids: set[str],
-    ) -> list[AgentViewArtifactRecord]:
-        return build_agent_view_artifacts(artifacts, visible_task_ids, direct_dependency_ids)
-
-    def _build_repair_instruction(self, task: Task, failure_category: str) -> str:
-        return build_repair_instruction_runtime(
-            task,
-            failure_category,
-            failed_artifact_content=self._failed_artifact_content,
-            artifact_type=ArtifactType.CODE,
-            validation_payload=self._validation_payload,
-            dataclass_default_order_repair_examples=self._dataclass_default_order_repair_examples,
-            missing_import_nameerror_details=self._missing_import_nameerror_details,
-            plain_class_field_default_factory_details=self._plain_class_field_default_factory_details,
-            test_validation_has_only_warnings=self._test_validation_has_only_warnings,
-        )
-
-    def _repair_owner_for_category(self, task: Task, failure_category: str) -> str:
-        return repair_owner_for_category(task.assigned_to, failure_category)
-
-    def _validation_payload(self, task: Task) -> Dict[str, Any]:
-        return validation_payload(task)
-
-    def _failed_artifact_content(self, task: Task, artifact_type: Optional[ArtifactType] = None) -> str:
-        return failed_artifact_content(task.output, task.output_payload, artifact_type)
-
-    def _task_context_output(self, task: Task) -> str:
-        return task_context_output(task)
-
     def _completion_diagnostics_from_output(
         self,
         output: AgentOutput,
@@ -898,110 +709,11 @@ class Orchestrator:
         syntax_error: Optional[str] = None,
     ) -> Dict[str, Any]:
         provider_call = output.metadata.get("provider_call") if isinstance(output.metadata, dict) else None
-        return self._completion_diagnostics_from_provider_call(
-            provider_call,
-            raw_content=raw_content,
-            syntax_ok=syntax_ok,
-            syntax_error=syntax_error,
-        )
-
-    def _completion_diagnostics_from_provider_call(
-        self,
-        provider_call: Any,
-        *,
-        raw_content: str = "",
-        syntax_ok: bool,
-        syntax_error: Optional[str] = None,
-    ) -> Dict[str, Any]:
         return completion_diagnostics_from_provider_call(
             provider_call,
             raw_content=raw_content,
             syntax_ok=syntax_ok,
             syntax_error=syntax_error,
-        )
-
-    def _looks_structurally_truncated(self, raw_content: str, syntax_error: Optional[str]) -> bool:
-        return looks_structurally_truncated(raw_content, syntax_error)
-
-    def _completion_hit_limit(self, completion_diagnostics: Dict[str, Any]) -> bool:
-        return completion_hit_limit(completion_diagnostics)
-
-    def _completion_validation_issue(self, completion_diagnostics: Dict[str, Any]) -> str:
-        return completion_validation_issue(completion_diagnostics)
-
-    def _completion_diagnostics_summary(self, completion_diagnostics: Dict[str, Any]) -> str:
-        return completion_diagnostics_summary(completion_diagnostics)
-
-    def _pytest_failure_details(self, test_execution: Optional[Dict[str, Any]], limit: int = 3) -> list[str]:
-        return pytest_failure_details(test_execution, limit=limit)
-
-    def _pytest_failure_origin(
-        self,
-        test_execution: Optional[Dict[str, Any]],
-        module_filename: Optional[str],
-        test_filename: Optional[str],
-    ) -> str:
-        return pytest_failure_origin(test_execution, module_filename, test_filename)
-
-    def _pytest_failure_is_semantic_assertion_mismatch(
-        self,
-        test_execution: Optional[Dict[str, Any]],
-    ) -> bool:
-        return pytest_failure_is_semantic_assertion_mismatch(test_execution)
-
-    def _pytest_contract_overreach_signals(
-        self,
-        test_execution: Optional[Dict[str, Any]],
-    ) -> list[str]:
-        return pytest_contract_overreach_signals(test_execution)
-
-    def _test_validation_has_static_issues(self, validation: Dict[str, Any]) -> bool:
-        return validation_has_static_issues(validation)
-
-    def _test_validation_has_blocking_issues(self, validation: Dict[str, Any]) -> bool:
-        """Return *True* only when the test has issues that prevent execution.
-
-        Unlike ``_test_validation_has_static_issues`` (which flags any issue),
-        this method ignores WARNING-level findings so the pytest arbiter can
-        make the final accept/reject decision.
-        """
-        return validation_has_blocking_issues(validation)
-
-    def _test_validation_has_only_warnings(self, validation: Dict[str, Any]) -> bool:
-        """Return *True* when the test has static findings but all are WARNING-level."""
-        return validation_has_only_warnings(validation)
-
-    def _build_repair_validation_summary(self, task: Task, failure_category: str) -> str:
-        return build_repair_validation_summary(task, failure_category, self._validation_payload(task))
-
-    def _test_failure_requires_code_repair(self, task: Task) -> bool:
-        return failed_test_requires_code_repair_runtime(
-            task,
-            validation_payload=self._validation_payload,
-            pytest_failure_origin=self._pytest_failure_origin,
-            pytest_contract_overreach_signals=self._pytest_contract_overreach_signals,
-            test_validation_has_blocking_issues=self._test_validation_has_blocking_issues,
-            pytest_failure_is_semantic_assertion_mismatch=self._pytest_failure_is_semantic_assertion_mismatch,
-        )
-
-    def _upstream_code_task_for_test_failure(self, project: ProjectState, task: Task) -> Optional[Task]:
-        return upstream_code_task_for_test_failure(
-            project,
-            task,
-            imported_code_task_for_failed_test=self._imported_code_task_for_failed_test,
-        )
-
-    @staticmethod
-    def _python_import_roots(raw_content: object) -> set[str]:
-        return python_import_roots(raw_content)
-
-    def _imported_code_task_for_failed_test(self, project: ProjectState, task: Task) -> Optional[Task]:
-        return imported_code_task_for_failed_test(
-            project,
-            task,
-            failed_artifact_content=self._failed_artifact_content,
-            python_import_roots=self._python_import_roots,
-            default_module_name_for_task=self._default_module_name_for_task,
         )
 
     def _build_code_repair_context_from_test_failure(
@@ -1014,58 +726,38 @@ class Orchestrator:
             code_task,
             test_task,
             cycle,
-            failed_artifact_content=self._failed_artifact_content,
-            build_repair_validation_summary=self._build_repair_validation_summary,
-            build_code_repair_instruction_from_test_failure=self._build_code_repair_instruction_from_test_failure,
+            failed_artifact_content=lambda current_task, artifact_type=None: failed_artifact_content(
+                current_task.output,
+                current_task.output_payload,
+                artifact_type,
+            ),
+            build_repair_validation_summary=lambda current_task, failure_category: build_repair_validation_summary(
+                current_task,
+                failure_category,
+                validation_payload(current_task),
+            ),
+            build_code_repair_instruction_from_test_failure=lambda current_code_task, validation_summary, existing_tests="": build_code_repair_instruction_from_test_failure_runtime(
+                current_code_task,
+                validation_summary,
+                failed_artifact_content=lambda current_task, artifact_type=None: failed_artifact_content(
+                    current_task.output,
+                    current_task.output_payload,
+                    artifact_type,
+                ),
+                artifact_type=ArtifactType.CODE,
+                duplicate_constructor_argument_details=self._duplicate_constructor_argument_details,
+                duplicate_constructor_argument_call_hint=self._duplicate_constructor_argument_call_hint,
+                duplicate_constructor_explicit_rewrite_hint=self._duplicate_constructor_explicit_rewrite_hint,
+                plain_class_field_default_factory_details=self._plain_class_field_default_factory_details,
+                missing_object_attribute_details=self._missing_object_attribute_details,
+                suggest_declared_attribute_replacement=self._suggest_declared_attribute_replacement,
+                render_name_list=self._render_name_list,
+                nested_payload_wrapper_field_validation_details=self._nested_payload_wrapper_field_validation_details,
+                invalid_outcome_missing_audit_trail_details=self._invalid_outcome_missing_audit_trail_details,
+                internal_constructor_strictness_details=self._internal_constructor_strictness_details,
+                existing_tests=existing_tests,
+            ),
             merge_prior_repair_context=self._merge_prior_repair_context,
-        )
-
-    def _build_code_repair_instruction_from_test_failure(
-        self,
-        code_task: Task,
-        validation_summary: str,
-        existing_tests: object = "",
-    ) -> str:
-        return build_code_repair_instruction_from_test_failure_runtime(
-            code_task,
-            validation_summary,
-            failed_artifact_content=self._failed_artifact_content,
-            artifact_type=ArtifactType.CODE,
-            duplicate_constructor_argument_details=self._duplicate_constructor_argument_details,
-            duplicate_constructor_argument_call_hint=self._duplicate_constructor_argument_call_hint,
-            duplicate_constructor_explicit_rewrite_hint=self._duplicate_constructor_explicit_rewrite_hint,
-            plain_class_field_default_factory_details=self._plain_class_field_default_factory_details,
-            missing_object_attribute_details=self._missing_object_attribute_details,
-            suggest_declared_attribute_replacement=self._suggest_declared_attribute_replacement,
-            render_name_list=self._render_name_list,
-            nested_payload_wrapper_field_validation_details=self._nested_payload_wrapper_field_validation_details,
-            invalid_outcome_missing_audit_trail_details=self._invalid_outcome_missing_audit_trail_details,
-            internal_constructor_strictness_details=self._internal_constructor_strictness_details,
-            existing_tests=existing_tests,
-        )
-
-    def _is_budget_decomposition_planner(self, task: Task) -> bool:
-        return is_budget_decomposition_planner(task)
-
-    @staticmethod
-    def _summary_limit_exceeded(validation_summary: object, label: str) -> bool:
-        return summary_limit_exceeded(validation_summary, label)
-
-    def _repair_requires_budget_decomposition(self, repair_context: Dict[str, Any]) -> bool:
-        return repair_requires_budget_decomposition(repair_context)
-
-    def _build_budget_decomposition_instruction(self, failure_category: str) -> str:
-        return build_budget_decomposition_instruction(failure_category)
-
-    def _build_budget_decomposition_task_context(
-        self,
-        task: Task,
-        repair_context: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        return build_budget_decomposition_task_context(
-            task,
-            repair_context,
-            self._execution_agent_name(task),
         )
 
     def _ensure_budget_decomposition_task(
@@ -1078,35 +770,58 @@ class Orchestrator:
             project,
             task,
             repair_context,
-            requires_budget_decomposition=self._repair_requires_budget_decomposition,
-            build_budget_decomposition_task_context=self._build_budget_decomposition_task_context,
+            requires_budget_decomposition=repair_requires_budget_decomposition,
+            build_budget_decomposition_task_context=lambda current_task, current_repair_context: build_budget_decomposition_task_context(
+                current_task,
+                current_repair_context,
+                self._execution_agent_name(current_task),
+            ),
         )
-
-    def _active_repair_cycle(self, project: ProjectState) -> Optional[Dict[str, Any]]:
-        return active_repair_cycle(project)
 
     def _build_repair_context(self, task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
         return build_repair_context(
             task,
             cycle,
-            repair_owner_for_category=self._repair_owner_for_category,
-            build_repair_instruction=self._build_repair_instruction,
-            build_repair_validation_summary=self._build_repair_validation_summary,
-            failed_artifact_content_for_category=self._failed_artifact_content_for_category,
-            test_repair_helper_surface_usages=self._test_repair_helper_surface_usages,
+            repair_owner_for_category=lambda current_task, failure_category: repair_owner_for_category(
+                current_task.assigned_to,
+                failure_category,
+            ),
+            build_repair_instruction=lambda current_task, failure_category: build_repair_instruction_runtime(
+                current_task,
+                failure_category,
+                failed_artifact_content=lambda helper_task, artifact_type=None: failed_artifact_content(
+                    helper_task.output,
+                    helper_task.output_payload,
+                    artifact_type,
+                ),
+                artifact_type=ArtifactType.CODE,
+                validation_payload=validation_payload,
+                dataclass_default_order_repair_examples=self._dataclass_default_order_repair_examples,
+                missing_import_nameerror_details=self._missing_import_nameerror_details,
+                plain_class_field_default_factory_details=self._plain_class_field_default_factory_details,
+                test_validation_has_only_warnings=validation_has_only_warnings,
+            ),
+            build_repair_validation_summary=lambda current_task, failure_category: build_repair_validation_summary(
+                current_task,
+                failure_category,
+                validation_payload(current_task),
+            ),
+            failed_artifact_content_for_category=lambda current_task, failure_category: failed_artifact_content_for_category(
+                current_task.output,
+                current_task.output_payload,
+                failure_category,
+            ),
+            test_repair_helper_surface_usages=lambda current_task, failure_category: helper_surface_usages_for_test_repair_runtime(
+                current_task,
+                failure_category,
+                validation_payload=validation_payload,
+            ),
             normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
             merge_prior_repair_context=self._merge_prior_repair_context,
         )
 
     def _merge_prior_repair_context(self, task: Task, repair_context: Dict[str, Any]) -> None:
         merge_prior_repair_context(task, repair_context)
-
-    def _test_repair_helper_surface_usages(self, task: Task, failure_category: str) -> list[str]:
-        return helper_surface_usages_for_test_repair_runtime(
-            task,
-            failure_category,
-            validation_payload=self._validation_payload,
-        )
 
     def _normalized_helper_surface_symbols(self, raw_values: object) -> list[str]:
         return normalized_helper_surface_symbols(raw_values)
@@ -1263,37 +978,6 @@ class Orchestrator:
     def _failing_pytest_test_names(validation_summary: object) -> list[str]:
         return failing_pytest_test_names(validation_summary)
 
-    @staticmethod
-    def _compare_mentions_invalid_literal(node: ast.Compare) -> bool:
-        return compare_mentions_invalid_literal(node)
-
-    @classmethod
-    def _test_function_targets_invalid_path(
-        cls,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-    ) -> bool:
-        return test_function_targets_invalid_path(node)
-
-    @staticmethod
-    def _attribute_is_field_reference(node: ast.AST, field_name: str) -> bool:
-        return attribute_is_field_reference(node, field_name)
-
-    @classmethod
-    def _is_len_of_field_reference(cls, node: ast.AST, field_name: str) -> bool:
-        return is_len_of_field_reference(node, field_name)
-
-    @classmethod
-    def _test_requires_non_empty_result_field(
-        cls,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        field_name: str,
-    ) -> bool:
-        return test_requires_non_empty_result_field(node, field_name)
-
-    @staticmethod
-    def _ast_is_empty_literal(node: ast.AST | None) -> bool:
-        return ast_is_empty_literal(node)
-
     @classmethod
     def _class_field_uses_empty_default(
         cls,
@@ -1395,31 +1079,46 @@ class Orchestrator:
             imported_module_symbols,
         )
 
-    def _has_repair_task_for_cycle(self, project: ProjectState, task_id: str, cycle_number: int) -> bool:
-        return has_repair_task_for_cycle(project, task_id, cycle_number)
-
     def _queue_active_cycle_repair(self, project: ProjectState, task: Task) -> bool:
         return queue_active_cycle_repair(
             project,
             task,
             workflow_resume_policy=self.config.workflow_resume_policy,
-            active_repair_cycle=self._active_repair_cycle,
-            has_repair_task_for_cycle=self._has_repair_task_for_cycle,
+            active_repair_cycle=active_repair_cycle,
+            has_repair_task_for_cycle=has_repair_task_for_cycle,
             configure_repair_attempts=self._configure_repair_attempts,
             repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
             log_event=self._log_event,
         )
-
-    def _failed_artifact_content_for_category(self, task: Task, failure_category: str) -> str:
-        return failed_artifact_content_for_category(task.output, task.output_payload, failure_category)
 
     def _configure_repair_attempts(self, project: ProjectState, failed_task_ids: list[str], cycle: Dict[str, Any]) -> None:
         configure_repair_attempts(
             project,
             failed_task_ids,
             cycle,
-            test_failure_requires_code_repair=self._test_failure_requires_code_repair,
-            upstream_code_task_for_test_failure=self._upstream_code_task_for_test_failure,
+            test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
+                task,
+                validation_payload=validation_payload,
+                pytest_failure_origin=pytest_failure_origin,
+                pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+                test_validation_has_blocking_issues=validation_has_blocking_issues,
+                pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+            ),
+            upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
+                current_project,
+                current_task,
+                imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
+                    imported_project,
+                    imported_task,
+                    failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
+                        artifact_task.output,
+                        artifact_task.output_payload,
+                        artifact_type,
+                    ),
+                    python_import_roots=python_import_roots,
+                    default_module_name_for_task=self._default_module_name_for_task,
+                ),
+            ),
             build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
             ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
             build_repair_context=self._build_repair_context,
@@ -1429,14 +1128,32 @@ class Orchestrator:
         return repair_task_ids_for_cycle(
             project,
             failed_task_ids,
-            test_failure_requires_code_repair=self._test_failure_requires_code_repair,
-            upstream_code_task_for_test_failure=self._upstream_code_task_for_test_failure,
+            test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
+                task,
+                validation_payload=validation_payload,
+                pytest_failure_origin=pytest_failure_origin,
+                pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+                test_validation_has_blocking_issues=validation_has_blocking_issues,
+                pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+            ),
+            upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
+                current_project,
+                current_task,
+                imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
+                    imported_project,
+                    imported_task,
+                    failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
+                        artifact_task.output,
+                        artifact_task.output_payload,
+                        artifact_type,
+                    ),
+                    python_import_roots=python_import_roots,
+                    default_module_name_for_task=self._default_module_name_for_task,
+                ),
+            ),
             ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
             execution_agent_name=self._execution_agent_name,
         )
-
-    def _failed_task_ids_for_repair(self, project: ProjectState) -> list[str]:
-        return failed_task_ids_for_repair(project)
 
     def _planned_module_context(
         self,
@@ -1515,9 +1232,6 @@ class Orchestrator:
             visited_task_ids.add(origin_task.id)
             current_task = origin_task
         return self._default_module_name_for_task(current_task)
-
-    def _task_public_contract_anchor(self, task_description: str) -> str:
-        return task_public_contract_anchor(task_description)
 
     def _code_artifact_context(
         self,
@@ -2197,7 +1911,39 @@ class Orchestrator:
         return validate_batch_call(node, bindings, callable_name, batch_rule)
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
-        context = self._build_context(task, project)
+        context = build_task_context_runtime(
+            task,
+            project,
+            provider_max_tokens=self.config.max_tokens,
+            build_agent_view=lambda current_task, current_project, snapshot: build_agent_view_runtime(
+                current_task,
+                current_project,
+                snapshot,
+                task_dependency_closure_ids=task_dependency_closure_ids,
+                direct_dependency_ids=direct_dependency_ids,
+            ),
+            task_dependency_closure_ids=task_dependency_closure_ids,
+            execution_agent_name=self._execution_agent_name,
+            planned_module_context=lambda current_project, visible_task_ids, current_task: self._planned_module_context(
+                current_project,
+                visible_task_ids,
+                current_task=current_task,
+            ),
+            task_public_contract_anchor=extract_task_public_contract_anchor,
+            should_compact_architecture_context=self._should_compact_architecture_context,
+            compact_architecture_context=compact_architecture_context,
+            task_context_output=task_context_output,
+            is_budget_decomposition_planner=is_budget_decomposition_planner,
+            semantic_output_key=semantic_output_key,
+            normalize_assigned_to=AgentRegistry.normalize_key,
+            code_artifact_context=self._code_artifact_context,
+            dependency_artifact_context=self._dependency_artifact_context,
+            test_artifact_context=self._test_artifact_context,
+            agent_visible_repair_context=self._agent_visible_repair_context,
+            normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
+            qa_repair_should_reuse_failed_test_artifact=self._qa_repair_should_reuse_failed_test_artifact,
+            redact_sensitive_data=redact_sensitive_data,
+        )
         repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
         repair_focus_lines = build_repair_focus_lines(repair_context, context) if repair_context else []
         return build_agent_input(
@@ -2219,7 +1965,7 @@ class Orchestrator:
             resume_workflow_tasks=lambda current_project: resume_workflow_tasks(
                 current_project,
                 workflow_resume_policy=self.config.workflow_resume_policy,
-                failed_task_ids_for_repair=self._failed_task_ids_for_repair,
+                failed_task_ids_for_repair=failed_task_ids_for_repair,
                 resume_failed_workflow_tasks=lambda resume_project, current_failed_task_ids, current_failure_categories: resume_failed_workflow_tasks(
                     resume_project,
                     current_failed_task_ids,

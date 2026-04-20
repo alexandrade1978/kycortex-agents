@@ -9,6 +9,7 @@ import ast
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.orchestration import ast_is_empty_literal, python_import_roots, validation_has_blocking_issues, validation_has_only_warnings, validation_has_static_issues
 from kycortex_agents.orchestrator import Orchestrator, _example_from_default
 
 
@@ -24,26 +25,26 @@ def orch(tmp_path):
 
 class TestTestValidationHasStaticIssues:
     def test_missing_test_analysis_returns_true(self, orch):
-        assert orch._test_validation_has_static_issues({}) is True
+        assert validation_has_static_issues({}) is True
 
     def test_non_dict_test_analysis_returns_true(self, orch):
-        assert orch._test_validation_has_static_issues({"test_analysis": "nope"}) is True
+        assert validation_has_static_issues({"test_analysis": "nope"}) is True
 
     def test_clean_validation_returns_false(self, orch):
         validation = {"test_analysis": {"syntax_ok": True}}
-        assert orch._test_validation_has_static_issues(validation) is False
+        assert validation_has_static_issues(validation) is False
 
     def test_syntax_not_ok(self, orch):
         validation = {"test_analysis": {"syntax_ok": False}}
-        assert orch._test_validation_has_static_issues(validation) is True
+        assert validation_has_static_issues(validation) is True
 
     def test_line_count_exceeds_budget(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "line_count": 200, "line_budget": 100}}
-        assert orch._test_validation_has_static_issues(validation) is True
+        assert validation_has_static_issues(validation) is True
 
     def test_line_count_within_budget(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "line_count": 50, "line_budget": 100}}
-        assert orch._test_validation_has_static_issues(validation) is False
+        assert validation_has_static_issues(validation) is False
 
     def test_top_level_test_count_mismatch(self, orch):
         validation = {
@@ -53,7 +54,7 @@ class TestTestValidationHasStaticIssues:
                 "expected_top_level_test_count": 3,
             }
         }
-        assert orch._test_validation_has_static_issues(validation) is True
+        assert validation_has_static_issues(validation) is True
 
     def test_top_level_test_count_exceeds_max(self, orch):
         validation = {
@@ -63,23 +64,23 @@ class TestTestValidationHasStaticIssues:
                 "max_top_level_test_count": 5,
             }
         }
-        assert orch._test_validation_has_static_issues(validation) is True
+        assert validation_has_static_issues(validation) is True
 
     def test_fixture_count_exceeds_budget(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "fixture_count": 5, "fixture_budget": 2}}
-        assert orch._test_validation_has_static_issues(validation) is True
+        assert validation_has_static_issues(validation) is True
 
     def test_fixture_count_within_budget(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "fixture_count": 1, "fixture_budget": 2}}
-        assert orch._test_validation_has_static_issues(validation) is False
+        assert validation_has_static_issues(validation) is False
 
     def test_blocking_issue_key_triggers(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "missing_function_imports": ["foo"]}}
-        assert orch._test_validation_has_static_issues(validation) is True
+        assert validation_has_static_issues(validation) is True
 
     def test_warning_issue_key_triggers(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "contract_overreach_signals": ["bar"]}}
-        assert orch._test_validation_has_static_issues(validation) is True
+        assert validation_has_static_issues(validation) is True
 
 
 # ---------------------------------------------------------------------------
@@ -89,18 +90,18 @@ class TestTestValidationHasStaticIssues:
 class TestTestValidationHasBlockingIssues:
     def test_clean_validation(self, orch):
         validation = {"test_analysis": {"syntax_ok": True}}
-        assert orch._test_validation_has_blocking_issues(validation) is False
+        assert validation_has_blocking_issues(validation) is False
 
     def test_missing_analysis(self, orch):
-        assert orch._test_validation_has_blocking_issues({}) is True
+        assert validation_has_blocking_issues({}) is True
 
     def test_blocking_key(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "undefined_fixtures": ["x"]}}
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_warning_key_not_blocking(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "type_mismatches": ["z"]}}
-        assert orch._test_validation_has_blocking_issues(validation) is False
+        assert validation_has_blocking_issues(validation) is False
 
 
 # ---------------------------------------------------------------------------
@@ -110,15 +111,15 @@ class TestTestValidationHasBlockingIssues:
 class TestTestValidationHasOnlyWarnings:
     def test_only_warnings(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "type_mismatches": ["m"]}}
-        assert orch._test_validation_has_only_warnings(validation) is True
+        assert validation_has_only_warnings(validation) is True
 
     def test_blocking_issues(self, orch):
         validation = {"test_analysis": {"syntax_ok": True, "undefined_fixtures": ["x"]}}
-        assert orch._test_validation_has_only_warnings(validation) is False
+        assert validation_has_only_warnings(validation) is False
 
     def test_no_issues(self, orch):
         validation = {"test_analysis": {"syntax_ok": True}}
-        assert orch._test_validation_has_only_warnings(validation) is False
+        assert validation_has_only_warnings(validation) is False
 
 
 # ---------------------------------------------------------------------------
@@ -127,59 +128,59 @@ class TestTestValidationHasOnlyWarnings:
 
 class TestAstIsEmptyLiteral:
     def test_none_input(self):
-        assert Orchestrator._ast_is_empty_literal(None) is False
+        assert ast_is_empty_literal(None) is False
 
     def test_empty_string_constant(self):
         node = ast.parse('""', mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_none_constant(self):
         node = ast.parse("None", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_non_empty_string(self):
         node = ast.parse('"hello"', mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is False
+        assert ast_is_empty_literal(node) is False
 
     def test_empty_list(self):
         node = ast.parse("[]", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_non_empty_list(self):
         node = ast.parse("[1]", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is False
+        assert ast_is_empty_literal(node) is False
 
     def test_empty_dict(self):
         node = ast.parse("{}", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_non_empty_dict(self):
         node = ast.parse("{'k': 1}", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is False
+        assert ast_is_empty_literal(node) is False
 
     def test_empty_tuple(self):
         node = ast.parse("()", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_empty_set_call(self):
         node = ast.parse("set()", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_dict_call(self):
         node = ast.parse("dict()", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_list_call(self):
         node = ast.parse("list()", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is True
+        assert ast_is_empty_literal(node) is True
 
     def test_call_with_args_not_empty(self):
         node = ast.parse("list([1, 2])", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is False
+        assert ast_is_empty_literal(node) is False
 
     def test_non_builtin_call(self):
         node = ast.parse("MyClass()", mode="eval").body
-        assert Orchestrator._ast_is_empty_literal(node) is False
+        assert ast_is_empty_literal(node) is False
 
 
 # ---------------------------------------------------------------------------
@@ -371,21 +372,21 @@ class TestModuleDefinedSymbolNames:
 class TestPythonImportRoots:
     def test_import_statement(self):
         code = "import os\nimport json.decoder"
-        assert Orchestrator._python_import_roots(code) == {"os", "json"}
+        assert python_import_roots(code) == {"os", "json"}
 
     def test_from_import(self):
         code = "from pathlib import Path\nfrom collections.abc import Mapping"
-        assert Orchestrator._python_import_roots(code) == {"pathlib", "collections"}
+        assert python_import_roots(code) == {"pathlib", "collections"}
 
     def test_relative_import_ignored(self):
         code = "from . import sibling"
-        assert Orchestrator._python_import_roots(code) == set()
+        assert python_import_roots(code) == set()
 
     def test_empty_string(self):
-        assert Orchestrator._python_import_roots("") == set()
+        assert python_import_roots("") == set()
 
     def test_non_string(self):
-        assert Orchestrator._python_import_roots(42) == set()
+        assert python_import_roots(42) == set()
 
 
 # ---------------------------------------------------------------------------

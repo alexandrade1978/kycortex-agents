@@ -16,20 +16,54 @@ from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
+from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output
 from kycortex_agents.orchestration import (
     ast_name,
+    active_repair_cycle,
     attribute_chain,
+    build_agent_view_runtime,
+    completion_diagnostics_summary,
+    completion_diagnostics_from_provider_call,
+    completion_validation_issue,
+    compact_architecture_context,
+    build_repair_validation_summary,
+    build_repair_instruction_runtime,
+    build_task_context_runtime,
     build_code_validation_summary,
     build_dependency_validation_summary,
     build_repair_focus_lines,
     build_test_validation_summary,
     callable_name,
     expression_root_name,
+    failed_artifact_content,
+    failed_artifact_content_for_category,
+    failed_test_requires_code_repair_runtime,
     first_call_argument,
+    is_budget_decomposition_planner,
     is_pytest_fixture,
+    looks_structurally_truncated,
+    pytest_contract_overreach_signals,
+    pytest_failure_details,
+    pytest_failure_is_semantic_assertion_mismatch,
+    pytest_failure_origin,
+    provider_call_metadata,
+    repair_owner_for_category,
     render_expression,
     semantic_output_key,
     summarize_output,
+    has_repair_task_for_cycle,
+    task_fixture_budget,
+    task_context_output,
+    task_public_contract_anchor,
+    task_public_contract_preflight,
+    task_requires_cli_entrypoint,
+    direct_dependency_ids,
+    task_dependency_closure_ids,
+    validation_has_blocking_issues,
+    validation_has_only_warnings,
+    validation_payload,
     validate_agent_resolution,
 )
 from kycortex_agents.orchestrator import Orchestrator
@@ -54,6 +88,83 @@ class RecordingAgent:
         self.last_description = task_description
         self.last_context = context
         return self.response
+
+
+def build_repair_instruction_for_test(orchestrator: Orchestrator, task: Task, failure_category: str) -> str:
+    return build_repair_instruction_runtime(
+        task,
+        failure_category,
+        failed_artifact_content=lambda current_task, artifact_type=None: failed_artifact_content(
+            current_task.output,
+            current_task.output_payload,
+            artifact_type,
+        ),
+        artifact_type=ArtifactType.CODE,
+        validation_payload=validation_payload,
+        dataclass_default_order_repair_examples=orchestrator._dataclass_default_order_repair_examples,
+        missing_import_nameerror_details=orchestrator._missing_import_nameerror_details,
+        plain_class_field_default_factory_details=orchestrator._plain_class_field_default_factory_details,
+        test_validation_has_only_warnings=validation_has_only_warnings,
+    )
+
+
+def failed_test_requires_code_repair_for_test(orchestrator: Orchestrator, task: Task) -> bool:
+    return failed_test_requires_code_repair_runtime(
+        task,
+        validation_payload=validation_payload,
+        pytest_failure_origin=pytest_failure_origin,
+        pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+        test_validation_has_blocking_issues=validation_has_blocking_issues,
+        pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+    )
+
+
+def build_repair_validation_summary_for_test(task: Task, failure_category: str) -> str:
+    return build_repair_validation_summary(task, failure_category, validation_payload(task))
+
+
+def failed_artifact_content_for_test(task: Task, artifact_type: ArtifactType | None = None) -> str:
+    return failed_artifact_content(task.output, task.output_payload, artifact_type)
+
+
+def repair_owner_for_category_for_test(task: Task, failure_category: str) -> str:
+    return repair_owner_for_category(task.assigned_to, failure_category)
+
+
+def build_context_for_test(orchestrator: Orchestrator, task: Task, project: ProjectState) -> dict[str, Any]:
+    return build_task_context_runtime(
+        task,
+        project,
+        provider_max_tokens=orchestrator.config.max_tokens,
+        build_agent_view=lambda current_task, current_project, snapshot: build_agent_view_runtime(
+            current_task,
+            current_project,
+            snapshot,
+            task_dependency_closure_ids=task_dependency_closure_ids,
+            direct_dependency_ids=direct_dependency_ids,
+        ),
+        task_dependency_closure_ids=task_dependency_closure_ids,
+        execution_agent_name=orchestrator._execution_agent_name,
+        planned_module_context=lambda current_project, visible_task_ids, current_task: orchestrator._planned_module_context(
+            current_project,
+            visible_task_ids,
+            current_task=current_task,
+        ),
+        task_public_contract_anchor=task_public_contract_anchor,
+        should_compact_architecture_context=orchestrator._should_compact_architecture_context,
+        compact_architecture_context=compact_architecture_context,
+        task_context_output=task_context_output,
+        is_budget_decomposition_planner=is_budget_decomposition_planner,
+        semantic_output_key=semantic_output_key,
+        normalize_assigned_to=AgentRegistry.normalize_key,
+        code_artifact_context=orchestrator._code_artifact_context,
+        dependency_artifact_context=orchestrator._dependency_artifact_context,
+        test_artifact_context=orchestrator._test_artifact_context,
+        agent_visible_repair_context=orchestrator._agent_visible_repair_context,
+        normalized_helper_surface_symbols=orchestrator._normalized_helper_surface_symbols,
+        qa_repair_should_reuse_failed_test_artifact=orchestrator._qa_repair_should_reuse_failed_test_artifact,
+        redact_sensitive_data=orchestrator_module.redact_sensitive_data,
+    )
 
 
 class FailingAgent:
@@ -480,7 +591,7 @@ def test_build_context_uses_raw_content_fallback_for_completed_tasks_and_semanti
         )
     )
 
-    context = orchestrator._build_context(project.tasks[1], project)
+    context = build_context_for_test(orchestrator, project.tasks[1], project)
 
     assert context["snapshot"]["task_results"]["arch"]["has_output"] is True
     assert context["completed_tasks"]["arch"] == "ARCHITECTURE DOC"
@@ -519,7 +630,7 @@ def test_build_context_falls_back_to_raw_code_context_when_code_artifacts_are_mi
         )
     )
 
-    context = orchestrator._build_context(project.tasks[1], project)
+    context = build_context_for_test(orchestrator, project.tasks[1], project)
 
     assert context["code"] == raw_code
     assert context["planned_module_name"] == "code_implementation"
@@ -578,7 +689,7 @@ def test_build_context_keeps_code_repair_module_surfaces_aligned_to_origin_task(
         )
     )
 
-    context = orchestrator._build_context(project.tasks[1], project)
+    context = build_context_for_test(orchestrator, project.tasks[1], project)
 
     assert context["planned_module_name"] == "code_implementation"
     assert context["planned_module_filename"] == "code_implementation.py"
@@ -702,7 +813,7 @@ def test_build_context_keeps_nested_code_repair_module_surfaces_aligned_to_root_
         )
     )
 
-    context = orchestrator._build_context(project.tasks[3], project)
+    context = build_context_for_test(orchestrator, project.tasks[3], project)
 
     assert context["code"] == "def main():\n    return 3\n"
     assert context["module_name"] == "code_implementation"
@@ -773,7 +884,7 @@ def test_build_context_uses_raw_content_fallback_for_budget_decomposition_brief(
         )
     )
 
-    context = orchestrator._build_context(project.tasks[3], project)
+    context = build_context_for_test(orchestrator, project.tasks[3], project)
 
     assert context["snapshot"]["task_results"]["code__repair_1__budget_plan"]["has_output"] is True
     assert context["completed_tasks"]["code__repair_1__budget_plan"].startswith("- Keep the public facade")
@@ -865,7 +976,7 @@ def test_build_context_keeps_downstream_repaired_code_module_surfaces_aligned_to
         )
     )
 
-    context = orchestrator._build_context(project.tasks[3], project)
+    context = build_context_for_test(orchestrator, project.tasks[3], project)
 
     assert context["code"] == "def main():\n    return 1\n"
     assert context["module_name"] == "code_implementation"
@@ -1052,10 +1163,10 @@ def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._summarize_pytest_output("", "", 5) == "pytest exited with code 5"
-    assert orchestrator._summarize_pytest_output("line one", "line two", 1) == "line two"
+    assert summarize_pytest_output("", "", 5) == "pytest exited with code 5"
+    assert summarize_pytest_output("line one", "line two", 1) == "line two"
 
 
 def test_validate_test_output_rejects_syntax_invalid_code_under_test(tmp_path):
@@ -1590,15 +1701,15 @@ def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monke
 
 def test_sanitize_generated_filename_appends_default_suffix_when_missing(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._sanitize_generated_filename("generated tests", "generated_tests.py") == "generated_tests.py"
-    assert orchestrator._sanitize_generated_filename("custom-name", "generated_tests.py") == "custom-name.py"
+    assert sanitize_generated_filename("generated tests", "generated_tests.py") == "generated_tests.py"
+    assert sanitize_generated_filename("custom-name", "generated_tests.py") == "custom-name.py"
 
 
 def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     class MetadataAgent:
         def get_last_provider_call_metadata(self):
@@ -1613,7 +1724,7 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
                 "provider_remaining_calls": 1,
             }
 
-    metadata = orchestrator._provider_call_metadata(MetadataAgent(), AgentOutput(summary="ok", raw_content="ok"))
+    metadata = provider_call_metadata(MetadataAgent(), AgentOutput(summary="ok", raw_content="ok"))
 
     assert metadata is not None
     assert metadata["provider"] == "openai"
@@ -1634,7 +1745,7 @@ def test_provider_call_metadata_uses_agent_getter_when_output_has_no_metadata(tm
 
 def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     output = AgentOutput(
         summary="ok",
@@ -1666,7 +1777,7 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
         },
     )
 
-    metadata = orchestrator._provider_call_metadata(object(), output)
+    metadata = provider_call_metadata(object(), output)
 
     assert metadata is not None
     assert metadata["provider"] == "anthropic"
@@ -1807,17 +1918,16 @@ def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
 
 def test_sanitize_artifact_relative_path_rejects_invalid_segments_and_empty_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
 
-    assert orchestrator._sanitize_artifact_relative_path("reports/./summary.md") == pathlib.Path("reports/summary.md")
+    assert support.sanitize_artifact_relative_path("reports/./summary.md") == pathlib.Path("reports/summary.md")
 
     with pytest.raises(AgentExecutionError, match="artifact path must not be empty"):
-        orchestrator._sanitize_artifact_relative_path(".")
+        support.sanitize_artifact_relative_path(".")
 
 
 def test_sanitize_artifact_relative_path_rejects_defensive_invalid_segment(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     real_sub = orchestrator_module.re.sub
 
     def fake_sub(pattern, replacement, value):
@@ -1826,27 +1936,28 @@ def test_sanitize_artifact_relative_path_rejects_defensive_invalid_segment(tmp_p
         return real_sub(pattern, replacement, value)
 
     monkeypatch.setattr(orchestrator_module.re, "sub", fake_sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
 
     with pytest.raises(AgentExecutionError, match="artifact path contains an invalid segment"):
-        orchestrator._sanitize_artifact_relative_path("reports/unsafe/summary.md")
+        support.sanitize_artifact_relative_path("reports/unsafe/summary.md")
 
 
 def test_artifact_record_path_returns_absolute_path_outside_output_root(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
     external_path = tmp_path / "external" / "report.txt"
     external_path.parent.mkdir()
     external_path.write_text("hello", encoding="utf-8")
 
-    assert orchestrator._artifact_record_path(external_path) == str(external_path.resolve())
+    assert support.artifact_record_path(external_path) == str(external_path.resolve())
 
 
 def test_default_artifact_path_sanitizes_blank_names_and_other_suffix(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
     artifact = ArtifactRecord(name="...", artifact_type=ArtifactType.OTHER)
 
-    assert orchestrator._default_artifact_path(artifact) == "artifacts/artifact.artifact"
+    assert support.default_artifact_path(artifact) == "artifacts/artifact.artifact"
 
 
 def test_build_context_includes_test_repair_content_and_summary(tmp_path):
@@ -1866,7 +1977,7 @@ def test_build_context_includes_test_repair_content_and_summary(tmp_path):
     )
     project.add_task(task)
 
-    context = orchestrator._build_context(task, project)
+    context = build_context_for_test(orchestrator, task, project)
 
     assert context["existing_tests"] == "def test_old():\n    assert False"
     assert context["test_validation_summary"] == "Generated test validation: failed"
@@ -1894,7 +2005,7 @@ def test_build_context_omits_hollow_test_repair_content_from_existing_tests(tmp_
     )
     project.add_task(task)
 
-    context = orchestrator._build_context(task, project)
+    context = build_context_for_test(orchestrator, task, project)
 
     assert "existing_tests" not in context
     assert context["test_validation_summary"].startswith("Generated test validation:")
@@ -1917,7 +2028,7 @@ def test_build_context_includes_dependency_repair_content_and_summary_without_ex
     )
     project.add_task(task)
 
-    context = orchestrator._build_context(task, project)
+    context = build_context_for_test(orchestrator, task, project)
 
     assert context["existing_dependency_manifest"] == "requests>=2.0"
     assert context["dependency_validation_summary"] == "Generated dependency validation: failed"
@@ -1952,8 +2063,8 @@ def test_build_context_skips_blank_repair_content_for_test_and_dependency_repair
     project.add_task(test_task)
     project.add_task(dependency_task)
 
-    test_context = orchestrator._build_context(test_task, project)
-    dependency_context = orchestrator._build_context(dependency_task, project)
+    test_context = build_context_for_test(orchestrator, test_task, project)
+    dependency_context = build_context_for_test(orchestrator, dependency_task, project)
 
     assert "existing_tests" not in test_context
     assert "test_validation_summary" not in test_context
@@ -1963,7 +2074,7 @@ def test_build_context_skips_blank_repair_content_for_test_and_dependency_repair
 
 def test_validation_payload_returns_empty_for_non_mapping_metadata(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="arch",
         title="Architecture",
@@ -1972,12 +2083,12 @@ def test_validation_payload_returns_empty_for_non_mapping_metadata(tmp_path):
         output_payload={"metadata": "invalid"},
     )
 
-    assert orchestrator._validation_payload(task) == {}
+    assert validation_payload(task) == {}
 
 
 def test_failed_artifact_content_skips_invalid_entries_and_falls_back_to_raw_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="code",
         title="Implementation",
@@ -1994,7 +2105,7 @@ def test_failed_artifact_content_skips_invalid_entries_and_falls_back_to_raw_con
         },
     )
 
-    assert orchestrator._failed_artifact_content(task, ArtifactType.CODE) == "def fallback() -> int:\n    return 1"
+    assert failed_artifact_content_for_test(task, ArtifactType.CODE) == "def fallback() -> int:\n    return 1"
 
 
 def test_build_code_validation_summary_omits_optional_fields_when_missing(tmp_path):
@@ -2115,7 +2226,7 @@ def test_task_public_contract_preflight_accepts_annotated_function_anchor(tmp_pa
         "    main()\n"
     )
 
-    preflight = orchestrator._task_public_contract_preflight(task, code_analysis)
+    preflight = task_public_contract_preflight(task, code_analysis)
 
     assert preflight is not None
     assert preflight["required_surfaces"] == [
@@ -2241,9 +2352,9 @@ def test_build_code_behavior_contract_expands_local_score_aliases(tmp_path):
 
 def test_pytest_failure_details_include_assertion_context(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    details = orchestrator._pytest_failure_details(
+    details = pytest_failure_details(
         {
             "stdout": "FAILED tests_tests.py::test_example - AssertionError: assert 1 == 2\nE   AssertionError: assert 1 == 2\n",
             "stderr": "",
@@ -2257,9 +2368,9 @@ def test_pytest_failure_details_include_assertion_context(tmp_path):
 
 def test_pytest_failure_details_prefer_full_assertion_lines_from_failure_sections(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    details = orchestrator._pytest_failure_details(
+    details = pytest_failure_details(
         {
             "stdout": (
                 "..F                                                                    \n"
@@ -2283,7 +2394,7 @@ def test_pytest_failure_details_prefer_full_assertion_lines_from_failure_section
 
 def test_build_repair_validation_summary_falls_back_when_validation_payload_shape_is_unusable(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="code",
         title="Implementation",
@@ -2302,27 +2413,27 @@ def test_build_repair_validation_summary_falls_back_when_validation_payload_shap
     )
 
     assert (
-        orchestrator._build_repair_validation_summary(task, FailureCategory.CODE_VALIDATION.value)
+        build_repair_validation_summary_for_test(task, FailureCategory.CODE_VALIDATION.value)
         == "fallback error"
     )
     assert (
-        orchestrator._build_repair_validation_summary(task, FailureCategory.DEPENDENCY_VALIDATION.value)
+        build_repair_validation_summary_for_test(task, FailureCategory.DEPENDENCY_VALIDATION.value)
         == "fallback error"
     )
 
 
 def test_active_repair_cycle_returns_none_for_non_mapping_history_entries(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.repair_history.append(cast(Any, "invalid"))
 
-    assert orchestrator._active_repair_cycle(project) is None
+    assert active_repair_cycle(project) is None
 
 
 def test_has_repair_task_for_cycle_matches_origin_and_attempt(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -2335,12 +2446,12 @@ def test_has_repair_task_for_cycle_matches_origin_and_attempt(tmp_path):
         )
     )
 
-    assert orchestrator._has_repair_task_for_cycle(project, "arch", 1) is True
+    assert has_repair_task_for_cycle(project, "arch", 1) is True
 
 
 def test_has_repair_task_for_cycle_returns_false_for_mismatched_attempt(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -2353,7 +2464,7 @@ def test_has_repair_task_for_cycle_returns_false_for_mismatched_attempt(tmp_path
         )
     )
 
-    assert orchestrator._has_repair_task_for_cycle(project, "arch", 1) is False
+    assert has_repair_task_for_cycle(project, "arch", 1) is False
 
 
 def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, monkeypatch):
@@ -2370,10 +2481,10 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
     assert orchestrator._queue_active_cycle_repair(project, task) is False
 
     project.repair_history[-1] = {"cycle": 1}
-    monkeypatch.setattr(orchestrator, "_has_repair_task_for_cycle", lambda *args, **kwargs: True)
+    monkeypatch.setattr(orchestrator_module, "has_repair_task_for_cycle", lambda *args, **kwargs: True)
     assert orchestrator._queue_active_cycle_repair(project, task) is False
 
-    monkeypatch.setattr(orchestrator, "_has_repair_task_for_cycle", lambda *args, **kwargs: False)
+    monkeypatch.setattr(orchestrator_module, "has_repair_task_for_cycle", lambda *args, **kwargs: False)
     monkeypatch.setattr(project, "_plan_task_repair", lambda *args, **kwargs: None)
     monkeypatch.setattr(orchestrator, "_repair_task_ids_for_cycle", lambda *args, **kwargs: [])
     assert orchestrator._queue_active_cycle_repair(project, task) is False
@@ -2381,7 +2492,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
 
 def test_failed_artifact_content_for_dependency_validation_uses_config_artifact(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="deps",
         title="Dependencies",
@@ -2395,10 +2506,11 @@ def test_failed_artifact_content_for_dependency_validation_uses_config_artifact(
         },
     )
 
-    assert (
-        orchestrator._failed_artifact_content_for_category(task, FailureCategory.DEPENDENCY_VALIDATION.value)
-        == "requests>=2.0"
-    )
+    assert failed_artifact_content_for_category(
+        task.output,
+        task.output_payload,
+        FailureCategory.DEPENDENCY_VALIDATION.value,
+    ) == "requests>=2.0"
 
 
 def test_repair_task_ids_for_cycle_skips_missing_tasks(tmp_path):
@@ -2547,12 +2659,12 @@ def test_analyze_dependency_manifest_flags_provenance_violations(tmp_path):
 
 def test_build_generated_test_env_strips_additional_prefix_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     monkeypatch.setenv("SSL_CERT_FILE", "/tmp/cert.pem")
     monkeypatch.setenv("KUBECONFIG", "/tmp/kubeconfig")
     monkeypatch.setenv("PYTHONMALLOCSTATS", "1")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "SSL_CERT_FILE" not in env
     assert "KUBECONFIG" not in env
@@ -4980,16 +5092,13 @@ def test_output_and_task_budget_helpers_handle_empty_and_optional_inputs(tmp_pat
     orchestrator = Orchestrator(config)
 
     assert orchestrator._output_line_count("") == 0
-    assert orchestrator._task_requires_cli_entrypoint(None) is False
-    assert orchestrator._task_fixture_budget(
+    assert task_requires_cli_entrypoint(None) is False
+    assert task_fixture_budget(
         Task(id="tests", title="Tests", description="Write at most 3 fixtures.", assigned_to="qa_tester")
     ) == 3
 
 
 def test_truncation_and_completion_helpers_cover_edge_cases(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
-
     class SplitlessStr(str):
         def strip(self, chars=None):
             return "content"
@@ -4997,25 +5106,25 @@ def test_truncation_and_completion_helpers_cover_edge_cases(tmp_path):
         def splitlines(self, keepends=False):
             return []
 
-    assert orchestrator._looks_structurally_truncated("", "was never closed") is False
-    assert orchestrator._looks_structurally_truncated("value = 1\n", "invalid syntax") is False
-    assert orchestrator._looks_structurally_truncated(SplitlessStr("placeholder"), "was never closed") is False
-    assert orchestrator._looks_structurally_truncated("return 1\n", "was never closed") is False
-    assert orchestrator._looks_structurally_truncated("label:\n", "expected an indented block") is True
-    assert orchestrator._looks_structurally_truncated('value = "unterminated\n', "unterminated string literal") is True
-    assert orchestrator._completion_validation_issue({"hit_token_limit": True}) == (
+    assert looks_structurally_truncated("", "was never closed") is False
+    assert looks_structurally_truncated("value = 1\n", "invalid syntax") is False
+    assert looks_structurally_truncated(SplitlessStr("placeholder"), "was never closed") is False
+    assert looks_structurally_truncated("return 1\n", "was never closed") is False
+    assert looks_structurally_truncated("label:\n", "expected an indented block") is True
+    assert looks_structurally_truncated('value = "unterminated\n', "unterminated string literal") is True
+    assert completion_validation_issue({"hit_token_limit": True}) == (
         "output likely truncated at the completion token limit"
     )
-    assert orchestrator._completion_validation_issue({"hit_token_limit": False}) == (
+    assert completion_validation_issue({"hit_token_limit": False}) == (
         "output likely truncated before the file ended cleanly"
     )
-    assert orchestrator._completion_diagnostics_summary({}) == "none"
-    assert orchestrator._completion_diagnostics_summary(
+    assert completion_diagnostics_summary({}) == "none"
+    assert completion_diagnostics_summary(
         {"done_reason": "length", "requested_max_tokens": 10}
     ) == "completion limit reached, token usage recorded"
-    assert orchestrator._completion_diagnostics_summary({"done_reason": "stop"}) == "provider termination reason recorded"
-    assert orchestrator._completion_diagnostics_summary({"output_tokens": 7}) == "token usage recorded"
-    assert orchestrator._pytest_failure_details(None) == []
+    assert completion_diagnostics_summary({"done_reason": "stop"}) == "provider termination reason recorded"
+    assert completion_diagnostics_summary({"output_tokens": 7}) == "token usage recorded"
+    assert pytest_failure_details(None) == []
 
 
 def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_path):
@@ -8062,9 +8171,9 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
 
 def test_build_generated_test_env_omits_sandbox_hooks_when_disabled(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), execution_sandbox_enabled=False)
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "KYCORTEX_SANDBOX_ALLOW_NETWORK" not in env
     assert "KYCORTEX_SANDBOX_ALLOW_SUBPROCESSES" not in env
@@ -8078,7 +8187,7 @@ def test_build_generated_test_env_omits_sandbox_hooks_when_disabled(tmp_path):
 
 def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("PYTHONASYNCIODEBUG", "1")
     monkeypatch.setenv("PYTHONPATH", "/tmp/injected")
@@ -8105,7 +8214,7 @@ def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, 
     monkeypatch.setenv("PYTHONVERBOSE", "1")
     monkeypatch.setenv("PYTHONWARNDEFAULTENCODING", "1")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "PYTHONASYNCIODEBUG" not in env
     assert "PYTHONPATH" not in env
@@ -8135,14 +8244,14 @@ def test_build_generated_test_env_strips_inherited_python_startup_env(tmp_path, 
 
 def test_build_generated_test_env_strips_inherited_pytest_env(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("PYTEST_ADDOPTS", "-p external_plugin --maxfail=1")
     monkeypatch.setenv("PYTEST_PLUGINS", "external_plugin")
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_demo.py::test_case (call)")
     monkeypatch.setenv("PYTEST_DEBUG", "1")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "PYTEST_ADDOPTS" not in env
     assert "PYTEST_PLUGINS" not in env
@@ -8152,7 +8261,7 @@ def test_build_generated_test_env_strips_inherited_pytest_env(tmp_path, monkeypa
 
 def test_build_generated_test_env_strips_terminal_and_color_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("COLORTERM", "truecolor")
     monkeypatch.setenv("FORCE_COLOR", "1")
@@ -8164,7 +8273,7 @@ def test_build_generated_test_env_strips_terminal_and_color_markers(tmp_path, mo
     monkeypatch.setenv("LINES", "70")
     monkeypatch.setenv("TERM", "xterm-256color")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "COLORTERM" not in env
     assert "FORCE_COLOR" not in env
@@ -8179,7 +8288,7 @@ def test_build_generated_test_env_strips_terminal_and_color_markers(tmp_path, mo
 
 def test_sandbox_preexec_fn_sets_restrictive_umask(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     policy = config.execution_sandbox_policy()
     recorded_calls: list[tuple[object, tuple[int, int]]] = []
     recorded_umasks: list[int] = []
@@ -8192,7 +8301,7 @@ def test_sandbox_preexec_fn_sets_restrictive_umask(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(orchestrator_module.os, "umask", lambda value: recorded_umasks.append(value) or 0)
 
-    preexec = orchestrator._sandbox_preexec_fn(policy)
+    preexec = build_sandbox_preexec_fn(policy, os_module=orchestrator_module.os, resource_module=orchestrator_module.resource)
 
     assert callable(preexec)
     preexec()
@@ -8203,7 +8312,7 @@ def test_sandbox_preexec_fn_sets_restrictive_umask(tmp_path, monkeypatch):
 
 def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     policy = config.execution_sandbox_policy()
     policy.sanitized_env = {
         "PATH": "/host/bin",
@@ -8222,7 +8331,7 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "0",
     }
 
-    env = orchestrator._build_generated_test_env(tmp_path, policy)
+    env = build_generated_test_env(tmp_path, policy, host_env=os.environ)
 
     assert env["PATH"] == str(tmp_path)
     assert env["HOME"] == str(tmp_path)
@@ -8242,7 +8351,7 @@ def test_build_generated_test_env_enforces_mandatory_sandbox_bindings(tmp_path):
 
 def test_build_generated_test_env_strips_package_manager_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("VIRTUAL_ENV", "/host/venv")
     monkeypatch.setenv("CONDA_PREFIX", "/host/conda")
@@ -8252,7 +8361,7 @@ def test_build_generated_test_env_strips_package_manager_markers(tmp_path, monke
     monkeypatch.setenv("PIXI_PROJECT_ROOT", "/host/pixi")
     monkeypatch.setenv("PYENV_VERSION", "3.12.3")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "VIRTUAL_ENV" not in env
     assert "CONDA_PREFIX" not in env
@@ -8265,7 +8374,7 @@ def test_build_generated_test_env_strips_package_manager_markers(tmp_path, monke
 
 def test_build_generated_test_env_strips_remaining_runtime_marker_prefixes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     policy = config.execution_sandbox_policy()
     policy.sanitized_env = {
         "PATH": "/host/bin",
@@ -8275,7 +8384,7 @@ def test_build_generated_test_env_strips_remaining_runtime_marker_prefixes(tmp_p
         "LD_LIBRARY_PATH": "/host/lib",
     }
 
-    env = orchestrator._build_generated_test_env(tmp_path, policy)
+    env = build_generated_test_env(tmp_path, policy, host_env=os.environ)
 
     assert "VIRTUAL_ENV" not in env
     assert "HTTPS_PROXY" not in env
@@ -8285,7 +8394,7 @@ def test_build_generated_test_env_strips_remaining_runtime_marker_prefixes(tmp_p
 
 def test_build_generated_test_env_strips_proxy_and_tls_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("HTTP_PROXY", "http://corp-proxy:8080")
     monkeypatch.setenv("HTTPS_PROXY", "https://corp-proxy:8443")
@@ -8296,7 +8405,7 @@ def test_build_generated_test_env_strips_proxy_and_tls_markers(tmp_path, monkeyp
     monkeypatch.setenv("SSL_CERT_FILE", "/host/certs/ssl.pem")
     monkeypatch.setenv("SSL_CERT_DIR", "/host/certs")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "HTTP_PROXY" not in env
     assert "HTTPS_PROXY" not in env
@@ -8310,7 +8419,7 @@ def test_build_generated_test_env_strips_proxy_and_tls_markers(tmp_path, monkeyp
 
 def test_build_generated_test_env_strips_credential_and_provider_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
     monkeypatch.setenv("AZURE_CLIENT_SECRET", "azure-secret")
@@ -8320,7 +8429,7 @@ def test_build_generated_test_env_strips_credential_and_provider_markers(tmp_pat
     monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
     monkeypatch.setenv("HF_TOKEN", "hf-token")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "AWS_ACCESS_KEY_ID" not in env
     assert "AZURE_CLIENT_SECRET" not in env
@@ -8333,7 +8442,7 @@ def test_build_generated_test_env_strips_credential_and_provider_markers(tmp_pat
 
 def test_build_generated_test_env_strips_generic_secret_like_markers_from_sanitized_env(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     policy = config.execution_sandbox_policy()
     policy.sanitized_env = {
         "CUSTOM_API_TOKEN": "secret-token",
@@ -8344,7 +8453,7 @@ def test_build_generated_test_env_strips_generic_secret_like_markers_from_saniti
         "APP_API_VERSION": "v1",
     }
 
-    env = orchestrator._build_generated_test_env(tmp_path, policy)
+    env = build_generated_test_env(tmp_path, policy, host_env=os.environ)
 
     assert "CUSTOM_API_TOKEN" not in env
     assert "DB_PASSWORD" not in env
@@ -8356,7 +8465,7 @@ def test_build_generated_test_env_strips_generic_secret_like_markers_from_saniti
 
 def test_build_generated_test_env_strips_git_ssh_and_gnupg_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("GIT_AUTHOR_NAME", "Host User")
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/host/.gitconfig")
@@ -8364,7 +8473,7 @@ def test_build_generated_test_env_strips_git_ssh_and_gnupg_markers(tmp_path, mon
     monkeypatch.setenv("SSH_AUTH_SOCK", "/host/ssh-agent.sock")
     monkeypatch.setenv("GNUPGHOME", "/host/.gnupg")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "GIT_AUTHOR_NAME" not in env
     assert "GIT_CONFIG_GLOBAL" not in env
@@ -8375,7 +8484,7 @@ def test_build_generated_test_env_strips_git_ssh_and_gnupg_markers(tmp_path, mon
 
 def test_build_generated_test_env_strips_container_and_ci_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
     monkeypatch.setenv("KUBECONFIG", "/host/.kube/config")
@@ -8388,7 +8497,7 @@ def test_build_generated_test_env_strips_container_and_ci_markers(tmp_path, monk
     monkeypatch.setenv("BUILDKITE_BUILD_ID", "12345")
     monkeypatch.setenv("JENKINS_HOME", "/host/jenkins")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "DOCKER_HOST" not in env
     assert "KUBECONFIG" not in env
@@ -8404,7 +8513,7 @@ def test_build_generated_test_env_strips_container_and_ci_markers(tmp_path, monk
 
 def test_build_generated_test_env_strips_loader_and_native_runtime_markers(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     monkeypatch.setenv("LD_PRELOAD", "/host/libinject.so")
     monkeypatch.setenv("LD_LIBRARY_PATH", "/host/lib")
@@ -8413,7 +8522,7 @@ def test_build_generated_test_env_strips_loader_and_native_runtime_markers(tmp_p
     monkeypatch.setenv("PYTHONMALLOCSTATS", "1")
     monkeypatch.setenv("PYTHONWARNINGS", "error")
 
-    env = orchestrator._build_generated_test_env(tmp_path, config.execution_sandbox_policy())
+    env = build_generated_test_env(tmp_path, config.execution_sandbox_policy(), host_env=os.environ)
 
     assert "LD_PRELOAD" not in env
     assert "LD_LIBRARY_PATH" not in env
@@ -8466,10 +8575,10 @@ def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_p
 
 
 def test_sanitize_generated_filename_strips_path_traversal():
-    orchestrator = Orchestrator(KYCortexConfig(output_dir="./output_test"))
+    Orchestrator(KYCortexConfig(output_dir="./output_test"))
 
-    assert orchestrator._sanitize_generated_filename("../../tests_generated.py", "generated_tests.py") == "tests_generated.py"
-    assert orchestrator._sanitize_generated_filename("", "generated_tests.py") == "generated_tests.py"
+    assert sanitize_generated_filename("../../tests_generated.py", "generated_tests.py") == "tests_generated.py"
+    assert sanitize_generated_filename("", "generated_tests.py") == "generated_tests.py"
 
 
 def test_run_task_exposes_generated_test_validation_to_downstream_agents(tmp_path):
@@ -9821,7 +9930,7 @@ def test_code_artifact_context_includes_behavior_contract(tmp_path):
     )
 
     orchestrator = Orchestrator(config)
-    context = orchestrator._build_context(project.tasks[0], project)
+    context = build_context_for_test(orchestrator, project.tasks[0], project)
 
     assert "Behavior contract:" in context["code_behavior_contract"]
     assert "Exact test contract:" in context["code_exact_test_contract"]
@@ -9856,7 +9965,7 @@ def test_build_context_extracts_task_public_contract_anchor(tmp_path):
     project.add_task(task)
 
     orchestrator = Orchestrator(config)
-    context = orchestrator._build_context(task, project)
+    context = build_context_for_test(orchestrator, task, project)
 
     assert context["task_public_contract_anchor"] == (
         "- Public facade: ComplianceIntakeService\n"
@@ -9877,7 +9986,7 @@ def test_build_context_includes_provider_max_tokens(tmp_path):
     project.add_task(task)
 
     orchestrator = Orchestrator(config)
-    context = orchestrator._build_context(task, project)
+    context = build_context_for_test(orchestrator, task, project)
 
     assert context["provider_max_tokens"] == 900
 
@@ -9913,7 +10022,7 @@ def test_build_context_compacts_architecture_for_low_budget_code_tasks_with_anch
     project.add_task(code_task)
 
     orchestrator = Orchestrator(config)
-    context = orchestrator._build_context(code_task, project)
+    context = build_context_for_test(orchestrator, code_task, project)
 
     assert context["architecture"].startswith("Low-budget architecture summary:")
     assert "- Public facade: ComplianceIntakeService" in context["architecture"]
@@ -9968,7 +10077,7 @@ def test_build_context_compacts_architecture_for_code_repairs_with_anchor(tmp_pa
     project.add_task(code_task)
 
     orchestrator = Orchestrator(config)
-    context = orchestrator._build_context(code_task, project)
+    context = build_context_for_test(orchestrator, code_task, project)
 
     assert context["architecture"].startswith("Repair-focused architecture summary:")
     assert "Do not copy illustrative code blocks over the failing implementation" in context["architecture"]
@@ -10015,7 +10124,7 @@ def test_code_artifact_context_includes_field_value_contracts(tmp_path):
     )
 
     orchestrator = Orchestrator(config)
-    context = orchestrator._build_context(project.tasks[0], project)
+    context = build_context_for_test(orchestrator, project.tasks[0], project)
 
     assert "score_request expects field `document_type` to be one of: document_type" in context["code_behavior_contract"]
 
@@ -12738,7 +12847,7 @@ def test_test_failure_requires_code_repair_ignores_contract_overreach_static_iss
         },
     )
 
-    assert orchestrator._test_failure_requires_code_repair(task) is True
+    assert failed_test_requires_code_repair_for_test(orchestrator, task) is True
 
 
 def test_test_failure_requires_code_repair_ignores_runtime_contract_overreach_issue(tmp_path):
@@ -12772,7 +12881,7 @@ def test_test_failure_requires_code_repair_ignores_runtime_contract_overreach_is
         },
     )
 
-    assert orchestrator._test_failure_requires_code_repair(task) is False
+    assert failed_test_requires_code_repair_for_test(orchestrator, task) is False
 
 
 def test_build_agent_input_adds_contract_overreach_repair_priorities(tmp_path):
@@ -16688,9 +16797,9 @@ def test_test_failure_requires_code_repair_for_code_tracebacks_and_assertion_mis
         },
     )
 
-    assert orchestrator._test_failure_requires_code_repair(code_failure_task) is True
-    assert orchestrator._test_failure_requires_code_repair(test_failure_task) is True
-    assert orchestrator._test_failure_requires_code_repair(test_local_failure_task) is False
+    assert failed_test_requires_code_repair_for_test(orchestrator, code_failure_task) is True
+    assert failed_test_requires_code_repair_for_test(orchestrator, test_failure_task) is True
+    assert failed_test_requires_code_repair_for_test(orchestrator, test_local_failure_task) is False
 
 
 def test_execute_workflow_resume_failed_repairs_code_before_rerunning_valid_tests(tmp_path):
@@ -16861,7 +16970,7 @@ def test_build_context_includes_dependency_repair_manifest_and_summary(tmp_path)
         )
     )
 
-    context = orchestrator._build_context(require_task(project, "deps"), project)
+    context = build_context_for_test(orchestrator, require_task(project, "deps"), project)
 
     assert context["repair_context"] == {
         "cycle": 1,
@@ -16893,7 +17002,7 @@ def test_build_context_preserves_full_repair_context_for_custom_repair_owner(tmp
         )
     )
 
-    context = orchestrator._build_context(require_task(project, "custom_repair"), project)
+    context = build_context_for_test(orchestrator, require_task(project, "custom_repair"), project)
 
     assert context["repair_context"] == {
         "cycle": 2,
@@ -16918,12 +17027,16 @@ def test_repair_helper_fallbacks_cover_missing_validation_payload(tmp_path):
         output_payload=cast(dict[str, Any], "not-a-dict"),
     )
 
-    assert orchestrator._validation_payload(task) == {}
-    assert orchestrator._failed_artifact_content(task) == "provider timeout"
-    assert orchestrator._failed_artifact_content_for_category(task, FailureCategory.UNKNOWN.value) == "provider timeout"
-    assert orchestrator._build_repair_validation_summary(task, FailureCategory.UNKNOWN.value) == "provider timeout"
-    assert orchestrator._repair_owner_for_category(task, FailureCategory.UNKNOWN.value) == "architect"
-    assert "repair" in orchestrator._build_repair_instruction(task, "custom_failure")
+    assert validation_payload(task) == {}
+    assert failed_artifact_content_for_test(task) == "provider timeout"
+    assert failed_artifact_content_for_category(
+        task.output,
+        task.output_payload,
+        FailureCategory.UNKNOWN.value,
+    ) == "provider timeout"
+    assert build_repair_validation_summary_for_test(task, FailureCategory.UNKNOWN.value) == "provider timeout"
+    assert repair_owner_for_category_for_test(task, FailureCategory.UNKNOWN.value) == "architect"
+    assert "repair" in build_repair_instruction_for_test(orchestrator, task, "custom_failure")
 
 
 def test_build_repair_instruction_specializes_repeated_dataclass_field_order_failures(tmp_path):
@@ -16968,7 +17081,7 @@ def test_build_repair_instruction_specializes_repeated_dataclass_field_order_fai
         },
     )
 
-    instruction = orchestrator._build_repair_instruction(task, FailureCategory.CODE_VALIDATION.value)
+    instruction = build_repair_instruction_for_test(orchestrator, task, FailureCategory.CODE_VALIDATION.value)
 
     assert "Repair the generated Python module by reordering any dataclass fields" in instruction
     assert "Inspect every dataclass in the module" in instruction
@@ -17021,7 +17134,7 @@ def test_build_repair_instruction_specializes_non_dataclass_field_default_factor
         },
     )
 
-    instruction = orchestrator._build_repair_instruction(task, FailureCategory.CODE_VALIDATION.value)
+    instruction = build_repair_instruction_for_test(orchestrator, task, FailureCategory.CODE_VALIDATION.value)
 
     assert "defines ComplianceIntakeService.audit_history with field(...) on a non-dataclass class" in instruction
     assert "Initialize self.audit_history inside __init__" in instruction
@@ -17066,7 +17179,7 @@ def test_build_repair_instruction_specializes_missing_import_nameerror_failures(
         },
     )
 
-    instruction = orchestrator._build_repair_instruction(task, FailureCategory.CODE_VALIDATION.value)
+    instruction = build_repair_instruction_for_test(orchestrator, task, FailureCategory.CODE_VALIDATION.value)
 
     assert "references logging during module import but never imports it" in instruction
     assert "logger = logging.getLogger(__name__)" in instruction
@@ -17099,7 +17212,7 @@ def test_repair_focus_lines_specialize_missing_import_nameerror_failures(tmp_pat
 
 def test_build_repair_validation_summary_uses_dependency_validation_payload(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="deps",
         title="Dependencies",
@@ -17131,7 +17244,7 @@ def test_build_repair_validation_summary_uses_dependency_validation_payload(tmp_
         },
     )
 
-    summary = orchestrator._build_repair_validation_summary(task, FailureCategory.DEPENDENCY_VALIDATION.value)
+    summary = build_repair_validation_summary_for_test(task, FailureCategory.DEPENDENCY_VALIDATION.value)
 
     assert "Missing manifest entries: numpy" in summary
     assert "Verdict: FAIL" in summary
@@ -17139,7 +17252,7 @@ def test_build_repair_validation_summary_uses_dependency_validation_payload(tmp_
 
 def test_failed_artifact_content_uses_raw_content_when_artifacts_are_missing(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="code",
         title="Code",
@@ -17154,13 +17267,13 @@ def test_failed_artifact_content_uses_raw_content_when_artifacts_are_missing(tmp
         },
     )
 
-    assert orchestrator._failed_artifact_content(task, ArtifactType.CODE) == "def fallback() -> int:\n    return 1"
-    assert orchestrator._validation_payload(task) == {"unexpected": True}
+    assert failed_artifact_content_for_test(task, ArtifactType.CODE) == "def fallback() -> int:\n    return 1"
+    assert validation_payload(task) == {"unexpected": True}
 
 
 def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="tests",
         title="Tests",
@@ -17205,7 +17318,7 @@ def test_build_repair_validation_summary_uses_test_validation_payload(tmp_path):
         },
     )
 
-    summary = orchestrator._build_repair_validation_summary(task, FailureCategory.TEST_VALIDATION.value)
+    summary = build_repair_validation_summary_for_test(task, FailureCategory.TEST_VALIDATION.value)
 
     assert "Missing function imports (blocking): add (line 4)" in summary
     assert "Completion diagnostics: likely truncated at completion limit, token usage recorded" in summary
@@ -17240,9 +17353,9 @@ def test_build_code_validation_summary_includes_completion_diagnostics(tmp_path)
 
 def test_completion_diagnostics_marks_syntax_invalid_length_limited_output_as_truncated(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    diagnostics = orchestrator._completion_diagnostics_from_provider_call(
+    diagnostics = completion_diagnostics_from_provider_call(
         {
             "requested_max_tokens": 900,
             "finish_reason": "length",
@@ -17264,9 +17377,9 @@ def test_completion_diagnostics_marks_syntax_invalid_length_limited_output_as_tr
 
 def test_completion_diagnostics_marks_structurally_incomplete_output_as_truncated(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    diagnostics = orchestrator._completion_diagnostics_from_provider_call(
+    diagnostics = completion_diagnostics_from_provider_call(
         {
             "requested_max_tokens": 3200,
             "usage": {"output_tokens": 508},
@@ -17368,21 +17481,21 @@ class TestValidationBlockingVsWarning:
     # -- _test_validation_has_blocking_issues ---------------------------------
 
     def test_blocking_issues_true_for_missing_test_analysis(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
-        assert orch._test_validation_has_blocking_issues({}) is True
+        self._make_orchestrator(tmp_path)
+        assert validation_has_blocking_issues({}) is True
 
     def test_blocking_issues_true_for_syntax_error(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {"test_analysis": {"syntax_ok": False}}
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_true_for_line_budget_exceeded(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {"test_analysis": {"syntax_ok": True, "line_count": 200, "line_budget": 100}}
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_true_for_test_count_mismatch(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
@@ -17390,60 +17503,60 @@ class TestValidationBlockingVsWarning:
                 "expected_top_level_test_count": 5,
             }
         }
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_true_for_missing_imports(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "missing_function_imports": ["helper_function"],
             }
         }
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_true_for_undefined_fixtures(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "undefined_fixtures": ["db_session (line 5)"],
             }
         }
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_true_for_undefined_local_names(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "undefined_local_names": ["result"],
             }
         }
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_true_for_imported_entrypoint_symbols(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "imported_entrypoint_symbols": ["main"],
             }
         }
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_true_for_unsafe_entrypoint_calls(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "unsafe_entrypoint_calls": ["main() (line 10)"],
             }
         }
-        assert orch._test_validation_has_blocking_issues(validation) is True
+        assert validation_has_blocking_issues(validation) is True
 
     def test_blocking_issues_false_for_warning_only_issues(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
@@ -17452,27 +17565,27 @@ class TestValidationBlockingVsWarning:
                 "payload_contract_violations": ["missing field 'name'"],
             }
         }
-        assert orch._test_validation_has_blocking_issues(validation) is False
+        assert validation_has_blocking_issues(validation) is False
 
     def test_blocking_issues_false_for_clean_analysis(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {"test_analysis": {"syntax_ok": True}}
-        assert orch._test_validation_has_blocking_issues(validation) is False
+        assert validation_has_blocking_issues(validation) is False
 
     # -- _test_validation_has_only_warnings -----------------------------------
 
     def test_only_warnings_true_for_warning_keys(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "constructor_arity_mismatches": ["MyClass (line 5)"],
             }
         }
-        assert orch._test_validation_has_only_warnings(validation) is True
+        assert validation_has_only_warnings(validation) is True
 
     def test_only_warnings_false_when_blocking_present(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
@@ -17480,52 +17593,52 @@ class TestValidationBlockingVsWarning:
                 "undefined_local_names": ["result"],
             }
         }
-        assert orch._test_validation_has_only_warnings(validation) is False
+        assert validation_has_only_warnings(validation) is False
 
     def test_only_warnings_false_for_clean_analysis(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {"test_analysis": {"syntax_ok": True}}
-        assert orch._test_validation_has_only_warnings(validation) is False
+        assert validation_has_only_warnings(validation) is False
 
     def test_only_warnings_true_for_type_mismatches(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "type_mismatches": ["str vs int at line 10"],
             }
         }
-        assert orch._test_validation_has_only_warnings(validation) is True
+        assert validation_has_only_warnings(validation) is True
 
     def test_only_warnings_true_for_unknown_module_symbols(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "unknown_module_symbols": ["helper_util"],
             }
         }
-        assert orch._test_validation_has_only_warnings(validation) is True
+        assert validation_has_only_warnings(validation) is True
 
     def test_only_warnings_true_for_call_arity_mismatches(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "call_arity_mismatches": ["func expected 2, got 3 (line 5)"],
             }
         }
-        assert orch._test_validation_has_only_warnings(validation) is True
+        assert validation_has_only_warnings(validation) is True
 
     def test_only_warnings_true_for_invalid_member_references(self, tmp_path):
-        orch = self._make_orchestrator(tmp_path)
+        self._make_orchestrator(tmp_path)
         validation = {
             "test_analysis": {
                 "syntax_ok": True,
                 "invalid_member_references": ["obj.nonexistent (line 5)"],
             }
         }
-        assert orch._test_validation_has_only_warnings(validation) is True
+        assert validation_has_only_warnings(validation) is True
 
 
 class TestValidateTestOutputPytestArbiter:
@@ -17701,7 +17814,7 @@ class TestRepairInstructionPytestFocus:
             },
         )
 
-        instruction = orch._build_repair_instruction(task, FailureCategory.TEST_VALIDATION.value)
+        instruction = build_repair_instruction_for_test(orch, task, FailureCategory.TEST_VALIDATION.value)
         assert "pytest failure details" in instruction
         assert "static analysis warnings" in instruction
 
@@ -17730,7 +17843,7 @@ class TestRepairInstructionPytestFocus:
             },
         )
 
-        instruction = orch._build_repair_instruction(task, FailureCategory.TEST_VALIDATION.value)
+        instruction = build_repair_instruction_for_test(orch, task, FailureCategory.TEST_VALIDATION.value)
         assert "matches the generated module contract" in instruction
 
 
@@ -17773,7 +17886,7 @@ class TestTestFailureRequiresCodeRepairBlockingOnly:
         # With only warnings, _test_validation_has_blocking_issues returns False,
         # so the code repair check proceeds to the semantic assertion check
         # (rather than short-circuiting to "fix test instead")
-        result = orch._test_failure_requires_code_repair(task)
+        result = failed_test_requires_code_repair_for_test(orch, task)
         # The result depends on whether it's a semantic assertion mismatch;
         # the key point is that it does NOT short-circuit to False due to warnings
         assert isinstance(result, bool)
@@ -17806,7 +17919,7 @@ class TestTestFailureRequiresCodeRepairBlockingOnly:
         )
 
         # Blocking issues cause short-circuit to False (fix test, not code)
-        assert orch._test_failure_requires_code_repair(task) is False
+        assert failed_test_requires_code_repair_for_test(orch, task) is False
 
 
 class TestBuildTestValidationSummarySeverity:

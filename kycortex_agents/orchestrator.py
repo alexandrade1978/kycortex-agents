@@ -256,12 +256,12 @@ from kycortex_agents.orchestration.workflow_control import (
     ensure_workflow_running,
     ensure_budget_decomposition_task,
     execute_runnable_frontier,
+    execute_workflow_runtime,
     execute_workflow_loop,
     execute_runnable_tasks,
     execute_workflow_task,
     failed_task_ids_for_repair,
     finish_workflow_if_no_pending_tasks,
-    prepare_workflow_execution,
     run_active_workflow,
     has_repair_task_for_cycle,
     cancel_workflow,
@@ -3635,7 +3635,7 @@ class Orchestrator:
 
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""
-        if prepare_workflow_execution(
+        execute_workflow_runtime(
             project,
             exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
             execution_plan=project.execution_plan,
@@ -3727,5 +3727,4 @@ class Orchestrator:
                 ),
                 log_event=self._log_event,
             ),
-        ):
-            return
+        )

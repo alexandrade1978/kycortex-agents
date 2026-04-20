@@ -261,6 +261,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
 	execute_runnable_frontier,
+	execute_workflow_runtime,
 	execute_workflow_loop,
 	execute_runnable_tasks,
 	execute_workflow_task,
@@ -3499,6 +3500,20 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		resume_workflow_tasks=lambda *_args, **_kwargs: None,
 		run_active_workflow=lambda *_args, **_kwargs: False,
 	) is True
+	runtime_project = ProjectState(project_name="Demo", goal="Build demo")
+	runtime_calls: list[str] = []
+	execute_workflow_runtime(
+		runtime_project,
+		exit_if_workflow_cancelled=lambda _project: False,
+		execution_plan=lambda: runtime_calls.append("plan"),
+		validate_agent_resolution=lambda _registry, _project: runtime_calls.append("validate"),
+		registry=object(),
+		workflow_max_repair_cycles=2,
+		resume_workflow_tasks=lambda _project: runtime_calls.append("resume"),
+		run_active_workflow=lambda _project: runtime_calls.append("active") or False,
+	)
+	assert runtime_project.repair_max_cycles == 2
+	assert runtime_calls == ["plan", "validate", "resume", "active"]
 
 
 def test_repair_instruction_owner_mapping_directly():

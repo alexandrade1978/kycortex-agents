@@ -19,6 +19,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 	normalize_import_name,
 	normalize_package_name,
 )
+from kycortex_agents.orchestration.context_building import apply_repair_context_to_context
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
@@ -329,6 +330,7 @@ __all__ = [
 	"ArtifactPersistenceSupport",
 	"failed_artifact_content",
 	"analyze_dependency_manifest",
+	"apply_repair_context_to_context",
 	"AcceptanceEvaluation",
 	"AcceptanceLane",
 	"TaskAcceptanceLists",

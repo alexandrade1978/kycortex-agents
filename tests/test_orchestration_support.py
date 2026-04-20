@@ -27,6 +27,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 	normalize_import_name,
 	normalize_package_name,
 )
+from kycortex_agents.orchestration.context_building import apply_repair_context_to_context
 from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
 	semantic_output_key,
@@ -325,6 +326,81 @@ def test_failed_artifact_content_prefers_matching_artifact_then_raw_content_dire
 		ArtifactType.CODE,
 	) == "raw fallback"
 	assert failed_artifact_content("fallback", "not-a-dict", ArtifactType.CODE) == "fallback"
+
+
+def test_apply_repair_context_to_context_populates_code_repair_fields():
+	ctx = {"code": "def current():\n    return 1"}
+	repair_context = {
+		"validation_summary": "code summary",
+		"existing_tests": "def test_existing():\n    assert True",
+		"failed_artifact_content": "def repaired():\n    return 2",
+	}
+
+	apply_repair_context_to_context(
+		ctx,
+		repair_context,
+		"code_engineer",
+		"budget-plan",
+		agent_visible_repair_context=lambda current_repair_context, execution_agent_name: {
+			"owner": execution_agent_name,
+			"summary": current_repair_context["validation_summary"],
+		},
+		normalized_execution_agent="code_engineer",
+		normalized_helper_surface_symbols=lambda raw_values: [str(item).strip() for item in raw_values if str(item).strip()],
+		qa_repair_should_reuse_failed_test_artifact=lambda *_args: False,
+	)
+
+	assert ctx["repair_context"] == {"owner": "code_engineer", "summary": "code summary"}
+	assert ctx["budget_decomposition_plan_task_id"] == "budget-plan"
+	assert ctx["repair_validation_summary"] == "code summary"
+	assert ctx["existing_code"] == "def repaired():\n    return 2"
+	assert ctx["existing_tests"] == "def test_existing():\n    assert True"
+
+
+def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():
+	qa_context = {"code": "def implementation():\n    return 1"}
+	qa_repair_context = {
+		"validation_summary": "test summary",
+		"helper_surface_usages": [" helper_a ", "", "helper_b"],
+		"helper_surface_symbols": [" helper_alias "],
+		"failed_output": "def test_generated():\n    assert implementation() == 1",
+	}
+
+	apply_repair_context_to_context(
+		qa_context,
+		qa_repair_context,
+		"qa_tester",
+		None,
+		agent_visible_repair_context=lambda current_repair_context, _execution_agent_name: dict(current_repair_context),
+		normalized_execution_agent="qa_tester",
+		normalized_helper_surface_symbols=lambda raw_values: [str(item).strip() for item in raw_values if str(item).strip()],
+		qa_repair_should_reuse_failed_test_artifact=lambda validation_summary, code_content, repair_content: bool(validation_summary and code_content and repair_content),
+	)
+
+	assert qa_context["existing_tests"] == "def test_generated():\n    assert implementation() == 1"
+	assert qa_context["test_validation_summary"] == "test summary"
+	assert qa_context["repair_helper_surface_usages"] == ["helper_a", "helper_b"]
+	assert qa_context["repair_helper_surface_symbols"] == ["helper_alias"]
+
+	dependency_context = {}
+	dependency_repair_context = {
+		"validation_summary": "dependency summary",
+		"failed_output": "requests==2.0.0",
+	}
+
+	apply_repair_context_to_context(
+		dependency_context,
+		dependency_repair_context,
+		"dependency_manager",
+		None,
+		agent_visible_repair_context=lambda current_repair_context, _execution_agent_name: dict(current_repair_context),
+		normalized_execution_agent="dependency_manager",
+		normalized_helper_surface_symbols=lambda raw_values: [str(item).strip() for item in raw_values if str(item).strip()],
+		qa_repair_should_reuse_failed_test_artifact=lambda *_args: False,
+	)
+
+	assert dependency_context["existing_dependency_manifest"] == "requests==2.0.0"
+	assert dependency_context["dependency_validation_summary"] == "dependency summary"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")

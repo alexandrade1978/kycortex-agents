@@ -6,6 +6,16 @@ from dataclasses import asdict
 from typing import cast
 from typing import Any, Callable, Optional
 
+from kycortex_agents.types import (
+    AgentView,
+    AgentViewArtifactRecord,
+    AgentViewDecisionRecord,
+    AgentViewTaskResult,
+    ArtifactType,
+    ProjectSnapshot,
+    TaskResult,
+)
+
 
 def build_task_context_base(
     task: Any,
@@ -283,3 +293,125 @@ def build_task_context_runtime(
             qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
         )
     return cast(dict[str, Any], redact_sensitive_data(ctx))
+
+
+def build_agent_view_runtime(
+    task: Any,
+    project: Any,
+    snapshot: ProjectSnapshot,
+    *,
+    task_dependency_closure_ids: Callable[[Any, Any], set[str]],
+    direct_dependency_ids: Callable[[Any], set[str]],
+) -> AgentView:
+    visible_task_ids = task_dependency_closure_ids(task, project)
+    current_direct_dependency_ids = direct_dependency_ids(task)
+    acceptance_evaluation = snapshot.acceptance_evaluation
+    acceptance_policy = acceptance_evaluation.get("policy")
+    if not isinstance(acceptance_policy, str):
+        acceptance_policy = None
+    terminal_outcome = acceptance_evaluation.get("terminal_outcome")
+    if not isinstance(terminal_outcome, str):
+        terminal_outcome = None
+    failure_category = acceptance_evaluation.get("failure_category")
+    if not isinstance(failure_category, str):
+        failure_category = None
+    acceptance_criteria_met = bool(acceptance_evaluation.get("accepted"))
+    return AgentView(
+        project_name=snapshot.project_name,
+        goal=snapshot.goal,
+        workflow_status=snapshot.workflow_status,
+        phase=snapshot.phase,
+        acceptance_policy=acceptance_policy,
+        terminal_outcome=terminal_outcome,
+        failure_category=failure_category,
+        acceptance_criteria_met=acceptance_criteria_met,
+        task_results=build_agent_view_task_results(snapshot.task_results, visible_task_ids),
+        decisions=build_agent_view_decisions(snapshot.decisions),
+        artifacts=build_agent_view_artifacts(snapshot.artifacts, visible_task_ids, current_direct_dependency_ids),
+    )
+
+
+def build_agent_view_task_results(
+    task_results: dict[str, TaskResult],
+    visible_task_ids: set[str],
+) -> dict[str, AgentViewTaskResult]:
+    filtered_results: dict[str, AgentViewTaskResult] = {}
+    for task_id, task_result in task_results.items():
+        if task_id not in visible_task_ids:
+            continue
+        failure_category = None
+        if task_result.failure is not None:
+            failure_category = task_result.failure.category
+        filtered_results[task_id] = AgentViewTaskResult(
+            task_id=task_result.task_id,
+            status=task_result.status,
+            agent_name=task_result.agent_name,
+            has_output=task_result.output is not None,
+            failure_category=failure_category,
+            started_at=task_result.started_at,
+            completed_at=task_result.completed_at,
+        )
+    return filtered_results
+
+
+def build_agent_view_decisions(decisions: list[Any]) -> list[AgentViewDecisionRecord]:
+    filtered_decisions: list[AgentViewDecisionRecord] = []
+    for decision in decisions:
+        if isinstance(decision, dict):
+            topic = decision.get("topic")
+            decision_text = decision.get("decision")
+            rationale = decision.get("rationale")
+            created_at = decision.get("created_at")
+        else:
+            topic = getattr(decision, "topic", None)
+            decision_text = getattr(decision, "decision", None)
+            rationale = getattr(decision, "rationale", None)
+            created_at = getattr(decision, "created_at", None)
+        if isinstance(topic, str) and isinstance(decision_text, str) and isinstance(rationale, str):
+            filtered_decisions.append(
+                AgentViewDecisionRecord(
+                    topic=topic,
+                    decision=decision_text,
+                    rationale=rationale,
+                    created_at=created_at if isinstance(created_at, str) else "",
+                )
+            )
+    return filtered_decisions
+
+
+def build_agent_view_artifacts(
+    artifacts: list[Any],
+    visible_task_ids: set[str],
+    direct_dependency_ids: set[str],
+) -> list[AgentViewArtifactRecord]:
+    filtered_artifacts: list[AgentViewArtifactRecord] = []
+    for artifact in artifacts:
+        if isinstance(artifact, dict):
+            metadata = artifact.get("metadata")
+            source_task_id = metadata.get("task_id") if isinstance(metadata, dict) else None
+            artifact_name = artifact.get("name")
+            artifact_type = artifact.get("artifact_type", ArtifactType.OTHER)
+            artifact_content = artifact.get("content")
+            created_at = artifact.get("created_at")
+        else:
+            metadata = artifact.metadata if isinstance(artifact.metadata, dict) else None
+            source_task_id = metadata.get("task_id") if isinstance(metadata, dict) else None
+            artifact_name = getattr(artifact, "name", None)
+            artifact_type = getattr(artifact, "artifact_type", ArtifactType.OTHER)
+            artifact_content = getattr(artifact, "content", None)
+            created_at = getattr(artifact, "created_at", None)
+        if isinstance(source_task_id, str) and source_task_id not in visible_task_ids:
+            continue
+        include_content = isinstance(source_task_id, str) and source_task_id in direct_dependency_ids
+        if not isinstance(artifact_name, str):
+            continue
+        filtered_artifacts.append(
+            AgentViewArtifactRecord(
+                name=artifact_name,
+                artifact_type=artifact_type if isinstance(artifact_type, ArtifactType) else ArtifactType(str(artifact_type)),
+                content=artifact_content if include_content and isinstance(artifact_content, str) else None,
+                created_at=created_at if isinstance(created_at, str) else "",
+                source_task_id=source_task_id if isinstance(source_task_id, str) else None,
+            )
+        )
+    return filtered_artifacts

@@ -33,6 +33,10 @@ from kycortex_agents.orchestration.context_building import (
 	apply_completed_tasks_to_context,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
+	build_agent_view_artifacts,
+	build_agent_view_decisions,
+	build_agent_view_runtime,
+	build_agent_view_task_results,
 	build_task_context_runtime,
 	build_task_context_base,
 )
@@ -331,7 +335,7 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 	task_acceptance_lists,
 )
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, AgentOutput, AgentView, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus, WorkflowOutcome
+from kycortex_agents.types import AgentInput, AgentOutput, AgentView, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskResult, TaskStatus, WorkflowOutcome
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -458,6 +462,91 @@ def test_build_task_context_runtime_builds_redacted_context_directly():
 	assert ctx["repair_validation_summary"] == "repair summary"
 	assert ctx["existing_code"] == "def repaired():\n    return 2"
 	assert ctx["redacted"] is True
+
+
+def test_build_agent_view_task_results_filters_visible_tasks_directly():
+	visible_task = TaskResult(task_id="code", status="done", agent_name="code_engineer")
+	visible_task.failure = SimpleNamespace(category="VALIDATION")
+	hidden_task = TaskResult(task_id="hidden", status="done", agent_name="qa_tester")
+
+	filtered = build_agent_view_task_results(
+		{"code": visible_task, "hidden": hidden_task},
+		{"code"},
+	)
+
+	assert list(filtered) == ["code"]
+	assert filtered["code"].failure_category == "VALIDATION"
+
+
+def test_build_agent_view_decisions_accepts_dicts_and_objects_directly():
+	decisions = build_agent_view_decisions(
+		[
+			{"topic": "api", "decision": "keep", "rationale": "stable", "created_at": "2026-04-20"},
+			SimpleNamespace(topic="tests", decision="add", rationale="coverage", created_at=None),
+			{"topic": "bad", "decision": 1, "rationale": "ignored"},
+		]
+	)
+
+	assert [decision.topic for decision in decisions] == ["api", "tests"]
+	assert decisions[1].created_at == ""
+
+
+def test_build_agent_view_artifacts_filters_visibility_and_dependency_content_directly():
+	artifacts = build_agent_view_artifacts(
+		[
+			{
+				"name": "visible.py",
+				"artifact_type": ArtifactType.CODE.value,
+				"content": "print('visible')",
+				"created_at": "2026-04-20",
+				"metadata": {"task_id": "code"},
+			},
+			{
+				"name": "hidden.py",
+				"artifact_type": ArtifactType.CODE.value,
+				"content": "print('hidden')",
+				"metadata": {"task_id": "hidden"},
+			},
+		],
+		{"code"},
+		{"code"},
+	)
+
+	assert len(artifacts) == 1
+	assert artifacts[0].name == "visible.py"
+	assert artifacts[0].content == "print('visible')"
+
+
+def test_build_agent_view_runtime_builds_filtered_agent_view_directly():
+	snapshot = SimpleNamespace(
+		project_name="demo",
+		goal="ship",
+		workflow_status=WorkflowOutcome.COMPLETED,
+		phase="build",
+		acceptance_evaluation={
+			"policy": "strict",
+			"terminal_outcome": "completed",
+			"failure_category": "VALIDATION",
+			"accepted": True,
+		},
+		task_results={"code": TaskResult(task_id="code", status="done", agent_name="code_engineer")},
+		decisions=[{"topic": "api", "decision": "keep", "rationale": "stable", "created_at": "2026-04-20"}],
+		artifacts=[{"name": "visible.py", "artifact_type": ArtifactType.CODE.value, "content": "x", "metadata": {"task_id": "code"}}],
+	)
+
+	agent_view = build_agent_view_runtime(
+		SimpleNamespace(id="code"),
+		SimpleNamespace(),
+		snapshot,
+		task_dependency_closure_ids=lambda task, project: {"code"},
+		direct_dependency_ids=lambda task: {"code"},
+	)
+
+	assert agent_view.project_name == "demo"
+	assert agent_view.acceptance_policy == "strict"
+	assert agent_view.acceptance_criteria_met is True
+	assert list(agent_view.task_results) == ["code"]
+	assert agent_view.artifacts[0].content == "x"
 
 
 def test_build_task_context_base_applies_planned_module_aliases_directly():

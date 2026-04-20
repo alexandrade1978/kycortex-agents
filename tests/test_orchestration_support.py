@@ -90,6 +90,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	render_score_expression,
 	self_assigned_attributes,
 )
+from kycortex_agents.orchestration.test_ast_analysis import analyze_test_behavior_contracts
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
 	harden_private_file_permissions,
@@ -671,6 +672,31 @@ def test_parse_behavior_contract_extracts_validation_type_and_batch_rules():
 		"process_requests": {"request_key": None, "wrapper_key": None, "fields": ["request_id", "compliance_data"]},
 		"process_nested": {"request_key": None, "wrapper_key": "payload", "fields": ["compliance_data", "status"]},
 	}
+
+
+def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    validate_request({'name': 'Ada'})\n"
+		"    score_request({'status': 'pending'})\n"
+		"    helper([1, 2, 3])\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{"validate_request": ["name", "email"]},
+		{"score_request": {"status": ["approved"]}},
+		{},
+		set(),
+		{"helper"},
+		{},
+	)
+
+	assert payload_violations == [
+		"score_request field `status` uses unsupported values: pending at line 3",
+		"validate_request payload missing required fields: email at line 2",
+	]
+	assert non_batch_calls == ["helper does not accept batch/list inputs at line 4"]
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

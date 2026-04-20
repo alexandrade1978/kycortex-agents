@@ -22,7 +22,6 @@ from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
 from kycortex_agents.orchestration.ast_tools import (
     callable_name,
-    first_call_argument,
     is_pytest_fixture,
     python_import_roots,
 )
@@ -184,6 +183,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     assert_expects_invalid_outcome,
     assert_limits_batch_result,
     assigned_name_for_call,
+    analyze_test_behavior_contracts,
     analyze_typed_test_member_usage,
     ast_contains_node,
     behavior_contract_explicitly_limits_score_state_to_valid_requests,
@@ -2435,78 +2435,15 @@ class Orchestrator:
         function_names: set[str],
         class_map: Dict[str, Any],
     ) -> tuple[list[str], list[str]]:
-        payload_violations: set[str] = set()
-        non_batch_calls: set[str] = set()
-
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
-                continue
-
-            bindings = self._collect_local_bindings(node)
-            parent_map = self._parent_map(node)
-            for child in ast.walk(node):
-                if not isinstance(child, ast.Call):
-                    continue
-                called_name = callable_name(child)
-                if not called_name:
-                    continue
-                negative_expectation = self._call_has_negative_expectation(child, parent_map)
-                invalid_outcome_expectation = negative_expectation or self._call_expects_invalid_outcome(
-                    node,
-                    child,
-                    parent_map,
-                )
-
-                if called_name in validation_rules:
-                    payload_arg = self._payload_argument_for_validation(child, called_name)
-                    payload_node = self._resolve_bound_value(payload_arg, bindings)
-                    payload_keys = self._extract_literal_dict_keys(payload_node, bindings, class_map)
-                    if payload_keys is not None:
-                        missing_fields = [field for field in validation_rules[called_name] if field not in payload_keys]
-                        if missing_fields and not invalid_outcome_expectation:  # pragma: no branch
-                            payload_violations.add(
-                                f"{called_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
-                            )
-
-                if called_name in field_value_rules:
-                    payload_arg = self._payload_argument_for_validation(child, called_name)
-                    payload_node = self._resolve_bound_value(payload_arg, bindings)
-                    for field_name, allowed_values in field_value_rules[called_name].items():
-                        observed_values = self._extract_literal_field_values(payload_node, bindings, field_name, class_map)
-                        invalid_values = [value for value in observed_values if value not in allowed_values]
-                        if invalid_values and not invalid_outcome_expectation:
-                            payload_violations.add(
-                                f"{called_name} field `{field_name}` uses unsupported values: {', '.join(invalid_values)} at line {child.lineno}"
-                            )
-
-                if called_name in batch_rules:
-                    batch_allows_partial_invalid = self._batch_call_allows_partial_invalid_items(
-                        node,
-                        child,
-                        bindings,
-                        parent_map,
-                    )
-                    batch_violations = [] if negative_expectation or batch_allows_partial_invalid else self._validate_batch_call(
-                        child,
-                        bindings,
-                        called_name,
-                        batch_rules[called_name],
-                    )
-                    payload_violations.update(batch_violations)
-                    continue
-
-                if called_name in sequence_input_functions:
-                    continue
-
-                if called_name in function_names and "batch" not in called_name:
-                    sequence_arg = first_call_argument(child)
-                    sequence_node = self._resolve_bound_value(sequence_arg, bindings)
-                    if isinstance(sequence_node, ast.List):
-                        non_batch_calls.add(
-                            f"{called_name} does not accept batch/list inputs at line {child.lineno}"
-                        )
-
-        return sorted(payload_violations), sorted(non_batch_calls)
+        return analyze_test_behavior_contracts(
+            tree,
+            validation_rules,
+            field_value_rules,
+            batch_rules,
+            sequence_input_functions,
+            function_names,
+            class_map,
+        )
 
     def _auto_fix_test_type_mismatches(
         self,

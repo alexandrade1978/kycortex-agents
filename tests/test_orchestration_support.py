@@ -44,6 +44,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	annotation_accepts_sequence_input,
 	build_code_behavior_contract,
 	build_code_exact_test_contract,
+	build_module_run_command,
 	build_code_public_api,
 	build_code_test_targets,
 	build_code_outline,
@@ -638,6 +639,11 @@ def test_build_code_test_targets_formats_function_and_class_buckets():
 	assert "Preferred workflow classes: ComplianceService" in summary
 	assert "Helper classes to avoid in compact workflow tests: ComplianceRepository" in summary
 	assert "Entry points to avoid in tests: BillingCLI, main" in summary
+
+
+def test_build_module_run_command_returns_python_command_for_main_guard():
+	assert build_module_run_command("app.py", {"has_main_guard": True}) == "python app.py"
+	assert build_module_run_command("app.py", {"has_main_guard": False}) == ""
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

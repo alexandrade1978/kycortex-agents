@@ -452,6 +452,12 @@ def build_code_test_targets(code_analysis: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def build_module_run_command(module_filename: str, code_analysis: Dict[str, Any]) -> str:
+    if code_analysis.get("has_main_guard"):
+        return f"python {module_filename}"
+    return ""
+
+
 def build_code_public_api(code_analysis: Dict[str, Any]) -> str:
     if not code_analysis.get("syntax_ok", True):
         return f"Module syntax error: {code_analysis.get('syntax_error') or 'unknown syntax error'}"

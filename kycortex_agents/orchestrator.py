@@ -50,6 +50,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     annotation_accepts_sequence_input,
     build_code_behavior_contract,
     build_code_exact_test_contract,
+    build_module_run_command,
     build_code_public_api,
     build_code_test_targets,
     build_code_outline,
@@ -2065,9 +2066,7 @@ class Orchestrator:
         return build_code_exact_test_contract(code_analysis)
 
     def _build_module_run_command(self, module_filename: str, code_analysis: Dict[str, Any]) -> str:
-        if code_analysis.get("has_main_guard"):
-            return f"python {module_filename}"
-        return ""
+        return build_module_run_command(module_filename, code_analysis)
 
     def _entrypoint_function_names(self, code_analysis: Dict[str, Any]) -> set[str]:
         return entrypoint_function_names(code_analysis)

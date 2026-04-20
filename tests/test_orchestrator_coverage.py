@@ -9,6 +9,7 @@ import ast
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.orchestration.test_ast_analysis import patched_target_name_from_call
 from kycortex_agents.orchestration import (
     ast_is_empty_literal,
     default_value_for_annotation,
@@ -456,25 +457,25 @@ class TestPatchedTargetNameFromCall:
     def test_patch_with_string(self, orch):
         code = "patch('module.Class')"
         tree = ast.parse(code, mode="eval").body
-        assert orch._patched_target_name_from_call(tree) == "module.Class"
+        assert patched_target_name_from_call(tree) == "module.Class"
 
     def test_patch_object(self, orch):
         code = "patch.object(MyClass, 'method')"
         tree = ast.parse(code, mode="eval").body
-        result = orch._patched_target_name_from_call(tree)
+        result = patched_target_name_from_call(tree)
         assert result is not None
         assert "method" in result
 
     def test_no_args(self, orch):
         code = "patch()"
         tree = ast.parse(code, mode="eval").body
-        result = orch._patched_target_name_from_call(tree)
+        result = patched_target_name_from_call(tree)
         assert result is None
 
     def test_non_string_arg(self, orch):
         code = "patch(some_variable)"
         tree = ast.parse(code, mode="eval").body
-        result = orch._patched_target_name_from_call(tree)
+        result = patched_target_name_from_call(tree)
         assert result is None
 
 

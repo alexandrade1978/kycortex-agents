@@ -104,15 +104,6 @@ from kycortex_agents.orchestration.repair_analysis import (
     render_name_list,
     suggest_declared_attribute_replacement,
 )
-from kycortex_agents.orchestration.repair_signals import (
-    content_has_bare_datetime_reference,
-    content_has_incomplete_required_evidence_payload,
-    content_has_matching_datetime_import,
-    implementation_prefers_direct_datetime_import,
-    implementation_required_evidence_items,
-    validation_summary_has_missing_datetime_import_issue,
-    validation_summary_has_required_evidence_runtime_issue,
-)
 from kycortex_agents.orchestration.repair_test_analysis import (
     imported_code_task_for_failed_test,
     is_helper_alias_like_name,
@@ -165,7 +156,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     auto_fix_test_type_mismatches,
     analyze_test_type_mismatches,
     analyze_typed_test_member_usage,
-    ast_contains_node,
     behavior_contract_explicitly_limits_score_state_to_valid_requests,
     batch_call_allows_partial_invalid_items,
     call_argument_count,
@@ -181,8 +171,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     collect_test_local_types,
     collect_undefined_local_names,
     comparison_implies_partial_batch_result,
-    count_test_assertion_like_checks,
-    exact_len_assertion,
     extract_literal_dict_keys,
     extract_literal_field_values,
     extract_literal_list_items,
@@ -198,16 +186,11 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     invalid_outcome_marker_matches,
     invalid_outcome_subject_matches,
     is_internal_score_state_target,
-    is_len_call,
-    is_mock_factory_call,
-    is_patch_call,
     iter_relevant_test_body_nodes,
     known_type_allows_member,
     len_call_matches_batch_result,
-    loop_contains_non_batch_call,
     parent_map,
     payload_argument_for_validation,
-    patched_target_name_from_call,
     resolve_bound_value,
     name_suggests_validation_failure,
     validate_batch_call,
@@ -821,53 +804,6 @@ class Orchestrator:
         failed_artifact_content: object = "",
     ) -> tuple[str, str] | None:
         return missing_import_nameerror_details(validation_summary, failed_artifact_content)
-
-    @staticmethod
-    def _content_has_matching_datetime_import(content: object) -> bool:
-        return content_has_matching_datetime_import(content)
-
-    @staticmethod
-    def _content_has_bare_datetime_reference(content: object) -> bool:
-        return content_has_bare_datetime_reference(content)
-
-    def _validation_summary_has_missing_datetime_import_issue(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object = "",
-    ) -> bool:
-        return validation_summary_has_missing_datetime_import_issue(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-    @staticmethod
-    def _implementation_prefers_direct_datetime_import(implementation_code: object) -> bool:
-        return implementation_prefers_direct_datetime_import(implementation_code)
-
-    def _implementation_required_evidence_items(self, implementation_code: object) -> list[str]:
-        return implementation_required_evidence_items(implementation_code)
-
-    def _content_has_incomplete_required_evidence_payload(
-        self,
-        content: object,
-        implementation_code: object,
-    ) -> bool:
-        return content_has_incomplete_required_evidence_payload(
-            content,
-            implementation_code,
-        )
-
-    def _validation_summary_has_required_evidence_runtime_issue(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object = "",
-        implementation_code: object = "",
-    ) -> bool:
-        return validation_summary_has_required_evidence_runtime_issue(
-            validation_summary,
-            failed_artifact_content,
-            implementation_code,
-        )
 
     def _qa_repair_should_reuse_failed_test_artifact(
         self,
@@ -1493,15 +1429,6 @@ class Orchestrator:
     ) -> list[int]:
         return visible_repeated_single_call_batch_sizes(node, bindings)
 
-    def _loop_contains_non_batch_call(self, node: ast.AST) -> bool:
-        return loop_contains_non_batch_call(node)
-
-    def _exact_len_assertion(self, node: ast.AST) -> Optional[tuple[str, int]]:
-        return exact_len_assertion(node)
-
-    def _is_len_call(self, node: ast.AST) -> bool:
-        return is_len_call(node)
-
     def _assert_expects_false(self, node: ast.Assert, call_node: ast.Call) -> bool:
         return assert_expects_false(node, call_node)
 
@@ -1510,12 +1437,6 @@ class Orchestrator:
 
     def _with_uses_pytest_assertion_context(self, node: ast.With | ast.AsyncWith) -> bool:
         return with_uses_pytest_assertion_context(node)
-
-    def _count_test_assertion_like_checks(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
-        return count_test_assertion_like_checks(node)
-
-    def _ast_contains_node(self, root: ast.AST, target: ast.AST) -> bool:
-        return ast_contains_node(root, target)
 
     def _collect_local_bindings(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, ast.AST]:
         return collect_local_bindings(node)
@@ -1613,15 +1534,6 @@ class Orchestrator:
         class_map: Dict[str, Any],
     ) -> bool:
         return known_type_allows_member(node, local_types, class_map)
-
-    def _is_mock_factory_call(self, node: ast.AST) -> bool:
-        return is_mock_factory_call(node)
-
-    def _is_patch_call(self, node: ast.AST) -> bool:
-        return is_patch_call(node)
-
-    def _patched_target_name_from_call(self, node: ast.Call) -> Optional[str]:
-        return patched_target_name_from_call(node)
 
     def _infer_call_result_type(
         self,

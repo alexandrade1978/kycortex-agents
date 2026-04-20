@@ -18,8 +18,16 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
-from kycortex_agents.orchestration.module_ast_analysis import self_assigned_attributes
-from kycortex_agents.orchestration.module_ast_analysis import is_probable_third_party_import
+from kycortex_agents.orchestration.module_ast_analysis import (
+    comparison_required_field,
+    extract_batch_rule,
+    extract_indirect_required_fields,
+    extract_lookup_field_rules,
+    extract_required_fields,
+    field_selector_name,
+    is_probable_third_party_import,
+    self_assigned_attributes,
+)
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
     missing_import_nameerror_details,
@@ -3114,19 +3122,19 @@ def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid
 
 def test_extract_required_fields_returns_declared_required_fields_list(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def validate(payload):\n"
         "    required_fields = ['name', 1, 'email']\n"
         "    return payload\n"
     )
 
-    assert orchestrator._extract_required_fields(function_node) == ["name", "email"]
+    assert extract_required_fields(function_node) == ["name", "email"]
 
 
 def test_extract_required_fields_collects_unique_comparison_literals(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def validate(payload):\n"
         "    if 'status' in payload:\n"
@@ -3136,60 +3144,60 @@ def test_extract_required_fields_collects_unique_comparison_literals(tmp_path):
         "    return 'request_id' in payload\n"
     )
 
-    assert orchestrator._extract_required_fields(function_node) == ["status", "request_id"]
+    assert extract_required_fields(function_node) == ["status", "request_id"]
 
 
 def test_extract_required_fields_returns_empty_for_blank_required_fields_list(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def validate(payload):\n"
         "    required_fields = []\n"
         "    return payload\n"
     )
 
-    assert orchestrator._extract_required_fields(function_node) == []
+    assert extract_required_fields(function_node) == []
 
 
 def test_comparison_required_field_rejects_invalid_shapes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     compare_nodes = [
         ast.Compare(left=ast.Constant("field"), ops=[], comparators=[]),
         ast.Compare(left=ast.Constant("field"), ops=[ast.In()], comparators=[ast.Constant("value")]),
         ast.Compare(left=ast.Constant("field"), ops=[ast.Eq()], comparators=[ast.Name("payload")]),
     ]
 
-    assert [orchestrator._comparison_required_field(node) for node in compare_nodes] == ["", "", ""]
+    assert [comparison_required_field(node) for node in compare_nodes] == ["", "", ""]
 
 
 def test_extract_indirect_required_fields_supports_attribute_calls(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def process(payload):\n"
         "    return helper.validate_request(payload)\n"
     )
 
-    assert orchestrator._extract_indirect_required_fields(function_node, {"validate_request": ["request_id"]}) == ["request_id"]
-    assert orchestrator._extract_indirect_required_fields(function_node, {"other": ["request_id"]}) == []
+    assert extract_indirect_required_fields(function_node, {"validate_request": ["request_id"]}) == ["request_id"]
+    assert extract_indirect_required_fields(function_node, {"other": ["request_id"]}) == []
 
 
 def test_extract_indirect_required_fields_ignores_unmatched_attribute_calls(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def validate(payload):\n"
         "    service.other(payload)\n"
         "    return payload\n"
     )
 
-    assert orchestrator._extract_indirect_required_fields(function_node, {"validate_request": ["request_id"]}) == []
+    assert extract_indirect_required_fields(function_node, {"validate_request": ["request_id"]}) == []
 
 
 def test_extract_lookup_field_rules_collects_literal_key_sets_and_skips_unknown_selectors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def score_request(request, payload, selector):\n"
         "    if True:\n"
@@ -3198,30 +3206,30 @@ def test_extract_lookup_field_rules_collects_literal_key_sets_and_skips_unknown_
         "    return risk_scores[request.status] + risk_scores[payload['state']] + risk_scores[selector]\n"
     )
 
-    assert orchestrator._extract_lookup_field_rules(function_node) == {
+    assert extract_lookup_field_rules(function_node) == {
         "status": ["approved", "denied"],
         "state": ["approved", "denied"],
     }
-    assert orchestrator._field_selector_name(ast.Subscript(value=ast.Name("payload"), slice=ast.Constant("state"))) == "state"
-    assert orchestrator._field_selector_name(ast.Constant("status")) == "status"
-    assert orchestrator._field_selector_name(ast.Name("selector")) == ""
+    assert field_selector_name(ast.Subscript(value=ast.Name("payload"), slice=ast.Constant("state"))) == "state"
+    assert field_selector_name(ast.Constant("status")) == "status"
+    assert field_selector_name(ast.Name("selector")) == ""
 
 
 def test_extract_lookup_field_rules_ignores_empty_literal_key_sets(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def validate(payload):\n"
         "    allowed = {}\n"
         "    return allowed[payload['status']]\n"
     )
 
-    assert orchestrator._extract_lookup_field_rules(function_node) == {}
+    assert extract_lookup_field_rules(function_node) == {}
 
 
 def test_extract_batch_rule_covers_direct_and_nested_shapes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     direct_batch = parse_function_node(
         "def process_batch(items):\n"
         "    for item in items:\n"
@@ -3250,24 +3258,24 @@ def test_extract_batch_rule_covers_direct_and_nested_shapes(tmp_path):
     validation_rules = {"intake_request": ["name", "email"]}
 
     assert (
-        orchestrator._extract_batch_rule(direct_batch, validation_rules)
+        extract_batch_rule(direct_batch, validation_rules)
         == "process_batch expects each batch item to include: request_id, name, email"
     )
     assert (
-        orchestrator._extract_batch_rule(nested_batch, validation_rules)
+        extract_batch_rule(nested_batch, validation_rules)
         == "process_batch expects each batch item to include key `request_id` and nested `payload` fields: name, email"
     )
     assert (
-        orchestrator._extract_batch_rule(wrapper_only_batch, validation_rules)
+        extract_batch_rule(wrapper_only_batch, validation_rules)
         == "process_batch expects nested `payload` fields: name, email"
     )
-    assert orchestrator._extract_batch_rule(missing_args_batch, validation_rules) == ""
-    assert orchestrator._extract_batch_rule(not_batch, validation_rules) == ""
+    assert extract_batch_rule(missing_args_batch, validation_rules) == ""
+    assert extract_batch_rule(not_batch, validation_rules) == ""
 
 
 def test_extract_batch_rule_ignores_non_matching_calls_and_empty_required_fields(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     validation_rules = {"intake_request": []}
     helper_batch = parse_function_node(
         "def process_batch(items):\n"
@@ -3285,9 +3293,9 @@ def test_extract_batch_rule_ignores_non_matching_calls_and_empty_required_fields
         "        intake_request(request_id, item['payload'])\n"
     )
 
-    assert orchestrator._extract_batch_rule(helper_batch, validation_rules) == ""
-    assert orchestrator._extract_batch_rule(empty_direct_batch, validation_rules) == ""
-    assert orchestrator._extract_batch_rule(empty_nested_batch, validation_rules) == ""
+    assert extract_batch_rule(helper_batch, validation_rules) == ""
+    assert extract_batch_rule(empty_direct_batch, validation_rules) == ""
+    assert extract_batch_rule(empty_nested_batch, validation_rules) == ""
 
 
 def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_input(tmp_path):

@@ -51,22 +51,16 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_test_targets,
     build_code_outline,
     callable_parameter_names,
-    comparison_required_field,
     call_signature_details,
     call_expression_basename,
     dict_accessed_keys_from_tree,
     direct_return_expression,
     entrypoint_symbol_names,
     example_from_default,
-    extract_batch_rule,
     extract_constructor_storage_rule,
-    extract_indirect_required_fields,
-    extract_lookup_field_rules,
-    extract_required_fields,
     extract_score_derivation_rule,
     extract_sequence_input_rule,
     expand_local_name_aliases,
-    field_selector_name,
     first_user_parameter,
     function_returns_score_value,
     helper_classes_to_avoid,
@@ -1077,35 +1071,9 @@ class Orchestrator:
     def _parameter_is_iterated(self, node: ast.FunctionDef | ast.AsyncFunctionDef, parameter_name: str) -> bool:
         return parameter_is_iterated(node, parameter_name)
 
-    def _extract_required_fields(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
-        return extract_required_fields(node)
-
-    def _comparison_required_field(self, node: ast.Compare) -> str:
-        return comparison_required_field(node)
-
-    def _extract_indirect_required_fields(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        validation_rules: Dict[str, list[str]],
-    ) -> list[str]:
-        return extract_indirect_required_fields(node, validation_rules)
-
-    def _extract_lookup_field_rules(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, list[str]]:
-        return extract_lookup_field_rules(node)
-
-    def _field_selector_name(self, node: ast.AST) -> str:
-        return field_selector_name(node)
-
     @staticmethod
     def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
         return dict_accessed_keys_from_tree(tree)
-
-    def _extract_batch_rule(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        validation_rules: Dict[str, list[str]],
-    ) -> str:
-        return extract_batch_rule(node, validation_rules)
 
     def _analyze_test_module(
         self,

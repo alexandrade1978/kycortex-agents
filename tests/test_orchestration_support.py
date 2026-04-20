@@ -258,6 +258,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
 	failed_task_ids_for_repair,
+	finish_workflow_if_no_pending_tasks,
 	has_repair_task_for_cycle,
 	merge_prior_repair_context,
 	privacy_safe_log_fields,
@@ -276,7 +277,7 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 	task_acceptance_lists,
 )
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus
+from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus, WorkflowOutcome
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -3062,6 +3063,30 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		start_project,
 		workflow_acceptance_policy="strict",
 		workflow_max_repair_cycles=2,
+		log_event=lambda *_args, **_kwargs: None,
+	) is False
+	finish_project = ProjectState(project_name="Demo", goal="Build demo")
+	finish_saved: list[bool] = []
+	finish_project.save = lambda: finish_saved.append(True)
+	finish_logs: list[tuple[str, str, dict[str, object]]] = []
+	assert finish_workflow_if_no_pending_tasks(
+		finish_project,
+		[],
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": True},
+		log_event=lambda level, event, **details: finish_logs.append((level, event, details)),
+	) is True
+	assert finish_project.phase == "completed"
+	assert finish_project.terminal_outcome == WorkflowOutcome.COMPLETED.value
+	assert finish_saved == [True]
+	assert finish_logs == [("info", "workflow_completed", {"project_name": "Demo", "phase": "completed"})]
+	assert finish_workflow_if_no_pending_tasks(
+		finish_project,
+		[Task(id="pending", title="Pending", description="Pending", assigned_to="architect")],
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
 		log_event=lambda *_args, **_kwargs: None,
 	) is False
 

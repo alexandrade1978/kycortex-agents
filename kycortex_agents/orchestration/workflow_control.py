@@ -522,6 +522,39 @@ def ensure_workflow_running(
     return True
 
 
+def finish_workflow_if_no_pending_tasks(
+    project: ProjectState,
+    pending_tasks: list[Task],
+    *,
+    workflow_acceptance_policy: str,
+    zero_budget_failure_categories: AbstractSet[str],
+    evaluate_workflow_acceptance,
+    log_event,
+) -> bool:
+    if pending_tasks:
+        return False
+    acceptance_evaluation = evaluate_workflow_acceptance(
+        project,
+        workflow_acceptance_policy,
+        zero_budget_failure_categories,
+    )
+    acceptance_criteria_met = bool(acceptance_evaluation["accepted"])
+    project.mark_workflow_finished(
+        "completed",
+        acceptance_policy=workflow_acceptance_policy,
+        terminal_outcome=(
+            WorkflowOutcome.COMPLETED.value
+            if acceptance_criteria_met
+            else WorkflowOutcome.DEGRADED.value
+        ),
+        acceptance_criteria_met=acceptance_criteria_met,
+        acceptance_evaluation=acceptance_evaluation,
+    )
+    project.save()
+    log_event("info", "workflow_completed", project_name=project.project_name, phase=project.phase)
+    return True
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

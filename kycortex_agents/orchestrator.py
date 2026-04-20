@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.workflow_control import (
     ensure_workflow_running,
     ensure_budget_decomposition_task,
     failed_task_ids_for_repair,
+    finish_workflow_if_no_pending_tasks,
     has_repair_task_for_cycle,
     cancel_workflow,
     emit_workflow_progress,
@@ -3671,26 +3672,14 @@ class Orchestrator:
             if self._exit_if_workflow_cancelled(project):
                 return
             pending = project.pending_tasks()
-            if not pending:
-                acceptance_evaluation = evaluate_workflow_acceptance(
-                    project,
-                    self.config.workflow_acceptance_policy,
-                    _ZERO_BUDGET_FAILURE_CATEGORIES,
-                )
-                acceptance_criteria_met = bool(acceptance_evaluation["accepted"])
-                project.mark_workflow_finished(
-                    "completed",
-                    acceptance_policy=self.config.workflow_acceptance_policy,
-                    terminal_outcome=(
-                        WorkflowOutcome.COMPLETED.value
-                        if acceptance_criteria_met
-                        else WorkflowOutcome.DEGRADED.value
-                    ),
-                    acceptance_criteria_met=acceptance_criteria_met,
-                    acceptance_evaluation=acceptance_evaluation,
-                )
-                project.save()
-                self._log_event("info", "workflow_completed", project_name=project.project_name, phase=project.phase)
+            if finish_workflow_if_no_pending_tasks(
+                project,
+                pending,
+                workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                log_event=self._log_event,
+            ):
                 break
             if self._exit_if_workflow_cancelled(project):
                 return

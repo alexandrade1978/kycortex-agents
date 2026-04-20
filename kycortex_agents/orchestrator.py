@@ -26,8 +26,6 @@ from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.orchestration.dependency_analysis import (
     analyze_dependency_manifest,
-    normalize_import_name,
-    normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
     build_agent_view_runtime,
@@ -78,7 +76,6 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     field_selector_name,
     first_user_parameter,
     function_returns_score_value,
-    has_dataclass_decorator,
     helper_classes_to_avoid,
     infer_dict_key_value_examples,
     inline_score_helper_expression,
@@ -92,28 +89,19 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
-    class_field_uses_empty_default,
     dataclass_default_order_repair_examples,
-    class_field_annotations_from_failed_artifact,
-    class_field_names_from_failed_artifact,
-    default_value_for_annotation,
-    duplicate_constructor_argument_call_details,
     duplicate_constructor_argument_call_hint,
     duplicate_constructor_argument_details,
     duplicate_constructor_explicit_rewrite_hint,
-    failing_pytest_test_names,
     failed_artifact_content_for_category,
     first_non_import_line_with_name,
     internal_constructor_strictness_details,
-    invalid_outcome_audit_return_details,
     invalid_outcome_missing_audit_trail_details,
     missing_import_nameerror_details,
     missing_object_attribute_details,
-    missing_required_constructor_details,
     nested_payload_wrapper_field_validation_details,
     plain_class_field_default_factory_details,
     render_name_list,
-    required_field_list_from_failed_artifact,
     suggest_declared_attribute_replacement,
 )
 from kycortex_agents.orchestration.repair_signals import (
@@ -130,7 +118,6 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     is_helper_alias_like_name,
     module_defined_symbol_names,
     normalized_helper_surface_symbols,
-    previous_valid_test_surface,
     qa_repair_should_reuse_failed_test_artifact,
     helper_surface_usages_for_test_repair_runtime,
     failed_test_requires_code_repair_runtime,
@@ -277,7 +264,6 @@ from kycortex_agents.orchestration.workflow_control import (
     merge_prior_repair_context,
     override_task,
     pause_workflow,
-    privacy_safe_log_fields,
     repair_task_ids_for_cycle,
     resume_failed_workflow_tasks,
     resume_failed_tasks_with_repair_cycle,
@@ -285,8 +271,6 @@ from kycortex_agents.orchestration.workflow_control import (
     replay_workflow,
     resume_workflow,
     skip_task,
-    task_id_collection_count,
-    task_id_count_log_field_name,
     validate_agent_resolution,
     queue_active_cycle_repair,
 )
@@ -355,21 +339,6 @@ class Orchestrator:
     def _log_event(self, level: str, event: str, **fields: Any) -> None:
         log_event(self.logger, level, event, **fields)
 
-    @staticmethod
-    def _privacy_safe_log_fields(fields: Dict[str, Any]) -> Dict[str, Any]:
-        return privacy_safe_log_fields(fields)
-
-    @staticmethod
-    def _task_id_collection_count(value: Any) -> Optional[int]:
-        return task_id_collection_count(value)
-
-    @staticmethod
-    def _task_id_count_log_field_name(field_name: str) -> Optional[str]:
-        return task_id_count_log_field_name(field_name)
-
-    def _emit_workflow_progress(self, project: ProjectState, *, task: Optional[Task] = None) -> None:
-        emit_workflow_progress(self.logger, project, task=task)
-
     def pause_workflow(self, project: ProjectState, *, reason: str) -> bool:
         """Pause a workflow so the orchestrator stops dispatching new runnable tasks."""
 
@@ -399,12 +368,6 @@ class Orchestrator:
         """Reset a workflow so it can be executed again from its initial task set."""
 
         return replay_workflow(self.logger, project, reason=reason)
-
-    def _exit_if_workflow_paused(self, project: ProjectState) -> bool:
-        return exit_if_workflow_paused(self.logger, project)
-
-    def _exit_if_workflow_cancelled(self, project: ProjectState) -> bool:
-        return exit_if_workflow_cancelled(self.logger, project)
 
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""
@@ -497,7 +460,7 @@ class Orchestrator:
         validate_dependency_output_runtime(
             context,
             output,
-            self._analyze_dependency_manifest,
+            analyze_dependency_manifest,
             self._record_output_validation,
         )
 
@@ -745,16 +708,16 @@ class Orchestrator:
                     artifact_type,
                 ),
                 artifact_type=ArtifactType.CODE,
-                duplicate_constructor_argument_details=self._duplicate_constructor_argument_details,
-                duplicate_constructor_argument_call_hint=self._duplicate_constructor_argument_call_hint,
-                duplicate_constructor_explicit_rewrite_hint=self._duplicate_constructor_explicit_rewrite_hint,
-                plain_class_field_default_factory_details=self._plain_class_field_default_factory_details,
-                missing_object_attribute_details=self._missing_object_attribute_details,
-                suggest_declared_attribute_replacement=self._suggest_declared_attribute_replacement,
-                render_name_list=self._render_name_list,
-                nested_payload_wrapper_field_validation_details=self._nested_payload_wrapper_field_validation_details,
-                invalid_outcome_missing_audit_trail_details=self._invalid_outcome_missing_audit_trail_details,
-                internal_constructor_strictness_details=self._internal_constructor_strictness_details,
+                duplicate_constructor_argument_details=duplicate_constructor_argument_details,
+                duplicate_constructor_argument_call_hint=duplicate_constructor_argument_call_hint,
+                duplicate_constructor_explicit_rewrite_hint=duplicate_constructor_explicit_rewrite_hint,
+                plain_class_field_default_factory_details=plain_class_field_default_factory_details,
+                missing_object_attribute_details=missing_object_attribute_details,
+                suggest_declared_attribute_replacement=suggest_declared_attribute_replacement,
+                render_name_list=render_name_list,
+                nested_payload_wrapper_field_validation_details=nested_payload_wrapper_field_validation_details,
+                invalid_outcome_missing_audit_trail_details=invalid_outcome_missing_audit_trail_details,
+                internal_constructor_strictness_details=internal_constructor_strictness_details,
                 existing_tests=existing_tests,
             ),
             merge_prior_repair_context=self._merge_prior_repair_context,
@@ -796,9 +759,9 @@ class Orchestrator:
                 ),
                 artifact_type=ArtifactType.CODE,
                 validation_payload=validation_payload,
-                dataclass_default_order_repair_examples=self._dataclass_default_order_repair_examples,
+                dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
                 missing_import_nameerror_details=self._missing_import_nameerror_details,
-                plain_class_field_default_factory_details=self._plain_class_field_default_factory_details,
+                plain_class_field_default_factory_details=plain_class_field_default_factory_details,
                 test_validation_has_only_warnings=validation_has_only_warnings,
             ),
             build_repair_validation_summary=lambda current_task, failure_category: build_repair_validation_summary(
@@ -916,167 +879,6 @@ class Orchestrator:
             validation_summary,
             implementation_code,
             failed_artifact_content,
-        )
-
-    @staticmethod
-    def _has_dataclass_decorator(node: ast.ClassDef) -> bool:
-        return has_dataclass_decorator(node)
-
-    def _dataclass_default_order_repair_examples(
-        self,
-        failed_artifact_content: object,
-    ) -> list[str]:
-        return dataclass_default_order_repair_examples(failed_artifact_content)
-
-    @staticmethod
-    def _render_name_list(names: list[str]) -> str:
-        return render_name_list(names)
-
-    @staticmethod
-    def _missing_required_constructor_details(
-        validation_summary: object,
-    ) -> Optional[tuple[str, list[str]]]:
-        return missing_required_constructor_details(validation_summary)
-
-    @staticmethod
-    def _required_field_list_from_failed_artifact(
-        failed_artifact_content: object,
-    ) -> list[str]:
-        return required_field_list_from_failed_artifact(failed_artifact_content)
-
-    def _nested_payload_wrapper_field_validation_details(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object,
-    ) -> Optional[tuple[str, list[str], str]]:
-        return nested_payload_wrapper_field_validation_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-    def _internal_constructor_strictness_details(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object,
-    ) -> Optional[tuple[str, list[str], list[str]]]:
-        return internal_constructor_strictness_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-    def _plain_class_field_default_factory_details(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object,
-    ) -> Optional[tuple[str, str]]:
-        return plain_class_field_default_factory_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-    @staticmethod
-    def _failing_pytest_test_names(validation_summary: object) -> list[str]:
-        return failing_pytest_test_names(validation_summary)
-
-    @classmethod
-    def _class_field_uses_empty_default(
-        cls,
-        failed_artifact_content: object,
-        class_name: str,
-        field_name: str,
-    ) -> bool:
-        return class_field_uses_empty_default(failed_artifact_content, class_name, field_name)
-
-    def _invalid_outcome_audit_return_details(
-        self,
-        failed_artifact_content: object,
-        field_name: str,
-    ) -> Optional[tuple[str, bool]]:
-        return invalid_outcome_audit_return_details(failed_artifact_content, field_name)
-
-    def _invalid_outcome_missing_audit_trail_details(
-        self,
-        validation_summary: object,
-        existing_tests: object,
-        failed_artifact_content: object,
-    ) -> Optional[tuple[list[str], str, str, bool]]:
-        return invalid_outcome_missing_audit_trail_details(
-            validation_summary,
-            existing_tests,
-            failed_artifact_content,
-        )
-
-    @staticmethod
-    def _duplicate_constructor_argument_details(
-        validation_summary: object,
-    ) -> Optional[tuple[str, str]]:
-        return duplicate_constructor_argument_details(validation_summary)
-
-    def _duplicate_constructor_argument_call_hint(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object,
-    ) -> Optional[str]:
-        return duplicate_constructor_argument_call_hint(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-    def _duplicate_constructor_argument_call_details(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object,
-    ) -> Optional[tuple[str, str, str, str, str]]:
-        return duplicate_constructor_argument_call_details(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-    def _duplicate_constructor_explicit_rewrite_hint(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object,
-    ) -> Optional[str]:
-        return duplicate_constructor_explicit_rewrite_hint(
-            validation_summary,
-            failed_artifact_content,
-        )
-
-    @staticmethod
-    def _class_field_annotations_from_failed_artifact(
-        failed_artifact_content: object,
-        class_name: str,
-    ) -> dict[str, str]:
-        return class_field_annotations_from_failed_artifact(failed_artifact_content, class_name)
-
-    @staticmethod
-    def _default_value_for_annotation(annotation: str) -> str:
-        return default_value_for_annotation(annotation)
-
-    @staticmethod
-    def _class_field_names_from_failed_artifact(
-        failed_artifact_content: object,
-        class_name: str,
-    ) -> list[str]:
-        return class_field_names_from_failed_artifact(failed_artifact_content, class_name)
-
-    def _missing_object_attribute_details(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object,
-    ) -> Optional[tuple[str, str, list[str]]]:
-        return missing_object_attribute_details(validation_summary, failed_artifact_content)
-
-    @staticmethod
-    def _suggest_declared_attribute_replacement(attribute_name: str, class_fields: list[str]) -> Optional[str]:
-        return suggest_declared_attribute_replacement(attribute_name, class_fields)
-
-    def _previous_valid_test_surface(
-        self, failed_artifact_content: object, imported_module_symbols: list[str]
-    ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-        return previous_valid_test_surface(
-            failed_artifact_content,
-            imported_module_symbols,
         )
 
     def _queue_active_cycle_repair(self, project: ProjectState, task: Task) -> bool:
@@ -1338,7 +1140,7 @@ class Orchestrator:
             path_obj = Path(artifact_path)
             if path_obj.name != "requirements.txt":
                 continue
-            dependency_analysis = self._analyze_dependency_manifest(task.output or "", code_analysis)
+            dependency_analysis = analyze_dependency_manifest(task.output or "", code_analysis)
             return {
                 "dependency_manifest": task.output or "",
                 "dependency_manifest_path": artifact_path,
@@ -1346,15 +1148,6 @@ class Orchestrator:
                 "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
             }
         return {}
-
-    def _analyze_dependency_manifest(self, manifest_content: str, code_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        return analyze_dependency_manifest(manifest_content, code_analysis)
-
-    def _normalize_package_name(self, package_name: str) -> str:
-        return normalize_package_name(package_name)
-
-    def _normalize_import_name(self, module_name: str) -> str:
-        return normalize_import_name(module_name)
 
     def _build_code_outline(self, raw_content: str) -> str:
         return build_code_outline(raw_content)
@@ -1957,7 +1750,7 @@ class Orchestrator:
         """Execute the full workflow until completion or an unrecoverable failure."""
         execute_workflow_runtime(
             project,
-            exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
+            exit_if_workflow_cancelled=lambda current_project: exit_if_workflow_cancelled(self.logger, current_project),
             execution_plan=project.execution_plan,
             validate_agent_resolution=validate_agent_resolution,
             registry=self.registry,
@@ -1988,8 +1781,8 @@ class Orchestrator:
             ),
             run_active_workflow=lambda current_project: run_active_workflow(
                 current_project,
-                exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
-                exit_if_workflow_paused=self._exit_if_workflow_paused,
+                exit_if_workflow_cancelled=lambda active_project: exit_if_workflow_cancelled(self.logger, active_project),
+                exit_if_workflow_paused=lambda active_project: exit_if_workflow_paused(self.logger, active_project),
                 ensure_workflow_running=lambda active_project: ensure_workflow_running(
                     active_project,
                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
@@ -1998,8 +1791,8 @@ class Orchestrator:
                 ),
                 execute_workflow_loop=lambda active_project: execute_workflow_loop(
                     active_project,
-                    exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
-                    exit_if_workflow_paused=self._exit_if_workflow_paused,
+                    exit_if_workflow_cancelled=lambda loop_project: exit_if_workflow_cancelled(self.logger, loop_project),
+                    exit_if_workflow_paused=lambda loop_project: exit_if_workflow_paused(self.logger, loop_project),
                     pending_tasks=active_project.pending_tasks,
                     finish_workflow_if_no_pending_tasks=lambda loop_project, pending: finish_workflow_if_no_pending_tasks(
                         loop_project,
@@ -2020,8 +1813,8 @@ class Orchestrator:
                                 task_project,
                                 task=task,
                                 run_task=self.run_task,
-                                exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
-                                exit_if_workflow_paused=self._exit_if_workflow_paused,
+                                exit_if_workflow_cancelled=lambda current_task_project: exit_if_workflow_cancelled(self.logger, current_task_project),
+                                exit_if_workflow_paused=lambda current_task_project: exit_if_workflow_paused(self.logger, current_task_project),
                                 classify_task_failure=self._classify_task_failure,
                                 dispatch_task_failure=lambda dispatch_project, *, task, failure_category: dispatch_task_failure(
                                     dispatch_project,
@@ -2032,11 +1825,19 @@ class Orchestrator:
                                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                                     is_repairable_failure=self._is_repairable_failure,
                                     queue_active_cycle_repair=self._queue_active_cycle_repair,
-                                    emit_workflow_progress=self._emit_workflow_progress,
+                                    emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
+                                        self.logger,
+                                        progress_project,
+                                        task=task,
+                                    ),
                                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                                     log_event=self._log_event,
                                 ),
-                                emit_workflow_progress=self._emit_workflow_progress,
+                                emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
+                                    self.logger,
+                                    progress_project,
+                                    task=task,
+                                ),
                             ),
                         ),
                         workflow_acceptance_policy=self.config.workflow_acceptance_policy,

@@ -17,11 +17,16 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.repair_analysis import (
+    dataclass_default_order_repair_examples,
+    plain_class_field_default_factory_details,
+)
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output
 from kycortex_agents.orchestration import (
     ast_name,
     active_repair_cycle,
+    analyze_dependency_manifest,
     attribute_chain,
     build_agent_view_runtime,
     completion_diagnostics_summary,
@@ -101,9 +106,9 @@ def build_repair_instruction_for_test(orchestrator: Orchestrator, task: Task, fa
         ),
         artifact_type=ArtifactType.CODE,
         validation_payload=validation_payload,
-        dataclass_default_order_repair_examples=orchestrator._dataclass_default_order_repair_examples,
+        dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
         missing_import_nameerror_details=orchestrator._missing_import_nameerror_details,
-        plain_class_field_default_factory_details=orchestrator._plain_class_field_default_factory_details,
+        plain_class_field_default_factory_details=plain_class_field_default_factory_details,
         test_validation_has_only_warnings=validation_has_only_warnings,
     )
 
@@ -2627,9 +2632,9 @@ def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_contex
 
 def test_analyze_dependency_manifest_skips_blank_requirement_names(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    analysis = orchestrator._analyze_dependency_manifest(
+    analysis = analyze_dependency_manifest(
         ">=1.0\nrequests>=2.0",
         {"third_party_imports": ["requests"]},
     )
@@ -2641,9 +2646,9 @@ def test_analyze_dependency_manifest_skips_blank_requirement_names(tmp_path):
 
 def test_analyze_dependency_manifest_flags_provenance_violations(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    analysis = orchestrator._analyze_dependency_manifest(
+    analysis = analyze_dependency_manifest(
         "requests @ https://example.com/requests.whl\n--extra-index-url https://example.com/simple",
         {"third_party_imports": ["requests"]},
     )

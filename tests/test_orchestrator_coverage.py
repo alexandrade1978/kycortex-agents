@@ -9,7 +9,16 @@ import ast
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.orchestration import ast_is_empty_literal, python_import_roots, validation_has_blocking_issues, validation_has_only_warnings, validation_has_static_issues
+from kycortex_agents.orchestration import (
+    ast_is_empty_literal,
+    default_value_for_annotation,
+    plain_class_field_default_factory_details,
+    python_import_roots,
+    required_field_list_from_failed_artifact,
+    validation_has_blocking_issues,
+    validation_has_only_warnings,
+    validation_has_static_issues,
+)
 from kycortex_agents.orchestrator import Orchestrator, _example_from_default
 
 
@@ -553,46 +562,46 @@ class TestAutoFixTestTypeMismatches:
 
 class TestDefaultValueForAnnotation:
     def test_bool(self):
-        assert Orchestrator._default_value_for_annotation("bool") == "False"
+        assert default_value_for_annotation("bool") == "False"
 
     def test_str(self):
-        assert Orchestrator._default_value_for_annotation("str") == "''"
+        assert default_value_for_annotation("str") == "''"
 
     def test_int(self):
-        assert Orchestrator._default_value_for_annotation("int") == "0"
+        assert default_value_for_annotation("int") == "0"
 
     def test_float(self):
-        assert Orchestrator._default_value_for_annotation("float") == "0.0"
+        assert default_value_for_annotation("float") == "0.0"
 
     def test_dict(self):
-        assert Orchestrator._default_value_for_annotation("dict") == "{}"
+        assert default_value_for_annotation("dict") == "{}"
 
     def test_dict_generic(self):
-        assert Orchestrator._default_value_for_annotation("dict[str, Any]") == "{}"
+        assert default_value_for_annotation("dict[str, Any]") == "{}"
 
     def test_Dict(self):
-        assert Orchestrator._default_value_for_annotation("Dict") == "{}"
+        assert default_value_for_annotation("Dict") == "{}"
 
     def test_list(self):
-        assert Orchestrator._default_value_for_annotation("list") == "[]"
+        assert default_value_for_annotation("list") == "[]"
 
     def test_list_generic(self):
-        assert Orchestrator._default_value_for_annotation("list[int]") == "[]"
+        assert default_value_for_annotation("list[int]") == "[]"
 
     def test_List(self):
-        assert Orchestrator._default_value_for_annotation("List") == "[]"
+        assert default_value_for_annotation("List") == "[]"
 
     def test_set(self):
-        assert Orchestrator._default_value_for_annotation("set") == "set()"
+        assert default_value_for_annotation("set") == "set()"
 
     def test_set_generic(self):
-        assert Orchestrator._default_value_for_annotation("Set[str]") == "set()"
+        assert default_value_for_annotation("Set[str]") == "set()"
 
     def test_unknown(self):
-        assert Orchestrator._default_value_for_annotation("MyClass") == ""
+        assert default_value_for_annotation("MyClass") == ""
 
     def test_empty(self):
-        assert Orchestrator._default_value_for_annotation("") == ""
+        assert default_value_for_annotation("") == ""
 
 
 # ---------------------------------------------------------------------------
@@ -602,27 +611,27 @@ class TestDefaultValueForAnnotation:
 class TestRequiredFieldListFromFailedArtifact:
     def test_finds_required_fields_list(self):
         code = "required_fields = ['name', 'age', 'email']"
-        assert Orchestrator._required_field_list_from_failed_artifact(code) == ["name", "age", "email"]
+        assert required_field_list_from_failed_artifact(code) == ["name", "age", "email"]
 
     def test_finds_required_keys(self):
         code = "required_keys = ('id', 'type')"
-        assert Orchestrator._required_field_list_from_failed_artifact(code) == ["id", "type"]
+        assert required_field_list_from_failed_artifact(code) == ["id", "type"]
 
     def test_non_string_input(self):
-        assert Orchestrator._required_field_list_from_failed_artifact(None) == []
+        assert required_field_list_from_failed_artifact(None) == []
 
     def test_empty_string(self):
-        assert Orchestrator._required_field_list_from_failed_artifact("") == []
+        assert required_field_list_from_failed_artifact("") == []
 
     def test_syntax_error(self):
-        assert Orchestrator._required_field_list_from_failed_artifact("def (()") == []
+        assert required_field_list_from_failed_artifact("def (()") == []
 
     def test_no_required_fields(self):
-        assert Orchestrator._required_field_list_from_failed_artifact("x = 1") == []
+        assert required_field_list_from_failed_artifact("x = 1") == []
 
     def test_annotated_assignment(self):
         code = "required_fields: list[str] = ['a', 'b']"
-        assert Orchestrator._required_field_list_from_failed_artifact(code) == ["a", "b"]
+        assert required_field_list_from_failed_artifact(code) == ["a", "b"]
 
 
 # ---------------------------------------------------------------------------
@@ -631,14 +640,14 @@ class TestRequiredFieldListFromFailedArtifact:
 
 class TestPlainClassFieldDefaultFactoryDetails:
     def test_returns_none_when_no_token(self, orch):
-        assert orch._plain_class_field_default_factory_details("other error", "class X:\n  pass") is None
+        assert plain_class_field_default_factory_details("other error", "class X:\n  pass") is None
 
     def test_detects_field_object_issue(self, orch):
         code = (
             "class MyModel:\n"
             "    items: list = field(default_factory=list)\n"
         )
-        result = orch._plain_class_field_default_factory_details(
+        result = plain_class_field_default_factory_details(
             "non-dataclass field(...) used", code
         )
         assert result is not None
@@ -646,10 +655,10 @@ class TestPlainClassFieldDefaultFactoryDetails:
         assert result[1] == "items"
 
     def test_returns_none_if_no_code(self, orch):
-        assert orch._plain_class_field_default_factory_details("field' object has no attribute", "") is None
+        assert plain_class_field_default_factory_details("field' object has no attribute", "") is None
 
     def test_returns_none_for_non_string(self, orch):
-        assert orch._plain_class_field_default_factory_details("field' object has no attribute", None) is None
+        assert plain_class_field_default_factory_details("field' object has no attribute", None) is None
 
 
 # ---------------------------------------------------------------------------

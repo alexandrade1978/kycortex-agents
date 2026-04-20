@@ -151,8 +151,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     payload_argument_for_validation,
     resolve_bound_value,
     validate_batch_call,
-    with_uses_pytest_assertion_context,
-    with_uses_pytest_raises,
 )
 from kycortex_agents.orchestration.validation_reporting import (
     build_dependency_validation_summary,
@@ -1192,12 +1190,6 @@ class Orchestrator:
         class_map: Dict[str, Any],
     ) -> str:
         return infer_argument_type(payload_node, bindings, field_name, class_map)
-
-    def _with_uses_pytest_raises(self, node: ast.With | ast.AsyncWith) -> bool:
-        return with_uses_pytest_raises(node)
-
-    def _with_uses_pytest_assertion_context(self, node: ast.With | ast.AsyncWith) -> bool:
-        return with_uses_pytest_assertion_context(node)
 
     def _call_signature_details(
         self,

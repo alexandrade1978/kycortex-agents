@@ -47,6 +47,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     int_constant_value,
     len_call_matches_batch_result,
     parent_map,
+    with_uses_pytest_assertion_context,
+    with_uses_pytest_raises,
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output
@@ -4272,7 +4274,7 @@ def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional
 
 def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     tree = ast.parse(
         "def test_invalid_case():\n"
         "    payload = {'status': 'invalid'}\n"
@@ -4296,8 +4298,8 @@ def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_pa
     assert call_has_negative_expectation(negative_call, parent_map_by_node) is True
     assert call_expects_invalid_outcome(test_node, followup_call, parent_map_by_node) is True
     with_node = parse_with_node("with pytest.raises(ValueError):\n    validate_request(data)\n")
-    assert orchestrator._with_uses_pytest_raises(with_node) is True
-    assert orchestrator._with_uses_pytest_assertion_context(with_node) is True
+    assert with_uses_pytest_raises(with_node) is True
+    assert with_uses_pytest_assertion_context(with_node) is True
 
 
 def test_literal_dict_and_field_value_helpers_cover_subscript_call_and_fallback_paths(tmp_path):
@@ -5161,7 +5163,7 @@ def test_truncation_and_completion_helpers_cover_edge_cases(tmp_path):
 
 def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     call_node = parse_call_node("process_batch(requests)")
 
     assert call_has_negative_expectation(call_node, {}) is False
@@ -5216,9 +5218,9 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     false_result_assert = parse_assert_node("assert result is False")
     assert assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")
-    assert orchestrator._with_uses_pytest_raises(with_node) is False
+    assert with_uses_pytest_raises(with_node) is False
     warns_with_node = parse_with_node("with pytest.warns(ValueError):\n    validate_request(data)\n")
-    assert orchestrator._with_uses_pytest_raises(warns_with_node) is False
+    assert with_uses_pytest_raises(warns_with_node) is False
 
 
 def test_batch_partial_invalid_detection_returns_false_when_asserts_do_not_limit_batch(tmp_path):

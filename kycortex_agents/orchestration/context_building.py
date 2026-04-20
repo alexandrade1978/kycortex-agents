@@ -415,3 +415,37 @@ def build_agent_view_artifacts(
             )
         )
     return filtered_artifacts
+
+
+def task_dependency_closure_ids(task: Any, project: Any) -> set[str]:
+    visible_task_ids = {task.id}
+    pending_task_ids = list(task.dependencies)
+    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
+    if isinstance(budget_decomposition_plan_task_id, str) and budget_decomposition_plan_task_id.strip():
+        pending_task_ids.append(budget_decomposition_plan_task_id)
+    if task.repair_origin_task_id:
+        pending_task_ids.append(task.repair_origin_task_id)
+
+    while pending_task_ids:
+        dependency_id = pending_task_ids.pop()
+        if dependency_id in visible_task_ids:
+            continue
+        visible_task_ids.add(dependency_id)
+        dependency_task = project.get_task(dependency_id)
+        if dependency_task is None:
+            continue
+        pending_task_ids.extend(dependency_task.dependencies)
+
+    return visible_task_ids
+
+
+def direct_dependency_ids(task: Any) -> set[str]:
+    current_direct_dependency_ids = set(task.dependencies)
+    if task.repair_origin_task_id:
+        current_direct_dependency_ids.add(task.repair_origin_task_id)
+    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
+    if isinstance(budget_decomposition_plan_task_id, str) and budget_decomposition_plan_task_id.strip():
+        current_direct_dependency_ids.add(budget_decomposition_plan_task_id)
+    return current_direct_dependency_ids

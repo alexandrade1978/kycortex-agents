@@ -31,6 +31,8 @@ from kycortex_agents.orchestration.context_building import (
 	build_agent_view_task_results,
 	build_task_context_runtime,
 	build_task_context_base,
+	direct_dependency_ids,
+	task_dependency_closure_ids,
 )
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
 from kycortex_agents.orchestration.private_files import (
@@ -383,6 +385,8 @@ __all__ = [
 	"build_agent_view_task_results",
 	"build_task_context_runtime",
 	"build_task_context_base",
+	"direct_dependency_ids",
+	"task_dependency_closure_ids",
 	"AcceptanceEvaluation",
 	"AcceptanceLane",
 	"TaskAcceptanceLists",

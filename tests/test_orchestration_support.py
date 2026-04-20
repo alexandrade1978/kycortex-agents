@@ -39,6 +39,8 @@ from kycortex_agents.orchestration.context_building import (
 	build_agent_view_task_results,
 	build_task_context_runtime,
 	build_task_context_base,
+	direct_dependency_ids,
+	task_dependency_closure_ids,
 )
 from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
@@ -547,6 +549,35 @@ def test_build_agent_view_runtime_builds_filtered_agent_view_directly():
 	assert agent_view.acceptance_criteria_met is True
 	assert list(agent_view.task_results) == ["code"]
 	assert agent_view.artifacts[0].content == "x"
+
+
+def test_task_dependency_closure_ids_includes_repair_origin_and_budget_plan_directly():
+	task = SimpleNamespace(
+		id="repair",
+		dependencies=["dep_a"],
+		repair_origin_task_id="origin",
+		repair_context={"budget_decomposition_plan_task_id": "plan"},
+	)
+	project = SimpleNamespace(
+		get_task=lambda task_id: {
+			"dep_a": SimpleNamespace(dependencies=["dep_b"]),
+			"dep_b": SimpleNamespace(dependencies=[]),
+			"origin": SimpleNamespace(dependencies=[]),
+			"plan": SimpleNamespace(dependencies=[]),
+		}.get(task_id)
+	)
+
+	assert task_dependency_closure_ids(task, project) == {"repair", "dep_a", "dep_b", "origin", "plan"}
+
+
+def test_direct_dependency_ids_includes_repair_origin_and_budget_plan_directly():
+	task = SimpleNamespace(
+		dependencies=["dep_a"],
+		repair_origin_task_id="origin",
+		repair_context={"budget_decomposition_plan_task_id": "plan"},
+	)
+
+	assert direct_dependency_ids(task) == {"dep_a", "origin", "plan"}
 
 
 def test_build_task_context_base_applies_planned_module_aliases_directly():

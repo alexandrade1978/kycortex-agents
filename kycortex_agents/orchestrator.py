@@ -35,6 +35,8 @@ from kycortex_agents.orchestration.context_building import (
     build_agent_view_runtime,
     build_agent_view_task_results,
     build_task_context_runtime,
+    direct_dependency_ids,
+    task_dependency_closure_ids,
 )
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
@@ -826,37 +828,11 @@ class Orchestrator:
         )
 
     def _task_dependency_closure_ids(self, task: Task, project: ProjectState) -> set[str]:
-        visible_task_ids = {task.id}
-        pending_task_ids = list(task.dependencies)
-        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-        budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
-        if isinstance(budget_decomposition_plan_task_id, str) and budget_decomposition_plan_task_id.strip():
-            pending_task_ids.append(budget_decomposition_plan_task_id)
-        if task.repair_origin_task_id:
-            pending_task_ids.append(task.repair_origin_task_id)
-
-        while pending_task_ids:
-            dependency_id = pending_task_ids.pop()
-            if dependency_id in visible_task_ids:
-                continue
-            visible_task_ids.add(dependency_id)
-            dependency_task = project.get_task(dependency_id)
-            if dependency_task is None:
-                continue
-            pending_task_ids.extend(dependency_task.dependencies)
-
-        return visible_task_ids
+        return task_dependency_closure_ids(task, project)
 
     @staticmethod
     def _direct_dependency_ids(task: Task) -> set[str]:
-        direct_dependency_ids = set(task.dependencies)
-        if task.repair_origin_task_id:
-            direct_dependency_ids.add(task.repair_origin_task_id)
-        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-        budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
-        if isinstance(budget_decomposition_plan_task_id, str) and budget_decomposition_plan_task_id.strip():
-            direct_dependency_ids.add(budget_decomposition_plan_task_id)
-        return direct_dependency_ids
+        return direct_dependency_ids(task)
 
     def _build_agent_view(self, task: Task, project: ProjectState, snapshot: ProjectSnapshot) -> AgentView:
         return build_agent_view_runtime(

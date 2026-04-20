@@ -258,6 +258,52 @@ def analyze_python_module(raw_content: str) -> Dict[str, Any]:
     return analysis
 
 
+def build_code_public_api(code_analysis: Dict[str, Any]) -> str:
+    if not code_analysis.get("syntax_ok", True):
+        return f"Module syntax error: {code_analysis.get('syntax_error') or 'unknown syntax error'}"
+
+    lines: list[str] = []
+    functions = code_analysis.get("functions") or []
+    classes = code_analysis.get("classes") or {}
+
+    if functions:
+        lines.append("Functions:")
+        for function in functions:
+            lines.append(f"- {function['signature']}")
+    else:
+        lines.append("Functions:\n- none")
+
+    if classes:
+        lines.append("Classes:")
+        for class_name in sorted(classes):
+            class_info = classes[class_name]
+            if class_info.get("is_enum"):
+                members = ", ".join(class_info.get("attributes") or []) or "none"
+                lines.append(f"- {class_name} enum members: {members}")
+                continue
+            constructor = ", ".join(class_info.get("constructor_params") or [])
+            class_attrs = ", ".join(class_info.get("attributes") or class_info.get("fields") or [])
+            methods = ", ".join(class_info.get("methods") or [])
+            suffix = f"({constructor})" if constructor else "()"
+            if class_attrs:
+                lines.append(f"- {class_name}{suffix}; class attributes/fields: {class_attrs}")
+            else:
+                lines.append(f"- {class_name}{suffix}")
+            if constructor:
+                lines.append(
+                    f"  tests must instantiate with all listed constructor fields explicitly: {constructor}"
+                )
+            if methods:
+                lines.append(f"  methods: {methods}")
+    else:
+        lines.append("Classes:\n- none")
+
+    lines.append(
+        f"Entrypoint: {'python ' + 'MODULE_FILE' if code_analysis.get('has_main_guard') else 'no __main__ entrypoint detected'}"
+    )
+    return "\n".join(lines)
+
+
 def extract_sequence_input_rule(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     parameter = first_user_parameter(node)
     if parameter is None:

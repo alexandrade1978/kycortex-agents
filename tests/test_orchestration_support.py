@@ -42,6 +42,7 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
 	analyze_python_module,
 	annotation_accepts_sequence_input,
+	build_code_public_api,
 	build_code_outline,
 	callable_parameter_names,
 	collect_isinstance_calls,
@@ -494,6 +495,32 @@ def test_is_probable_third_party_import_filters_empty_future_and_stdlib():
 	assert is_probable_third_party_import("") is False
 	assert is_probable_third_party_import("__future__") is False
 	assert is_probable_third_party_import("json") is False
+
+
+def test_build_code_public_api_formats_constructors_and_entrypoint():
+	summary = build_code_public_api(
+		{
+			"syntax_ok": True,
+			"functions": [{"signature": "fetch(items)"}],
+			"classes": {
+				"Payload": {
+					"is_enum": False,
+					"constructor_params": ["name", "count"],
+					"attributes": ["name", "count"],
+					"fields": ["name", "count"],
+					"methods": ["render(self)"],
+				},
+			},
+			"has_main_guard": True,
+		}
+	)
+
+	assert "Functions:" in summary
+	assert "- fetch(items)" in summary
+	assert "- Payload(name, count); class attributes/fields: name, count" in summary
+	assert "tests must instantiate with all listed constructor fields explicitly: name, count" in summary
+	assert "methods: render(self)" in summary
+	assert "Entrypoint: python MODULE_FILE" in summary
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

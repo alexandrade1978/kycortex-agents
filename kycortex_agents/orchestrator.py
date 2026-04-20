@@ -48,6 +48,7 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
     annotation_accepts_sequence_input,
+    build_code_public_api,
     build_code_outline,
     callable_parameter_names,
     collect_isinstance_calls,
@@ -2048,49 +2049,7 @@ class Orchestrator:
         return is_probable_third_party_import(module_name)
 
     def _build_code_public_api(self, code_analysis: Dict[str, Any]) -> str:
-        if not code_analysis.get("syntax_ok", True):
-            return f"Module syntax error: {code_analysis.get('syntax_error') or 'unknown syntax error'}"
-
-        lines: list[str] = []
-        functions = code_analysis.get("functions") or []
-        classes = code_analysis.get("classes") or {}
-
-        if functions:
-            lines.append("Functions:")
-            for function in functions:
-                lines.append(f"- {function['signature']}")
-        else:
-            lines.append("Functions:\n- none")
-
-        if classes:
-            lines.append("Classes:")
-            for class_name in sorted(classes):
-                class_info = classes[class_name]
-                if class_info.get("is_enum"):
-                    members = ", ".join(class_info.get("attributes") or []) or "none"
-                    lines.append(f"- {class_name} enum members: {members}")
-                    continue
-                constructor = ", ".join(class_info.get("constructor_params") or [])
-                class_attrs = ", ".join(class_info.get("attributes") or class_info.get("fields") or [])
-                methods = ", ".join(class_info.get("methods") or [])
-                suffix = f"({constructor})" if constructor else "()"
-                if class_attrs:
-                    lines.append(f"- {class_name}{suffix}; class attributes/fields: {class_attrs}")
-                else:
-                    lines.append(f"- {class_name}{suffix}")
-                if constructor:
-                    lines.append(
-                        f"  tests must instantiate with all listed constructor fields explicitly: {constructor}"
-                    )
-                if methods:
-                    lines.append(f"  methods: {methods}")
-        else:
-            lines.append("Classes:\n- none")
-
-        lines.append(
-            f"Entrypoint: {'python ' + 'MODULE_FILE' if code_analysis.get('has_main_guard') else 'no __main__ entrypoint detected'}"
-        )
-        return "\n".join(lines)
+        return build_code_public_api(code_analysis)
 
     def _build_code_exact_test_contract(self, code_analysis: Dict[str, Any]) -> str:
         if not code_analysis.get("syntax_ok", True):

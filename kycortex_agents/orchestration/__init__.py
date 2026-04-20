@@ -39,6 +39,7 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
 	analyze_python_module,
 	annotation_accepts_sequence_input,
+	build_code_public_api,
 	build_code_outline,
 	callable_parameter_names,
 	collect_isinstance_calls,
@@ -352,6 +353,7 @@ __all__ = [
 	"unredacted_agent_result",
 	"analyze_python_module",
 	"annotation_accepts_sequence_input",
+	"build_code_public_api",
 	"build_code_outline",
 	"callable_parameter_names",
 	"collect_isinstance_calls",

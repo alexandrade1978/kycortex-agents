@@ -264,6 +264,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	repair_task_ids_for_cycle,
 	resume_failed_workflow_tasks,
 	resume_failed_tasks_with_repair_cycle,
+	resume_workflow_tasks,
 	task_id_collection_count,
 	task_id_count_log_field_name,
 	validate_agent_resolution,
@@ -3010,6 +3011,41 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert hard_stop_saved == [True]
 	assert hard_stop_project.phase == "failed"
 	assert hard_stop_project.failure_category == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+	resume_stage_project = ProjectState(project_name="Demo", goal="Build demo")
+	resume_stage_project.add_task(
+		Task(
+			id="tests",
+			title="Tests",
+			description="Tests",
+			assigned_to="qa_tester",
+			status=TaskStatus.FAILED.value,
+			last_error_category=FailureCategory.TEST_VALIDATION.value,
+		)
+	)
+	resume_stage_project.resume_interrupted_tasks = lambda: ["arch"]
+	resume_stage_saved: list[bool] = []
+	resume_stage_project.save = lambda: resume_stage_saved.append(True)
+	resume_stage_calls: list[tuple[list[str], set[str]]] = []
+	resume_stage_logs: list[tuple[str, str, dict[str, object]]] = []
+	assert resume_workflow_tasks(
+		resume_stage_project,
+		workflow_resume_policy="resume_failed",
+		failed_task_ids_for_repair=lambda _project: ["tests"],
+		resume_failed_workflow_tasks=lambda _project, failed_task_ids, failure_categories: resume_stage_calls.append((failed_task_ids, failure_categories)) or ["tests__repair_1"],
+		log_event=lambda level, event, **details: resume_stage_logs.append((level, event, details)),
+	) == ["arch", "tests__repair_1"]
+	assert resume_stage_saved == [True]
+	assert resume_stage_calls == [(["tests"], {FailureCategory.TEST_VALIDATION.value})]
+	assert resume_stage_logs == [
+		(
+			"info",
+			"workflow_resumed",
+			{
+				"project_name": "Demo",
+				"task_ids": ["arch", "tests__repair_1"],
+			},
+		)
+	]
 
 
 def test_repair_instruction_owner_mapping_directly():

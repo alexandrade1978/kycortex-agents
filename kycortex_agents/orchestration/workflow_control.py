@@ -480,6 +480,31 @@ def resume_failed_workflow_tasks(
     )
 
 
+def resume_workflow_tasks(
+    project: ProjectState,
+    *,
+    workflow_resume_policy: str,
+    failed_task_ids_for_repair,
+    resume_failed_workflow_tasks,
+    log_event,
+) -> list[str]:
+    resumed_task_ids = project.resume_interrupted_tasks()
+    failed_task_ids = failed_task_ids_for_repair(project)
+    if workflow_resume_policy == "resume_failed" and failed_task_ids:
+        failure_categories = {
+            task.last_error_category or FailureCategory.UNKNOWN.value
+            for task in project.tasks
+            if task.id in failed_task_ids
+        }
+        resumed_task_ids.extend(
+            resume_failed_workflow_tasks(project, list(failed_task_ids), failure_categories)
+        )
+    if resumed_task_ids:
+        log_event("info", "workflow_resumed", project_name=project.project_name, task_ids=list(resumed_task_ids))
+        project.save()
+    return resumed_task_ids
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
 from kycortex_agents.orchestration.ast_tools import (
 	AstNameReplacer,
@@ -260,6 +260,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	emit_workflow_progress_and_save,
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
+	execute_runnable_frontier,
 	execute_runnable_tasks,
 	execute_workflow_task,
 	fail_workflow_after_task_failure,
@@ -3362,6 +3363,61 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		execute_workflow_task=lambda _project, *, task: runnable_calls.append(task.id) or ("return" if task.id == "first" else "continue"),
 	) is True
 	assert runnable_calls == ["first"]
+	frontier_project = ProjectState(project_name="Demo", goal="Build demo")
+	frontier_logs: list[tuple[str, str, dict[str, object]]] = []
+	assert execute_runnable_frontier(
+		frontier_project,
+		runnable_tasks=lambda: runnable_tasks,
+		blocked_tasks=lambda: [],
+		execute_runnable_tasks=lambda _project, current_runnable: [task.id for task in current_runnable] == ["first", "second"],
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		log_event=lambda level, event, **details: frontier_logs.append((level, event, details)),
+	) is True
+	assert frontier_logs == []
+	definition_frontier_project = ProjectState(project_name="Demo", goal="Build demo")
+	definition_frontier_logs: list[tuple[str, str, dict[str, object]]] = []
+	with pytest.raises(WorkflowDefinitionError, match="cycle"):
+		execute_runnable_frontier(
+			definition_frontier_project,
+			runnable_tasks=lambda: (_ for _ in ()).throw(WorkflowDefinitionError("cycle")),
+			blocked_tasks=lambda: [],
+			execute_runnable_tasks=lambda _project, _runnable: False,
+			workflow_acceptance_policy="strict",
+			zero_budget_failure_categories=set(),
+			evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+			log_event=lambda level, event, **details: definition_frontier_logs.append((level, event, details)),
+		)
+	assert definition_frontier_project.phase == "failed"
+	assert definition_frontier_logs == [
+		(
+			"error",
+			"workflow_failed",
+			{"project_name": "Demo", "phase": "failed"},
+		)
+	]
+	blocked_frontier_project = ProjectState(project_name="Demo", goal="Build demo")
+	blocked_frontier_logs: list[tuple[str, str, dict[str, object]]] = []
+	with pytest.raises(AgentExecutionError, match="Workflow is blocked"):
+		execute_runnable_frontier(
+			blocked_frontier_project,
+			runnable_tasks=lambda: [],
+			blocked_tasks=lambda: [Task(id="blocked_frontier", title="Blocked", description="Wait", assigned_to="architect")],
+			execute_runnable_tasks=lambda _project, _runnable: False,
+			workflow_acceptance_policy="strict",
+			zero_budget_failure_categories=set(),
+			evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+			log_event=lambda level, event, **details: blocked_frontier_logs.append((level, event, details)),
+		)
+	assert blocked_frontier_project.phase == "failed"
+	assert blocked_frontier_logs == [
+		(
+			"error",
+			"workflow_blocked",
+			{"project_name": "Demo", "phase": "failed", "blocked_task_ids": "blocked_frontier"},
+		)
+	]
 
 
 def test_repair_instruction_owner_mapping_directly():

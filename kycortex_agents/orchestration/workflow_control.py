@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import AbstractSet, Any, Callable, Literal, Optional, cast
 
-from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
 from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus, WorkflowOutcome
@@ -789,6 +789,40 @@ def execute_runnable_tasks(
         if execute_workflow_task(project, task=task) == "return":
             return True
     return False
+
+
+def execute_runnable_frontier(
+    project: ProjectState,
+    *,
+    runnable_tasks,
+    blocked_tasks,
+    execute_runnable_tasks,
+    workflow_acceptance_policy: str,
+    zero_budget_failure_categories: AbstractSet[str],
+    evaluate_workflow_acceptance,
+    log_event,
+) -> bool:
+    try:
+        runnable = runnable_tasks()
+    except WorkflowDefinitionError:
+        fail_workflow_for_definition_error(
+            project,
+            workflow_acceptance_policy=workflow_acceptance_policy,
+            zero_budget_failure_categories=zero_budget_failure_categories,
+            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+            log_event=log_event,
+        )
+        raise
+    if not runnable:
+        fail_workflow_when_blocked(
+            project,
+            blocked_tasks=list(blocked_tasks()),
+            workflow_acceptance_policy=workflow_acceptance_policy,
+            zero_budget_failure_categories=zero_budget_failure_categories,
+            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+            log_event=log_event,
+        )
+    return execute_runnable_tasks(project, runnable)
 
 
 def build_repair_context(

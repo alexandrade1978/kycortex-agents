@@ -265,6 +265,7 @@ from kycortex_agents.orchestration.workflow_control import (
     pause_workflow,
     privacy_safe_log_fields,
     repair_task_ids_for_cycle,
+    resume_failed_workflow_tasks,
     resume_failed_tasks_with_repair_cycle,
     replay_workflow,
     resume_workflow,
@@ -3639,43 +3640,24 @@ class Orchestrator:
                     for task in project.tasks
                     if task.id in failed_task_ids
                 }
-                non_repairable_categories = {
-                    category for category in failure_categories if not self._is_repairable_failure(category)
-                }
-                if non_repairable_categories:
-                    resolved_category = (
-                        next(iter(non_repairable_categories))
-                        if len(non_repairable_categories) == 1
-                        else FailureCategory.UNKNOWN.value
-                    )
-                    acceptance_evaluation = evaluate_workflow_acceptance(
-                        project,
-                        self.config.workflow_acceptance_policy,
-                        _ZERO_BUDGET_FAILURE_CATEGORIES,
-                    )
-                    project.mark_workflow_finished(
-                        "failed",
-                        acceptance_policy=self.config.workflow_acceptance_policy,
-                        terminal_outcome=WorkflowOutcome.FAILED.value,
-                        failure_category=resolved_category,
-                        acceptance_criteria_met=False,
-                        acceptance_evaluation=acceptance_evaluation,
-                    )
-                    project.save()
-                    raise AgentExecutionError(
-                        "Workflow contains non-repairable failed tasks and cannot resume automatically"
-                    )
                 resumed_task_ids.extend(
-                    resume_failed_tasks_with_repair_cycle(
+                    resume_failed_workflow_tasks(
                         project,
                         list(failed_task_ids),
                         failure_categories,
+                        is_repairable_failure=self._is_repairable_failure,
                         workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                        configure_repair_attempts=self._configure_repair_attempts,
-                        repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
-                        log_event=self._log_event,
+                        resume_failed_tasks_with_repair_cycle=lambda current_project, current_failed_task_ids, current_failure_categories, **kwargs: resume_failed_tasks_with_repair_cycle(
+                            current_project,
+                            current_failed_task_ids,
+                            current_failure_categories,
+                            configure_repair_attempts=self._configure_repair_attempts,
+                            repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
+                            log_event=self._log_event,
+                            **kwargs,
+                        ),
                     )
                 )
         if resumed_task_ids:

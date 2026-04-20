@@ -262,6 +262,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	privacy_safe_log_fields,
 	queue_active_cycle_repair,
 	repair_task_ids_for_cycle,
+	resume_failed_workflow_tasks,
 	resume_failed_tasks_with_repair_cycle,
 	task_id_collection_count,
 	task_id_count_log_field_name,
@@ -2979,6 +2980,36 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			},
 		)
 	]
+	delegated_calls: list[tuple[list[str], set[str]]] = []
+	delegated_ids = resume_failed_workflow_tasks(
+		resume_project,
+		["code"],
+		{FailureCategory.CODE_VALIDATION.value},
+		is_repairable_failure=lambda _category: True,
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		resume_failed_tasks_with_repair_cycle=lambda _project, failed_task_ids, failure_categories, **_kwargs: delegated_calls.append((failed_task_ids, failure_categories)) or ["code__repair_1"],
+	)
+	assert delegated_ids == ["code__repair_1"]
+	assert delegated_calls == [(["code"], {FailureCategory.CODE_VALIDATION.value})]
+	hard_stop_project = ProjectState(project_name="Demo", goal="Build demo")
+	hard_stop_saved: list[bool] = []
+	hard_stop_project.save = lambda: hard_stop_saved.append(True)
+	with pytest.raises(AgentExecutionError, match="cannot resume automatically"):
+		resume_failed_workflow_tasks(
+			hard_stop_project,
+			["tests"],
+			{FailureCategory.SANDBOX_SECURITY_VIOLATION.value},
+			is_repairable_failure=lambda _category: False,
+			workflow_acceptance_policy="strict",
+			zero_budget_failure_categories={FailureCategory.SANDBOX_SECURITY_VIOLATION.value},
+			evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+			resume_failed_tasks_with_repair_cycle=lambda *_args, **_kwargs: [],
+		)
+	assert hard_stop_saved == [True]
+	assert hard_stop_project.phase == "failed"
+	assert hard_stop_project.failure_category == FailureCategory.SANDBOX_SECURITY_VIOLATION.value
 
 
 def test_repair_instruction_owner_mapping_directly():

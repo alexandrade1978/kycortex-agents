@@ -432,6 +432,54 @@ def resume_failed_tasks_with_repair_cycle(
     return resumed_task_ids
 
 
+def resume_failed_workflow_tasks(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    failure_categories: AbstractSet[str],
+    *,
+    is_repairable_failure,
+    workflow_acceptance_policy: str,
+    zero_budget_failure_categories: AbstractSet[str],
+    evaluate_workflow_acceptance,
+    resume_failed_tasks_with_repair_cycle,
+) -> list[str]:
+    non_repairable_categories = {
+        category for category in failure_categories if not is_repairable_failure(category)
+    }
+    if non_repairable_categories:
+        resolved_category = (
+            next(iter(non_repairable_categories))
+            if len(non_repairable_categories) == 1
+            else FailureCategory.UNKNOWN.value
+        )
+        acceptance_evaluation = evaluate_workflow_acceptance(
+            project,
+            workflow_acceptance_policy,
+            zero_budget_failure_categories,
+        )
+        project.mark_workflow_finished(
+            "failed",
+            acceptance_policy=workflow_acceptance_policy,
+            terminal_outcome=WorkflowOutcome.FAILED.value,
+            failure_category=resolved_category,
+            acceptance_criteria_met=False,
+            acceptance_evaluation=acceptance_evaluation,
+        )
+        project.save()
+        raise AgentExecutionError(
+            "Workflow contains non-repairable failed tasks and cannot resume automatically"
+        )
+
+    return resume_failed_tasks_with_repair_cycle(
+        project,
+        failed_task_ids,
+        failure_categories,
+        workflow_acceptance_policy=workflow_acceptance_policy,
+        zero_budget_failure_categories=zero_budget_failure_categories,
+        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+    )
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

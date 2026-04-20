@@ -35,6 +35,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     batch_call_allows_partial_invalid_items,
     call_expects_invalid_outcome,
     call_has_negative_expectation,
+    comparison_implies_partial_batch_result,
+    int_constant_value,
     len_call_matches_batch_result,
     parent_map,
 )
@@ -5185,11 +5187,11 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     direct_len = parse_call_node("len(process_batch(requests))")
     assert isinstance(direct_len.args[0], ast.Call)
     assert len_call_matches_batch_result(direct_len, None, direct_len.args[0]) is True
-    assert orchestrator._int_constant_value(ast.Constant("x")) is None
-    assert orchestrator._comparison_implies_partial_batch_result(ast.Gt(), 1, 3) is False
-    assert orchestrator._comparison_implies_partial_batch_result(ast.Lt(), 3, 3) is True
-    assert orchestrator._comparison_implies_partial_batch_result(ast.LtE(), 2, 3) is True
-    assert orchestrator._comparison_implies_partial_batch_result(ast.Eq(), None, 3) is False
+    assert int_constant_value(ast.Constant("x")) is None
+    assert comparison_implies_partial_batch_result(ast.Gt(), 1, 3) is False
+    assert comparison_implies_partial_batch_result(ast.Lt(), 3, 3) is True
+    assert comparison_implies_partial_batch_result(ast.LtE(), 2, 3) is True
+    assert comparison_implies_partial_batch_result(ast.Eq(), None, 3) is False
     false_compare = parse_assert_node("assert False == validate_request(data)")
     assert isinstance(false_compare.test, ast.Compare)
     assert isinstance(false_compare.test.comparators[0], ast.Call)

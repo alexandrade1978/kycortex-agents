@@ -149,7 +149,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     collect_parametrized_argument_names,
     collect_test_local_types,
     collect_undefined_local_names,
-    comparison_implies_partial_batch_result,
     extract_literal_dict_keys,
     extract_literal_field_values,
     extract_literal_list_items,
@@ -159,7 +158,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     infer_argument_type,
     infer_call_result_type,
     infer_expression_type,
-    int_constant_value,
     is_internal_score_state_target,
     payload_argument_for_validation,
     resolve_bound_value,
@@ -1206,17 +1204,6 @@ class Orchestrator:
         class_map: Dict[str, Any],
     ) -> str:
         return infer_argument_type(payload_node, bindings, field_name, class_map)
-
-    def _int_constant_value(self, node: ast.AST) -> Optional[int]:
-        return int_constant_value(node)
-
-    def _comparison_implies_partial_batch_result(
-        self,
-        op: ast.cmpop,
-        compared_value: Optional[int],
-        batch_size: int,
-    ) -> bool:
-        return comparison_implies_partial_batch_result(op, compared_value, batch_size)
 
     @staticmethod
     def _test_name_suggests_validation_failure(test_name: str) -> bool:

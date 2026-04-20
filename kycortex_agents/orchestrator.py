@@ -261,6 +261,7 @@ from kycortex_agents.orchestration.workflow_control import (
     execute_workflow_task,
     failed_task_ids_for_repair,
     finish_workflow_if_no_pending_tasks,
+    prepare_workflow_execution,
     run_active_workflow,
     has_repair_task_for_cycle,
     cancel_workflow,
@@ -3634,94 +3635,97 @@ class Orchestrator:
 
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""
-        if self._exit_if_workflow_cancelled(project):
-            return
-        project.execution_plan()
-        validate_agent_resolution(self.registry, project)
-        project.repair_max_cycles = self.config.workflow_max_repair_cycles
-        resume_workflow_tasks(
-            project,
-            workflow_resume_policy=self.config.workflow_resume_policy,
-            failed_task_ids_for_repair=self._failed_task_ids_for_repair,
-            resume_failed_workflow_tasks=lambda current_project, current_failed_task_ids, current_failure_categories: resume_failed_workflow_tasks(
-                current_project,
-                current_failed_task_ids,
-                current_failure_categories,
-                is_repairable_failure=self._is_repairable_failure,
-                workflow_acceptance_policy=self.config.workflow_acceptance_policy,
-                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                resume_failed_tasks_with_repair_cycle=lambda resume_project, resume_failed_task_ids, resume_failure_categories, **kwargs: resume_failed_tasks_with_repair_cycle(
-                    resume_project,
-                    resume_failed_task_ids,
-                    resume_failure_categories,
-                    configure_repair_attempts=self._configure_repair_attempts,
-                    repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
-                    log_event=self._log_event,
-                    **kwargs,
-                ),
-            ),
-            log_event=self._log_event,
-        )
-        if run_active_workflow(
+        if prepare_workflow_execution(
             project,
             exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
-            exit_if_workflow_paused=self._exit_if_workflow_paused,
-            ensure_workflow_running=lambda current_project: ensure_workflow_running(
+            execution_plan=project.execution_plan,
+            validate_agent_resolution=validate_agent_resolution,
+            registry=self.registry,
+            workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
+            resume_workflow_tasks=lambda current_project: resume_workflow_tasks(
                 current_project,
-                workflow_acceptance_policy=self.config.workflow_acceptance_policy,
-                workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
+                workflow_resume_policy=self.config.workflow_resume_policy,
+                failed_task_ids_for_repair=self._failed_task_ids_for_repair,
+                resume_failed_workflow_tasks=lambda resume_project, current_failed_task_ids, current_failure_categories: resume_failed_workflow_tasks(
+                    resume_project,
+                    current_failed_task_ids,
+                    current_failure_categories,
+                    is_repairable_failure=self._is_repairable_failure,
+                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                    resume_failed_tasks_with_repair_cycle=lambda repair_project, resume_failed_task_ids, resume_failure_categories, **kwargs: resume_failed_tasks_with_repair_cycle(
+                        repair_project,
+                        resume_failed_task_ids,
+                        resume_failure_categories,
+                        configure_repair_attempts=self._configure_repair_attempts,
+                        repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
+                        log_event=self._log_event,
+                        **kwargs,
+                    ),
+                ),
                 log_event=self._log_event,
             ),
-            execute_workflow_loop=lambda current_project: execute_workflow_loop(
+            run_active_workflow=lambda current_project: run_active_workflow(
                 current_project,
                 exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
                 exit_if_workflow_paused=self._exit_if_workflow_paused,
-                pending_tasks=current_project.pending_tasks,
-                finish_workflow_if_no_pending_tasks=lambda loop_project, pending: finish_workflow_if_no_pending_tasks(
-                    loop_project,
-                    pending,
+                ensure_workflow_running=lambda active_project: ensure_workflow_running(
+                    active_project,
                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
-                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                    workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
                     log_event=self._log_event,
                 ),
-                execute_runnable_frontier=lambda loop_project: execute_runnable_frontier(
-                    loop_project,
-                    runnable_tasks=loop_project.runnable_tasks,
-                    blocked_tasks=loop_project.blocked_tasks,
-                    execute_runnable_tasks=lambda runnable_project, current_runnable: execute_runnable_tasks(
-                        runnable_project,
-                        current_runnable,
-                        execute_workflow_task=lambda task_project, *, task: execute_workflow_task(
-                            task_project,
-                            task=task,
-                            run_task=self.run_task,
-                            exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
-                            exit_if_workflow_paused=self._exit_if_workflow_paused,
-                            classify_task_failure=self._classify_task_failure,
-                            dispatch_task_failure=lambda dispatch_project, *, task, failure_category: dispatch_task_failure(
-                                dispatch_project,
-                                task=task,
-                                failure_category=failure_category,
-                                workflow_failure_policy=self.config.workflow_failure_policy,
-                                workflow_acceptance_policy=self.config.workflow_acceptance_policy,
-                                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                                is_repairable_failure=self._is_repairable_failure,
-                                queue_active_cycle_repair=self._queue_active_cycle_repair,
-                                emit_workflow_progress=self._emit_workflow_progress,
-                                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                                log_event=self._log_event,
-                            ),
-                            emit_workflow_progress=self._emit_workflow_progress,
-                        ),
+                execute_workflow_loop=lambda active_project: execute_workflow_loop(
+                    active_project,
+                    exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
+                    exit_if_workflow_paused=self._exit_if_workflow_paused,
+                    pending_tasks=active_project.pending_tasks,
+                    finish_workflow_if_no_pending_tasks=lambda loop_project, pending: finish_workflow_if_no_pending_tasks(
+                        loop_project,
+                        pending,
+                        workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                        zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                        log_event=self._log_event,
                     ),
-                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
-                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                    log_event=self._log_event,
+                    execute_runnable_frontier=lambda loop_project: execute_runnable_frontier(
+                        loop_project,
+                        runnable_tasks=loop_project.runnable_tasks,
+                        blocked_tasks=loop_project.blocked_tasks,
+                        execute_runnable_tasks=lambda runnable_project, current_runnable: execute_runnable_tasks(
+                            runnable_project,
+                            current_runnable,
+                            execute_workflow_task=lambda task_project, *, task: execute_workflow_task(
+                                task_project,
+                                task=task,
+                                run_task=self.run_task,
+                                exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
+                                exit_if_workflow_paused=self._exit_if_workflow_paused,
+                                classify_task_failure=self._classify_task_failure,
+                                dispatch_task_failure=lambda dispatch_project, *, task, failure_category: dispatch_task_failure(
+                                    dispatch_project,
+                                    task=task,
+                                    failure_category=failure_category,
+                                    workflow_failure_policy=self.config.workflow_failure_policy,
+                                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                                    is_repairable_failure=self._is_repairable_failure,
+                                    queue_active_cycle_repair=self._queue_active_cycle_repair,
+                                    emit_workflow_progress=self._emit_workflow_progress,
+                                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                                    log_event=self._log_event,
+                                ),
+                                emit_workflow_progress=self._emit_workflow_progress,
+                            ),
+                        ),
+                        workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                        zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                        log_event=self._log_event,
+                    ),
                 ),
+                log_event=self._log_event,
             ),
-            log_event=self._log_event,
         ):
             return

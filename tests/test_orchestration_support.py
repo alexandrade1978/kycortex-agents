@@ -264,6 +264,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	execute_workflow_loop,
 	execute_runnable_tasks,
 	execute_workflow_task,
+	prepare_workflow_execution,
 	run_active_workflow,
 	fail_workflow_after_task_failure,
 	fail_workflow_for_definition_error,
@@ -3472,6 +3473,31 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		ensure_workflow_running=lambda _project: (_ for _ in ()).throw(RuntimeError("should not run")),
 		execute_workflow_loop=lambda _project: False,
 		log_event=lambda *_args, **_kwargs: None,
+	) is True
+	prepared_project = ProjectState(project_name="Demo", goal="Build demo")
+	prepared_calls: list[str] = []
+	registry = object()
+	assert prepare_workflow_execution(
+		prepared_project,
+		exit_if_workflow_cancelled=lambda _project: False,
+		execution_plan=lambda: prepared_calls.append("plan"),
+		validate_agent_resolution=lambda current_registry, current_project: prepared_calls.append(f"validate:{current_registry is registry}:{current_project.project_name}"),
+		registry=registry,
+		workflow_max_repair_cycles=3,
+		resume_workflow_tasks=lambda current_project: prepared_calls.append(f"resume:{current_project.project_name}"),
+		run_active_workflow=lambda current_project: prepared_calls.append(f"active:{current_project.project_name}") or False,
+	) is False
+	assert prepared_project.repair_max_cycles == 3
+	assert prepared_calls == ["plan", "validate:True:Demo", "resume:Demo", "active:Demo"]
+	assert prepare_workflow_execution(
+		prepared_project,
+		exit_if_workflow_cancelled=lambda _project: True,
+		execution_plan=lambda: (_ for _ in ()).throw(RuntimeError("should not plan")),
+		validate_agent_resolution=lambda *_args, **_kwargs: None,
+		registry=registry,
+		workflow_max_repair_cycles=3,
+		resume_workflow_tasks=lambda *_args, **_kwargs: None,
+		run_active_workflow=lambda *_args, **_kwargs: False,
 	) is True
 
 

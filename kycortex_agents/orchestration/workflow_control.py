@@ -875,6 +875,26 @@ def run_active_workflow(
     return False
 
 
+def prepare_workflow_execution(
+    project: ProjectState,
+    *,
+    exit_if_workflow_cancelled,
+    execution_plan,
+    validate_agent_resolution,
+    registry,
+    workflow_max_repair_cycles: int,
+    resume_workflow_tasks,
+    run_active_workflow,
+) -> bool:
+    if exit_if_workflow_cancelled(project):
+        return True
+    execution_plan()
+    validate_agent_resolution(registry, project)
+    project.repair_max_cycles = workflow_max_repair_cycles
+    resume_workflow_tasks(project)
+    return run_active_workflow(project)
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

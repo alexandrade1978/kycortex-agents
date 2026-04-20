@@ -275,6 +275,8 @@ from kycortex_agents.orchestration.validation_reporting import (
 from kycortex_agents.orchestration.validation_runtime import (
 	provider_call_metadata,
 	redact_validation_execution_result,
+	record_test_validation_metadata,
+	replace_test_output_content,
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
 )
@@ -504,6 +506,8 @@ __all__ = [
 	"test_requires_non_empty_result_field",
 	"provider_call_metadata",
 	"redact_validation_execution_result",
+	"record_test_validation_metadata",
+	"replace_test_output_content",
 	"sanitize_output_provider_call_metadata",
 	"sanitize_generated_filename",
 	"summarize_pytest_output",

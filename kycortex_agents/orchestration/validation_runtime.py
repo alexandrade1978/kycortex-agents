@@ -58,3 +58,21 @@ def replace_test_output_content(
         artifact.content = new_test_content
     updated_test_artifact_content = new_test_content if test_artifact_content else test_artifact_content
     return new_test_content, updated_test_artifact_content
+
+
+def record_test_validation_metadata(
+    output: AgentOutput,
+    test_analysis: dict[str, Any],
+    test_execution: dict[str, Any],
+    completion_diagnostics: dict[str, Any],
+    module_filename: str,
+    test_filename: str,
+    pytest_failure_origin: str,
+    record_output_validation: Any,
+) -> None:
+    record_output_validation(output, "test_analysis", test_analysis)
+    record_output_validation(output, "test_execution", test_execution)
+    record_output_validation(output, "completion_diagnostics", completion_diagnostics)
+    record_output_validation(output, "module_filename", module_filename)
+    record_output_validation(output, "test_filename", test_filename)
+    record_output_validation(output, "pytest_failure_origin", pytest_failure_origin)

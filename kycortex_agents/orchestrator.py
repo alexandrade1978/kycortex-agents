@@ -250,6 +250,7 @@ from kycortex_agents.orchestration.validation_reporting import (
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     redact_validation_execution_result,
+    record_test_validation_metadata,
     replace_test_output_content,
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
@@ -705,15 +706,16 @@ class Orchestrator:
             syntax_ok=test_analysis.get("syntax_ok", True),
             syntax_error=test_analysis.get("syntax_error"),
         )
-        self._record_output_validation(output, "test_analysis", test_analysis)
-        self._record_output_validation(output, "test_execution", test_execution)
-        self._record_output_validation(output, "completion_diagnostics", completion_diagnostics)
-        self._record_output_validation(output, "module_filename", module_filename)
-        self._record_output_validation(output, "test_filename", test_filename)
-        self._record_output_validation(
+        pytest_failure_origin = self._pytest_failure_origin(test_execution, module_filename, test_filename)
+        record_test_validation_metadata(
             output,
-            "pytest_failure_origin",
-            self._pytest_failure_origin(test_execution, module_filename, test_filename),
+            test_analysis,
+            test_execution,
+            completion_diagnostics,
+            module_filename,
+            test_filename,
+            pytest_failure_origin,
+            self._record_output_validation,
         )
 
         validation_issues, warning_issues, pytest_passed = collect_test_validation_issues(

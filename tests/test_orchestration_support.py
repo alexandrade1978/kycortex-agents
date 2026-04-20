@@ -263,6 +263,7 @@ from kycortex_agents.orchestration.validation_reporting import (
 from kycortex_agents.orchestration.validation_runtime import (
 	provider_call_metadata,
 	redact_validation_execution_result,
+	record_test_validation_metadata,
 	replace_test_output_content,
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
@@ -4135,6 +4136,35 @@ def test_replace_test_output_content_updates_test_artifact_and_summary_directly(
 	assert output.summary == "summary:36"
 	assert output.artifacts[0].content == "def test_example():\n    assert True\n"
 	assert output.artifacts[1].content == "def ok():\n    return 1"
+
+
+def test_record_test_validation_metadata_persists_expected_fields_directly():
+	output = AgentOutput(raw_content="tests", summary="tests")
+	recorded: dict[str, object] = {}
+
+	def recorder(agent_output, key, value):
+		assert agent_output is output
+		recorded[key] = value
+
+	record_test_validation_metadata(
+		output,
+		{"syntax_ok": True},
+		{"returncode": 0},
+		{"truncated": False},
+		"code_implementation.py",
+		"tests_tests.py",
+		"tests",
+		recorder,
+	)
+
+	assert recorded == {
+		"test_analysis": {"syntax_ok": True},
+		"test_execution": {"returncode": 0},
+		"completion_diagnostics": {"truncated": False},
+		"module_filename": "code_implementation.py",
+		"test_filename": "tests_tests.py",
+		"pytest_failure_origin": "tests",
+	}
 
 
 def test_validation_analysis_helpers_classify_blocking_and_warning_issues_directly():

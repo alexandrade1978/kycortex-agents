@@ -372,6 +372,50 @@ def exposed_test_class_names(
     )
 
 
+def build_code_exact_test_contract(code_analysis: Dict[str, Any]) -> str:
+    if not code_analysis.get("syntax_ok", True):
+        return "Exact test contract unavailable because module syntax is invalid."
+
+    entrypoints = entrypoint_symbol_names(code_analysis)
+    functions = code_analysis.get("functions") or []
+    classes = code_analysis.get("classes") or {}
+    preferred_classes = preferred_test_class_names(code_analysis)
+    exposed_class_names = exposed_test_class_names(code_analysis, preferred_classes)
+    allowed_imports = sorted(
+        [item["name"] for item in functions if item["name"] not in entrypoints]
+        + exposed_class_names
+    )
+    exact_method_refs: list[str] = []
+    constructor_refs: list[str] = []
+
+    for class_name in exposed_class_names:
+        class_info = classes[class_name]
+        constructor_params = class_info.get("constructor_params") or []
+        if constructor_params:
+            constructor_refs.append(f"{class_name}({', '.join(constructor_params)})")
+        for method_name in class_info.get("methods") or []:
+            if method_name.startswith("_"):
+                continue
+            exact_method_refs.append(f"{class_name}.{method_name}")
+
+    callable_refs = [
+        item["signature"]
+        for item in functions
+        if item["name"] not in entrypoints
+    ]
+
+    lines = ["Exact test contract:"]
+    lines.append(f"- Allowed production imports: {', '.join(allowed_imports or ['none'])}")
+    lines.append(f"- Preferred service or workflow facades: {', '.join(preferred_classes or ['none'])}")
+    lines.append(f"- Exact public callables: {', '.join(callable_refs or ['none'])}")
+    lines.append(f"- Exact public class methods: {', '.join(exact_method_refs or ['none'])}")
+    lines.append(f"- Exact constructor fields: {', '.join(constructor_refs or ['none'])}")
+    lines.append(
+        "- Treat every listed import, method, and constructor field as exact. Do not replace any of them with a guessed alias, shortened variant, or placeholder name."
+    )
+    return "\n".join(lines)
+
+
 def build_code_public_api(code_analysis: Dict[str, Any]) -> str:
     if not code_analysis.get("syntax_ok", True):
         return f"Module syntax error: {code_analysis.get('syntax_error') or 'unknown syntax error'}"

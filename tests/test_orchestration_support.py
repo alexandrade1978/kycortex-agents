@@ -43,6 +43,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	analyze_python_module,
 	annotation_accepts_sequence_input,
 	build_code_behavior_contract,
+	build_code_exact_test_contract,
 	build_code_public_api,
 	build_code_outline,
 	callable_parameter_names,
@@ -576,6 +577,35 @@ def test_test_target_classification_helpers_exclude_entrypoints_and_optional_hel
 	assert entrypoint_symbol_names(code_analysis) == {"BillingCLI", "main"}
 	assert helper_classes_to_avoid(code_analysis, preferred) == ["InvoiceRepository"]
 	assert exposed_test_class_names(code_analysis, preferred) == ["AuditLogger", "RequestWorkflow"]
+
+
+def test_build_code_exact_test_contract_formats_allowed_imports_and_methods():
+	summary = build_code_exact_test_contract(
+		{
+			"syntax_ok": True,
+			"functions": [{"name": "helper", "signature": "helper(payload)"}, {"name": "main", "signature": "main()"}],
+			"classes": {
+				"AuditLogger": {"constructor_params": [], "methods": ["log_action"], "method_signatures": {"log_action": {}}},
+				"ComplianceRequest": {
+					"constructor_params": ["request_id", "details"],
+					"methods": [],
+					"method_signatures": {},
+				},
+				"ComplianceWorkflow": {
+					"constructor_params": [],
+					"methods": ["intake_request", "_private_hook"],
+					"method_signatures": {"intake_request": {}, "_private_hook": {}},
+				},
+			},
+		}
+	)
+
+	assert "Exact test contract:" in summary
+	assert "Allowed production imports: ComplianceRequest, ComplianceWorkflow, helper" in summary
+	assert "Preferred service or workflow facades: ComplianceWorkflow" in summary
+	assert "Exact public callables: helper(payload)" in summary
+	assert "Exact public class methods: ComplianceWorkflow.intake_request" in summary
+	assert "Exact constructor fields: ComplianceRequest(request_id, details)" in summary
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

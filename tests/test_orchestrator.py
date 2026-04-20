@@ -17,6 +17,7 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
+from kycortex_agents.orchestration.module_ast_analysis import self_assigned_attributes
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
     missing_import_nameerror_details,
@@ -5304,8 +5305,8 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
         "values",
     } <= bindings
     assert "missing" not in orchestrator._collect_undefined_local_names(function_node, {"items", "manager", "source"})
-    assert orchestrator._self_assigned_attributes(class_init) == ["value"]
-    assert orchestrator._self_assigned_attributes(class_init_with_local) == ["value"]
+    assert self_assigned_attributes(class_init) == ["value"]
+    assert self_assigned_attributes(class_init_with_local) == ["value"]
     starred_assign = ast.parse("first, *rest = values").body[0]
     assert isinstance(starred_assign, ast.Assign)
     starred_target = starred_assign.targets[0]

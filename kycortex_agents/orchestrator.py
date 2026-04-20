@@ -74,11 +74,9 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     helper_classes_to_avoid,
     inline_score_helper_expression,
     is_probable_third_party_import,
-    method_binding_kind,
     parameter_is_iterated,
     parse_behavior_contract,
     render_score_expression,
-    self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
@@ -1243,12 +1241,6 @@ class Orchestrator:
         skip_first_param: bool = False,
     ) -> Dict[str, Any]:
         return call_signature_details(node, skip_first_param=skip_first_param)
-
-    def _method_binding_kind(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-        return method_binding_kind(node)
-
-    def _self_assigned_attributes(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
-        return self_assigned_attributes(node)
 
     def _call_argument_count(self, node: ast.Call) -> int:
         return call_argument_count(node)

@@ -26,6 +26,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     normalized_helper_surface_symbols,
     qa_repair_should_reuse_failed_test_artifact,
 )
+from kycortex_agents.orchestration.test_ast_analysis import analyze_typed_test_member_usage
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output
 from kycortex_agents.orchestration import (
@@ -5373,7 +5374,7 @@ def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path)
         function_map,
     ) is None
 
-    invalid_refs, arity_mismatches = orchestrator._analyze_typed_test_member_usage(test_node, local_types, class_map)
+    invalid_refs, arity_mismatches = analyze_typed_test_member_usage(test_node, local_types, class_map)
 
     assert invalid_refs == ["Request.invalid (line 9)", "Service.missing (line 8)"]
     assert arity_mismatches == ["Service.range_fetch expects 1-2 args but test uses 3 at line 7"]
@@ -5418,7 +5419,7 @@ def test_type_inference_and_member_usage_helpers_support_inline_constructor_call
         function_map,
     ) == "Request"
 
-    invalid_refs, arity_mismatches = orchestrator._analyze_typed_test_member_usage(
+    invalid_refs, arity_mismatches = analyze_typed_test_member_usage(
         test_node,
         local_types,
         class_map,
@@ -5431,7 +5432,7 @@ def test_type_inference_and_member_usage_helpers_support_inline_constructor_call
 
 def test_analyze_typed_test_member_usage_treats_enum_fields_as_invalid_members(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     test_node = parse_function_node(
         "def test_enum_usage():\n"
         "    status = Status()\n"
@@ -5447,7 +5448,7 @@ def test_analyze_typed_test_member_usage_treats_enum_fields_as_invalid_members(t
         }
     }
 
-    invalid_refs, arity_mismatches = orchestrator._analyze_typed_test_member_usage(test_node, local_types, class_map)
+    invalid_refs, arity_mismatches = analyze_typed_test_member_usage(test_node, local_types, class_map)
 
     assert invalid_refs == ["Status.value (line 3)"]
     assert arity_mismatches == []

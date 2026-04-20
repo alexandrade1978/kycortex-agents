@@ -161,7 +161,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     collect_local_bindings,
     collect_local_name_bindings,
     collect_module_defined_names,
-    collect_mock_support,
     collect_parametrized_argument_names,
     collect_test_local_types,
     collect_undefined_local_names,
@@ -172,7 +171,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     extract_parametrize_argument_names,
     extract_string_literals,
     find_contract_overreach_signals,
-    find_unsupported_mock_assertions,
     function_argument_names,
     infer_argument_type,
     infer_call_result_type,
@@ -182,7 +180,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     invalid_outcome_subject_matches,
     is_internal_score_state_target,
     iter_relevant_test_body_nodes,
-    known_type_allows_member,
     len_call_matches_batch_result,
     parent_map,
     payload_argument_for_validation,
@@ -192,7 +189,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     visible_repeated_single_call_batch_sizes,
     with_uses_pytest_assertion_context,
     with_uses_pytest_raises,
-    supports_mock_assertion_target,
 )
 from kycortex_agents.orchestration.validation_reporting import (
     build_dependency_validation_summary,
@@ -1448,36 +1444,6 @@ class Orchestrator:
             function_map,
             self._infer_call_result_type,
         )
-
-    def _find_unsupported_mock_assertions(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        local_types: Dict[str, str],
-        class_map: Dict[str, Any],
-    ) -> list[str]:
-        return find_unsupported_mock_assertions(node, local_types, class_map)
-
-    def _collect_mock_support(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-    ) -> tuple[set[str], set[str]]:
-        return collect_mock_support(node)
-
-    def _supports_mock_assertion_target(
-        self,
-        node: ast.AST,
-        mock_bindings: set[str],
-        patched_targets: set[str],
-    ) -> bool:
-        return supports_mock_assertion_target(node, mock_bindings, patched_targets)
-
-    def _known_type_allows_member(
-        self,
-        node: ast.Attribute,
-        local_types: Dict[str, str],
-        class_map: Dict[str, Any],
-    ) -> bool:
-        return known_type_allows_member(node, local_types, class_map)
 
     def _infer_call_result_type(
         self,

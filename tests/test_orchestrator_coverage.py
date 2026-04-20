@@ -10,7 +10,7 @@ import pytest
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.orchestration.repair_test_analysis import module_defined_symbol_names
-from kycortex_agents.orchestration.test_ast_analysis import patched_target_name_from_call
+from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support, known_type_allows_member, patched_target_name_from_call
 from kycortex_agents.orchestration import (
     ast_is_empty_literal,
     default_value_for_annotation,
@@ -340,19 +340,19 @@ class TestCollectMockSupport:
             "    pass\n"
         )
         func = ast.parse(code).body[0]
-        mock_bindings, patched = orch._collect_mock_support(func)
+        mock_bindings, patched = collect_mock_support(func)
         assert "mocker" in mock_bindings
 
     def test_mock_prefixed_argument(self, orch):
         code = "def test_something(mock_service):\n    pass\n"
         func = ast.parse(code).body[0]
-        mock_bindings, _ = orch._collect_mock_support(func)
+        mock_bindings, _ = collect_mock_support(func)
         assert "mock_service" in mock_bindings
 
     def test_no_mocks(self, orch):
         code = "def test_something(x, y):\n    pass\n"
         func = ast.parse(code).body[0]
-        mock_bindings, patched = orch._collect_mock_support(func)
+        mock_bindings, patched = collect_mock_support(func)
         assert len(mock_bindings) == 0
         assert len(patched) == 0
 
@@ -410,44 +410,44 @@ class TestKnownTypeAllowsMember:
         node = ast.parse(code, mode="eval").body
         local_types = {"obj": "MyClass"}
         class_map = {"MyClass": {"attributes": ["name", "age"], "fields": [], "method_signatures": {}, "is_enum": False}}
-        assert orch._known_type_allows_member(node, local_types, class_map) is True
+        assert known_type_allows_member(node, local_types, class_map) is True
 
     def test_unknown_attribute(self, orch):
         code = "obj.nonexistent"
         node = ast.parse(code, mode="eval").body
         local_types = {"obj": "MyClass"}
         class_map = {"MyClass": {"attributes": ["name"], "fields": [], "method_signatures": {}, "is_enum": False}}
-        assert orch._known_type_allows_member(node, local_types, class_map) is False
+        assert known_type_allows_member(node, local_types, class_map) is False
 
     def test_enum_skips_fields(self, orch):
         code = "obj.RED"
         node = ast.parse(code, mode="eval").body
         local_types = {"obj": "Color"}
         class_map = {"Color": {"attributes": ["RED"], "fields": ["RED"], "method_signatures": {}, "is_enum": True}}
-        assert orch._known_type_allows_member(node, local_types, class_map) is True
+        assert known_type_allows_member(node, local_types, class_map) is True
 
     def test_method_allowed(self, orch):
         code = "obj.validate"
         node = ast.parse(code, mode="eval").body
         local_types = {"obj": "Service"}
         class_map = {"Service": {"attributes": [], "fields": [], "method_signatures": {"validate": {}}, "is_enum": False}}
-        assert orch._known_type_allows_member(node, local_types, class_map) is True
+        assert known_type_allows_member(node, local_types, class_map) is True
 
     def test_non_name_value(self, orch):
         # Attribute node where .value is not a Name (e.g. func().attr)
         node = ast.parse("func().attr", mode="eval").body
-        assert orch._known_type_allows_member(node, {}, {}) is False
+        assert known_type_allows_member(node, {}, {}) is False
 
     def test_owner_not_in_map(self, orch):
         node = ast.parse("obj.name", mode="eval").body
-        assert orch._known_type_allows_member(node, {"obj": "Unknown"}, {}) is False
+        assert known_type_allows_member(node, {"obj": "Unknown"}, {}) is False
 
     def test_owner_name_as_type(self, orch):
         code = "MyClass.method"
         node = ast.parse(code, mode="eval").body
         local_types = {}
         class_map = {"MyClass": {"attributes": [], "fields": [], "method_signatures": {"method": {}}, "is_enum": False}}
-        assert orch._known_type_allows_member(node, local_types, class_map) is True
+        assert known_type_allows_member(node, local_types, class_map) is True
 
 
 # ---------------------------------------------------------------------------

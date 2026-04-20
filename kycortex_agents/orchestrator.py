@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.workflow_control import (
     build_repair_context,
     ensure_workflow_running,
     ensure_budget_decomposition_task,
+    execute_runnable_tasks,
     execute_workflow_task,
     fail_workflow_for_definition_error,
     fail_workflow_when_blocked,
@@ -3708,16 +3709,18 @@ class Orchestrator:
                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                     log_event=self._log_event,
                 )
-            for task in runnable:
-                task_outcome = execute_workflow_task(
-                    project,
+            if execute_runnable_tasks(
+                project,
+                runnable,
+                execute_workflow_task=lambda current_project, *, task: execute_workflow_task(
+                    current_project,
                     task=task,
                     run_task=self.run_task,
                     exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
                     exit_if_workflow_paused=self._exit_if_workflow_paused,
                     classify_task_failure=self._classify_task_failure,
-                    dispatch_task_failure=lambda current_project, *, task, failure_category: dispatch_task_failure(
-                        project,
+                    dispatch_task_failure=lambda dispatch_project, *, task, failure_category: dispatch_task_failure(
+                        dispatch_project,
                         task=task,
                         failure_category=failure_category,
                         workflow_failure_policy=self.config.workflow_failure_policy,
@@ -3730,9 +3733,9 @@ class Orchestrator:
                         log_event=self._log_event,
                     ),
                     emit_workflow_progress=self._emit_workflow_progress,
-                )
-                if task_outcome == "return":
-                    return
+                ),
+            ):
+                return
         self._log_event(
             "info",
             "workflow_finished",

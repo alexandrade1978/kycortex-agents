@@ -779,6 +779,18 @@ def execute_workflow_task(
     return "continue"
 
 
+def execute_runnable_tasks(
+    project: ProjectState,
+    runnable_tasks: list[Task],
+    *,
+    execute_workflow_task,
+) -> bool:
+    for task in runnable_tasks:
+        if execute_workflow_task(project, task=task) == "return":
+            return True
+    return False
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

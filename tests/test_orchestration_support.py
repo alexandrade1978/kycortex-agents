@@ -260,6 +260,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	emit_workflow_progress_and_save,
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
+	execute_runnable_tasks,
 	execute_workflow_task,
 	fail_workflow_after_task_failure,
 	fail_workflow_for_definition_error,
@@ -3342,6 +3343,25 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		("exec", "classified"),
 		("exec", FailureCategory.UNKNOWN.value),
 	]
+	runnable_project = ProjectState(project_name="Demo", goal="Build demo")
+	runnable_tasks = [
+		Task(id="first", title="First", description="First", assigned_to="architect"),
+		Task(id="second", title="Second", description="Second", assigned_to="architect"),
+	]
+	runnable_calls: list[str] = []
+	assert execute_runnable_tasks(
+		runnable_project,
+		runnable_tasks,
+		execute_workflow_task=lambda _project, *, task: runnable_calls.append(task.id) or "continue",
+	) is False
+	assert runnable_calls == ["first", "second"]
+	runnable_calls = []
+	assert execute_runnable_tasks(
+		runnable_project,
+		runnable_tasks,
+		execute_workflow_task=lambda _project, *, task: runnable_calls.append(task.id) or ("return" if task.id == "first" else "continue"),
+	) is True
+	assert runnable_calls == ["first"]
 
 
 def test_repair_instruction_owner_mapping_directly():

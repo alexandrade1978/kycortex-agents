@@ -28,6 +28,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 	normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
+	apply_completed_task_artifact_contexts,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
 )
@@ -401,6 +402,28 @@ def test_apply_completed_task_output_to_context_skips_artifact_context_for_budge
 	assert ctx["budget_task"] == "budget brief"
 	assert ctx["completed_tasks"] == {"budget_task": "budget brief"}
 	assert "architecture" not in ctx
+
+
+@pytest.mark.parametrize(
+	("normalized_assigned_to", "expected_key"),
+	[
+		("code_engineer", "code"),
+		("dependency_manager", "dependency"),
+		("qa_tester", "test"),
+	],
+)
+def test_apply_completed_task_artifact_contexts_dispatches_by_role(normalized_assigned_to, expected_key):
+	ctx = {}
+
+	apply_completed_task_artifact_contexts(
+		ctx,
+		normalized_assigned_to=normalized_assigned_to,
+		code_artifact_context=lambda: {"code": "code artifact"},
+		dependency_artifact_context=lambda: {"dependency": "dependency artifact"},
+		test_artifact_context=lambda: {"test": "test artifact"},
+	)
+
+	assert ctx == {expected_key: f"{expected_key} artifact" if expected_key != "dependency" else "dependency artifact"}
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

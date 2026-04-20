@@ -35,6 +35,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
     normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
+    apply_completed_task_artifact_contexts,
     apply_completed_task_output_to_context,
     apply_repair_context_to_context,
 )
@@ -1049,12 +1050,13 @@ class Orchestrator:
                 )
                 if not should_apply_artifact_context:
                     continue
-                if AgentRegistry.normalize_key(prev_task.assigned_to) == "code_engineer":
-                    ctx.update(self._code_artifact_context(prev_task, project))
-                if AgentRegistry.normalize_key(prev_task.assigned_to) == "dependency_manager":
-                    ctx.update(self._dependency_artifact_context(prev_task, ctx))
-                if AgentRegistry.normalize_key(prev_task.assigned_to) == "qa_tester":
-                    ctx.update(self._test_artifact_context(prev_task, ctx))
+                apply_completed_task_artifact_contexts(
+                    ctx,
+                    normalized_assigned_to=AgentRegistry.normalize_key(prev_task.assigned_to),
+                    code_artifact_context=lambda: self._code_artifact_context(prev_task, project),
+                    dependency_artifact_context=lambda: self._dependency_artifact_context(prev_task, ctx),
+                    test_artifact_context=lambda: self._test_artifact_context(prev_task, ctx),
+                )
         if repair_context:
             apply_repair_context_to_context(
                 ctx,

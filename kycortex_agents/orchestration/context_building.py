@@ -5,6 +5,22 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 
+def apply_completed_task_artifact_contexts(
+    ctx: dict[str, Any],
+    *,
+    normalized_assigned_to: str,
+    code_artifact_context: Callable[[], dict[str, Any]],
+    dependency_artifact_context: Callable[[], dict[str, Any]],
+    test_artifact_context: Callable[[], dict[str, Any]],
+) -> None:
+    if normalized_assigned_to == "code_engineer":
+        ctx.update(code_artifact_context())
+    if normalized_assigned_to == "dependency_manager":
+        ctx.update(dependency_artifact_context())
+    if normalized_assigned_to == "qa_tester":
+        ctx.update(test_artifact_context())
+
+
 def apply_completed_task_output_to_context(
     ctx: dict[str, Any],
     *,

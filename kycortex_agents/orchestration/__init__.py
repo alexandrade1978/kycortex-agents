@@ -20,6 +20,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 	normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
+	apply_completed_task_artifact_contexts,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
 )
@@ -333,6 +334,7 @@ __all__ = [
 	"ArtifactPersistenceSupport",
 	"failed_artifact_content",
 	"analyze_dependency_manifest",
+	"apply_completed_task_artifact_contexts",
 	"apply_completed_task_output_to_context",
 	"apply_repair_context_to_context",
 	"AcceptanceEvaluation",

@@ -89,6 +89,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     isinstance_type_names,
     method_binding_kind,
     parameter_is_iterated,
+    parse_behavior_contract,
     render_score_expression,
     self_assigned_attributes,
 )
@@ -2422,80 +2423,7 @@ class Orchestrator:
         self,
         contract: str,
     ) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]], set[str], Dict[str, Dict[str, list[str]]]]:
-        validation_rules: Dict[str, list[str]] = {}
-        field_value_rules: Dict[str, Dict[str, list[str]]] = {}
-        type_constraint_rules: Dict[str, Dict[str, list[str]]] = {}
-        batch_rules: Dict[str, Dict[str, Any]] = {}
-        sequence_input_functions: set[str] = set()
-        if not contract.strip():
-            return validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules
-
-        for raw_line in contract.splitlines():
-            line = raw_line.strip()
-            if not line.startswith("- "):
-                continue
-            validation_match = re.match(r"-\s+(\w+) requires fields: (.+)$", line)
-            if validation_match:
-                function_name = validation_match.group(1)
-                fields = [field.strip() for field in validation_match.group(2).split(",") if field.strip()]
-                if fields:
-                    validation_rules[function_name] = fields
-                continue
-
-            type_constraint_match = re.match(r"-\s+(\w+) requires parameter `([^`]+)` to be of type: (.+)$", line)
-            if type_constraint_match:
-                function_name = type_constraint_match.group(1)
-                field_name = type_constraint_match.group(2)
-                raw_types = re.sub(r"\s*\(keys used:[^)]*\)", "", type_constraint_match.group(3))
-                types = [t.strip() for t in raw_types.split(",") if t.strip()]
-                if types:
-                    type_constraint_rules.setdefault(function_name, {})[field_name] = types
-                continue
-
-            field_value_match = re.match(r"-\s+(\w+) expects field `([^`]+)` to be one of: (.+)$", line)
-            if field_value_match:
-                function_name = field_value_match.group(1)
-                field_name = field_value_match.group(2)
-                values = [value.strip() for value in field_value_match.group(3).split(",") if value.strip()]
-                if values:
-                    field_value_rules.setdefault(function_name, {})[field_name] = values
-                continue
-
-            sequence_input_match = re.match(r"-\s+(\w+) accepts sequence inputs via parameter `([^`]+)`$", line)
-            if sequence_input_match:
-                sequence_input_functions.add(sequence_input_match.group(1))
-                continue
-
-            nested_match = re.match(
-                r"-\s+(\w+) expects each batch item to include key `([^`]+)` and nested `([^`]+)` fields: (.+)$",
-                line,
-            )
-            if nested_match:
-                batch_rules[nested_match.group(1)] = {
-                    "request_key": nested_match.group(2),
-                    "wrapper_key": nested_match.group(3),
-                    "fields": [field.strip() for field in nested_match.group(4).split(",") if field.strip()],
-                }
-                continue
-
-            direct_match = re.match(r"-\s+(\w+) expects each batch item to include: (.+)$", line)
-            if direct_match:
-                batch_rules[direct_match.group(1)] = {
-                    "request_key": None,
-                    "wrapper_key": None,
-                    "fields": [field.strip() for field in direct_match.group(2).split(",") if field.strip()],
-                }
-                continue
-
-            wrapper_match = re.match(r"-\s+(\w+) expects nested `([^`]+)` fields: (.+)$", line)
-            if wrapper_match:  # pragma: no branch
-                batch_rules[wrapper_match.group(1)] = {
-                    "request_key": None,
-                    "wrapper_key": wrapper_match.group(2),
-                    "fields": [field.strip() for field in wrapper_match.group(3).split(",") if field.strip()],
-                }
-
-        return validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules
+        return parse_behavior_contract(contract)
 
     def _analyze_test_behavior_contracts(
         self,

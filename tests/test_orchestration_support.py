@@ -45,6 +45,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	build_code_behavior_contract,
 	build_code_exact_test_contract,
 	build_module_run_command,
+	parse_behavior_contract,
 	build_code_public_api,
 	build_code_test_targets,
 	build_code_outline,
@@ -644,6 +645,32 @@ def test_build_code_test_targets_formats_function_and_class_buckets():
 def test_build_module_run_command_returns_python_command_for_main_guard():
 	assert build_module_run_command("app.py", {"has_main_guard": True}) == "python app.py"
 	assert build_module_run_command("app.py", {"has_main_guard": False}) == ""
+
+
+def test_parse_behavior_contract_extracts_validation_type_and_batch_rules():
+	validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
+		"\n".join(
+			[
+				"- intake_request requires fields: request_id, compliance_data",
+				"- intake_request requires parameter `payload` to be of type: dict, list (keys used: request_id)",
+				"- intake_request expects field `status` to be one of: approved, denied",
+				"- process_batch accepts sequence inputs via parameter `items`",
+				"- process_batch expects each batch item to include key `request_id` and nested `payload` fields: compliance_data, status",
+				"- process_requests expects each batch item to include: request_id, compliance_data",
+				"- process_nested expects nested `payload` fields: compliance_data, status",
+			]
+		)
+	)
+
+	assert validation_rules == {"intake_request": ["request_id", "compliance_data"]}
+	assert field_value_rules == {"intake_request": {"status": ["approved", "denied"]}}
+	assert type_constraint_rules == {"intake_request": {"payload": ["dict", "list"]}}
+	assert sequence_input_functions == {"process_batch"}
+	assert batch_rules == {
+		"process_batch": {"request_key": "request_id", "wrapper_key": "payload", "fields": ["compliance_data", "status"]},
+		"process_requests": {"request_key": None, "wrapper_key": None, "fields": ["request_id", "compliance_data"]},
+		"process_nested": {"request_key": None, "wrapper_key": "payload", "fields": ["compliance_data", "status"]},
+	}
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

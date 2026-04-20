@@ -5,6 +5,22 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 
+def apply_task_public_contract_context(
+    ctx: dict[str, Any],
+    *,
+    task_public_contract_anchor: str,
+    should_compact_architecture_context: Callable[[], bool],
+    compact_architecture_context: Callable[[], str],
+) -> Optional[str]:
+    if not task_public_contract_anchor:
+        return None
+
+    ctx["task_public_contract_anchor"] = task_public_contract_anchor
+    if should_compact_architecture_context():
+        return compact_architecture_context()
+    return None
+
+
 def apply_completed_task_artifact_contexts(
     ctx: dict[str, Any],
     *,

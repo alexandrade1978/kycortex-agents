@@ -28,6 +28,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 	normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
+	apply_task_public_contract_context,
 	apply_completed_task_artifact_contexts,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
@@ -424,6 +425,34 @@ def test_apply_completed_task_artifact_contexts_dispatches_by_role(normalized_as
 	)
 
 	assert ctx == {expected_key: f"{expected_key} artifact" if expected_key != "dependency" else "dependency artifact"}
+
+
+def test_apply_task_public_contract_context_sets_anchor_and_optional_compaction():
+	ctx = {}
+
+	compact_architecture_context = apply_task_public_contract_context(
+		ctx,
+		task_public_contract_anchor="Anchor",
+		should_compact_architecture_context=lambda: True,
+		compact_architecture_context=lambda: "compact architecture",
+	)
+
+	assert ctx["task_public_contract_anchor"] == "Anchor"
+	assert compact_architecture_context == "compact architecture"
+
+
+def test_apply_task_public_contract_context_skips_empty_anchor():
+	ctx = {}
+
+	compact_architecture_context = apply_task_public_contract_context(
+		ctx,
+		task_public_contract_anchor="",
+		should_compact_architecture_context=lambda: True,
+		compact_architecture_context=lambda: "compact architecture",
+	)
+
+	assert compact_architecture_context is None
+	assert ctx == {}
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

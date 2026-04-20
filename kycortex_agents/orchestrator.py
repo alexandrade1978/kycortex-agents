@@ -35,6 +35,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
     normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
+    apply_task_public_contract_context,
     apply_completed_task_artifact_contexts,
     apply_completed_task_output_to_context,
     apply_repair_context_to_context,
@@ -1027,11 +1028,12 @@ class Orchestrator:
         if isinstance(planned_module_filename, str) and planned_module_filename.strip():
             ctx["module_filename"] = planned_module_filename
         task_public_contract_anchor = self._task_public_contract_anchor(task.description)
-        compact_architecture_context: Optional[str] = None
-        if task_public_contract_anchor:
-            ctx["task_public_contract_anchor"] = task_public_contract_anchor
-            if self._should_compact_architecture_context(task, task_public_contract_anchor):
-                compact_architecture_context = self._compact_architecture_context(task, task_public_contract_anchor)
+        compact_architecture_context = apply_task_public_contract_context(
+            ctx,
+            task_public_contract_anchor=task_public_contract_anchor,
+            should_compact_architecture_context=lambda: self._should_compact_architecture_context(task, task_public_contract_anchor),
+            compact_architecture_context=lambda: self._compact_architecture_context(task, task_public_contract_anchor),
+        )
         for prev_task in project.tasks:
             if prev_task.id not in visible_task_ids:
                 continue

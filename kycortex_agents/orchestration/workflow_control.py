@@ -555,6 +555,30 @@ def finish_workflow_if_no_pending_tasks(
     return True
 
 
+def fail_workflow_for_definition_error(
+    project: ProjectState,
+    *,
+    workflow_acceptance_policy: str,
+    zero_budget_failure_categories: AbstractSet[str],
+    evaluate_workflow_acceptance,
+    log_event,
+) -> None:
+    project.mark_workflow_finished(
+        "failed",
+        acceptance_policy=workflow_acceptance_policy,
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category=FailureCategory.WORKFLOW_DEFINITION.value,
+        acceptance_criteria_met=False,
+        acceptance_evaluation=evaluate_workflow_acceptance(
+            project,
+            workflow_acceptance_policy,
+            zero_budget_failure_categories,
+        ),
+    )
+    project.save()
+    log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

@@ -254,6 +254,7 @@ from kycortex_agents.orchestration.workflow_control import (
     build_repair_context,
     ensure_workflow_running,
     ensure_budget_decomposition_task,
+    fail_workflow_for_definition_error,
     failed_task_ids_for_repair,
     finish_workflow_if_no_pending_tasks,
     has_repair_task_for_cycle,
@@ -3688,20 +3689,13 @@ class Orchestrator:
             try:
                 runnable = project.runnable_tasks()
             except WorkflowDefinitionError:
-                project.mark_workflow_finished(
-                    "failed",
-                    acceptance_policy=self.config.workflow_acceptance_policy,
-                    terminal_outcome=WorkflowOutcome.FAILED.value,
-                    failure_category=FailureCategory.WORKFLOW_DEFINITION.value,
-                    acceptance_criteria_met=False,
-                    acceptance_evaluation=evaluate_workflow_acceptance(
-                        project,
-                        self.config.workflow_acceptance_policy,
-                        _ZERO_BUDGET_FAILURE_CATEGORIES,
-                    ),
+                fail_workflow_for_definition_error(
+                    project,
+                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                    log_event=self._log_event,
                 )
-                project.save()
-                self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                 raise
             if not runnable:
                 blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())

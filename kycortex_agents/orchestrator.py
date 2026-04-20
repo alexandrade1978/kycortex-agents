@@ -94,7 +94,6 @@ from kycortex_agents.orchestration.repair_analysis import (
     duplicate_constructor_argument_details,
     duplicate_constructor_explicit_rewrite_hint,
     failed_artifact_content_for_category,
-    first_non_import_line_with_name,
     internal_constructor_strictness_details,
     invalid_outcome_missing_audit_trail_details,
     missing_import_nameerror_details,
@@ -106,15 +105,11 @@ from kycortex_agents.orchestration.repair_analysis import (
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
     imported_code_task_for_failed_test,
-    is_helper_alias_like_name,
-    module_defined_symbol_names,
     normalized_helper_surface_symbols,
     qa_repair_should_reuse_failed_test_artifact,
     helper_surface_usages_for_test_repair_runtime,
     failed_test_requires_code_repair_runtime,
     upstream_code_task_for_test_failure,
-    validation_summary_helper_alias_names,
-    validation_summary_symbols,
 )
 from kycortex_agents.orchestration.repair_focus import (
     build_repair_focus_lines,
@@ -703,7 +698,7 @@ class Orchestrator:
                 internal_constructor_strictness_details=internal_constructor_strictness_details,
                 existing_tests=existing_tests,
             ),
-            merge_prior_repair_context=self._merge_prior_repair_context,
+            merge_prior_repair_context=merge_prior_repair_context,
         )
 
     def _ensure_budget_decomposition_task(
@@ -743,7 +738,7 @@ class Orchestrator:
                 artifact_type=ArtifactType.CODE,
                 validation_payload=validation_payload,
                 dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
-                missing_import_nameerror_details=self._missing_import_nameerror_details,
+                missing_import_nameerror_details=missing_import_nameerror_details,
                 plain_class_field_default_factory_details=plain_class_field_default_factory_details,
                 test_validation_has_only_warnings=validation_has_only_warnings,
             ),
@@ -762,59 +757,8 @@ class Orchestrator:
                 failure_category,
                 validation_payload=validation_payload,
             ),
-            normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
-            merge_prior_repair_context=self._merge_prior_repair_context,
-        )
-
-    def _merge_prior_repair_context(self, task: Task, repair_context: Dict[str, Any]) -> None:
-        merge_prior_repair_context(task, repair_context)
-
-    def _normalized_helper_surface_symbols(self, raw_values: object) -> list[str]:
-        return normalized_helper_surface_symbols(raw_values)
-
-    @staticmethod
-    def _validation_summary_symbols(validation_summary: str, label: str) -> list[str]:
-        return validation_summary_symbols(validation_summary, label)
-
-    @staticmethod
-    def _module_defined_symbol_names(implementation_code: object) -> list[str]:
-        return module_defined_symbol_names(implementation_code)
-
-    @staticmethod
-    def _is_helper_alias_like_name(name: str) -> bool:
-        return is_helper_alias_like_name(name)
-
-    def _validation_summary_helper_alias_names(
-        self,
-        validation_summary: object,
-        implementation_code: object = "",
-    ) -> list[str]:
-        return validation_summary_helper_alias_names(
-            validation_summary,
-            implementation_code,
-        )
-
-    @staticmethod
-    def _first_non_import_line_with_name(content: object, symbol_name: str) -> str:
-        return first_non_import_line_with_name(content, symbol_name)
-
-    def _missing_import_nameerror_details(
-        self,
-        validation_summary: object,
-        failed_artifact_content: object = "",
-    ) -> tuple[str, str] | None:
-        return missing_import_nameerror_details(validation_summary, failed_artifact_content)
-
-    def _qa_repair_should_reuse_failed_test_artifact(
-        self,
-        validation_summary: object,
-        implementation_code: object = "",
-        failed_artifact_content: object = "",
-    ) -> bool:
-        return qa_repair_should_reuse_failed_test_artifact(
-            validation_summary,
-            implementation_code,
-            failed_artifact_content,
+            normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+            merge_prior_repair_context=merge_prior_repair_context,
         )
 
     def _queue_active_cycle_repair(self, project: ProjectState, task: Task) -> bool:
@@ -1645,8 +1589,8 @@ class Orchestrator:
             dependency_artifact_context=self._dependency_artifact_context,
             test_artifact_context=self._test_artifact_context,
             agent_visible_repair_context=self._agent_visible_repair_context,
-            normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
-            qa_repair_should_reuse_failed_test_artifact=self._qa_repair_should_reuse_failed_test_artifact,
+            normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+            qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
             redact_sensitive_data=redact_sensitive_data,
         )
         repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}

@@ -19,7 +19,12 @@ from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
+    missing_import_nameerror_details,
     plain_class_field_default_factory_details,
+)
+from kycortex_agents.orchestration.repair_test_analysis import (
+    normalized_helper_surface_symbols,
+    qa_repair_should_reuse_failed_test_artifact,
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output
@@ -107,7 +112,7 @@ def build_repair_instruction_for_test(orchestrator: Orchestrator, task: Task, fa
         artifact_type=ArtifactType.CODE,
         validation_payload=validation_payload,
         dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
-        missing_import_nameerror_details=orchestrator._missing_import_nameerror_details,
+        missing_import_nameerror_details=missing_import_nameerror_details,
         plain_class_field_default_factory_details=plain_class_field_default_factory_details,
         test_validation_has_only_warnings=validation_has_only_warnings,
     )
@@ -166,8 +171,8 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
         dependency_artifact_context=orchestrator._dependency_artifact_context,
         test_artifact_context=orchestrator._test_artifact_context,
         agent_visible_repair_context=orchestrator._agent_visible_repair_context,
-        normalized_helper_surface_symbols=orchestrator._normalized_helper_surface_symbols,
-        qa_repair_should_reuse_failed_test_artifact=orchestrator._qa_repair_should_reuse_failed_test_artifact,
+        normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+        qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
         redact_sensitive_data=orchestrator_module.redact_sensitive_data,
     )
 
@@ -14806,7 +14811,7 @@ def test_build_agent_input_does_not_reuse_suite_with_bare_datetime_without_impor
     tests_task = require_task(project, "tests")
 
     assert "existing_tests" not in agent_input.context
-    assert not orchestrator._qa_repair_should_reuse_failed_test_artifact(
+    assert not qa_repair_should_reuse_failed_test_artifact(
         tests_task.repair_context["validation_summary"],
         code_content,
         failed_artifact_content,
@@ -14923,7 +14928,7 @@ def test_build_agent_input_does_not_reuse_suite_with_incomplete_required_evidenc
     tests_task = require_task(project, "tests")
 
     assert "existing_tests" not in agent_input.context
-    assert not orchestrator._qa_repair_should_reuse_failed_test_artifact(
+    assert not qa_repair_should_reuse_failed_test_artifact(
         tests_task.repair_context["validation_summary"],
         code_content,
         failed_artifact_content,
@@ -15040,7 +15045,7 @@ def test_build_agent_input_does_not_reuse_suite_with_invalid_batch_missing_docum
     tests_task = require_task(project, "tests")
 
     assert "existing_tests" not in agent_input.context
-    assert not orchestrator._qa_repair_should_reuse_failed_test_artifact(
+    assert not qa_repair_should_reuse_failed_test_artifact(
         tests_task.repair_context["validation_summary"],
         code_content,
         failed_artifact_content,
@@ -15138,7 +15143,7 @@ def test_build_agent_input_does_not_reuse_helper_alias_suite_and_adds_alias_drif
 
 def test_build_agent_input_reuses_real_module_symbol_suite_and_adds_missing_import_priority(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     code_content = (
         "from dataclasses import dataclass\n"
@@ -15249,7 +15254,7 @@ def test_build_agent_input_reuses_real_module_symbol_suite_and_adds_missing_impo
     )
     tests_task = require_task(project, "tests")
 
-    assert orchestrator._qa_repair_should_reuse_failed_test_artifact(
+    assert qa_repair_should_reuse_failed_test_artifact(
         tests_task.repair_context["validation_summary"],
         code_content,
     )

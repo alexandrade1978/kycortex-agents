@@ -9,6 +9,7 @@ import ast
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.orchestration.repair_test_analysis import module_defined_symbol_names
 from kycortex_agents.orchestration.test_ast_analysis import patched_target_name_from_call
 from kycortex_agents.orchestration import (
     ast_is_empty_literal,
@@ -363,16 +364,16 @@ class TestCollectMockSupport:
 class TestModuleDefinedSymbolNames:
     def test_classes_and_functions(self):
         code = "class Foo:\n    pass\n\ndef bar():\n    pass\n\nasync def baz():\n    pass\n"
-        assert Orchestrator._module_defined_symbol_names(code) == ["Foo", "bar", "baz"]
+        assert module_defined_symbol_names(code) == ["Foo", "bar", "baz"]
 
     def test_empty_string(self):
-        assert Orchestrator._module_defined_symbol_names("") == []
+        assert module_defined_symbol_names("") == []
 
     def test_non_string(self):
-        assert Orchestrator._module_defined_symbol_names(None) == []
+        assert module_defined_symbol_names(None) == []
 
     def test_syntax_error(self):
-        assert Orchestrator._module_defined_symbol_names("def (()") == []
+        assert module_defined_symbol_names("def (()") == []
 
 
 # ---------------------------------------------------------------------------

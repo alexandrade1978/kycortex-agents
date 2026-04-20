@@ -6,6 +6,8 @@ import io
 import tokenize
 from typing import Any, Dict, Optional
 
+from kycortex_agents.types import FailureCategory
+
 from kycortex_agents.orchestration.validation_analysis import (
 	BLOCKING_TEST_ISSUE_KEYS,
 	WARNING_TEST_ISSUE_KEYS,
@@ -240,6 +242,40 @@ def build_dependency_validation_summary(dependency_analysis: Dict[str, Any]) -> 
 	)
 	lines.append(f"- Verdict: {'PASS' if dependency_analysis.get('is_valid') else 'FAIL'}")
 	return "\n".join(lines)
+
+
+def build_repair_validation_summary(task: Any, failure_category: str, validation: object) -> str:
+	fallback_message = task.last_error or task.output or ""
+	if not isinstance(validation, dict):
+		return fallback_message
+	if failure_category == FailureCategory.CODE_VALIDATION.value:
+		code_analysis = validation.get("code_analysis")
+		if isinstance(code_analysis, dict):
+			completion_diagnostics = validation.get("completion_diagnostics")
+			import_validation = validation.get("import_validation")
+			task_public_contract_preflight = validation.get("task_public_contract_preflight")
+			return build_code_validation_summary(
+				code_analysis,
+				fallback_message,
+				completion_diagnostics if isinstance(completion_diagnostics, dict) else None,
+				import_validation if isinstance(import_validation, dict) else None,
+				task_public_contract_preflight if isinstance(task_public_contract_preflight, dict) else None,
+			)
+	if failure_category == FailureCategory.TEST_VALIDATION.value:
+		test_analysis = validation.get("test_analysis")
+		test_execution = validation.get("test_execution")
+		if isinstance(test_analysis, dict):
+			completion_diagnostics = validation.get("completion_diagnostics")
+			return build_test_validation_summary(
+				test_analysis,
+				test_execution if isinstance(test_execution, dict) else None,
+				completion_diagnostics if isinstance(completion_diagnostics, dict) else None,
+			)
+	if failure_category == FailureCategory.DEPENDENCY_VALIDATION.value:
+		dependency_analysis = validation.get("dependency_analysis")
+		if isinstance(dependency_analysis, dict):
+			return build_dependency_validation_summary(dependency_analysis)
+	return fallback_message
 
 
 def build_test_validation_summary(

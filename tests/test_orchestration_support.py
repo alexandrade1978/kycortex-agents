@@ -263,6 +263,7 @@ from kycortex_agents.orchestration.task_constraints import (
 from kycortex_agents.orchestration.validation_reporting import (
 	build_code_validation_summary,
 	build_dependency_validation_summary,
+	build_repair_validation_summary,
 	build_test_validation_summary,
 	completion_diagnostics_from_provider_call,
 	completion_diagnostics_summary,
@@ -578,6 +579,38 @@ def test_direct_dependency_ids_includes_repair_origin_and_budget_plan_directly()
 	)
 
 	assert direct_dependency_ids(task) == {"dep_a", "origin", "plan"}
+
+
+def test_build_repair_validation_summary_dispatches_by_failure_category_directly():
+	task = SimpleNamespace(last_error="fallback error", output="fallback output")
+
+	code_summary = build_repair_validation_summary(
+		task,
+		FailureCategory.CODE_VALIDATION.value,
+		{
+			"code_analysis": {"syntax_ok": False, "syntax_error": "bad syntax", "line_count": 1, "third_party_imports": []},
+			"completion_diagnostics": {"hit_token_limit": False},
+		},
+	)
+	test_summary = build_repair_validation_summary(
+		task,
+		FailureCategory.TEST_VALIDATION.value,
+		{
+			"test_analysis": {"syntax_ok": False, "syntax_error": "bad test", "test_count": 0, "assertion_count": 0, "fixture_count": 0, "issues": []},
+			"test_execution": None,
+		},
+	)
+	dependency_summary = build_repair_validation_summary(
+		task,
+		FailureCategory.DEPENDENCY_VALIDATION.value,
+		{"dependency_analysis": {"is_valid": False, "missing_manifest_entries": ["numpy"], "provenance_violations": []}},
+	)
+	unknown_summary = build_repair_validation_summary(task, FailureCategory.UNKNOWN.value, {})
+
+	assert "bad syntax" in code_summary
+	assert "bad test" in test_summary
+	assert "numpy" in dependency_summary
+	assert unknown_summary == "fallback error"
 
 
 def test_build_task_context_base_applies_planned_module_aliases_directly():

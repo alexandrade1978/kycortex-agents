@@ -274,6 +274,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 from kycortex_agents.orchestration.validation_reporting import (
 	build_code_validation_summary,
 	build_dependency_validation_summary,
+	build_repair_validation_summary,
 	build_test_validation_summary,
 	completion_diagnostics_from_provider_call,
 	completion_diagnostics_summary,
@@ -466,6 +467,7 @@ __all__ = [
 	"BLOCKING_TEST_ISSUE_KEYS",
 	"build_code_validation_summary",
 	"build_dependency_validation_summary",
+	"build_repair_validation_summary",
 	"build_test_validation_summary",
 	"build_runtime_only_test_repair_lines",
 	"build_structural_test_repair_lines",

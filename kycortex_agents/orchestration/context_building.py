@@ -57,6 +57,49 @@ def apply_task_public_contract_context(
     return None
 
 
+def apply_completed_tasks_to_context(
+    ctx: dict[str, Any],
+    *,
+    project_tasks: list[Any],
+    visible_task_ids: set[str],
+    budget_decomposition_plan_task_id: Optional[str],
+    compact_architecture_context: Optional[str],
+    task_context_output: Callable[[Any], Optional[str]],
+    is_budget_decomposition_planner: Callable[[Any], bool],
+    semantic_output_key: Callable[[str, str], Optional[str]],
+    normalize_assigned_to: Callable[[str], str],
+    code_artifact_context: Callable[[Any], dict[str, Any]],
+    dependency_artifact_context: Callable[[Any, dict[str, Any]], dict[str, Any]],
+    test_artifact_context: Callable[[Any, dict[str, Any]], dict[str, Any]],
+) -> None:
+    for prev_task in project_tasks:
+        if prev_task.id not in visible_task_ids:
+            continue
+        visible_output = task_context_output(prev_task)
+        if prev_task.status != "done" or not visible_output:
+            continue
+        should_apply_artifact_context = apply_completed_task_output_to_context(
+            ctx,
+            task_id=prev_task.id,
+            assigned_to=prev_task.assigned_to,
+            title=prev_task.title,
+            visible_output=visible_output,
+            budget_decomposition_plan_task_id=budget_decomposition_plan_task_id,
+            compact_architecture_context=compact_architecture_context,
+            is_budget_decomposition_planner=lambda: is_budget_decomposition_planner(prev_task),
+            semantic_output_key=semantic_output_key,
+        )
+        if not should_apply_artifact_context:
+            continue
+        apply_completed_task_artifact_contexts(
+            ctx,
+            normalized_assigned_to=normalize_assigned_to(prev_task.assigned_to),
+            code_artifact_context=lambda: code_artifact_context(prev_task),
+            dependency_artifact_context=lambda: dependency_artifact_context(prev_task, ctx),
+            test_artifact_context=lambda: test_artifact_context(prev_task, ctx),
+        )
+
+
 def apply_completed_task_artifact_contexts(
     ctx: dict[str, Any],
     *,

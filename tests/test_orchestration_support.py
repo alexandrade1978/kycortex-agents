@@ -30,6 +30,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 from kycortex_agents.orchestration.context_building import (
 	apply_task_public_contract_context,
 	apply_completed_task_artifact_contexts,
+	apply_completed_tasks_to_context,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
 	build_task_context_base,
@@ -462,6 +463,37 @@ def test_apply_completed_task_output_to_context_skips_artifact_context_for_budge
 	assert ctx["budget_task"] == "budget brief"
 	assert ctx["completed_tasks"] == {"budget_task": "budget brief"}
 	assert "architecture" not in ctx
+
+
+def test_apply_completed_tasks_to_context_tracks_visible_done_outputs_and_dispatches_artifacts():
+	ctx = {"completed_tasks": {}}
+	tasks = [
+		SimpleNamespace(id="code", status="done", assigned_to="code_engineer", title="Implement"),
+		SimpleNamespace(id="deps", status="done", assigned_to="dependency_manager", title="Dependencies"),
+		SimpleNamespace(id="skip", status="pending", assigned_to="qa_tester", title="Tests"),
+	]
+
+	apply_completed_tasks_to_context(
+		ctx,
+		project_tasks=tasks,
+		visible_task_ids={"code", "deps", "skip"},
+		budget_decomposition_plan_task_id=None,
+		compact_architecture_context=None,
+		task_context_output=lambda task: {"code": "code output", "deps": "deps output"}.get(task.id),
+		is_budget_decomposition_planner=lambda task: False,
+		semantic_output_key=lambda assigned_to, title: f"{assigned_to}:{title}",
+		normalize_assigned_to=lambda assigned_to: assigned_to,
+		code_artifact_context=lambda task: {"code_artifact": task.id},
+		dependency_artifact_context=lambda task, current_ctx: {"dependency_artifact": current_ctx[task.id]},
+		test_artifact_context=lambda task, current_ctx: {"test_artifact": current_ctx[task.id]},
+	)
+
+	assert ctx["completed_tasks"] == {"code": "code output", "deps": "deps output"}
+	assert ctx["code_artifact"] == "code"
+	assert ctx["dependency_artifact"] == "deps output"
+	assert ctx["code_engineer:Implement"] == "code output"
+	assert ctx["dependency_manager:Dependencies"] == "deps output"
+	assert "skip" not in ctx
 
 
 @pytest.mark.parametrize(

@@ -22,6 +22,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 from kycortex_agents.orchestration.context_building import (
 	apply_task_public_contract_context,
 	apply_completed_task_artifact_contexts,
+	apply_completed_tasks_to_context,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
 	build_task_context_base,
@@ -368,6 +369,7 @@ __all__ = [
 	"analyze_dependency_manifest",
 	"apply_task_public_contract_context",
 	"apply_completed_task_artifact_contexts",
+	"apply_completed_tasks_to_context",
 	"apply_completed_task_output_to_context",
 	"apply_repair_context_to_context",
 	"build_task_context_base",

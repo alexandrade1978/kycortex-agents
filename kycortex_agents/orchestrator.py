@@ -32,8 +32,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
 )
 from kycortex_agents.orchestration.context_building import (
     apply_task_public_contract_context,
-    apply_completed_task_artifact_contexts,
-    apply_completed_task_output_to_context,
+    apply_completed_tasks_to_context,
     apply_repair_context_to_context,
     build_task_context_base,
 )
@@ -321,7 +320,6 @@ from kycortex_agents.types import (
     ExecutionSandboxPolicy,
     FailureCategory,
     ProjectSnapshot,
-    TaskStatus,
     TaskResult,
 )
 
@@ -823,31 +821,20 @@ class Orchestrator:
             should_compact_architecture_context=lambda: self._should_compact_architecture_context(task, task_public_contract_anchor),
             compact_architecture_context=lambda: self._compact_architecture_context(task, task_public_contract_anchor),
         )
-        for prev_task in project.tasks:
-            if prev_task.id not in visible_task_ids:
-                continue
-            visible_output = self._task_context_output(prev_task)
-            if prev_task.status == TaskStatus.DONE.value and visible_output:
-                should_apply_artifact_context = apply_completed_task_output_to_context(
-                    ctx,
-                    task_id=prev_task.id,
-                    assigned_to=prev_task.assigned_to,
-                    title=prev_task.title,
-                    visible_output=visible_output,
-                    budget_decomposition_plan_task_id=budget_decomposition_plan_task_id,
-                    compact_architecture_context=compact_architecture_context,
-                    is_budget_decomposition_planner=lambda: self._is_budget_decomposition_planner(prev_task),
-                    semantic_output_key=semantic_output_key,
-                )
-                if not should_apply_artifact_context:
-                    continue
-                apply_completed_task_artifact_contexts(
-                    ctx,
-                    normalized_assigned_to=AgentRegistry.normalize_key(prev_task.assigned_to),
-                    code_artifact_context=lambda: self._code_artifact_context(prev_task, project),
-                    dependency_artifact_context=lambda: self._dependency_artifact_context(prev_task, ctx),
-                    test_artifact_context=lambda: self._test_artifact_context(prev_task, ctx),
-                )
+        apply_completed_tasks_to_context(
+            ctx,
+            project_tasks=project.tasks,
+            visible_task_ids=visible_task_ids,
+            budget_decomposition_plan_task_id=budget_decomposition_plan_task_id,
+            compact_architecture_context=compact_architecture_context,
+            task_context_output=self._task_context_output,
+            is_budget_decomposition_planner=self._is_budget_decomposition_planner,
+            semantic_output_key=semantic_output_key,
+            normalize_assigned_to=AgentRegistry.normalize_key,
+            code_artifact_context=lambda prev_task: self._code_artifact_context(prev_task, project),
+            dependency_artifact_context=lambda prev_task, current_ctx: self._dependency_artifact_context(prev_task, current_ctx),
+            test_artifact_context=lambda prev_task, current_ctx: self._test_artifact_context(prev_task, current_ctx),
+        )
         if repair_context:
             apply_repair_context_to_context(
                 ctx,

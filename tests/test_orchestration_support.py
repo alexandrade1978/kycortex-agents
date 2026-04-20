@@ -267,6 +267,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	build_test_validation_runtime_state,
 	provider_call_metadata,
 	redact_validation_execution_result,
+	record_code_validation_metadata,
 	record_test_validation_metadata,
 	replace_test_output_content,
 	sanitize_output_provider_call_metadata,
@@ -4170,6 +4171,31 @@ def test_record_test_validation_metadata_persists_expected_fields_directly():
 		"module_filename": "code_implementation.py",
 		"test_filename": "tests_tests.py",
 		"pytest_failure_origin": "tests",
+	}
+
+
+def test_record_code_validation_metadata_persists_expected_fields_directly():
+	output = AgentOutput(raw_content="code", summary="code")
+	recorded: dict[str, object] = {}
+
+	def recorder(agent_output, key, value):
+		assert agent_output is output
+		recorded[key] = value
+
+	record_code_validation_metadata(
+		output,
+		{"syntax_ok": True},
+		{"passed": True, "issues": []},
+		{"ran": True, "returncode": 0},
+		{"likely_truncated": False},
+		recorder,
+	)
+
+	assert recorded == {
+		"code_analysis": {"syntax_ok": True},
+		"task_public_contract_preflight": {"passed": True, "issues": []},
+		"import_validation": {"ran": True, "returncode": 0},
+		"completion_diagnostics": {"likely_truncated": False},
 	}
 
 

@@ -147,6 +147,22 @@ def record_test_validation_metadata(
     record_output_validation(output, "pytest_failure_origin", pytest_failure_origin)
 
 
+def record_code_validation_metadata(
+    output: AgentOutput,
+    code_analysis: dict[str, Any],
+    task_public_contract_preflight: Optional[dict[str, Any]],
+    import_validation: Optional[dict[str, Any]],
+    completion_diagnostics: dict[str, Any],
+    record_output_validation: Any,
+) -> None:
+    record_output_validation(output, "code_analysis", code_analysis)
+    if task_public_contract_preflight is not None:
+        record_output_validation(output, "task_public_contract_preflight", task_public_contract_preflight)
+    if import_validation is not None:
+        record_output_validation(output, "import_validation", import_validation)
+    record_output_validation(output, "completion_diagnostics", completion_diagnostics)
+
+
 def build_test_validation_runtime_state(
     output: AgentOutput,
     test_artifact_content: str,

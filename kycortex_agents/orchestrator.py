@@ -250,6 +250,7 @@ from kycortex_agents.orchestration.validation_reporting import (
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     redact_validation_execution_result,
+    record_code_validation_metadata,
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
     validate_test_output_runtime,
@@ -561,12 +562,14 @@ class Orchestrator:
                 default_filename="code_implementation.py",
             )
             import_validation = self._execute_generated_module_import(module_filename, code_content)
-        self._record_output_validation(output, "code_analysis", code_analysis)
-        if task_public_contract_preflight is not None:
-            self._record_output_validation(output, "task_public_contract_preflight", task_public_contract_preflight)
-        if import_validation is not None:
-            self._record_output_validation(output, "import_validation", import_validation)
-        self._record_output_validation(output, "completion_diagnostics", completion_diagnostics)
+        record_code_validation_metadata(
+            output,
+            code_analysis,
+            task_public_contract_preflight,
+            import_validation,
+            completion_diagnostics,
+            self._record_output_validation,
+        )
         validation_issues = collect_code_validation_issues(
             code_analysis,
             line_budget,

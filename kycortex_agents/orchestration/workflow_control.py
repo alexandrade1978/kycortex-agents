@@ -740,6 +740,45 @@ def dispatch_task_failure(
     return "raise"
 
 
+def execute_workflow_task(
+    project: ProjectState,
+    *,
+    task: Task,
+    run_task,
+    exit_if_workflow_cancelled,
+    exit_if_workflow_paused,
+    classify_task_failure,
+    dispatch_task_failure,
+    emit_workflow_progress,
+) -> Literal["continue", "return"]:
+    if exit_if_workflow_cancelled(project):
+        return "return"
+    if exit_if_workflow_paused(project):
+        return "return"
+    try:
+        run_task(task, project)
+    except Exception as exc:
+        if exit_if_workflow_cancelled(project):
+            return "return"
+        failure_category = classify_task_failure(task, exc)
+        if (
+            dispatch_task_failure(
+                project,
+                task=task,
+                failure_category=failure_category,
+            )
+            == "continue"
+        ):
+            return "continue"
+        raise exc
+    emit_workflow_progress_and_save(
+        project,
+        task=task,
+        emit_workflow_progress=emit_workflow_progress,
+    )
+    return "continue"
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

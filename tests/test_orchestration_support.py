@@ -260,6 +260,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	emit_workflow_progress_and_save,
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
+	execute_workflow_task,
 	fail_workflow_after_task_failure,
 	fail_workflow_for_definition_error,
 	fail_workflow_when_blocked,
@@ -3299,6 +3300,47 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			"workflow_failed",
 			{"project_name": "Demo", "phase": "failed"},
 		)
+	]
+	execute_project = ProjectState(project_name="Demo", goal="Build demo")
+	execute_task = Task(id="exec", title="Execute", description="Execute", assigned_to="architect")
+	execute_project.add_task(execute_task)
+	execute_progress: list[str] = []
+	assert execute_workflow_task(
+		execute_project,
+		task=execute_task,
+		run_task=lambda current_task, _project: execute_progress.append(f"run:{current_task.id}"),
+		exit_if_workflow_cancelled=lambda _project: False,
+		exit_if_workflow_paused=lambda _project: False,
+		classify_task_failure=lambda _task, _exc: FailureCategory.UNKNOWN.value,
+		dispatch_task_failure=lambda *_args, **_kwargs: "raise",
+		emit_workflow_progress=lambda _project, *, task: execute_progress.append(f"progress:{task.id}"),
+	) == "continue"
+	assert execute_progress == ["run:exec", "progress:exec"]
+	assert execute_workflow_task(
+		execute_project,
+		task=execute_task,
+		run_task=lambda *_args, **_kwargs: None,
+		exit_if_workflow_cancelled=lambda _project: True,
+		exit_if_workflow_paused=lambda _project: False,
+		classify_task_failure=lambda _task, _exc: FailureCategory.UNKNOWN.value,
+		dispatch_task_failure=lambda *_args, **_kwargs: "raise",
+		emit_workflow_progress=lambda *_args, **_kwargs: None,
+	) == "return"
+	failure_dispatch_calls: list[tuple[str, str]] = []
+	with pytest.raises(RuntimeError, match="boom"):
+		execute_workflow_task(
+			execute_project,
+			task=execute_task,
+			run_task=lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+			exit_if_workflow_cancelled=lambda _project: False,
+			exit_if_workflow_paused=lambda _project: False,
+			classify_task_failure=lambda task, _exc: failure_dispatch_calls.append((task.id, "classified")) or FailureCategory.UNKNOWN.value,
+			dispatch_task_failure=lambda current_project, *, task, failure_category: failure_dispatch_calls.append((task.id, failure_category)) or "raise",
+			emit_workflow_progress=lambda *_args, **_kwargs: None,
+		)
+	assert failure_dispatch_calls == [
+		("exec", "classified"),
+		("exec", FailureCategory.UNKNOWN.value),
 	]
 
 

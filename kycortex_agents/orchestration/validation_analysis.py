@@ -32,6 +32,38 @@ WARNING_TEST_ISSUE_KEYS: frozenset[str] = frozenset(
 )
 
 
+def collect_code_validation_issues(
+    code_analysis: dict[str, Any],
+    line_budget: Optional[int],
+    task_public_contract_preflight: Optional[dict[str, Any]],
+    import_validation: Optional[dict[str, Any]],
+    completion_diagnostics: dict[str, Any],
+    completion_validation_issue: Callable[[dict[str, Any]], str],
+) -> list[str]:
+    validation_issues: list[str] = []
+    if not code_analysis.get("syntax_ok", True):
+        validation_issues.append(f"syntax error {code_analysis.get('syntax_error') or 'unknown syntax error'}")
+    if isinstance(line_budget, int) and code_analysis.get("line_count", 0) > line_budget:
+        validation_issues.append(f"line count {code_analysis['line_count']} exceeds maximum {line_budget}")
+    if code_analysis.get("main_guard_required") and not code_analysis.get("has_main_guard"):
+        validation_issues.append("missing required CLI entrypoint")
+    if isinstance(import_validation, dict) and import_validation.get("ran") and import_validation.get("returncode") not in (None, 0):
+        import_summary = import_validation.get("summary") or "generated module failed to import"
+        validation_issues.append(f"module import failed: {import_summary}")
+    if isinstance(task_public_contract_preflight, dict):
+        contract_issues = task_public_contract_preflight.get("issues") or []
+        if contract_issues:
+            validation_issues.append(f"task public contract mismatch: {', '.join(contract_issues)}")
+    invalid_dataclass_field_usages = code_analysis.get("invalid_dataclass_field_usages") or []
+    if invalid_dataclass_field_usages:
+        validation_issues.append(
+            f"non-dataclass field(...) usage: {', '.join(invalid_dataclass_field_usages)}"
+        )
+    if completion_diagnostics.get("likely_truncated"):
+        validation_issues.append(completion_validation_issue(completion_diagnostics))
+    return validation_issues
+
+
 def pytest_failure_details(test_execution: Optional[dict[str, Any]], limit: int = 3) -> list[str]:
     if not isinstance(test_execution, dict):
         return []

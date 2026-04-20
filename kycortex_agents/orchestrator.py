@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.validation_runtime import (
     validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
+    collect_code_validation_issues,
     pytest_contract_overreach_signals,
     pytest_failure_details,
     pytest_failure_is_semantic_assertion_mismatch,
@@ -566,31 +567,14 @@ class Orchestrator:
         if import_validation is not None:
             self._record_output_validation(output, "import_validation", import_validation)
         self._record_output_validation(output, "completion_diagnostics", completion_diagnostics)
-        validation_issues: list[str] = []
-        if not code_analysis.get("syntax_ok", True):
-            validation_issues.append(f"syntax error {code_analysis.get('syntax_error') or 'unknown syntax error'}")
-        if isinstance(line_budget, int) and code_analysis["line_count"] > line_budget:
-            validation_issues.append(f"line count {code_analysis['line_count']} exceeds maximum {line_budget}")
-        if code_analysis.get("main_guard_required") and not code_analysis.get("has_main_guard"):
-            validation_issues.append("missing required CLI entrypoint")
-        if (
-            isinstance(import_validation, dict)
-            and import_validation.get("ran")
-            and import_validation.get("returncode") not in (None, 0)
-        ):
-            import_summary = import_validation.get("summary") or "generated module failed to import"
-            validation_issues.append(f"module import failed: {import_summary}")
-        if isinstance(task_public_contract_preflight, dict):
-            contract_issues = task_public_contract_preflight.get("issues") or []
-            if contract_issues:
-                validation_issues.append(f"task public contract mismatch: {', '.join(contract_issues)}")
-        invalid_dataclass_field_usages = code_analysis.get("invalid_dataclass_field_usages") or []
-        if invalid_dataclass_field_usages:
-            validation_issues.append(
-                f"non-dataclass field(...) usage: {', '.join(invalid_dataclass_field_usages)}"
-            )
-        if completion_diagnostics.get("likely_truncated"):
-            validation_issues.append(self._completion_validation_issue(completion_diagnostics))
+        validation_issues = collect_code_validation_issues(
+            code_analysis,
+            line_budget,
+            task_public_contract_preflight,
+            import_validation,
+            completion_diagnostics,
+            self._completion_validation_issue,
+        )
         if validation_issues:
             raise AgentExecutionError(f"Generated code validation failed: {'; '.join(validation_issues)}")
 

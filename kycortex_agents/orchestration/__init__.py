@@ -288,6 +288,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 from kycortex_agents.orchestration.validation_analysis import (
 	BLOCKING_TEST_ISSUE_KEYS,
 	WARNING_TEST_ISSUE_KEYS,
+	collect_code_validation_issues,
 	pytest_contract_overreach_signals,
 	pytest_failure_details,
 	pytest_failure_is_semantic_assertion_mismatch,
@@ -533,6 +534,7 @@ __all__ = [
 	"validation_has_blocking_issues",
 	"validation_has_only_warnings",
 	"validation_has_static_issues",
+	"collect_code_validation_issues",
 	"validation_summary_helper_alias_names",
 	"validation_summary_symbols",
 	"validation_summary_has_missing_datetime_import_issue",

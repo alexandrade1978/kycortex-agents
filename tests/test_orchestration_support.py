@@ -274,6 +274,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
+	collect_code_validation_issues,
 	collect_test_validation_issues,
 	pytest_contract_overreach_signals,
 	pytest_failure_details,
@@ -4333,6 +4334,34 @@ def test_validation_analysis_helpers_classify_blocking_and_warning_issues_direct
 	assert validation_has_blocking_issues(blocking_validation) is True
 	assert validation_has_blocking_issues(warning_validation) is False
 	assert validation_has_only_warnings(warning_validation) is True
+
+
+def test_collect_code_validation_issues_classifies_all_current_failure_paths_directly():
+	issues = collect_code_validation_issues(
+		{
+			"syntax_ok": False,
+			"syntax_error": "invalid syntax",
+			"line_count": 12,
+			"main_guard_required": True,
+			"has_main_guard": False,
+			"invalid_dataclass_field_usages": ["field(name='x')"],
+		},
+		10,
+		{"issues": ["must expose run()"]},
+		{"ran": True, "returncode": 1, "summary": "ImportError: nope"},
+		{"likely_truncated": True},
+		lambda diagnostics: "output likely truncated",
+	)
+
+	assert issues == [
+		"syntax error invalid syntax",
+		"line count 12 exceeds maximum 10",
+		"missing required CLI entrypoint",
+		"module import failed: ImportError: nope",
+		"task public contract mismatch: must expose run()",
+		"non-dataclass field(...) usage: field(name='x')",
+		"output likely truncated",
+	]
 
 
 def test_collect_test_validation_issues_classifies_blocking_warning_and_pytest_paths_directly():

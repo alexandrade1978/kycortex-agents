@@ -35,6 +35,7 @@ from kycortex_agents.orchestration.context_building import (
     apply_completed_task_artifact_contexts,
     apply_completed_task_output_to_context,
     apply_repair_context_to_context,
+    build_task_context_base,
 )
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
@@ -800,36 +801,21 @@ class Orchestrator:
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
         snapshot = project.snapshot()
         agent_view = self._build_agent_view(task, project, snapshot)
+        agent_view_snapshot = asdict(agent_view)
         visible_task_ids = self._task_dependency_closure_ids(task, project)
         execution_agent_name = self._execution_agent_name(task)
         repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
         budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
         if not isinstance(budget_decomposition_plan_task_id, str) or not budget_decomposition_plan_task_id.strip():
             budget_decomposition_plan_task_id = None
-        ctx: Dict[str, Any] = {
-            "goal": project.goal,
-            "project_name": project.project_name,
-            "phase": project.phase,
-            "provider_max_tokens": self.config.max_tokens,
-            "task": {
-                "id": task.id,
-                "title": task.title,
-                "description": task.description,
-                "assigned_to": task.assigned_to,
-                "execution_agent": execution_agent_name,
-            },
-            "snapshot": asdict(agent_view),
-            "completed_tasks": {},
-            "decisions": agent_view.decisions,
-            "artifacts": agent_view.artifacts,
-        }
-        ctx.update(self._planned_module_context(project, visible_task_ids, current_task=task))
-        planned_module_name = ctx.get("planned_module_name")
-        planned_module_filename = ctx.get("planned_module_filename")
-        if isinstance(planned_module_name, str) and planned_module_name.strip():
-            ctx["module_name"] = planned_module_name
-        if isinstance(planned_module_filename, str) and planned_module_filename.strip():
-            ctx["module_filename"] = planned_module_filename
+        ctx = build_task_context_base(
+            task,
+            project,
+            execution_agent_name=execution_agent_name,
+            provider_max_tokens=self.config.max_tokens,
+            agent_view_snapshot=agent_view_snapshot,
+            planned_module_context=self._planned_module_context(project, visible_task_ids, current_task=task),
+        )
         task_public_contract_anchor = self._task_public_contract_anchor(task.description)
         compact_architecture_context = apply_task_public_contract_context(
             ctx,

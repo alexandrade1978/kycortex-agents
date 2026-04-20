@@ -5,6 +5,42 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 
+def build_task_context_base(
+    task: Any,
+    project: Any,
+    *,
+    execution_agent_name: str,
+    provider_max_tokens: int,
+    agent_view_snapshot: dict[str, Any],
+    planned_module_context: dict[str, Any],
+) -> dict[str, Any]:
+    ctx: dict[str, Any] = {
+        "goal": project.goal,
+        "project_name": project.project_name,
+        "phase": project.phase,
+        "provider_max_tokens": provider_max_tokens,
+        "task": {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "assigned_to": task.assigned_to,
+            "execution_agent": execution_agent_name,
+        },
+        "snapshot": agent_view_snapshot,
+        "completed_tasks": {},
+        "decisions": agent_view_snapshot.get("decisions", []),
+        "artifacts": agent_view_snapshot.get("artifacts", []),
+    }
+    ctx.update(planned_module_context)
+    planned_module_name = ctx.get("planned_module_name")
+    planned_module_filename = ctx.get("planned_module_filename")
+    if isinstance(planned_module_name, str) and planned_module_name.strip():
+        ctx["module_name"] = planned_module_name
+    if isinstance(planned_module_filename, str) and planned_module_filename.strip():
+        ctx["module_filename"] = planned_module_filename
+    return ctx
+
+
 def apply_task_public_contract_context(
     ctx: dict[str, Any],
     *,

@@ -32,6 +32,7 @@ from kycortex_agents.orchestration.context_building import (
 	apply_completed_task_artifact_contexts,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
+	build_task_context_base,
 )
 from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
@@ -392,6 +393,32 @@ def test_apply_repair_context_to_context_populates_code_repair_fields():
 	assert ctx["repair_validation_summary"] == "code summary"
 	assert ctx["existing_code"] == "def repaired():\n    return 2"
 	assert ctx["existing_tests"] == "def test_existing():\n    assert True"
+
+
+def test_build_task_context_base_applies_planned_module_aliases_directly():
+	task = SimpleNamespace(id="code", title="Implement", description="desc", assigned_to="code_engineer")
+	project = SimpleNamespace(goal="ship", project_name="demo", phase="build")
+	snapshot = {"decisions": ["d1"], "artifacts": ["a1"], "workflow_status": "running"}
+
+	ctx = build_task_context_base(
+		task,
+		project,
+		execution_agent_name="code_engineer",
+		provider_max_tokens=4096,
+		agent_view_snapshot=snapshot,
+		planned_module_context={
+			"planned_module_name": "code_implementation",
+			"planned_module_filename": "code_implementation.py",
+		},
+	)
+
+	assert ctx["goal"] == "ship"
+	assert ctx["provider_max_tokens"] == 4096
+	assert ctx["snapshot"] is snapshot
+	assert ctx["decisions"] == ["d1"]
+	assert ctx["artifacts"] == ["a1"]
+	assert ctx["module_name"] == "code_implementation"
+	assert ctx["module_filename"] == "code_implementation.py"
 
 
 def test_apply_completed_task_output_to_context_tracks_completed_and_semantic_outputs():

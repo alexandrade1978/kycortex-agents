@@ -24,6 +24,7 @@ from kycortex_agents.orchestration.context_building import (
 	apply_completed_task_artifact_contexts,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
+	build_task_context_base,
 )
 from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, AcceptanceLane, TaskAcceptanceLists
 from kycortex_agents.orchestration.private_files import (
@@ -369,6 +370,7 @@ __all__ = [
 	"apply_completed_task_artifact_contexts",
 	"apply_completed_task_output_to_context",
 	"apply_repair_context_to_context",
+	"build_task_context_base",
 	"AcceptanceEvaluation",
 	"AcceptanceLane",
 	"TaskAcceptanceLists",

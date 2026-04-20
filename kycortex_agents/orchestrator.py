@@ -51,7 +51,6 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_test_targets,
     build_code_outline,
     callable_parameter_names,
-    collect_isinstance_calls,
     comparison_required_field,
     call_signature_details,
     call_expression_basename,
@@ -62,26 +61,19 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     entrypoint_symbol_names,
     example_from_default,
     extract_batch_rule,
-    extract_class_definition_style,
     extract_constructor_storage_rule,
     extract_indirect_required_fields,
     extract_lookup_field_rules,
     extract_required_fields,
     extract_score_derivation_rule,
-    extract_return_type_annotation,
     extract_sequence_input_rule,
-    extract_type_constraints,
-    extract_valid_literal_examples,
     expand_local_name_aliases,
     field_selector_name,
     first_user_parameter,
     function_returns_score_value,
     helper_classes_to_avoid,
-    infer_dict_key_value_examples,
     inline_score_helper_expression,
     is_probable_third_party_import,
-    isinstance_subject_name,
-    isinstance_type_names,
     method_binding_kind,
     parameter_is_iterated,
     parse_behavior_contract,
@@ -142,7 +134,6 @@ from kycortex_agents.orchestration.task_constraints import (
     task_requires_cli_entrypoint,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
-    assert_expects_false,
     analyze_test_module,
     analyze_test_behavior_contracts,
     auto_fix_test_type_mismatches,
@@ -164,19 +155,16 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     extract_literal_list_items,
     extract_parametrize_argument_names,
     extract_string_literals,
-    find_contract_overreach_signals,
     function_argument_names,
     infer_argument_type,
     infer_call_result_type,
     infer_expression_type,
     int_constant_value,
     is_internal_score_state_target,
-    iter_relevant_test_body_nodes,
     payload_argument_for_validation,
     resolve_bound_value,
     name_suggests_validation_failure,
     validate_batch_call,
-    visible_repeated_single_call_batch_sizes,
     with_uses_pytest_assertion_context,
     with_uses_pytest_raises,
 )
@@ -1045,16 +1033,6 @@ class Orchestrator:
     def _build_code_behavior_contract(self, raw_content: str) -> str:
         return build_code_behavior_contract(raw_content)
 
-    @staticmethod
-    def _extract_class_definition_style(node: ast.ClassDef) -> str:
-        """Return a human-readable description of how the class is defined."""
-        return extract_class_definition_style(node)
-
-    @staticmethod
-    def _extract_return_type_annotation(class_name: str | None, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-        """Return a description of the return type annotation if present."""
-        return extract_return_type_annotation(class_name, node)
-
     def _extract_constructor_storage_rule(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
         return extract_constructor_storage_rule(node)
 
@@ -1130,32 +1108,8 @@ class Orchestrator:
         return field_selector_name(node)
 
     @staticmethod
-    def _infer_dict_key_value_examples(tree: ast.AST) -> Dict[str, Dict[str, str]]:
-        return infer_dict_key_value_examples(tree)
-
-    @staticmethod
     def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
         return dict_accessed_keys_from_tree(tree)
-
-    def _extract_type_constraints(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-    ) -> Dict[str, list[str]]:
-        """Extract isinstance() type checks from if-guards and raise blocks."""
-        return extract_type_constraints(node)
-
-    def _collect_isinstance_calls(self, node: ast.AST, result: list[ast.Call]) -> None:
-        collect_isinstance_calls(node, result)
-
-    def _isinstance_subject_name(self, node: ast.AST) -> str:
-        return isinstance_subject_name(node)
-
-    def _isinstance_type_names(self, node: ast.AST) -> list[str]:
-        return isinstance_type_names(node)
-
-    def _extract_valid_literal_examples(self, raw_content: str) -> Dict[str, str]:
-        """Extract sample dict/list literals from top-level constant assignments."""
-        return extract_valid_literal_examples(raw_content)
 
     def _extract_batch_rule(
         self,
@@ -1282,24 +1236,6 @@ class Orchestrator:
             rendered_target,
         )
 
-    def _find_contract_overreach_signals(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        bindings: Dict[str, ast.AST],
-        code_behavior_contract: str = "",
-    ) -> list[str]:
-        return find_contract_overreach_signals(node, bindings, code_behavior_contract)
-
-    def _visible_repeated_single_call_batch_sizes(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        bindings: Dict[str, ast.AST],
-    ) -> list[int]:
-        return visible_repeated_single_call_batch_sizes(node, bindings)
-
-    def _assert_expects_false(self, node: ast.Assert, call_node: ast.Call) -> bool:
-        return assert_expects_false(node, call_node)
-
     def _with_uses_pytest_raises(self, node: ast.With | ast.AsyncWith) -> bool:
         return with_uses_pytest_raises(node)
 
@@ -1390,9 +1326,6 @@ class Orchestrator:
         function_map: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> tuple[list[str], list[str]]:
         return analyze_typed_test_member_usage(node, local_types, class_map, function_map)
-
-    def _iter_relevant_test_body_nodes(self, node: ast.AST):
-        yield from iter_relevant_test_body_nodes(node)
 
     def _bound_target_names(self, target: ast.AST) -> set[str]:
         return bound_target_names(target)

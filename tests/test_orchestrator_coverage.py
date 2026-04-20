@@ -9,6 +9,12 @@ import ast
 import pytest
 
 from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.orchestration.module_ast_analysis import (
+    extract_type_constraints,
+    infer_dict_key_value_examples,
+    isinstance_subject_name,
+    isinstance_type_names,
+)
 from kycortex_agents.orchestration.repair_test_analysis import module_defined_symbol_names
 from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support, known_type_allows_member, parent_map, patched_target_name_from_call
 from kycortex_agents.orchestration import (
@@ -247,23 +253,23 @@ class TestInferArgumentType:
 class TestIsinstanceSubjectName:
     def test_name_node(self, orch):
         node = ast.parse("x", mode="eval").body
-        assert orch._isinstance_subject_name(node) == "x"
+        assert isinstance_subject_name(node) == "x"
 
     def test_attribute_node(self, orch):
         node = ast.parse("obj.attr", mode="eval").body
-        assert orch._isinstance_subject_name(node) == "attr"
+        assert isinstance_subject_name(node) == "attr"
 
     def test_subscript_node(self, orch):
         node = ast.parse("d['key']", mode="eval").body
-        assert orch._isinstance_subject_name(node) == "key"
+        assert isinstance_subject_name(node) == "key"
 
     def test_call_get_method(self, orch):
         node = ast.parse("d.get('field')", mode="eval").body
-        assert orch._isinstance_subject_name(node) == "field"
+        assert isinstance_subject_name(node) == "field"
 
     def test_unrecognised(self, orch):
         node = ast.parse("1 + 2", mode="eval").body
-        assert orch._isinstance_subject_name(node) == ""
+        assert isinstance_subject_name(node) == ""
 
 
 # ---------------------------------------------------------------------------
@@ -273,25 +279,25 @@ class TestIsinstanceSubjectName:
 class TestIsinstanceTypeNames:
     def test_single_name(self, orch):
         node = ast.parse("int", mode="eval").body
-        assert orch._isinstance_type_names(node) == ["int"]
+        assert isinstance_type_names(node) == ["int"]
 
     def test_attribute(self, orch):
         node = ast.parse("module.MyClass", mode="eval").body
-        result = orch._isinstance_type_names(node)
+        result = isinstance_type_names(node)
         assert len(result) == 1
         assert "MyClass" in result[0]
 
     def test_tuple_of_types(self, orch):
         node = ast.parse("(int, str, float)", mode="eval").body
-        assert orch._isinstance_type_names(node) == ["int", "str", "float"]
+        assert isinstance_type_names(node) == ["int", "str", "float"]
 
     def test_empty_tuple(self, orch):
         node = ast.parse("()", mode="eval").body
-        assert orch._isinstance_type_names(node) == []
+        assert isinstance_type_names(node) == []
 
     def test_non_type_expression(self, orch):
         node = ast.parse("42", mode="eval").body
-        assert orch._isinstance_type_names(node) == []
+        assert isinstance_type_names(node) == []
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +312,7 @@ class TestExtractTypeConstraints:
             "        raise TypeError('bad')\n"
         )
         func = ast.parse(code).body[0]
-        constraints = orch._extract_type_constraints(func)
+        constraints = extract_type_constraints(func)
         assert "data" in constraints
         assert "dict" in constraints["data"]
 
@@ -317,7 +323,7 @@ class TestExtractTypeConstraints:
             "        raise TypeError('bad')\n"
         )
         func = ast.parse(code).body[0]
-        constraints = orch._extract_type_constraints(func)
+        constraints = extract_type_constraints(func)
         assert "value" in constraints
         assert "str" in constraints["value"]
         assert "int" in constraints["value"]
@@ -325,7 +331,7 @@ class TestExtractTypeConstraints:
     def test_no_isinstance(self, orch):
         code = "def validate(data):\n    return data\n"
         func = ast.parse(code).body[0]
-        constraints = orch._extract_type_constraints(func)
+        constraints = extract_type_constraints(func)
         assert constraints == {}
 
 
@@ -773,25 +779,25 @@ class TestInferDictKeyValueExamples:
     def test_get_with_int_default(self, orch):
         code = "details.get('count', 0)"
         tree = ast.parse(code)
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert result["details"]["count"] == "1"
 
     def test_get_with_bool_default(self, orch):
         code = "details.get('active', False)"
         tree = ast.parse(code)
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert result["details"]["active"] == "False"
 
     def test_get_with_list_default(self, orch):
         code = "details.get('items', [])"
         tree = ast.parse(code)
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert result["details"]["items"] == "['sample']"
 
     def test_get_with_string_default(self, orch):
         code = "details.get('name', 'unknown')"
         tree = ast.parse(code)
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert result["details"]["name"] == "'unknown'"
 
     def test_alias_resolution(self, orch):
@@ -800,7 +806,7 @@ class TestInferDictKeyValueExamples:
             "d.get('count', 0)\n"
         )
         tree = ast.parse(code)
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert "details" in result
         assert result["details"]["count"] == "1"
 
@@ -811,7 +817,7 @@ class TestInferDictKeyValueExamples:
             "details.get('items', [])\n"
         )
         tree = ast.parse(code)
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert result["details"]["prior_returns"] == "1"
         assert result["details"]["receipt_present"] == "False"
         assert result["details"]["items"] == "['sample']"
@@ -819,12 +825,12 @@ class TestInferDictKeyValueExamples:
     def test_no_default_arg(self, orch):
         code = "details.get('key')"
         tree = ast.parse(code)
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert result == {}
 
     def test_empty_code(self, orch):
         tree = ast.parse("")
-        result = Orchestrator._infer_dict_key_value_examples(tree)
+        result = infer_dict_key_value_examples(tree)
         assert result == {}
 
 

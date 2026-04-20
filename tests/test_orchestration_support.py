@@ -93,6 +93,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 from kycortex_agents.orchestration.test_ast_analysis import (
 	analyze_test_behavior_contracts,
 	analyze_test_type_mismatches,
+	auto_fix_test_type_mismatches,
 )
 from kycortex_agents.orchestration.private_files import (
 	harden_private_directory_permissions,
@@ -724,6 +725,32 @@ def test_analyze_test_type_mismatches_reports_only_non_negative_type_mismatches(
 	assert mismatches == [
 		"validate_request passes tuple for `details` (expected dict) at line 2"
 	]
+
+
+def test_auto_fix_test_type_mismatches_reuses_existing_dict_variable_and_skips_negative_tests():
+	impl_code = (
+		"class Service:\n"
+		"    def handle(self, details):\n"
+		"        return details['name']\n"
+	)
+	test_code = (
+		"def test_handle():\n"
+		"    details = {'name': 'alice'}\n"
+		"    s = Service()\n"
+		"    s.handle(details='test')\n\n"
+		"def test_validation_failure():\n"
+		"    s = Service()\n"
+		"    s.handle(details='bad')\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(
+		test_code,
+		impl_code,
+		lambda tree: {"details": ["name"]},
+	)
+
+	assert "s.handle(details=details)" in fixed
+	assert "details='bad'" in fixed
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

@@ -943,6 +943,84 @@ def analyze_test_type_mismatches(
     return sorted(mismatches)
 
 
+def auto_fix_test_type_mismatches(
+    test_content: str,
+    code_content: str,
+    dict_accessed_keys_from_tree: Callable[[ast.AST], Dict[str, list[str]]],
+) -> str:
+    """Auto-fix str->dict type mismatches in generated test code."""
+    try:
+        impl_tree = ast.parse(code_content)
+    except SyntaxError:
+        return test_content
+    dict_keys = dict_accessed_keys_from_tree(impl_tree)
+    if not dict_keys:
+        return test_content
+
+    skip_lines: set[int] = set()
+    try:
+        test_tree = ast.parse(test_content)
+        for node in ast.walk(test_tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not node.name.startswith("test_"):
+                continue
+            name_lower = node.name.lower()
+            is_negative = "validation_failure" in name_lower or "invalid" in name_lower
+            if not is_negative:
+                func_src = ast.get_source_segment(test_content, node) or ""
+                if "is False" in func_src or "is_valid is False" in func_src:
+                    is_negative = True
+            if is_negative:
+                start = node.lineno - 1
+                end = node.end_lineno or node.lineno
+                for line_number in range(start, end):
+                    skip_lines.add(line_number)
+    except SyntaxError:
+        pass
+
+    func_var_dict_ranges: list[tuple[int, int, set[str]]] = []
+    try:
+        test_tree = ast.parse(test_content)
+        for node in ast.walk(test_tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not node.name.startswith("test_"):
+                continue
+            dict_assigned_vars: set[str] = set()
+            for child in ast.walk(node):
+                if isinstance(child, ast.Assign) and len(child.targets) == 1:
+                    target = child.targets[0]
+                    if isinstance(target, ast.Name) and isinstance(child.value, ast.Dict):
+                        dict_assigned_vars.add(target.id)
+            start = node.lineno - 1
+            end = node.end_lineno or node.lineno
+            func_var_dict_ranges.append((start, end, dict_assigned_vars))
+    except SyntaxError:
+        pass
+
+    lines = test_content.split("\n")
+    for param_name, keys in dict_keys.items():
+        if not keys:
+            continue
+        dict_literal = "{" + ", ".join(f"'{key}': 'value'" for key in sorted(keys)) + "}"
+        str_pattern = re.compile(
+            rf"\b({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")"
+        )
+        for line_index, line in enumerate(lines):
+            if line_index in skip_lines:
+                continue
+            if not str_pattern.search(line):
+                continue
+            replacement = dict_literal
+            for start, end, dict_assigned_vars in func_var_dict_ranges:
+                if start <= line_index < end and param_name in dict_assigned_vars:
+                    replacement = param_name
+                    break
+            lines[line_index] = str_pattern.sub(rf"\1={replacement}", line)
+    return "\n".join(lines)
+
+
 def assert_limits_batch_result(
     test: ast.AST,
     result_name: Optional[str],
@@ -1247,6 +1325,7 @@ __all__ = [
     "assert_expects_invalid_outcome",
     "assert_limits_batch_result",
     "assigned_name_for_call",
+    "auto_fix_test_type_mismatches",
     "call_expects_invalid_outcome",
     "call_has_negative_expectation",
     "ast_contains_node",

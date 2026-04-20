@@ -183,6 +183,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     assert_limits_batch_result,
     assigned_name_for_call,
     analyze_test_behavior_contracts,
+    auto_fix_test_type_mismatches,
     analyze_test_type_mismatches,
     analyze_typed_test_member_usage,
     ast_contains_node,
@@ -2450,104 +2451,11 @@ class Orchestrator:
         test_content: str,
         code_content: str,
     ) -> str:
-        """Auto-fix str→dict type mismatches in generated test code.
-
-        Scans the implementation code to discover which parameters are used
-        as dicts (via subscript/key-access patterns).  Then replaces any
-        ``param='...'`` string literal in the test with a dict literal
-        containing the discovered keys.  This catches mismatches in ALL
-        call sites (constructors, handle_request, validate_request, etc.)
-        rather than only the specific lines reported by the type checker.
-
-        Lines inside test functions that intentionally test validation
-        failure (name contains ``validation_failure`` / ``invalid``, or
-        the body asserts ``is False``) are left untouched so that the
-        deliberately-wrong type continues to trigger a validation error.
-        """
-        try:
-            impl_tree = ast.parse(code_content)
-        except SyntaxError:
-            return test_content
-        dict_keys = self._dict_accessed_keys_from_tree(impl_tree)
-        if not dict_keys:
-            return test_content
-
-        # Determine line ranges belonging to negative-expectation tests
-        # so the auto-fix does not "correct" intentionally-wrong types.
-        skip_lines: set[int] = set()
-        try:
-            test_tree = ast.parse(test_content)
-            for node in ast.walk(test_tree):
-                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    continue
-                if not node.name.startswith("test_"):
-                    continue
-                name_lower = node.name.lower()
-                is_negative = "validation_failure" in name_lower or "invalid" in name_lower
-                if not is_negative:
-                    # Check body for `is_valid is False` / `is False` patterns
-                    func_src = ast.get_source_segment(test_content, node) or ""
-                    if "is False" in func_src or "is_valid is False" in func_src:
-                        is_negative = True
-                if is_negative:
-                    start = node.lineno - 1  # 0-based
-                    end = node.end_lineno or node.lineno
-                    for ln in range(start, end):
-                        skip_lines.add(ln)
-        except SyntaxError:
-            pass
-
-        # Build per-function variable maps: if a test function already
-        # assigns ``param = {dict_literal}``, reuse the variable instead
-        # of injecting a generic ``{'key': 'value'}`` replacement.
-        func_var_dict_ranges: list[tuple[int, int, set[str]]] = []
-        try:
-            _tree = ast.parse(test_content)
-            for node in ast.walk(_tree):
-                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    continue
-                if not node.name.startswith("test_"):
-                    continue
-                dict_assigned_vars: set[str] = set()
-                for child in ast.walk(node):
-                    if isinstance(child, ast.Assign) and len(child.targets) == 1:
-                        target = child.targets[0]
-                        if isinstance(target, ast.Name) and isinstance(child.value, ast.Dict):
-                            dict_assigned_vars.add(target.id)
-                start = node.lineno - 1
-                end = node.end_lineno or node.lineno
-                func_var_dict_ranges.append((start, end, dict_assigned_vars))
-        except SyntaxError:
-            pass
-
-        lines = test_content.split("\n")
-        for param_name, keys in dict_keys.items():
-            if not keys:
-                continue
-            dict_literal = (
-                "{"
-                + ", ".join(f"'{k}': 'value'" for k in sorted(keys))
-                + "}"
-            )
-            str_pattern = re.compile(
-                rf"\b({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")"
-            )
-            for i, line in enumerate(lines):
-                if i in skip_lines:
-                    continue
-                if str_pattern.search(line):
-                    # If the same function already has ``param_name = {dict}``,
-                    # substitute with the variable reference instead of a
-                    # generic dict literal.
-                    replacement = dict_literal
-                    for fstart, fend, dvars in func_var_dict_ranges:
-                        if fstart <= i < fend and param_name in dvars:
-                            replacement = param_name
-                            break
-                    lines[i] = str_pattern.sub(
-                        rf"\1={replacement}", line
-                    )
-        return "\n".join(lines)
+        return auto_fix_test_type_mismatches(
+            test_content,
+            code_content,
+            self._dict_accessed_keys_from_tree,
+        )
 
     def _analyze_test_type_mismatches(
         self,

@@ -135,7 +135,6 @@ from kycortex_agents.orchestration.repair_signals import (
     validation_summary_has_required_evidence_runtime_issue,
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
-    failed_test_requires_code_repair,
     imported_code_task_for_failed_test,
     is_helper_alias_like_name,
     module_defined_symbol_names,
@@ -143,6 +142,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     previous_valid_test_surface,
     qa_repair_should_reuse_failed_test_artifact,
     helper_surface_usages_for_test_repair_runtime,
+    failed_test_requires_code_repair_runtime,
     upstream_code_task_for_test_failure,
     validation_summary_helper_alias_names,
     validation_summary_symbols,
@@ -975,9 +975,9 @@ class Orchestrator:
         return build_repair_validation_summary(task, failure_category, self._validation_payload(task))
 
     def _test_failure_requires_code_repair(self, task: Task) -> bool:
-        return failed_test_requires_code_repair(
+        return failed_test_requires_code_repair_runtime(
             task,
-            self._validation_payload(task),
+            validation_payload=self._validation_payload,
             pytest_failure_origin=self._pytest_failure_origin,
             pytest_contract_overreach_signals=self._pytest_contract_overreach_signals,
             test_validation_has_blocking_issues=self._test_validation_has_blocking_issues,

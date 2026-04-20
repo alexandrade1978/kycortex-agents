@@ -153,6 +153,7 @@ from kycortex_agents.orchestration.repair_signals import (
 from kycortex_agents.orchestration.repair_test_analysis import (
 	analyze_test_repair_surface,
 	failed_test_requires_code_repair,
+	failed_test_requires_code_repair_runtime,
 	imported_code_task_for_failed_test,
 	is_helper_alias_like_name,
 	module_defined_symbol_names,
@@ -3718,6 +3719,23 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		test_validation_has_blocking_issues=lambda _validation: False,
 		pytest_failure_is_semantic_assertion_mismatch=lambda _execution: True,
 	) is False
+	assert failed_test_requires_code_repair_runtime(
+		Task(
+			id="tests",
+			title="Tests",
+			description="Write tests",
+			assigned_to="qa_tester",
+			last_error_category=FailureCategory.TEST_VALIDATION.value,
+		),
+		validation_payload=lambda task: {
+			"test_execution": {"ran": True, "returncode": 1, "stdout": "FAILED test_module.py::test_ok\n"},
+			"pytest_failure_origin": "code_under_test",
+		},
+		pytest_failure_origin=lambda *_args: "tests",
+		pytest_contract_overreach_signals=lambda _execution: [],
+		test_validation_has_blocking_issues=lambda _validation: False,
+		pytest_failure_is_semantic_assertion_mismatch=lambda _execution: False,
+	) is True
 	lookup_project = ProjectState(project_name="Demo", goal="Build demo")
 	lookup_project.add_task(Task(id="code", title="Code", description="Code", assigned_to="code_engineer"))
 	lookup_project.add_task(Task(id="code__repair_1", title="Repair code", description="Repair code", assigned_to="code_engineer", repair_origin_task_id="code"))

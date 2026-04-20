@@ -82,6 +82,12 @@ This file summarizes the evolution of the project in operational language, based
 - the extracted support now owns validation-payload lookup plus helper-surface usage dispatch through `helper_surface_usages_for_test_repair_runtime(...)`
 - `Orchestrator` now delegates that helper-surface shell through shared repair-test analysis support, while focused regressions re-cleared locally at `767 passed`, with `ruff` and `mypy` also green across 69 source files
 
+## Local operational milestone on 2026-04-20 - Failed-test code-repair runtime slice recorded
+
+- the next deterministic refactor slice co-located `_test_failure_requires_code_repair(...)` into `kycortex_agents/orchestration/repair_test_analysis.py`
+- the extracted support now owns validation-payload lookup plus failed-test code-repair dispatch through `failed_test_requires_code_repair_runtime(...)`
+- `Orchestrator` now delegates that failed-test routing shell through shared repair-test analysis support, while focused regressions re-cleared locally at `767 passed`, with `ruff` and `mypy` also green across 69 source files
+
 ## Local operational milestone on 2026-04-20 - Test validation runtime façade slice recorded
 
 - the next deterministic refactor slice co-located the remaining `_validate_test_output(...)` orchestration shell into `kycortex_agents/orchestration/validation_runtime.py`

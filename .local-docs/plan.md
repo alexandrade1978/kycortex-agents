@@ -69,7 +69,8 @@
 - Most recent completed slices after restart also include repair-instruction runtime extraction into `kycortex_agents/orchestration/repair_instructions.py`, moving `_build_repair_instruction(...)` out of `Orchestrator`
 - Most recent completed slices after restart also include test-repair helper-surface runtime extraction into `kycortex_agents/orchestration/repair_test_analysis.py`, moving `_test_repair_helper_surface_usages(...)` out of `Orchestrator`
 - Validation status at checkpoint: `pytest tests/test_orchestration_support.py tests/test_orchestrator.py tests/test_orchestrator_coverage.py -q` (`767 passed`), `python -m ruff check .`, and `python -m mypy` all green after the latest slice
-- Next intended remap after restart: continue from the next deterministic repair/output boundary now that the helper-surface lookup shell is also out of `Orchestrator`
+- Most recent completed slices after restart also include failed-test code-repair runtime extraction into `kycortex_agents/orchestration/repair_test_analysis.py`, moving `_test_failure_requires_code_repair(...)` out of `Orchestrator`
+- Next intended remap after restart: continue from the next deterministic repair/output boundary now that the failed-test code-repair decision shell is also out of `Orchestrator`
 
 ## 2026-04-18 Refactor reset
 

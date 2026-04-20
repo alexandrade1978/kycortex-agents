@@ -179,6 +179,25 @@ def failed_test_requires_code_repair(
     return failure_origin == "tests" and pytest_failure_is_semantic_assertion_mismatch(test_execution)
 
 
+def failed_test_requires_code_repair_runtime(
+    task: Task,
+    *,
+    validation_payload,
+    pytest_failure_origin,
+    pytest_contract_overreach_signals,
+    test_validation_has_blocking_issues,
+    pytest_failure_is_semantic_assertion_mismatch,
+) -> bool:
+    return failed_test_requires_code_repair(
+        task,
+        validation_payload(task),
+        pytest_failure_origin=pytest_failure_origin,
+        pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+        test_validation_has_blocking_issues=test_validation_has_blocking_issues,
+        pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+    )
+
+
 def imported_code_task_for_failed_test(
     project: ProjectState,
     task: Task,

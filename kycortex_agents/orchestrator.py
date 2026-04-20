@@ -259,6 +259,7 @@ from kycortex_agents.orchestration.validation_analysis import (
     pytest_failure_details,
     pytest_failure_is_semantic_assertion_mismatch,
     pytest_failure_origin,
+    validation_error_message_for_test_result,
     validation_has_blocking_issues,
     validation_has_only_warnings,
     validation_has_static_issues,
@@ -725,14 +726,13 @@ class Orchestrator:
             self._completion_validation_issue,
         )
 
-        if validation_issues:
-            all_issues = validation_issues + [f"(warning) {w}" for w in warning_issues]
-            raise AgentExecutionError(f"Generated test validation failed: {'; '.join(all_issues)}")
-
-        if warning_issues and not pytest_passed:
-            raise AgentExecutionError(
-                f"Generated test validation failed: {'; '.join(warning_issues)} (pytest did not confirm correctness)"
-            )
+        error_message = validation_error_message_for_test_result(
+            validation_issues,
+            warning_issues,
+            pytest_passed,
+        )
+        if error_message:
+            raise AgentExecutionError(error_message)
         # If only warnings and pytest passed → accept (warnings are false positives)
 
     def _output_line_count(self, raw_content: str) -> int:

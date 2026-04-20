@@ -272,6 +272,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 	pytest_failure_details,
 	pytest_failure_is_semantic_assertion_mismatch,
 	pytest_failure_origin,
+	validation_error_message_for_test_result,
 	validation_has_blocking_issues,
 	validation_has_only_warnings,
 	validation_has_static_issues,
@@ -4160,6 +4161,16 @@ def test_collect_test_validation_issues_classifies_blocking_warning_and_pytest_p
 		"tests without assertion-like checks: test_empty (line 2)",
 		"constructor arity mismatches: Workflow expects 2 args but test uses 1 at line 4",
 	]
+
+
+def test_test_validation_error_message_handles_blocking_and_warning_only_paths_directly():
+	assert validation_error_message_for_test_result(["pytest failed: 1 failed"], ["warning detail"], False) == (
+		"Generated test validation failed: pytest failed: 1 failed; (warning) warning detail"
+	)
+	assert validation_error_message_for_test_result([], ["warning detail"], False) == (
+		"Generated test validation failed: warning detail (pytest did not confirm correctness)"
+	)
+	assert validation_error_message_for_test_result([], ["warning detail"], True) is None
 
 
 def test_validation_analysis_helpers_detect_contract_overreach_directly():

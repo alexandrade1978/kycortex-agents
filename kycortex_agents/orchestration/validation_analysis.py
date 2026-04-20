@@ -456,3 +456,21 @@ def collect_test_validation_issues(
         validation_issues.append(f"pytest failed: {test_execution.get('summary') or 'generated tests failed'}")
 
     return validation_issues, warning_issues, pytest_passed
+
+
+def validation_error_message_for_test_result(
+    validation_issues: list[str],
+    warning_issues: list[str],
+    pytest_passed: bool,
+) -> Optional[str]:
+    if validation_issues:
+        all_issues = validation_issues + [f"(warning) {warning}" for warning in warning_issues]
+        return f"Generated test validation failed: {'; '.join(all_issues)}"
+
+    if warning_issues and not pytest_passed:
+        return (
+            f"Generated test validation failed: {'; '.join(warning_issues)} "
+            "(pytest did not confirm correctness)"
+        )
+
+    return None

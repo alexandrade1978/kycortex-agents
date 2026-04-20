@@ -59,16 +59,12 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     comparison_required_field,
     call_signature_details,
     call_expression_basename,
-    constructor_param_matches_class,
     dataclass_field_has_default,
     dataclass_field_is_init_enabled,
     dict_accessed_keys_from_tree,
     direct_return_expression,
-    entrypoint_class_names,
-    entrypoint_function_names,
     entrypoint_symbol_names,
     example_from_default,
-    exposed_test_class_names,
     extract_batch_rule,
     extract_class_definition_style,
     extract_constructor_storage_rule,
@@ -93,7 +89,6 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     isinstance_type_names,
     method_binding_kind,
     parameter_is_iterated,
-    preferred_test_class_names,
     render_score_expression,
     self_assigned_attributes,
 )
@@ -2068,37 +2063,8 @@ class Orchestrator:
     def _build_module_run_command(self, module_filename: str, code_analysis: Dict[str, Any]) -> str:
         return build_module_run_command(module_filename, code_analysis)
 
-    def _entrypoint_function_names(self, code_analysis: Dict[str, Any]) -> set[str]:
-        return entrypoint_function_names(code_analysis)
-
-    def _entrypoint_class_names(self, code_analysis: Dict[str, Any]) -> set[str]:
-        return entrypoint_class_names(code_analysis)
-
-    def _entrypoint_symbol_names(self, code_analysis: Dict[str, Any]) -> set[str]:
-        return entrypoint_symbol_names(code_analysis)
-
-    def _exposed_test_class_names(
-        self,
-        code_analysis: Dict[str, Any],
-        preferred_classes: Optional[list[str]] = None,
-    ) -> list[str]:
-        return exposed_test_class_names(code_analysis, preferred_classes)
-
     def _build_code_test_targets(self, code_analysis: Dict[str, Any]) -> str:
         return build_code_test_targets(code_analysis)
-
-    def _preferred_test_class_names(self, code_analysis: Dict[str, Any]) -> list[str]:
-        return preferred_test_class_names(code_analysis)
-
-    def _constructor_param_matches_class(self, param_name: str, class_name: str) -> bool:
-        return constructor_param_matches_class(param_name, class_name)
-
-    def _helper_classes_to_avoid(
-        self,
-        code_analysis: Dict[str, Any],
-        preferred_classes: Optional[list[str]] = None,
-    ) -> list[str]:
-        return helper_classes_to_avoid(code_analysis, preferred_classes)
 
     def _build_code_behavior_contract(self, raw_content: str) -> str:
         return build_code_behavior_contract(raw_content)
@@ -2267,9 +2233,9 @@ class Orchestrator:
         function_names = {item["name"] for item in code_analysis.get("functions") or []}
         function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
         class_map = code_analysis.get("classes") or {}
-        helper_classes_to_avoid = set(self._helper_classes_to_avoid(code_analysis))
+        helper_class_names_to_avoid = set(helper_classes_to_avoid(code_analysis))
         module_defined_names = self._collect_module_defined_names(tree)
-        entrypoint_names = self._entrypoint_symbol_names(code_analysis)
+        entrypoint_names = entrypoint_symbol_names(code_analysis)
         validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = self._parse_behavior_contract(
             code_behavior_contract
         )
@@ -2409,11 +2375,11 @@ class Orchestrator:
         )
         imported_entrypoint_symbols = sorted(symbol for symbol in imported_symbols if symbol in entrypoint_names)
         helper_surface_usages = sorted(
-            {symbol for symbol in imported_symbols if symbol in helper_classes_to_avoid}
+            {symbol for symbol in imported_symbols if symbol in helper_class_names_to_avoid}
             | {
                 f"{name} (line {lineno})"
                 for name, lineno in called_names
-                if name in helper_classes_to_avoid
+                if name in helper_class_names_to_avoid
             }
         )
         payload_contract_violations, non_batch_sequence_calls = self._analyze_test_behavior_contracts(

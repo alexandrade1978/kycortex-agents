@@ -43,31 +43,18 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
-    annotation_accepts_sequence_input,
     build_code_behavior_contract,
     build_code_exact_test_contract,
     build_module_run_command,
     build_code_public_api,
     build_code_test_targets,
     build_code_outline,
-    callable_parameter_names,
     call_signature_details,
-    call_expression_basename,
     dict_accessed_keys_from_tree,
-    direct_return_expression,
     entrypoint_symbol_names,
     example_from_default,
-    extract_constructor_storage_rule,
-    extract_score_derivation_rule,
-    extract_sequence_input_rule,
-    expand_local_name_aliases,
-    first_user_parameter,
-    function_returns_score_value,
     helper_classes_to_avoid,
-    inline_score_helper_expression,
-    parameter_is_iterated,
     parse_behavior_contract,
-    render_score_expression,
 )
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
@@ -1015,61 +1002,6 @@ class Orchestrator:
 
     def _build_code_behavior_contract(self, raw_content: str) -> str:
         return build_code_behavior_contract(raw_content)
-
-    def _extract_constructor_storage_rule(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-        return extract_constructor_storage_rule(node)
-
-    def _extract_score_derivation_rule(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        function_map: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
-    ) -> str:
-        return extract_score_derivation_rule(node, function_map)
-
-    def _function_returns_score_value(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-        return function_returns_score_value(node)
-
-    def _render_score_expression(
-        self,
-        expression: ast.expr,
-        function_map: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
-    ) -> str:
-        return render_score_expression(expression, function_map)
-
-    def _inline_score_helper_expression(
-        self,
-        expression: ast.expr,
-        function_map: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
-    ) -> ast.expr:
-        return inline_score_helper_expression(expression, function_map)
-
-    def _expand_local_name_aliases(
-        self,
-        expression: ast.expr,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-    ) -> ast.expr:
-        return expand_local_name_aliases(expression, node)
-
-    def _call_expression_basename(self, node: ast.AST) -> str:
-        return call_expression_basename(node)
-
-    def _direct_return_expression(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Optional[ast.expr]:
-        return direct_return_expression(node)
-
-    def _callable_parameter_names(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
-        return callable_parameter_names(node)
-
-    def _extract_sequence_input_rule(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-        return extract_sequence_input_rule(node)
-
-    def _first_user_parameter(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Optional[ast.arg]:
-        return first_user_parameter(node)
-
-    def _annotation_accepts_sequence_input(self, annotation: str) -> bool:
-        return annotation_accepts_sequence_input(annotation)
-
-    def _parameter_is_iterated(self, node: ast.FunctionDef | ast.AsyncFunctionDef, parameter_name: str) -> bool:
-        return parameter_is_iterated(node, parameter_name)
 
     @staticmethod
     def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:

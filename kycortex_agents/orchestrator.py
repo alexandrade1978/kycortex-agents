@@ -250,13 +250,12 @@ from kycortex_agents.orchestration.validation_reporting import (
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     redact_validation_execution_result,
-    record_code_validation_metadata,
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
+    validate_code_output_runtime,
     validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
-    collect_code_validation_issues,
     pytest_contract_overreach_signals,
     pytest_failure_details,
     pytest_failure_is_semantic_assertion_mismatch,
@@ -535,51 +534,20 @@ class Orchestrator:
         raise AgentExecutionError(f"Dependency manifest validation failed: {failure_summary}")
 
     def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
-        code_artifact_content = self._artifact_content(output, ArtifactType.CODE)
-        code_content = code_artifact_content or output.raw_content
-        if not self._should_validate_code_content(code_content, has_typed_artifact=bool(code_artifact_content)):
-            return
-        code_analysis = self._analyze_python_module(code_content)
-        code_analysis["line_count"] = self._output_line_count(code_content)
-        line_budget = self._task_line_budget(task)
-        if line_budget is not None:
-            code_analysis["line_budget"] = line_budget
-        if self._task_requires_cli_entrypoint(task):
-            code_analysis["main_guard_required"] = True
-        task_public_contract_preflight = self._task_public_contract_preflight(task, code_analysis)
-        completion_diagnostics = self._completion_diagnostics_from_output(
+        validate_code_output_runtime(
             output,
-            raw_content=code_content,
-            syntax_ok=code_analysis.get("syntax_ok", True),
-            syntax_error=code_analysis.get("syntax_error"),
-        )
-        import_validation: Optional[Dict[str, Any]] = None
-        third_party_imports = code_analysis.get("third_party_imports") or []
-        if code_analysis.get("syntax_ok", True) and not third_party_imports:
-            module_filename = self._artifact_filename(
-                output,
-                ArtifactType.CODE,
-                default_filename="code_implementation.py",
-            )
-            import_validation = self._execute_generated_module_import(module_filename, code_content)
-        record_code_validation_metadata(
-            output,
-            code_analysis,
-            task_public_contract_preflight,
-            import_validation,
-            completion_diagnostics,
+            self._task_line_budget(task),
+            self._task_requires_cli_entrypoint(task),
+            self._should_validate_code_content,
+            self._analyze_python_module,
+            self._output_line_count,
+            lambda code_analysis: self._task_public_contract_preflight(task, code_analysis),
+            self._completion_diagnostics_from_output,
+            self._artifact_filename,
+            self._execute_generated_module_import,
             self._record_output_validation,
-        )
-        validation_issues = collect_code_validation_issues(
-            code_analysis,
-            line_budget,
-            task_public_contract_preflight,
-            import_validation,
-            completion_diagnostics,
             self._completion_validation_issue,
         )
-        if validation_issues:
-            raise AgentExecutionError(f"Generated code validation failed: {'; '.join(validation_issues)}")
 
     def _task_public_contract_preflight(
         self,

@@ -272,6 +272,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	replace_test_output_content,
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
+	validate_code_output_runtime,
 	validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
@@ -4197,6 +4198,26 @@ def test_record_code_validation_metadata_persists_expected_fields_directly():
 		"import_validation": {"ran": True, "returncode": 0},
 		"completion_diagnostics": {"likely_truncated": False},
 	}
+
+
+def test_validate_code_output_runtime_rejects_missing_cli_entrypoint_directly():
+	output = AgentOutput(summary="code", raw_content="def run() -> int:\n    return 1\n")
+
+	with pytest.raises(AgentExecutionError, match="missing required CLI entrypoint"):
+		validate_code_output_runtime(
+			output,
+			None,
+			True,
+			lambda content, has_typed_artifact: True,
+			lambda content: {"syntax_ok": True, "has_main_guard": False, "third_party_imports": []},
+			lambda content: len(content.splitlines()),
+			lambda code_analysis: None,
+			lambda agent_output, **kwargs: {"likely_truncated": False},
+			lambda agent_output, artifact_type, default_filename: default_filename,
+			lambda module_filename, code_content: {"ran": True, "returncode": 0, "summary": "ok"},
+			lambda *args, **kwargs: None,
+			lambda diagnostics: "truncated",
+		)
 
 
 def test_build_test_validation_runtime_input_normalizes_context_and_artifacts_directly():

@@ -7,6 +7,7 @@ from typing import Any, Optional, cast
 
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.orchestration.validation_analysis import (
+    collect_code_validation_issues,
     collect_test_validation_issues,
     validation_error_message_for_test_result,
 )
@@ -161,6 +162,70 @@ def record_code_validation_metadata(
     if import_validation is not None:
         record_output_validation(output, "import_validation", import_validation)
     record_output_validation(output, "completion_diagnostics", completion_diagnostics)
+
+
+def validate_code_output_runtime(
+    output: AgentOutput,
+    line_budget: Optional[int],
+    requires_cli_entrypoint: bool,
+    should_validate_code_content: Any,
+    analyze_python_module: Any,
+    output_line_count: Any,
+    task_public_contract_preflight: Any,
+    completion_diagnostics_from_output: Any,
+    artifact_filename: Any,
+    execute_generated_module_import: Any,
+    record_output_validation: Any,
+    completion_validation_issue: Any,
+) -> None:
+    code_artifact_content = ""
+    for artifact in output.artifacts:
+        if artifact.artifact_type != ArtifactType.CODE:
+            continue
+        if isinstance(artifact.content, str) and artifact.content.strip():
+            code_artifact_content = artifact.content
+            break
+    code_content = code_artifact_content or output.raw_content
+    if not should_validate_code_content(code_content, has_typed_artifact=bool(code_artifact_content)):
+        return
+
+    code_analysis = analyze_python_module(code_content)
+    code_analysis["line_count"] = output_line_count(code_content)
+    if line_budget is not None:
+        code_analysis["line_budget"] = line_budget
+    if requires_cli_entrypoint:
+        code_analysis["main_guard_required"] = True
+    task_public_contract_preflight_result = task_public_contract_preflight(code_analysis)
+    completion_diagnostics = completion_diagnostics_from_output(
+        output,
+        raw_content=code_content,
+        syntax_ok=code_analysis.get("syntax_ok", True),
+        syntax_error=code_analysis.get("syntax_error"),
+    )
+    import_validation: Optional[dict[str, Any]] = None
+    third_party_imports = code_analysis.get("third_party_imports") or []
+    if code_analysis.get("syntax_ok", True) and not third_party_imports:
+        module_filename = artifact_filename(output, ArtifactType.CODE, default_filename="code_implementation.py")
+        import_validation = execute_generated_module_import(module_filename, code_content)
+
+    record_code_validation_metadata(
+        output,
+        code_analysis,
+        task_public_contract_preflight_result,
+        import_validation,
+        completion_diagnostics,
+        record_output_validation,
+    )
+    validation_issues = collect_code_validation_issues(
+        code_analysis,
+        line_budget,
+        task_public_contract_preflight_result,
+        import_validation,
+        completion_diagnostics,
+        completion_validation_issue,
+    )
+    if validation_issues:
+        raise AgentExecutionError(f"Generated code validation failed: {'; '.join(validation_issues)}")
 
 
 def build_test_validation_runtime_state(

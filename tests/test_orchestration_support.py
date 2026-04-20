@@ -261,6 +261,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
 	execute_runnable_frontier,
+	execute_workflow_loop,
 	execute_runnable_tasks,
 	execute_workflow_task,
 	fail_workflow_after_task_failure,
@@ -3418,6 +3419,27 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			{"project_name": "Demo", "phase": "failed", "blocked_task_ids": "blocked_frontier"},
 		)
 	]
+	loop_project = ProjectState(project_name="Demo", goal="Build demo")
+	loop_pending_calls: list[str] = []
+	assert execute_workflow_loop(
+		loop_project,
+		exit_if_workflow_cancelled=lambda _project: False,
+		exit_if_workflow_paused=lambda _project: False,
+		pending_tasks=lambda: loop_pending_calls.append("pending") or [],
+		finish_workflow_if_no_pending_tasks=lambda _project, pending: pending == [],
+		execute_runnable_frontier=lambda _project: False,
+	) is False
+	assert loop_pending_calls == ["pending"]
+	loop_return_calls: list[str] = []
+	assert execute_workflow_loop(
+		loop_project,
+		exit_if_workflow_cancelled=lambda _project: False,
+		exit_if_workflow_paused=lambda _project: False,
+		pending_tasks=lambda: [Task(id="pending", title="Pending", description="Pending", assigned_to="architect")],
+		finish_workflow_if_no_pending_tasks=lambda _project, _pending: False,
+		execute_runnable_frontier=lambda _project: loop_return_calls.append("frontier") or True,
+	) is True
+	assert loop_return_calls == ["frontier"]
 
 
 def test_repair_instruction_owner_mapping_directly():

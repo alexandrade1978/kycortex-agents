@@ -256,6 +256,7 @@ from kycortex_agents.orchestration.workflow_control import (
     ensure_workflow_running,
     ensure_budget_decomposition_task,
     execute_runnable_frontier,
+    execute_workflow_loop,
     execute_runnable_tasks,
     execute_workflow_task,
     failed_task_ids_for_repair,
@@ -3671,24 +3672,20 @@ class Orchestrator:
             workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
             log_event=self._log_event,
         )
-        while True:
-            if self._exit_if_workflow_cancelled(project):
-                return
-            pending = project.pending_tasks()
-            if finish_workflow_if_no_pending_tasks(
-                project,
+        if execute_workflow_loop(
+            project,
+            exit_if_workflow_cancelled=self._exit_if_workflow_cancelled,
+            exit_if_workflow_paused=self._exit_if_workflow_paused,
+            pending_tasks=project.pending_tasks,
+            finish_workflow_if_no_pending_tasks=lambda current_project, pending: finish_workflow_if_no_pending_tasks(
+                current_project,
                 pending,
                 workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                 zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                 evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                 log_event=self._log_event,
-            ):
-                break
-            if self._exit_if_workflow_cancelled(project):
-                return
-            if self._exit_if_workflow_paused(project):
-                return
-            if execute_runnable_frontier(
+            ),
+            execute_runnable_frontier=lambda current_project: execute_runnable_frontier(
                 project,
                 runnable_tasks=project.runnable_tasks,
                 blocked_tasks=project.blocked_tasks,
@@ -3722,8 +3719,9 @@ class Orchestrator:
                 zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                 evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                 log_event=self._log_event,
-            ):
-                return
+            ),
+        ):
+            return
         self._log_event(
             "info",
             "workflow_finished",

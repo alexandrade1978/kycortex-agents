@@ -825,6 +825,29 @@ def execute_runnable_frontier(
     return execute_runnable_tasks(project, runnable)
 
 
+def execute_workflow_loop(
+    project: ProjectState,
+    *,
+    exit_if_workflow_cancelled,
+    exit_if_workflow_paused,
+    pending_tasks,
+    finish_workflow_if_no_pending_tasks,
+    execute_runnable_frontier,
+) -> bool:
+    while True:
+        if exit_if_workflow_cancelled(project):
+            return True
+        pending = pending_tasks()
+        if finish_workflow_if_no_pending_tasks(project, pending):
+            return False
+        if exit_if_workflow_cancelled(project):
+            return True
+        if exit_if_workflow_paused(project):
+            return True
+        if execute_runnable_frontier(project):
+            return True
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

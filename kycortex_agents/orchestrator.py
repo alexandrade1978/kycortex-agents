@@ -21,7 +21,6 @@ from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientErr
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
 from kycortex_agents.orchestration.ast_tools import (
-    ast_name,
     callable_name,
     first_call_argument,
     is_pytest_fixture,
@@ -47,6 +46,7 @@ from kycortex_agents.orchestration.output_helpers import (
     unredacted_agent_result,
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
+    analyze_python_module,
     annotation_accepts_sequence_input,
     build_code_outline,
     callable_parameter_names,
@@ -77,6 +77,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     has_dataclass_decorator,
     infer_dict_key_value_examples,
     inline_score_helper_expression,
+    is_probable_third_party_import,
     isinstance_subject_name,
     isinstance_type_names,
     method_binding_kind,
@@ -315,7 +316,6 @@ from kycortex_agents.types import (
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
-_STDLIB_MODULES = set(getattr(sys, "stdlib_module_names", set()))
 _PYTEST_BUILTIN_FIXTURES = {
     "cache",
     "capfd",
@@ -2036,178 +2036,7 @@ class Orchestrator:
         return build_code_outline(raw_content)
 
     def _analyze_python_module(self, raw_content: str) -> Dict[str, Any]:
-        analysis: Dict[str, Any] = {
-            "syntax_ok": True,
-            "syntax_error": None,
-            "functions": [],
-            "classes": {},
-            "imports": [],
-            "third_party_imports": [],
-            "invalid_dataclass_field_usages": [],
-            "module_variables": [],
-            "symbols": [],
-            "has_main_guard": '__name__ == "__main__"' in raw_content or "__name__ == '__main__'" in raw_content,
-        }
-        if not raw_content.strip():
-            return analysis
-        try:
-            tree = ast.parse(raw_content)
-        except SyntaxError as exc:
-            analysis["syntax_ok"] = False
-            analysis["syntax_error"] = f"{exc.msg} at line {exc.lineno}"
-            return analysis
-
-        functions: list[Dict[str, Any]] = []
-        classes: Dict[str, Dict[str, Any]] = {}
-        import_roots: set[str] = set()
-        invalid_dataclass_field_usages: list[str] = []
-        module_variables: set[str] = set()
-
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name.startswith("_"):
-                    continue
-                signature = self._call_signature_details(node)
-                functions.append({
-                    "name": node.name,
-                    "params": signature["params"],
-                    "param_annotations": signature["param_annotations"],
-                    "min_args": signature["min_args"],
-                    "max_args": signature["max_args"],
-                    "return_annotation": signature["return_annotation"],
-                    "signature": f"{node.name}({', '.join(signature['params'])})",
-                    "accepts_sequence_input": signature["accepts_sequence_input"],
-                    "async": isinstance(node, ast.AsyncFunctionDef),
-                })
-                continue
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    for name in self._bound_target_names(target):
-                        if not name.startswith("_"):
-                            module_variables.add(name)
-                continue
-            if isinstance(node, ast.AnnAssign):
-                if node.value is not None:
-                    for name in self._bound_target_names(node.target):
-                        if not name.startswith("_"):
-                            module_variables.add(name)
-                continue
-            if isinstance(node, ast.Import):
-                for alias in node.names:  # pragma: no branch
-                    root_name = alias.name.split(".", 1)[0]
-                    if root_name:  # pragma: no branch
-                        import_roots.add(root_name)
-                continue
-            if isinstance(node, ast.ImportFrom):
-                if node.level:
-                    continue
-                module_name = (node.module or "").split(".", 1)[0]
-                if module_name:  # pragma: no branch
-                    import_roots.add(module_name)
-                continue
-            if not isinstance(node, ast.ClassDef):
-                continue
-
-            field_names: list[str] = []
-            dataclass_init_params: list[str] = []
-            dataclass_required_params: list[str] = []
-            class_attributes: list[str] = []
-            init_params: list[str] = []
-            constructor_min_args: Optional[int] = None
-            constructor_max_args: Optional[int] = None
-            methods: list[str] = []
-            method_signatures: Dict[str, Dict[str, Any]] = {}
-            bases = [ast_name(base) for base in node.bases]
-            is_enum = any(base.endswith("Enum") for base in bases)
-            is_dataclass = self._has_dataclass_decorator(node)
-
-            for stmt in node.body:  # pragma: no branch
-                if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-                    field_name = stmt.target.id
-                    field_names.append(field_name)
-                    if (
-                        not is_dataclass
-                        and isinstance(stmt.value, ast.Call)
-                        and self._call_expression_basename(stmt.value.func) == "field"
-                    ):
-                        invalid_dataclass_field_usages.append(
-                            f"{node.name}.{field_name} uses field(...) on a non-dataclass class"
-                        )
-                    if is_dataclass:
-                        has_default = self._dataclass_field_has_default(stmt.value)
-                        if self._dataclass_field_is_init_enabled(stmt.value):
-                            dataclass_init_params.append(field_name)
-                            if not has_default:
-                                dataclass_required_params.append(field_name)
-                elif isinstance(stmt, ast.Assign):
-                    for target in stmt.targets:  # pragma: no branch
-                        if isinstance(target, ast.Name):  # pragma: no branch
-                            class_attributes.append(target.id)
-                            if (
-                                not is_dataclass
-                                and isinstance(stmt.value, ast.Call)
-                                and self._call_expression_basename(stmt.value.func) == "field"
-                            ):
-                                invalid_dataclass_field_usages.append(
-                                    f"{node.name}.{target.id} uses field(...) on a non-dataclass class"
-                                )
-                elif isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
-                    signature = self._call_signature_details(stmt, skip_first_param=True)
-                    init_params = signature["params"]
-                    constructor_min_args = signature["min_args"]
-                    constructor_max_args = signature["max_args"]
-                    class_attributes.extend(self._self_assigned_attributes(stmt))
-                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and not stmt.name.startswith("_"):  # pragma: no branch
-                    binding_kind = self._method_binding_kind(stmt)
-                    signature = self._call_signature_details(
-                        stmt,
-                        skip_first_param=binding_kind != "static",
-                    )
-                    if binding_kind == "static":
-                        params = list(signature["params"])
-                    elif binding_kind == "class":
-                        params = ["cls", *signature["params"]]
-                    else:
-                        params = ["self", *signature["params"]]
-                    methods.append(f"{stmt.name}({', '.join(params)})")
-                    method_signatures[stmt.name] = signature
-
-            if init_params:
-                constructor_params = init_params
-            elif is_dataclass:
-                constructor_params = dataclass_init_params
-            else:
-                constructor_params = []
-            if constructor_min_args is None and constructor_max_args is None:
-                if is_dataclass:
-                    constructor_min_args = len(dataclass_required_params)
-                    constructor_max_args = len(dataclass_init_params)
-                else:
-                    constructor_min_args = 0
-                    constructor_max_args = 0
-            classes[node.name] = {
-                "name": node.name,
-                "bases": bases,
-                "is_enum": is_enum,
-                "fields": field_names,
-                "attributes": sorted(set(class_attributes)),
-                "constructor_params": constructor_params,
-                "constructor_min_args": constructor_min_args if constructor_min_args is not None else len(constructor_params),
-                "constructor_max_args": constructor_max_args if constructor_max_args is not None else len(constructor_params),
-                "methods": methods,
-                "method_signatures": method_signatures,
-            }
-
-        analysis["functions"] = functions
-        analysis["classes"] = classes
-        analysis["imports"] = sorted(import_roots)
-        analysis["third_party_imports"] = [
-            module_name for module_name in sorted(import_roots) if self._is_probable_third_party_import(module_name)
-        ]
-        analysis["invalid_dataclass_field_usages"] = sorted(dict.fromkeys(invalid_dataclass_field_usages))
-        analysis["module_variables"] = sorted(module_variables)
-        analysis["symbols"] = sorted([item["name"] for item in functions] + list(classes.keys()))
-        return analysis
+        return analyze_python_module(raw_content)
 
     def _dataclass_field_has_default(self, value: Optional[ast.expr]) -> bool:
         return dataclass_field_has_default(value)
@@ -2216,14 +2045,7 @@ class Orchestrator:
         return dataclass_field_is_init_enabled(value)
 
     def _is_probable_third_party_import(self, module_name: str) -> bool:
-        normalized_name = module_name.strip()
-        if not normalized_name:
-            return False
-        if normalized_name == "__future__":
-            return False
-        if normalized_name in _STDLIB_MODULES:
-            return False
-        return True
+        return is_probable_third_party_import(module_name)
 
     def _build_code_public_api(self, code_analysis: Dict[str, Any]) -> str:
         if not code_analysis.get("syntax_ok", True):

@@ -40,6 +40,7 @@ from kycortex_agents.orchestration.output_helpers import (
 	unredacted_agent_result,
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
+	analyze_python_module,
 	annotation_accepts_sequence_input,
 	build_code_outline,
 	callable_parameter_names,
@@ -70,6 +71,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	has_dataclass_decorator,
 	infer_dict_key_value_examples,
 	inline_score_helper_expression,
+	is_probable_third_party_import,
 	isinstance_subject_name,
 	isinstance_type_names,
 	method_binding_kind,
@@ -453,6 +455,45 @@ def test_apply_task_public_contract_context_skips_empty_anchor():
 
 	assert compact_architecture_context is None
 	assert ctx == {}
+
+
+def test_analyze_python_module_reports_public_symbols_and_third_party_imports():
+	raw_content = """
+from dataclasses import dataclass, field
+import requests
+
+PUBLIC_VALUE = 1
+
+async def fetch(items: list[str]) -> str:
+	return ",".join(items)
+
+class Plain:
+	value = field(default=1)
+
+@dataclass
+class Payload:
+	name: str
+	count: int = 0
+"""
+
+	analysis = analyze_python_module(raw_content)
+
+	assert analysis["syntax_ok"] is True
+	assert analysis["imports"] == ["dataclasses", "requests"]
+	assert analysis["third_party_imports"] == ["requests"]
+	assert analysis["module_variables"] == ["PUBLIC_VALUE"]
+	assert analysis["symbols"] == ["Payload", "Plain", "fetch"]
+	assert analysis["functions"][0]["accepts_sequence_input"] is True
+	assert analysis["classes"]["Payload"]["constructor_min_args"] == 1
+	assert analysis["invalid_dataclass_field_usages"] == [
+		"Plain.value uses field(...) on a non-dataclass class"
+	]
+
+
+def test_is_probable_third_party_import_filters_empty_future_and_stdlib():
+	assert is_probable_third_party_import("") is False
+	assert is_probable_third_party_import("__future__") is False
+	assert is_probable_third_party_import("json") is False
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

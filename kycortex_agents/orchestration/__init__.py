@@ -37,6 +37,7 @@ from kycortex_agents.orchestration.output_helpers import (
 	unredacted_agent_result,
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
+	analyze_python_module,
 	annotation_accepts_sequence_input,
 	build_code_outline,
 	callable_parameter_names,
@@ -67,6 +68,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	has_dataclass_decorator,
 	infer_dict_key_value_examples,
 	inline_score_helper_expression,
+	is_probable_third_party_import,
 	isinstance_subject_name,
 	isinstance_type_names,
 	method_binding_kind,
@@ -348,6 +350,7 @@ __all__ = [
 	"semantic_output_key",
 	"summarize_output",
 	"unredacted_agent_result",
+	"analyze_python_module",
 	"annotation_accepts_sequence_input",
 	"build_code_outline",
 	"callable_parameter_names",
@@ -378,6 +381,7 @@ __all__ = [
 	"has_dataclass_decorator",
 	"infer_dict_key_value_examples",
 	"inline_score_helper_expression",
+	"is_probable_third_party_import",
 	"isinstance_subject_name",
 	"isinstance_type_names",
 	"method_binding_kind",

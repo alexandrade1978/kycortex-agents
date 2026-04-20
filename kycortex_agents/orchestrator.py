@@ -54,8 +54,6 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     comparison_required_field,
     call_signature_details,
     call_expression_basename,
-    dataclass_field_has_default,
-    dataclass_field_is_init_enabled,
     dict_accessed_keys_from_tree,
     direct_return_expression,
     entrypoint_symbol_names,
@@ -73,7 +71,6 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     function_returns_score_value,
     helper_classes_to_avoid,
     inline_score_helper_expression,
-    is_probable_third_party_import,
     parameter_is_iterated,
     parse_behavior_contract,
     render_score_expression,
@@ -1009,15 +1006,6 @@ class Orchestrator:
 
     def _analyze_python_module(self, raw_content: str) -> Dict[str, Any]:
         return analyze_python_module(raw_content)
-
-    def _dataclass_field_has_default(self, value: Optional[ast.expr]) -> bool:
-        return dataclass_field_has_default(value)
-
-    def _dataclass_field_is_init_enabled(self, value: Optional[ast.expr]) -> bool:
-        return dataclass_field_is_init_enabled(value)
-
-    def _is_probable_third_party_import(self, module_name: str) -> bool:
-        return is_probable_third_party_import(module_name)
 
     def _build_code_public_api(self, code_analysis: Dict[str, Any]) -> str:
         return build_code_public_api(code_analysis)

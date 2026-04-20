@@ -19,6 +19,7 @@ from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientErr
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.module_ast_analysis import self_assigned_attributes
+from kycortex_agents.orchestration.module_ast_analysis import is_probable_third_party_import
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
     missing_import_nameerror_details,
@@ -2914,10 +2915,10 @@ def test_analyze_python_module_returns_default_shape_for_blank_content(tmp_path)
 
 def test_is_probable_third_party_import_rejects_blank_and_future(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._is_probable_third_party_import("") is False
-    assert orchestrator._is_probable_third_party_import("__future__") is False
+    assert is_probable_third_party_import("") is False
+    assert is_probable_third_party_import("__future__") is False
 
 
 def test_build_code_public_api_reports_syntax_errors(tmp_path):

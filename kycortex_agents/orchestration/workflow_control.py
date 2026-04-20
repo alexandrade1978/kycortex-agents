@@ -579,6 +579,41 @@ def fail_workflow_for_definition_error(
     log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
 
 
+def fail_workflow_when_blocked(
+    project: ProjectState,
+    *,
+    blocked_tasks: list[Task],
+    workflow_acceptance_policy: str,
+    zero_budget_failure_categories: AbstractSet[str],
+    evaluate_workflow_acceptance,
+    log_event,
+) -> None:
+    blocked_task_ids = ", ".join(task.id for task in blocked_tasks)
+    project.mark_workflow_finished(
+        "failed",
+        acceptance_policy=workflow_acceptance_policy,
+        terminal_outcome=WorkflowOutcome.FAILED.value,
+        failure_category=FailureCategory.WORKFLOW_BLOCKED.value,
+        acceptance_criteria_met=False,
+        acceptance_evaluation=evaluate_workflow_acceptance(
+            project,
+            workflow_acceptance_policy,
+            zero_budget_failure_categories,
+        ),
+    )
+    project.save()
+    log_event(
+        "error",
+        "workflow_blocked",
+        project_name=project.project_name,
+        phase=project.phase,
+        blocked_task_ids=blocked_task_ids,
+    )
+    raise AgentExecutionError(
+        f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
+    )
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

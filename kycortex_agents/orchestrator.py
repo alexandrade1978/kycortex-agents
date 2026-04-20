@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.workflow_control import (
     ensure_workflow_running,
     ensure_budget_decomposition_task,
     fail_workflow_for_definition_error,
+    fail_workflow_when_blocked,
     failed_task_ids_for_repair,
     finish_workflow_if_no_pending_tasks,
     has_repair_task_for_cycle,
@@ -3698,29 +3699,13 @@ class Orchestrator:
                 )
                 raise
             if not runnable:
-                blocked_task_ids = ", ".join(task.id for task in project.blocked_tasks())
-                project.mark_workflow_finished(
-                    "failed",
-                    acceptance_policy=self.config.workflow_acceptance_policy,
-                    terminal_outcome=WorkflowOutcome.FAILED.value,
-                    failure_category=FailureCategory.WORKFLOW_BLOCKED.value,
-                    acceptance_criteria_met=False,
-                    acceptance_evaluation=evaluate_workflow_acceptance(
-                        project,
-                        self.config.workflow_acceptance_policy,
-                        _ZERO_BUDGET_FAILURE_CATEGORIES,
-                    ),
-                )
-                project.save()
-                self._log_event(
-                    "error",
-                    "workflow_blocked",
-                    project_name=project.project_name,
-                    phase=project.phase,
-                    blocked_task_ids=blocked_task_ids,
-                )
-                raise AgentExecutionError(
-                    f"Workflow is blocked because pending tasks have unsatisfied dependencies: {blocked_task_ids}"
+                fail_workflow_when_blocked(
+                    project,
+                    blocked_tasks=list(project.blocked_tasks()),
+                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                    log_event=self._log_event,
                 )
             for task in runnable:
                 if self._exit_if_workflow_cancelled(project):

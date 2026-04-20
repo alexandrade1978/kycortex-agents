@@ -258,6 +258,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
 	fail_workflow_for_definition_error,
+	fail_workflow_when_blocked,
 	failed_task_ids_for_repair,
 	finish_workflow_if_no_pending_tasks,
 	has_repair_task_for_cycle,
@@ -3106,6 +3107,30 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert definition_project.terminal_outcome == WorkflowOutcome.FAILED.value
 	assert definition_saved == [True]
 	assert definition_logs == [("error", "workflow_failed", {"project_name": "Demo", "phase": "failed"})]
+	blocked_project = ProjectState(project_name="Demo", goal="Build demo")
+	blocked_saved: list[bool] = []
+	blocked_project.save = lambda: blocked_saved.append(True)
+	blocked_logs: list[tuple[str, str, dict[str, object]]] = []
+	with pytest.raises(AgentExecutionError, match="Workflow is blocked"):
+		fail_workflow_when_blocked(
+			blocked_project,
+			blocked_tasks=[Task(id="blocked", title="Blocked", description="Wait", assigned_to="architect")],
+			workflow_acceptance_policy="strict",
+			zero_budget_failure_categories=set(),
+			evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+			log_event=lambda level, event, **details: blocked_logs.append((level, event, details)),
+		)
+	assert blocked_project.phase == "failed"
+	assert blocked_project.failure_category == FailureCategory.WORKFLOW_BLOCKED.value
+	assert blocked_project.terminal_outcome == WorkflowOutcome.FAILED.value
+	assert blocked_saved == [True]
+	assert blocked_logs == [
+		(
+			"error",
+			"workflow_blocked",
+			{"project_name": "Demo", "phase": "failed", "blocked_task_ids": "blocked"},
+		)
+	]
 
 
 def test_repair_instruction_owner_mapping_directly():

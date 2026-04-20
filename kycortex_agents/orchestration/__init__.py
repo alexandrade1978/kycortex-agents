@@ -43,7 +43,9 @@ from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
 	semantic_output_key,
 	summarize_output,
+	task_context_output,
 	unredacted_agent_result,
+	validation_payload,
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
 	analyze_python_module,
@@ -396,7 +398,9 @@ __all__ = [
 	"normalize_package_name",
 	"semantic_output_key",
 	"summarize_output",
+	"task_context_output",
 	"unredacted_agent_result",
+	"validation_payload",
 	"analyze_python_module",
 	"annotation_accepts_sequence_input",
 	"build_code_behavior_contract",

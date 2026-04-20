@@ -46,7 +46,9 @@ from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
 	semantic_output_key,
 	summarize_output,
+	task_context_output,
 	unredacted_agent_result,
+	validation_payload,
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
 	analyze_python_module,
@@ -579,6 +581,17 @@ def test_direct_dependency_ids_includes_repair_origin_and_budget_plan_directly()
 	)
 
 	assert direct_dependency_ids(task) == {"dep_a", "origin", "plan"}
+
+
+def test_validation_payload_reads_nested_validation_metadata_directly():
+	task = SimpleNamespace(output_payload={"metadata": {"validation": {"result": "ok"}}})
+
+	assert validation_payload(task) == {"result": "ok"}
+
+
+def test_task_context_output_prefers_output_then_raw_content_directly():
+	assert task_context_output(SimpleNamespace(output="rendered", output_payload={})) == "rendered"
+	assert task_context_output(SimpleNamespace(output="", output_payload={"raw_content": "raw fallback"})) == "raw fallback"
 
 
 def test_build_repair_validation_summary_dispatches_by_failure_category_directly():

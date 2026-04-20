@@ -42,7 +42,9 @@ from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
     semantic_output_key,
     summarize_output,
+    task_context_output,
     unredacted_agent_result,
+    validation_payload,
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
@@ -879,25 +881,13 @@ class Orchestrator:
         return repair_owner_for_category(task.assigned_to, failure_category)
 
     def _validation_payload(self, task: Task) -> Dict[str, Any]:
-        if not isinstance(task.output_payload, dict):
-            return {}
-        metadata = task.output_payload.get("metadata")
-        if not isinstance(metadata, dict):
-            return {}
-        validation = metadata.get("validation")
-        return validation if isinstance(validation, dict) else {}
+        return validation_payload(task)
 
     def _failed_artifact_content(self, task: Task, artifact_type: Optional[ArtifactType] = None) -> str:
         return failed_artifact_content(task.output, task.output_payload, artifact_type)
 
     def _task_context_output(self, task: Task) -> str:
-        if isinstance(task.output, str) and task.output.strip():
-            return task.output
-        if isinstance(task.output_payload, dict):
-            raw_content = task.output_payload.get("raw_content")
-            if isinstance(raw_content, str) and raw_content.strip():
-                return raw_content
-        return task.output or ""
+        return task_context_output(task)
 
     def _completion_diagnostics_from_output(
         self,

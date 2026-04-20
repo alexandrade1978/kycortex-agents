@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.types import AgentOutput
@@ -59,3 +59,23 @@ def unredacted_agent_result(agent: object, result: AgentOutput) -> AgentOutput:
 		if isinstance(unredacted, AgentOutput):
 			return unredacted
 	return result
+
+
+def validation_payload(task: Any) -> dict[str, Any]:
+	if not isinstance(task.output_payload, dict):
+		return {}
+	metadata = task.output_payload.get("metadata")
+	if not isinstance(metadata, dict):
+		return {}
+	validation = metadata.get("validation")
+	return validation if isinstance(validation, dict) else {}
+
+
+def task_context_output(task: Any) -> str:
+	if isinstance(task.output, str) and task.output.strip():
+		return task.output
+	if isinstance(task.output_payload, dict):
+		raw_content = task.output_payload.get("raw_content")
+		if isinstance(raw_content, str) and raw_content.strip():
+			return raw_content
+	return task.output or ""

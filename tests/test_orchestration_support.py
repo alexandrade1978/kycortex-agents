@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	build_code_repair_context_from_test_failure,
 	configure_repair_attempts,
 	build_repair_context,
+	continue_workflow_after_task_failure,
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
 	fail_workflow_for_definition_error,
@@ -3129,6 +3130,43 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			"error",
 			"workflow_blocked",
 			{"project_name": "Demo", "phase": "failed", "blocked_task_ids": "blocked"},
+		)
+	]
+	continue_project = ProjectState(project_name="Demo", goal="Build demo")
+	continue_project.add_task(
+		Task(id="failed", title="Failed", description="Fail", assigned_to="architect", status=TaskStatus.FAILED.value)
+	)
+	continue_project.add_task(
+		Task(
+			id="downstream",
+			title="Downstream",
+			description="Wait",
+			assigned_to="architect",
+			dependencies=["failed"],
+		)
+	)
+	continue_saved: list[bool] = []
+	continue_project.save = lambda: continue_saved.append(True)
+	progress_calls: list[tuple[str, str]] = []
+	continue_logs: list[tuple[str, str, dict[str, object]]] = []
+	failed_task = continue_project.get_task("failed")
+	assert failed_task is not None
+	continue_workflow_after_task_failure(
+		continue_project,
+		task=failed_task,
+		emit_workflow_progress=lambda project, *, task: progress_calls.append((project.project_name, task.id)),
+		log_event=lambda level, event, **details: continue_logs.append((level, event, details)),
+	)
+	downstream_task = continue_project.get_task("downstream")
+	assert downstream_task is not None
+	assert downstream_task.status == TaskStatus.SKIPPED.value
+	assert continue_saved == [True]
+	assert progress_calls == [("Demo", "failed")]
+	assert continue_logs == [
+		(
+			"warning",
+			"dependent_tasks_skipped",
+			{"project_name": "Demo", "task_id": "failed", "skipped_task_ids": ["downstream"]},
 		)
 	]
 

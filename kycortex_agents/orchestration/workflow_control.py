@@ -614,6 +614,29 @@ def fail_workflow_when_blocked(
     )
 
 
+def continue_workflow_after_task_failure(
+    project: ProjectState,
+    *,
+    task: Task,
+    emit_workflow_progress,
+    log_event,
+) -> None:
+    skipped = project.skip_dependent_tasks(
+        task.id,
+        f"Skipped because dependency '{task.id}' failed",
+    )
+    emit_workflow_progress(project, task=task)
+    project.save()
+    if skipped:
+        log_event(
+            "warning",
+            "dependent_tasks_skipped",
+            project_name=project.project_name,
+            task_id=task.id,
+            skipped_task_ids=list(skipped),
+        )
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

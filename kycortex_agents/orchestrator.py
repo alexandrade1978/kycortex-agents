@@ -248,20 +248,17 @@ from kycortex_agents.orchestration.validation_reporting import (
     looks_structurally_truncated,
 )
 from kycortex_agents.orchestration.validation_runtime import (
-    build_test_validation_runtime_state,
     provider_call_metadata,
     redact_validation_execution_result,
-    record_test_validation_metadata,
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
+    validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
-    collect_test_validation_issues,
     pytest_contract_overreach_signals,
     pytest_failure_details,
     pytest_failure_is_semantic_assertion_mismatch,
     pytest_failure_origin,
-    validation_error_message_for_test_result,
     validation_has_blocking_issues,
     validation_has_only_warnings,
     validation_has_static_issues,
@@ -623,39 +620,9 @@ class Orchestrator:
         )
 
     def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:
-        raw_code_analysis = context.get("code_analysis")
-        code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
-        if code_analysis and not code_analysis.get("syntax_ok", True):
-            raise AgentExecutionError(
-                f"Generated test validation failed: code under test has syntax error {code_analysis.get('syntax_error') or 'unknown syntax error'}"
-            )
-
-        module_name = context.get("module_name")
-        module_filename = context.get("module_filename")
-        code_content = context.get("code")
-        if not isinstance(module_name, str) or not module_name.strip():
-            return
-        if not isinstance(module_filename, str) or not module_filename.strip():
-            module_filename = f"{module_name}.py"
-        if not isinstance(code_content, str) or not code_content.strip():
-            return
-
-        test_artifact_content = self._artifact_content(output, ArtifactType.TEST)
-        test_content = test_artifact_content or output.raw_content
-        test_filename = self._artifact_filename(output, ArtifactType.TEST, default_filename="tests_tests.py")
-        code_exact_test_contract = context.get("code_exact_test_contract", "")
-        code_behavior_contract = context.get("code_behavior_contract")
-        runtime_state = build_test_validation_runtime_state(
+        validate_test_output_runtime(
+            context,
             output,
-            test_artifact_content,
-            test_content,
-            module_name,
-            module_filename,
-            code_content,
-            code_analysis,
-            code_exact_test_contract if isinstance(code_exact_test_contract, str) else "",
-            code_behavior_contract if isinstance(code_behavior_contract, str) else "",
-            test_filename,
             self._task_line_budget(task),
             self._task_exact_top_level_test_count(task),
             self._task_max_top_level_test_count(task),
@@ -668,35 +635,10 @@ class Orchestrator:
             self._execute_generated_tests,
             self._completion_diagnostics_from_output,
             self._pytest_failure_origin,
+            self._record_output_validation,
+            self._completion_validation_issue,
             summarize_output,
         )
-        if runtime_state is None:
-            return
-        record_test_validation_metadata(
-            output,
-            runtime_state.test_analysis,
-            runtime_state.test_execution,
-            runtime_state.completion_diagnostics,
-            runtime_state.module_filename,
-            runtime_state.test_filename,
-            runtime_state.pytest_failure_origin,
-            self._record_output_validation,
-        )
-
-        validation_issues, warning_issues, pytest_passed = collect_test_validation_issues(
-            runtime_state.test_analysis,
-            runtime_state.test_execution,
-            runtime_state.completion_diagnostics,
-            self._completion_validation_issue,
-        )
-
-        error_message = validation_error_message_for_test_result(
-            validation_issues,
-            warning_issues,
-            pytest_passed,
-        )
-        if error_message:
-            raise AgentExecutionError(error_message)
         # If only warnings and pytest passed → accept (warnings are false positives)
 
     def _output_line_count(self, raw_content: str) -> int:

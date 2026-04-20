@@ -273,7 +273,9 @@ from kycortex_agents.orchestration.validation_reporting import (
 	looks_structurally_truncated,
 )
 from kycortex_agents.orchestration.validation_runtime import (
+	ValidationRuntimeInput,
 	ValidationRuntimeState,
+	build_test_validation_runtime_input,
 	build_test_validation_runtime_state,
 	provider_call_metadata,
 	redact_validation_execution_result,
@@ -281,6 +283,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	replace_test_output_content,
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
+	validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
 	BLOCKING_TEST_ISSUE_KEYS,
@@ -508,13 +511,16 @@ __all__ = [
 	"test_requires_non_empty_result_field",
 	"provider_call_metadata",
 	"redact_validation_execution_result",
+	"ValidationRuntimeInput",
 	"ValidationRuntimeState",
+	"build_test_validation_runtime_input",
 	"build_test_validation_runtime_state",
 	"record_test_validation_metadata",
 	"replace_test_output_content",
 	"sanitize_output_provider_call_metadata",
 	"sanitize_generated_filename",
 	"summarize_pytest_output",
+	"validate_test_output_runtime",
 	"is_helper_alias_like_name",
 	"module_defined_symbol_names",
 	"normalized_helper_surface_symbols",

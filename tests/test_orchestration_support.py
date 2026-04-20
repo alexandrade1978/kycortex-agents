@@ -261,7 +261,9 @@ from kycortex_agents.orchestration.validation_reporting import (
 	looks_structurally_truncated,
 )
 from kycortex_agents.orchestration.validation_runtime import (
+	ValidationRuntimeInput,
 	ValidationRuntimeState,
+	build_test_validation_runtime_input,
 	build_test_validation_runtime_state,
 	provider_call_metadata,
 	redact_validation_execution_result,
@@ -269,6 +271,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	replace_test_output_content,
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
+	validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
 	collect_test_validation_issues,
@@ -4169,6 +4172,38 @@ def test_record_test_validation_metadata_persists_expected_fields_directly():
 	}
 
 
+def test_build_test_validation_runtime_input_normalizes_context_and_artifacts_directly():
+	output = AgentOutput(
+		raw_content="fallback tests",
+		summary="tests",
+		artifacts=[
+			ArtifactRecord(name="tests", artifact_type=ArtifactType.TEST, path="nested/generated_tests.py", content="typed tests"),
+			ArtifactRecord(name="code", artifact_type=ArtifactType.CODE, path="code.py", content="def ok():\n    return 1"),
+		],
+	)
+
+	runtime_input = build_test_validation_runtime_input(
+		{
+			"module_name": "code_implementation",
+			"module_filename": "  ",
+			"code": "def ok():\n    return 1",
+			"code_exact_test_contract": "exact contract",
+			"code_behavior_contract": "behavior contract",
+		},
+		output,
+	)
+
+	assert isinstance(runtime_input, ValidationRuntimeInput)
+	assert runtime_input.module_name == "code_implementation"
+	assert runtime_input.module_filename == "code_implementation.py"
+	assert runtime_input.code_content == "def ok():\n    return 1"
+	assert runtime_input.test_artifact_content == "typed tests"
+	assert runtime_input.test_content == "typed tests"
+	assert runtime_input.test_filename == "generated_tests.py"
+	assert runtime_input.code_exact_test_contract == "exact contract"
+	assert runtime_input.code_behavior_contract == "behavior contract"
+
+
 def test_build_test_validation_runtime_state_runs_finalize_autofix_analysis_and_execution_directly():
 	output = AgentOutput(
 		raw_content="initial tests",
@@ -4249,6 +4284,35 @@ def test_build_test_validation_runtime_state_runs_finalize_autofix_analysis_and_
 	assert output.raw_content == "fixed tests"
 	assert output.summary == "summary:fixed tests"
 	assert output.artifacts[0].content == "fixed tests"
+
+
+def test_validate_test_output_runtime_rejects_syntax_invalid_code_directly():
+	output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
+
+	with pytest.raises(AgentExecutionError, match="code under test has syntax error invalid syntax"):
+		validate_test_output_runtime(
+			{
+				"code_analysis": {"syntax_ok": False, "syntax_error": "invalid syntax"},
+				"module_name": "code_implementation",
+				"code": "def broken(:\n    pass",
+			},
+			output,
+			None,
+			None,
+			None,
+			None,
+			lambda *args, **kwargs: None,
+			lambda *args, **kwargs: True,
+			lambda *args, **kwargs: {},
+			lambda *args, **kwargs: "",
+			lambda *args, **kwargs: 0,
+			lambda *args, **kwargs: {},
+			lambda *args, **kwargs: {},
+			lambda *args, **kwargs: "tests",
+			lambda *args, **kwargs: None,
+			lambda *args, **kwargs: None,
+			lambda content: content,
+		)
 
 
 def test_validation_analysis_helpers_classify_blocking_and_warning_issues_directly():

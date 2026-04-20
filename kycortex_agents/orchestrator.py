@@ -254,7 +254,7 @@ from kycortex_agents.orchestration.validation_runtime import (
     summarize_pytest_output,
 )
 from kycortex_agents.orchestration.validation_analysis import (
-    BLOCKING_TEST_ISSUE_KEYS as _BLOCKING_TEST_ISSUE_KEYS,
+    collect_test_validation_issues,
     pytest_contract_overreach_signals,
     pytest_failure_details,
     pytest_failure_is_semantic_assertion_mismatch,
@@ -718,69 +718,12 @@ class Orchestrator:
             self._pytest_failure_origin(test_execution, module_filename, test_filename),
         )
 
-        validation_issues: list[str] = []
-        warning_issues: list[str] = []
-        if not test_analysis.get("syntax_ok", True):
-            validation_issues.append(f"test syntax error {test_analysis.get('syntax_error') or 'unknown syntax error'}")
-        if isinstance(line_budget, int) and test_analysis["line_count"] > line_budget:
-            validation_issues.append(f"line count {test_analysis['line_count']} exceeds maximum {line_budget}")
-        if isinstance(exact_test_count, int) and test_analysis.get("top_level_test_count") != exact_test_count:
-            validation_issues.append(
-                f"top-level test count {test_analysis.get('top_level_test_count')} does not match required {exact_test_count}"
-            )
-        if isinstance(max_test_count, int) and test_analysis.get("top_level_test_count", 0) > max_test_count:
-            validation_issues.append(
-                f"top-level test count {test_analysis.get('top_level_test_count')} exceeds maximum {max_test_count}"
-            )
-        if isinstance(fixture_budget, int) and test_analysis.get("fixture_count", 0) > fixture_budget:
-            validation_issues.append(
-                f"fixture count {test_analysis.get('fixture_count')} exceeds maximum {fixture_budget}"
-            )
-        tests_without_assertions = test_analysis.get("tests_without_assertions") or []
-        if tests_without_assertions:
-            warning_issues.append(
-                f"tests without assertion-like checks: {', '.join(tests_without_assertions)}"
-            )
-        contract_overreach_signals = test_analysis.get("contract_overreach_signals") or []
-        if contract_overreach_signals:
-            warning_issues.append(
-                f"contract overreach signals: {', '.join(contract_overreach_signals)}"
-            )
-        if test_analysis.get("helper_surface_usages") and (
-            isinstance(line_budget, int) or isinstance(max_test_count, int) or isinstance(fixture_budget, int)
-        ):
-            validation_issues.append(
-                f"helper surface usages: {', '.join(test_analysis.get('helper_surface_usages') or [])}"
-            )
-        for issue_key, label in (
-            ("missing_function_imports", "missing function imports"),
-            ("unknown_module_symbols", "unknown module symbols"),
-            ("invalid_member_references", "invalid member references"),
-            ("call_arity_mismatches", "call arity mismatches"),
-            ("constructor_arity_mismatches", "constructor arity mismatches"),
-            ("payload_contract_violations", "payload contract violations"),
-            ("non_batch_sequence_calls", "non-batch sequence calls"),
-            ("reserved_fixture_names", "reserved fixture names"),
-            ("undefined_fixtures", "undefined test fixtures"),
-            ("undefined_local_names", "undefined local names"),
-            ("imported_entrypoint_symbols", "imported entrypoint symbols"),
-            ("unsafe_entrypoint_calls", "unsafe entrypoint calls"),
-            ("unsupported_mock_assertions", "unsupported mock assertions"),
-        ):
-            issues = test_analysis.get(issue_key) or []
-            if issues:
-                target = validation_issues if issue_key in _BLOCKING_TEST_ISSUE_KEYS else warning_issues
-                target.append(f"{label}: {', '.join(issues)}")
-
-        if completion_diagnostics.get("likely_truncated"):
-            validation_issues.append(self._completion_validation_issue(completion_diagnostics))
-
-        # --- Pytest arbiter: warnings are accepted when tests pass ---
-        pytest_ran = test_execution.get("ran")
-        pytest_passed = pytest_ran and test_execution.get("returncode") in (None, 0)
-
-        if test_execution.get("ran") and test_execution.get("returncode") not in (None, 0):
-            validation_issues.append(f"pytest failed: {test_execution.get('summary') or 'generated tests failed'}")
+        validation_issues, warning_issues, pytest_passed = collect_test_validation_issues(
+            test_analysis,
+            test_execution,
+            completion_diagnostics,
+            self._completion_validation_issue,
+        )
 
         if validation_issues:
             all_issues = validation_issues + [f"(warning) {w}" for w in warning_issues]

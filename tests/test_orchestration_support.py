@@ -267,6 +267,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	summarize_pytest_output,
 )
 from kycortex_agents.orchestration.validation_analysis import (
+	collect_test_validation_issues,
 	pytest_contract_overreach_signals,
 	pytest_failure_details,
 	pytest_failure_is_semantic_assertion_mismatch,
@@ -4127,6 +4128,38 @@ def test_validation_analysis_helpers_classify_blocking_and_warning_issues_direct
 	assert validation_has_blocking_issues(blocking_validation) is True
 	assert validation_has_blocking_issues(warning_validation) is False
 	assert validation_has_only_warnings(warning_validation) is True
+
+
+def test_collect_test_validation_issues_classifies_blocking_warning_and_pytest_paths_directly():
+	test_analysis = {
+		"syntax_ok": True,
+		"line_count": 12,
+		"line_budget": 10,
+		"tests_without_assertions": ["test_empty (line 2)"],
+		"constructor_arity_mismatches": ["Workflow expects 2 args but test uses 1 at line 4"],
+		"undefined_local_names": ["result (line 5)"],
+	}
+	test_execution = {"ran": True, "returncode": 1, "summary": "1 failed"}
+	completion_diagnostics = {"likely_truncated": True}
+
+	validation_issues, warning_issues, pytest_passed = collect_test_validation_issues(
+		test_analysis,
+		test_execution,
+		completion_diagnostics,
+		lambda diagnostics: "completion likely truncated",
+	)
+
+	assert pytest_passed is False
+	assert validation_issues == [
+		"line count 12 exceeds maximum 10",
+		"undefined local names: result (line 5)",
+		"completion likely truncated",
+		"pytest failed: 1 failed",
+	]
+	assert warning_issues == [
+		"tests without assertion-like checks: test_empty (line 2)",
+		"constructor arity mismatches: Workflow expects 2 args but test uses 1 at line 4",
+	]
 
 
 def test_validation_analysis_helpers_detect_contract_overreach_directly():

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 
 BLOCKING_TEST_ISSUE_KEYS: frozenset[str] = frozenset(
@@ -359,3 +359,100 @@ def validation_has_only_warnings(validation: dict[str, Any]) -> bool:
     if not isinstance(test_analysis, dict):
         return False
     return any(test_analysis.get(key) for key in WARNING_TEST_ISSUE_KEYS)
+
+
+def collect_test_validation_issues(
+    test_analysis: dict[str, Any],
+    test_execution: dict[str, Any],
+    completion_diagnostics: dict[str, Any],
+    completion_validation_issue: Callable[[dict[str, Any]], str],
+) -> tuple[list[str], list[str], bool]:
+    validation_issues: list[str] = []
+    warning_issues: list[str] = []
+
+    if not test_analysis.get("syntax_ok", True):
+        validation_issues.append(f"test syntax error {test_analysis.get('syntax_error') or 'unknown syntax error'}")
+
+    line_count = test_analysis.get("line_count")
+    line_budget = test_analysis.get("line_budget")
+    if isinstance(line_count, int) and isinstance(line_budget, int) and line_count > line_budget:
+        validation_issues.append(f"line count {line_count} exceeds maximum {line_budget}")
+
+    top_level_test_count = test_analysis.get("top_level_test_count")
+    expected_top_level_test_count = test_analysis.get("expected_top_level_test_count")
+    if (
+        isinstance(top_level_test_count, int)
+        and isinstance(expected_top_level_test_count, int)
+        and top_level_test_count != expected_top_level_test_count
+    ):
+        validation_issues.append(
+            f"top-level test count {top_level_test_count} does not match required {expected_top_level_test_count}"
+        )
+
+    max_top_level_test_count = test_analysis.get("max_top_level_test_count")
+    if (
+        isinstance(top_level_test_count, int)
+        and isinstance(max_top_level_test_count, int)
+        and top_level_test_count > max_top_level_test_count
+    ):
+        validation_issues.append(
+            f"top-level test count {top_level_test_count} exceeds maximum {max_top_level_test_count}"
+        )
+
+    fixture_count = test_analysis.get("fixture_count")
+    fixture_budget = test_analysis.get("fixture_budget")
+    if isinstance(fixture_count, int) and isinstance(fixture_budget, int) and fixture_count > fixture_budget:
+        validation_issues.append(f"fixture count {fixture_count} exceeds maximum {fixture_budget}")
+
+    tests_without_assertions = test_analysis.get("tests_without_assertions") or []
+    if tests_without_assertions:
+        warning_issues.append(
+            f"tests without assertion-like checks: {', '.join(tests_without_assertions)}"
+        )
+
+    contract_overreach_signals = test_analysis.get("contract_overreach_signals") or []
+    if contract_overreach_signals:
+        warning_issues.append(
+            f"contract overreach signals: {', '.join(contract_overreach_signals)}"
+        )
+
+    helper_surface_usages = test_analysis.get("helper_surface_usages") or []
+    if helper_surface_usages and (
+        isinstance(line_budget, int)
+        or isinstance(max_top_level_test_count, int)
+        or isinstance(fixture_budget, int)
+    ):
+        validation_issues.append(
+            f"helper surface usages: {', '.join(helper_surface_usages)}"
+        )
+
+    for issue_key, label in (
+        ("missing_function_imports", "missing function imports"),
+        ("unknown_module_symbols", "unknown module symbols"),
+        ("invalid_member_references", "invalid member references"),
+        ("call_arity_mismatches", "call arity mismatches"),
+        ("constructor_arity_mismatches", "constructor arity mismatches"),
+        ("payload_contract_violations", "payload contract violations"),
+        ("non_batch_sequence_calls", "non-batch sequence calls"),
+        ("reserved_fixture_names", "reserved fixture names"),
+        ("undefined_fixtures", "undefined test fixtures"),
+        ("undefined_local_names", "undefined local names"),
+        ("imported_entrypoint_symbols", "imported entrypoint symbols"),
+        ("unsafe_entrypoint_calls", "unsafe entrypoint calls"),
+        ("unsupported_mock_assertions", "unsupported mock assertions"),
+    ):
+        issues = test_analysis.get(issue_key) or []
+        if issues:
+            target = validation_issues if issue_key in BLOCKING_TEST_ISSUE_KEYS else warning_issues
+            target.append(f"{label}: {', '.join(issues)}")
+
+    if completion_diagnostics.get("likely_truncated"):
+        validation_issues.append(completion_validation_issue(completion_diagnostics))
+
+    pytest_ran = test_execution.get("ran")
+    pytest_passed = bool(pytest_ran and test_execution.get("returncode") in (None, 0))
+
+    if pytest_ran and test_execution.get("returncode") not in (None, 0):
+        validation_issues.append(f"pytest failed: {test_execution.get('summary') or 'generated tests failed'}")
+
+    return validation_issues, warning_issues, pytest_passed

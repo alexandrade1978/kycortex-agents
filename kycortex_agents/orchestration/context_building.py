@@ -23,9 +23,12 @@ def build_task_context_base(
     *,
     execution_agent_name: str,
     provider_max_tokens: int,
+    agent_view: Optional[AgentView] = None,
     agent_view_snapshot: dict[str, Any],
     planned_module_context: dict[str, Any],
 ) -> dict[str, Any]:
+    decisions = list(agent_view.decisions) if agent_view is not None else agent_view_snapshot.get("decisions", [])
+    artifacts = list(agent_view.artifacts) if agent_view is not None else agent_view_snapshot.get("artifacts", [])
     ctx: dict[str, Any] = {
         "goal": project.goal,
         "project_name": project.project_name,
@@ -40,8 +43,8 @@ def build_task_context_base(
         },
         "snapshot": agent_view_snapshot,
         "completed_tasks": {},
-        "decisions": agent_view_snapshot.get("decisions", []),
-        "artifacts": agent_view_snapshot.get("artifacts", []),
+        "decisions": decisions,
+        "artifacts": artifacts,
     }
     ctx.update(planned_module_context)
     planned_module_name = ctx.get("planned_module_name")
@@ -257,6 +260,7 @@ def build_task_context_runtime(
         project,
         execution_agent_name=current_execution_agent_name,
         provider_max_tokens=provider_max_tokens,
+        agent_view=agent_view,
         agent_view_snapshot=agent_view_snapshot,
         planned_module_context=planned_module_context(project, visible_task_ids, task),
     )

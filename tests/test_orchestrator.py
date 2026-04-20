@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import pytest
 import kycortex_agents.orchestrator as orchestrator_module
+import kycortex_agents.orchestration.test_ast_analysis as test_ast_analysis_module
 
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
@@ -28,25 +29,38 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     qa_repair_should_reuse_failed_test_artifact,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+    analyze_test_type_mismatches,
     analyze_typed_test_member_usage,
     assert_expects_false,
     assert_expects_invalid_outcome,
     assert_limits_batch_result,
     assigned_name_for_call,
     batch_call_allows_partial_invalid_items,
+    bound_target_names,
+    call_argument_value,
     call_expects_invalid_outcome,
     call_has_negative_expectation,
     collect_local_bindings,
     collect_local_name_bindings,
     collect_module_defined_names,
     collect_parametrized_argument_names,
+    collect_test_local_types,
     collect_undefined_local_names,
     comparison_implies_partial_batch_result,
+    extract_literal_dict_keys,
+    extract_literal_field_values,
+    extract_literal_list_items,
     extract_parametrize_argument_names,
+    extract_string_literals,
     function_argument_names,
+    infer_argument_type,
+    infer_call_result_type,
     int_constant_value,
     len_call_matches_batch_result,
+    payload_argument_for_validation,
     parent_map,
+    resolve_bound_value,
+    validate_batch_call,
     with_uses_pytest_assertion_context,
     with_uses_pytest_raises,
 )
@@ -3958,7 +3972,7 @@ def test_analyze_test_module_flags_reserved_request_fixture_and_missing_fixture_
 
 def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def test_case():\n"
         "    payload: dict = {'status': 'approved'}\n"
@@ -3982,10 +3996,10 @@ def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(t
     assert attribute_chain(call_nodes[0].func) == "service.validate_request"
     assert expression_root_name(call_nodes[0].func) == "service"
     assert render_expression(call_nodes[0]) == "service.validate_request(payload)"
-    assert isinstance(orchestrator._payload_argument_for_validation(call_nodes[0], "validate_request"), ast.Name)
-    assert isinstance(orchestrator._payload_argument_for_validation(call_nodes[1], "process_request"), ast.Name)
+    assert isinstance(payload_argument_for_validation(call_nodes[0], "validate_request"), ast.Name)
+    assert isinstance(payload_argument_for_validation(call_nodes[1], "process_request"), ast.Name)
     keyword_only_call = ast.Call(func=ast.Name("process_request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Name("payload"))])
-    assert orchestrator._payload_argument_for_validation(keyword_only_call, "process_request") == keyword_only_call.keywords[0].value
+    assert payload_argument_for_validation(keyword_only_call, "process_request") == keyword_only_call.keywords[0].value
 
 
 def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(tmp_path):
@@ -4211,7 +4225,7 @@ def test_analyze_test_behavior_contracts_ignores_unresolved_payloads_and_support
 
 def test_payload_and_binding_resolution_helpers_cover_keyword_and_depth_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     keyword_call = ast.Call(func=ast.Name("score_request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Name("payload"))])
     fallback_call = ast.Call(func=ast.Name("score_request"), args=[ast.Constant("first")], keywords=[ast.keyword(arg="other", value=ast.Constant("ignored"))])
     bindings = {
@@ -4220,17 +4234,17 @@ def test_payload_and_binding_resolution_helpers_cover_keyword_and_depth_paths(tm
         "payload_final": ast.Dict(keys=[ast.Constant("name")], values=[ast.Constant("Ada")]),
     }
 
-    assert isinstance(orchestrator._payload_argument_for_validation(keyword_call, "score_request"), ast.Name)
-    fallback_value = orchestrator._payload_argument_for_validation(fallback_call, "score_request")
+    assert isinstance(payload_argument_for_validation(keyword_call, "score_request"), ast.Name)
+    fallback_value = payload_argument_for_validation(fallback_call, "score_request")
     assert isinstance(fallback_value, ast.Constant)
     assert fallback_value.value == "first"
-    resolved = orchestrator._resolve_bound_value(ast.Name("payload"), bindings)
+    resolved = resolve_bound_value(ast.Name("payload"), bindings)
     assert isinstance(resolved, ast.Dict)
 
 
 def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     tree = ast.parse(
         "def test_case():\n"
         "    validate_request({'details': ('a', 'b')})\n"
@@ -4240,7 +4254,7 @@ def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional
     )
     class_map = {"Request": {"constructor_params": ["status", "data"]}}
 
-    mismatches = orchestrator._analyze_test_type_mismatches(
+    mismatches = analyze_test_type_mismatches(
         tree,
         {
             "validate_request": {"details": ["dict"]},
@@ -4252,19 +4266,19 @@ def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional
     assert mismatches == [
         "validate_request passes tuple for `details` (expected dict) at line 2"
     ]
-    assert orchestrator._infer_argument_type(
+    assert infer_argument_type(
         ast.Dict(keys=[ast.Constant("details")], values=[ast.Tuple(elts=[ast.Constant("a")])]),
         {},
         "details",
         class_map,
     ) == "tuple"
-    assert orchestrator._infer_argument_type(
+    assert infer_argument_type(
         ast.Dict(keys=[ast.Constant("details")], values=[ast.Set(elts=[ast.Constant("a")])]),
         {},
         "details",
         class_map,
     ) == "set"
-    assert orchestrator._infer_argument_type(
+    assert infer_argument_type(
         ast.Dict(keys=[ast.Constant("details")], values=[ast.Call(func=ast.Name("dict"), args=[], keywords=[])]),
         {},
         "details",
@@ -4304,7 +4318,7 @@ def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_pa
 
 def test_literal_dict_and_field_value_helpers_cover_subscript_call_and_fallback_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     bindings = {
         "payload": ast.Dict(
             keys=[ast.Constant("payload"), ast.Constant("status")],
@@ -4319,27 +4333,27 @@ def test_literal_dict_and_field_value_helpers_cover_subscript_call_and_fallback_
     }
     class_map = {"Request": {"constructor_params": ["status"]}}
 
-    nested_keys = orchestrator._extract_literal_dict_keys(
+    nested_keys = extract_literal_dict_keys(
         ast.Subscript(value=ast.Name("payload"), slice=ast.Constant("payload")),
         bindings,
         class_map,
     )
-    call_keys = orchestrator._extract_literal_dict_keys(ast.Name("request_obj"), bindings, class_map)
-    dict_field_values = orchestrator._extract_literal_field_values(ast.Name("payload"), bindings, "status", class_map)
-    call_field_values = orchestrator._extract_literal_field_values(ast.Name("request_obj"), bindings, "status", class_map)
-    list_items = orchestrator._extract_literal_list_items(ast.Name("items"), bindings)
+    call_keys = extract_literal_dict_keys(ast.Name("request_obj"), bindings, class_map)
+    dict_field_values = extract_literal_field_values(ast.Name("payload"), bindings, "status", class_map)
+    call_field_values = extract_literal_field_values(ast.Name("request_obj"), bindings, "status", class_map)
+    list_items = extract_literal_list_items(ast.Name("items"), bindings)
 
     assert nested_keys == {"name"}
     assert call_keys == {"status"}
     assert dict_field_values == ["approved"]
     assert call_field_values == ["pending"]
     assert isinstance(list_items, list)
-    assert orchestrator._extract_literal_list_items(ast.Constant("nope"), bindings) is None
+    assert extract_literal_list_items(ast.Constant("nope"), bindings) is None
 
 
 def test_literal_helpers_cover_missing_keys_nested_data_and_non_string_values(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     bindings = {
         "container": ast.Dict(
             keys=[ast.Constant("payload")],
@@ -4354,25 +4368,25 @@ def test_literal_helpers_cover_missing_keys_nested_data_and_non_string_values(tm
     class_map = {"Request": {"constructor_params": ["status", "data"]}}
 
     assert (
-        orchestrator._extract_literal_dict_keys(
+        extract_literal_dict_keys(
             ast.Subscript(value=ast.Name("container"), slice=ast.Constant("missing")),
             bindings,
             class_map,
         )
         is None
     )
-    assert orchestrator._extract_literal_dict_keys(ast.Name("request_obj"), bindings, class_map) == {"email"}
-    assert orchestrator._extract_literal_field_values(
+    assert extract_literal_dict_keys(ast.Name("request_obj"), bindings, class_map) == {"email"}
+    assert extract_literal_field_values(
         ast.Dict(keys=[ast.Constant("status")], values=[ast.Constant("approved")]),
         {},
         "missing",
         class_map,
     ) == []
-    assert orchestrator._extract_literal_field_values(ast.Name("request_obj"), bindings, "email", class_map) == [
+    assert extract_literal_field_values(ast.Name("request_obj"), bindings, "email", class_map) == [
         "ada@example.com"
     ]
-    assert orchestrator._extract_string_literals(ast.Constant(123), {}) == []
-    assert orchestrator._extract_literal_dict_keys(
+    assert extract_string_literals(ast.Constant(123), {}) == []
+    assert extract_literal_dict_keys(
         ast.Subscript(
             value=ast.Dict(
                 keys=[ast.Constant("data")],
@@ -4384,7 +4398,7 @@ def test_literal_helpers_cover_missing_keys_nested_data_and_non_string_values(tm
         class_map,
     ) == {"email"}
     assert (
-        orchestrator._extract_literal_field_values(
+        extract_literal_field_values(
             ast.Call(func=ast.Name("Request"), args=[], keywords=[]),
             {},
             "email",
@@ -4393,7 +4407,7 @@ def test_literal_helpers_cover_missing_keys_nested_data_and_non_string_values(tm
         == []
     )
     assert (
-        orchestrator._extract_literal_dict_keys(
+        extract_literal_dict_keys(
             ast.Subscript(value=ast.Name("request_obj"), slice=ast.Constant("missing")),
             bindings,
             class_map,
@@ -4553,25 +4567,25 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
 
 def test_call_argument_value_handles_keywords_constructors_and_non_name_callables(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     class_map = {"Request": {"constructor_params": ["status", "payload"]}}
 
     keyword_call = ast.Call(func=ast.Name("Request"), args=[], keywords=[ast.keyword(arg="payload", value=ast.Constant("kw"))])
     positional_call = ast.Call(func=ast.Name("Request"), args=[ast.Constant("approved")], keywords=[])
     attr_call = ast.Call(func=ast.Attribute(value=ast.Name("service"), attr="build"), args=[], keywords=[])
 
-    assert isinstance(orchestrator._call_argument_value(keyword_call, "payload", class_map), ast.Constant)
-    positional_value = orchestrator._call_argument_value(positional_call, "status", class_map)
+    assert isinstance(call_argument_value(keyword_call, "payload", class_map), ast.Constant)
+    positional_value = call_argument_value(positional_call, "status", class_map)
     assert isinstance(positional_value, ast.Constant)
     assert positional_value.value == "approved"
-    assert orchestrator._call_argument_value(attr_call, "payload", class_map) is None
-    assert orchestrator._call_argument_value(positional_call, "missing", class_map) is None
-    assert orchestrator._call_argument_value(positional_call, "payload", class_map) is None
+    assert call_argument_value(attr_call, "payload", class_map) is None
+    assert call_argument_value(positional_call, "missing", class_map) is None
+    assert call_argument_value(positional_call, "payload", class_map) is None
 
 
 def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_violations(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     bindings: dict[str, ast.AST] = {
         "batch": ast.List(
             elts=[
@@ -4588,7 +4602,7 @@ def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_viol
     call_node = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("batch")], keywords=[]))
     batch_rule = {"fields": ["name", "email"], "request_key": "request_id", "wrapper_key": "payload"}
 
-    violations = orchestrator._validate_batch_call(call_node, bindings, "process_batch", batch_rule)
+    violations = validate_batch_call(call_node, bindings, "process_batch", batch_rule)
 
     assert violations == [
         "process_batch expects dict-like batch items, but test uses Constant at line 1",
@@ -4598,12 +4612,12 @@ def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_viol
         "process_batch batch item nested `payload` missing required fields: email at line 1",
     ]
     no_batch_call = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Constant("not-a-list")], keywords=[]))
-    assert orchestrator._validate_batch_call(no_batch_call, {}, "process_batch", batch_rule) == []
+    assert validate_batch_call(no_batch_call, {}, "process_batch", batch_rule) == []
 
 
 def test_validate_batch_call_reports_missing_nested_fields_when_nested_payload_keys_are_available(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     bindings: dict[str, ast.AST] = {
         "batch": ast.List(
             elts=[
@@ -4616,23 +4630,23 @@ def test_validate_batch_call_reports_missing_nested_fields_when_nested_payload_k
     }
     call_node = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("batch")], keywords=[]))
     batch_rule = {"fields": ["name", "email"], "request_key": "request_id", "wrapper_key": "payload"}
-    real_extract = orchestrator._extract_literal_dict_keys
+    real_extract = test_ast_analysis_module.extract_literal_dict_keys
 
     def fake_extract(node, current_bindings, class_map=None):
         if isinstance(node, ast.Subscript):
             return {"name"}
         return real_extract(node, current_bindings, class_map)
 
-    monkeypatch.setattr(orchestrator, "_extract_literal_dict_keys", fake_extract)
+    monkeypatch.setattr(test_ast_analysis_module, "extract_literal_dict_keys", fake_extract)
 
-    assert orchestrator._validate_batch_call(call_node, bindings, "process_batch", batch_rule) == [
+    assert validate_batch_call(call_node, bindings, "process_batch", batch_rule) == [
         "process_batch batch item nested `payload` missing required fields: email at line 1"
     ]
 
 
 def test_validate_batch_call_reports_missing_required_fields_for_direct_items(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     bindings: dict[str, ast.AST] = {
         "batch": ast.List(
             elts=[
@@ -4643,22 +4657,22 @@ def test_validate_batch_call_reports_missing_required_fields_for_direct_items(tm
     call_node = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("batch")], keywords=[]))
     batch_rule = {"fields": ["name", "email"], "request_key": None, "wrapper_key": None}
 
-    assert orchestrator._validate_batch_call(call_node, bindings, "process_batch", batch_rule) == [
+    assert validate_batch_call(call_node, bindings, "process_batch", batch_rule) == [
         "process_batch batch item missing required fields: email at line 1"
     ]
 
 
 def test_validate_batch_call_accepts_complete_direct_and_nested_items(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
-    real_extract = orchestrator._extract_literal_dict_keys
+    Orchestrator(config)
+    real_extract = test_ast_analysis_module.extract_literal_dict_keys
 
     def fake_extract(node, current_bindings, class_map=None):
         if isinstance(node, ast.Subscript):
             return {"name", "email"}
         return real_extract(node, current_bindings, class_map)
 
-    monkeypatch.setattr(orchestrator, "_extract_literal_dict_keys", fake_extract)
+    monkeypatch.setattr(test_ast_analysis_module, "extract_literal_dict_keys", fake_extract)
     bindings: dict[str, ast.AST] = {
         "direct_batch": ast.List(
             elts=[
@@ -4686,8 +4700,8 @@ def test_validate_batch_call_accepts_complete_direct_and_nested_items(tmp_path, 
     direct_call = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("direct_batch")], keywords=[]))
     nested_call = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("nested_batch")], keywords=[]))
 
-    assert orchestrator._validate_batch_call(direct_call, bindings, "process_batch", {"fields": ["name", "email"], "request_key": None, "wrapper_key": None}) == []
-    assert orchestrator._validate_batch_call(nested_call, bindings, "process_batch", {"fields": ["name", "email"], "request_key": "request_id", "wrapper_key": "payload"}) == []
+    assert validate_batch_call(direct_call, bindings, "process_batch", {"fields": ["name", "email"], "request_key": None, "wrapper_key": None}) == []
+    assert validate_batch_call(nested_call, bindings, "process_batch", {"fields": ["name", "email"], "request_key": "request_id", "wrapper_key": "payload"}) == []
 
 
 def test_is_pytest_fixture_detects_name_attribute_and_call_decorators(tmp_path):
@@ -5247,7 +5261,7 @@ def test_batch_partial_invalid_detection_returns_false_when_asserts_do_not_limit
 
 def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     assert collect_module_defined_names(ast.Constant(1)) == set()
     assert collect_module_defined_names(ast.parse("annotated_only: int\n")) == {"annotated_only"}
@@ -5319,13 +5333,13 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
     starred_assign = ast.parse("first, *rest = values").body[0]
     assert isinstance(starred_assign, ast.Assign)
     starred_target = starred_assign.targets[0]
-    assert orchestrator._bound_target_names(starred_target) == {"first", "rest"}
-    assert orchestrator._bound_target_names(ast.Attribute(value=ast.Name("obj"), attr="field")) == set()
+    assert bound_target_names(starred_target) == {"first", "rest"}
+    assert bound_target_names(ast.Attribute(value=ast.Name("obj"), attr="field")) == set()
 
 
 def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     class_map = {
         "Request": {
             "attributes": ["request_id"],
@@ -5360,37 +5374,37 @@ def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path)
         "    assert returned.invalid == 1\n"
     )
 
-    local_types = orchestrator._collect_test_local_types(test_node, class_map, function_map)
+    local_types = collect_test_local_types(test_node, class_map, function_map, infer_call_result_type)
 
     assert local_types["request"] == "Request"
     assert local_types["service"] == "Service"
     assert local_types["returned"] == "Request"
     assert "text" not in local_types
-    assert orchestrator._infer_call_result_type(
+    assert infer_call_result_type(
         ast.parse("build_text()", mode="eval").body,
         {},
         class_map,
         function_map,
     ) is None
-    assert orchestrator._infer_call_result_type(
+    assert infer_call_result_type(
         ast.parse("missing_factory()", mode="eval").body,
         {},
         class_map,
         function_map,
     ) is None
-    assert orchestrator._infer_call_result_type(
+    assert infer_call_result_type(
         ast.parse("factory().fetch()", mode="eval").body,
         {},
         class_map,
         function_map,
     ) is None
-    assert orchestrator._infer_call_result_type(
+    assert infer_call_result_type(
         ast.parse("service.fetch()", mode="eval").body,
         {},
         class_map,
         function_map,
     ) is None
-    assert orchestrator._infer_call_result_type(
+    assert infer_call_result_type(
         ast.parse("service.unknown()", mode="eval").body,
         {"service": "Service"},
         class_map,
@@ -5405,7 +5419,7 @@ def test_type_inference_and_member_usage_helpers_cover_remaining_cases(tmp_path)
 
 def test_type_inference_and_member_usage_helpers_support_inline_constructor_calls(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     class_map = {
         "Request": {
             "attributes": ["request_id"],
@@ -5432,10 +5446,10 @@ def test_type_inference_and_member_usage_helpers_support_inline_constructor_call
         "    assert returned.invalid == 1\n"
     )
 
-    local_types = orchestrator._collect_test_local_types(test_node, class_map, function_map)
+    local_types = collect_test_local_types(test_node, class_map, function_map, infer_call_result_type)
 
     assert local_types["returned"] == "Request"
-    assert orchestrator._infer_call_result_type(
+    assert infer_call_result_type(
         ast.parse("Service().fetch({'request_id': 'req-1'})", mode="eval").body,
         {},
         class_map,

@@ -947,14 +947,19 @@ def analyze_test_type_mismatches(
 def auto_fix_test_type_mismatches(
     test_content: str,
     code_content: str,
-    dict_accessed_keys_from_tree: Callable[[ast.AST], Dict[str, list[str]]],
+    dict_key_extractor: Optional[Callable[[ast.AST], Dict[str, list[str]]]] = None,
 ) -> str:
     """Auto-fix str->dict type mismatches in generated test code."""
+    if dict_key_extractor is None:
+        from kycortex_agents.orchestration.module_ast_analysis import dict_accessed_keys_from_tree
+
+        dict_key_extractor = dict_accessed_keys_from_tree
+
     try:
         impl_tree = ast.parse(code_content)
     except SyntaxError:
         return test_content
-    dict_keys = dict_accessed_keys_from_tree(impl_tree)
+    dict_keys = dict_key_extractor(impl_tree)
     if not dict_keys:
         return test_content
 

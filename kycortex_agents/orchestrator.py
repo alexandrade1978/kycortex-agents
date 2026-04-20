@@ -135,22 +135,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     analyze_test_module,
     analyze_test_behavior_contracts,
     auto_fix_test_type_mismatches,
-    analyze_test_type_mismatches,
-    analyze_typed_test_member_usage,
-    call_argument_count,
-    bound_target_names,
-    call_argument_value,
-    collect_test_local_types,
-    extract_literal_dict_keys,
-    extract_literal_field_values,
-    extract_literal_list_items,
-    extract_string_literals,
-    infer_argument_type,
-    infer_call_result_type,
-    infer_expression_type,
-    payload_argument_for_validation,
-    resolve_bound_value,
-    validate_batch_call,
 )
 from kycortex_agents.orchestration.validation_reporting import (
     build_dependency_validation_summary,
@@ -450,7 +434,7 @@ class Orchestrator:
             QATesterAgent._finalize_generated_test_suite,
             self._should_validate_test_content,
             self._analyze_test_module,
-            self._auto_fix_test_type_mismatches,
+            auto_fix_test_type_mismatches,
             self._output_line_count,
             self._execute_generated_tests,
             self._completion_diagnostics_from_output,
@@ -1196,34 +1180,6 @@ class Orchestrator:
             class_map,
         )
 
-    def _auto_fix_test_type_mismatches(
-        self,
-        test_content: str,
-        code_content: str,
-    ) -> str:
-        return auto_fix_test_type_mismatches(
-            test_content,
-            code_content,
-            self._dict_accessed_keys_from_tree,
-        )
-
-    def _analyze_test_type_mismatches(
-        self,
-        tree: ast.AST,
-        type_constraint_rules: Dict[str, Dict[str, list[str]]],
-        class_map: Dict[str, Any],
-    ) -> list[str]:
-        return analyze_test_type_mismatches(tree, type_constraint_rules, class_map)
-
-    def _infer_argument_type(
-        self,
-        payload_node: Optional[ast.AST],
-        bindings: Dict[str, ast.AST],
-        field_name: str,
-        class_map: Dict[str, Any],
-    ) -> str:
-        return infer_argument_type(payload_node, bindings, field_name, class_map)
-
     def _call_signature_details(
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
@@ -1231,108 +1187,6 @@ class Orchestrator:
         skip_first_param: bool = False,
     ) -> Dict[str, Any]:
         return call_signature_details(node, skip_first_param=skip_first_param)
-
-    def _call_argument_count(self, node: ast.Call) -> int:
-        return call_argument_count(node)
-
-    def _infer_expression_type(
-        self,
-        node: Optional[ast.AST],
-        local_types: Dict[str, str],
-        class_map: Dict[str, Any],
-        function_map: Dict[str, Dict[str, Any]],
-    ) -> Optional[str]:
-        return infer_expression_type(node, local_types, class_map, function_map)
-
-    def _collect_test_local_types(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        class_map: Dict[str, Any],
-        function_map: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, str]:
-        return collect_test_local_types(
-            node,
-            class_map,
-            function_map,
-            self._infer_call_result_type,
-        )
-
-    def _infer_call_result_type(
-        self,
-        node: Optional[ast.AST],
-        local_types: Dict[str, str],
-        class_map: Dict[str, Any],
-        function_map: Dict[str, Dict[str, Any]],
-    ) -> Optional[str]:
-        return infer_call_result_type(node, local_types, class_map, function_map)
-
-    def _analyze_typed_test_member_usage(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        local_types: Dict[str, str],
-        class_map: Dict[str, Any],
-        function_map: Optional[Dict[str, Dict[str, Any]]] = None,
-    ) -> tuple[list[str], list[str]]:
-        return analyze_typed_test_member_usage(node, local_types, class_map, function_map)
-
-    def _bound_target_names(self, target: ast.AST) -> set[str]:
-        return bound_target_names(target)
-
-    def _payload_argument_for_validation(self, node: ast.Call, callable_name: str) -> Optional[ast.expr]:
-        return payload_argument_for_validation(node, callable_name)
-
-    def _resolve_bound_value(
-        self,
-        node: Optional[ast.AST],
-        bindings: Dict[str, ast.AST],
-        *,
-        max_depth: int = 3,
-    ) -> Optional[ast.AST]:
-        return resolve_bound_value(node, bindings, max_depth=max_depth)
-
-    def _extract_literal_dict_keys(
-        self,
-        node: Optional[ast.AST],
-        bindings: Dict[str, ast.AST],
-        class_map: Optional[Dict[str, Any]] = None,
-    ) -> Optional[set[str]]:
-        return extract_literal_dict_keys(node, bindings, class_map)
-
-    def _extract_literal_field_values(
-        self,
-        node: Optional[ast.AST],
-        bindings: Dict[str, ast.AST],
-        field_name: str,
-        class_map: Dict[str, Any],
-    ) -> list[str]:
-        return extract_literal_field_values(node, bindings, field_name, class_map)
-
-    def _extract_string_literals(self, node: Optional[ast.AST], bindings: Dict[str, ast.AST]) -> list[str]:
-        return extract_string_literals(node, bindings)
-
-    def _call_argument_value(
-        self,
-        node: ast.Call,
-        argument_name: str,
-        class_map: Dict[str, Any],
-    ) -> Optional[ast.AST]:
-        return call_argument_value(node, argument_name, class_map)
-
-    def _extract_literal_list_items(
-        self,
-        node: Optional[ast.AST],
-        bindings: Dict[str, ast.AST],
-    ) -> Optional[list[ast.AST]]:
-        return extract_literal_list_items(node, bindings)
-
-    def _validate_batch_call(
-        self,
-        node: ast.Call,
-        bindings: Dict[str, ast.AST],
-        callable_name: str,
-        batch_rule: Dict[str, Any],
-    ) -> list[str]:
-        return validate_batch_call(node, bindings, callable_name, batch_rule)
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
         context = build_task_context_runtime(

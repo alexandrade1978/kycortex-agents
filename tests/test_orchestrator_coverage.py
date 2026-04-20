@@ -16,7 +16,15 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     isinstance_type_names,
 )
 from kycortex_agents.orchestration.repair_test_analysis import module_defined_symbol_names
-from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support, known_type_allows_member, parent_map, patched_target_name_from_call
+from kycortex_agents.orchestration.test_ast_analysis import (
+    analyze_test_type_mismatches,
+    auto_fix_test_type_mismatches,
+    collect_mock_support,
+    infer_argument_type,
+    known_type_allows_member,
+    parent_map,
+    patched_target_name_from_call,
+)
 from kycortex_agents.orchestration import (
     ast_is_empty_literal,
     default_value_for_annotation,
@@ -206,44 +214,44 @@ class TestAstIsEmptyLiteral:
 
 class TestInferArgumentType:
     def test_none_payload(self, orch):
-        assert orch._infer_argument_type(None, {}, "field", {}) == ""
+        assert infer_argument_type(None, {}, "field", {}) == ""
 
     def test_dict_payload_string_field(self, orch):
         code = "{'name': 'alice'}"
         node = ast.parse(code, mode="eval").body
-        assert orch._infer_argument_type(node, {}, "name", {}) == "str"
+        assert infer_argument_type(node, {}, "name", {}) == "str"
 
     def test_dict_payload_int_field(self, orch):
         node = ast.parse("{'age': 30}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "age", {}) == "int"
+        assert infer_argument_type(node, {}, "age", {}) == "int"
 
     def test_dict_payload_missing_field(self, orch):
         node = ast.parse("{'name': 'alice'}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "missing", {}) == ""
+        assert infer_argument_type(node, {}, "missing", {}) == ""
 
     def test_dict_field_is_dict(self, orch):
         node = ast.parse("{'data': {'k': 'v'}}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "data", {}) == "dict"
+        assert infer_argument_type(node, {}, "data", {}) == "dict"
 
     def test_dict_field_is_list(self, orch):
         node = ast.parse("{'items': [1, 2]}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "items", {}) == "list"
+        assert infer_argument_type(node, {}, "items", {}) == "list"
 
     def test_dict_field_is_tuple(self, orch):
         node = ast.parse("{'coords': (1, 2)}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "coords", {}) == "tuple"
+        assert infer_argument_type(node, {}, "coords", {}) == "tuple"
 
     def test_dict_field_is_set(self, orch):
         node = ast.parse("{'tags': {1, 2}}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "tags", {}) == "set"
+        assert infer_argument_type(node, {}, "tags", {}) == "set"
 
     def test_dict_field_is_builtin_call(self, orch):
         node = ast.parse("{'items': list()}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "items", {}) == "list"
+        assert infer_argument_type(node, {}, "items", {}) == "list"
 
     def test_dict_field_is_dict_call(self, orch):
         node = ast.parse("{'data': dict()}", mode="eval").body
-        assert orch._infer_argument_type(node, {}, "data", {}) == "dict"
+        assert infer_argument_type(node, {}, "data", {}) == "dict"
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +320,7 @@ class TestExtractTypeConstraints:
             "        raise TypeError('bad')\n"
         )
         func = ast.parse(code).body[0]
+        assert isinstance(func, ast.FunctionDef)
         constraints = extract_type_constraints(func)
         assert "data" in constraints
         assert "dict" in constraints["data"]
@@ -323,6 +332,7 @@ class TestExtractTypeConstraints:
             "        raise TypeError('bad')\n"
         )
         func = ast.parse(code).body[0]
+        assert isinstance(func, ast.FunctionDef)
         constraints = extract_type_constraints(func)
         assert "value" in constraints
         assert "str" in constraints["value"]
@@ -331,6 +341,7 @@ class TestExtractTypeConstraints:
     def test_no_isinstance(self, orch):
         code = "def validate(data):\n    return data\n"
         func = ast.parse(code).body[0]
+        assert isinstance(func, ast.FunctionDef)
         constraints = extract_type_constraints(func)
         assert constraints == {}
 
@@ -346,18 +357,21 @@ class TestCollectMockSupport:
             "    pass\n"
         )
         func = ast.parse(code).body[0]
+        assert isinstance(func, ast.FunctionDef)
         mock_bindings, patched = collect_mock_support(func)
         assert "mocker" in mock_bindings
 
     def test_mock_prefixed_argument(self, orch):
         code = "def test_something(mock_service):\n    pass\n"
         func = ast.parse(code).body[0]
+        assert isinstance(func, ast.FunctionDef)
         mock_bindings, _ = collect_mock_support(func)
         assert "mock_service" in mock_bindings
 
     def test_no_mocks(self, orch):
         code = "def test_something(x, y):\n    pass\n"
         func = ast.parse(code).body[0]
+        assert isinstance(func, ast.FunctionDef)
         mock_bindings, patched = collect_mock_support(func)
         assert len(mock_bindings) == 0
         assert len(patched) == 0
@@ -414,6 +428,7 @@ class TestKnownTypeAllowsMember:
     def test_known_attribute(self, orch):
         code = "obj.name"
         node = ast.parse(code, mode="eval").body
+        assert isinstance(node, ast.Attribute)
         local_types = {"obj": "MyClass"}
         class_map = {"MyClass": {"attributes": ["name", "age"], "fields": [], "method_signatures": {}, "is_enum": False}}
         assert known_type_allows_member(node, local_types, class_map) is True
@@ -421,6 +436,7 @@ class TestKnownTypeAllowsMember:
     def test_unknown_attribute(self, orch):
         code = "obj.nonexistent"
         node = ast.parse(code, mode="eval").body
+        assert isinstance(node, ast.Attribute)
         local_types = {"obj": "MyClass"}
         class_map = {"MyClass": {"attributes": ["name"], "fields": [], "method_signatures": {}, "is_enum": False}}
         assert known_type_allows_member(node, local_types, class_map) is False
@@ -428,6 +444,7 @@ class TestKnownTypeAllowsMember:
     def test_enum_skips_fields(self, orch):
         code = "obj.RED"
         node = ast.parse(code, mode="eval").body
+        assert isinstance(node, ast.Attribute)
         local_types = {"obj": "Color"}
         class_map = {"Color": {"attributes": ["RED"], "fields": ["RED"], "method_signatures": {}, "is_enum": True}}
         assert known_type_allows_member(node, local_types, class_map) is True
@@ -435,6 +452,7 @@ class TestKnownTypeAllowsMember:
     def test_method_allowed(self, orch):
         code = "obj.validate"
         node = ast.parse(code, mode="eval").body
+        assert isinstance(node, ast.Attribute)
         local_types = {"obj": "Service"}
         class_map = {"Service": {"attributes": [], "fields": [], "method_signatures": {"validate": {}}, "is_enum": False}}
         assert known_type_allows_member(node, local_types, class_map) is True
@@ -442,15 +460,18 @@ class TestKnownTypeAllowsMember:
     def test_non_name_value(self, orch):
         # Attribute node where .value is not a Name (e.g. func().attr)
         node = ast.parse("func().attr", mode="eval").body
+        assert isinstance(node, ast.Attribute)
         assert known_type_allows_member(node, {}, {}) is False
 
     def test_owner_not_in_map(self, orch):
         node = ast.parse("obj.name", mode="eval").body
+        assert isinstance(node, ast.Attribute)
         assert known_type_allows_member(node, {"obj": "Unknown"}, {}) is False
 
     def test_owner_name_as_type(self, orch):
         code = "MyClass.method"
         node = ast.parse(code, mode="eval").body
+        assert isinstance(node, ast.Attribute)
         local_types = {}
         class_map = {"MyClass": {"attributes": [], "fields": [], "method_signatures": {"method": {}}, "is_enum": False}}
         assert known_type_allows_member(node, local_types, class_map) is True
@@ -464,11 +485,13 @@ class TestPatchedTargetNameFromCall:
     def test_patch_with_string(self, orch):
         code = "patch('module.Class')"
         tree = ast.parse(code, mode="eval").body
+        assert isinstance(tree, ast.Call)
         assert patched_target_name_from_call(tree) == "module.Class"
 
     def test_patch_object(self, orch):
         code = "patch.object(MyClass, 'method')"
         tree = ast.parse(code, mode="eval").body
+        assert isinstance(tree, ast.Call)
         result = patched_target_name_from_call(tree)
         assert result is not None
         assert "method" in result
@@ -476,12 +499,14 @@ class TestPatchedTargetNameFromCall:
     def test_no_args(self, orch):
         code = "patch()"
         tree = ast.parse(code, mode="eval").body
+        assert isinstance(tree, ast.Call)
         result = patched_target_name_from_call(tree)
         assert result is None
 
     def test_non_string_arg(self, orch):
         code = "patch(some_variable)"
         tree = ast.parse(code, mode="eval").body
+        assert isinstance(tree, ast.Call)
         result = patched_target_name_from_call(tree)
         assert result is None
 
@@ -506,7 +531,7 @@ class TestAutoFixTestTypeMismatches:
     def test_no_dict_keys_returns_unchanged(self, orch):
         code = "class Foo:\n    pass\n"
         test_code = "def test_foo():\n    f = Foo()\n"
-        result = orch._auto_fix_test_type_mismatches(test_code, code)
+        result = auto_fix_test_type_mismatches(test_code, code)
         assert result == test_code
 
     def test_fixes_string_to_dict(self, orch):
@@ -516,11 +541,11 @@ class TestAutoFixTestTypeMismatches:
             "        return details['name']\n"
         )
         test_code = "def test_handle():\n    s = Service()\n    s.handle(details='test')\n"
-        result = orch._auto_fix_test_type_mismatches(test_code, impl_code)
+        result = auto_fix_test_type_mismatches(test_code, impl_code)
         assert "{'name': 'value'}" in result or "details=" in result
 
     def test_syntax_error_in_impl_returns_unchanged(self, orch):
-        result = orch._auto_fix_test_type_mismatches("test", "def (():")
+        result = auto_fix_test_type_mismatches("test", "def (():")
         assert result == "test"
 
     def test_skips_negative_test(self, orch):
@@ -530,7 +555,7 @@ class TestAutoFixTestTypeMismatches:
             "        return details['name']\n"
         )
         test_code = "def test_validation_failure():\n    s = Service()\n    s.handle(details='bad')\n"
-        result = orch._auto_fix_test_type_mismatches(test_code, impl_code)
+        result = auto_fix_test_type_mismatches(test_code, impl_code)
         assert "details='bad'" in result
 
     def test_skips_is_false_test(self, orch):
@@ -545,7 +570,7 @@ class TestAutoFixTestTypeMismatches:
             "    result = s.handle(details='bad')\n"
             "    assert result is False\n"
         )
-        result = orch._auto_fix_test_type_mismatches(test_code, impl_code)
+        result = auto_fix_test_type_mismatches(test_code, impl_code)
         assert "details='bad'" in result
 
     def test_reuses_existing_dict_variable(self, orch):
@@ -560,7 +585,7 @@ class TestAutoFixTestTypeMismatches:
             "    s = Service()\n"
             "    s.handle(details='test')\n"
         )
-        result = orch._auto_fix_test_type_mismatches(test_code, impl_code)
+        result = auto_fix_test_type_mismatches(test_code, impl_code)
         assert "details=details" in result or "details={'name'" in result
 
 
@@ -676,7 +701,7 @@ class TestPlainClassFieldDefaultFactoryDetails:
 class TestAnalyzeTestTypeMismatchesExtras:
     def test_empty_rules(self, orch):
         tree = ast.parse("def test_x(): pass")
-        assert orch._analyze_test_type_mismatches(tree, {}, {}) == []
+        assert analyze_test_type_mismatches(tree, {}, {}) == []
 
     def test_detects_str_passed_as_dict(self, orch):
         test_code = (
@@ -685,7 +710,7 @@ class TestAnalyzeTestTypeMismatchesExtras:
         )
         tree = ast.parse(test_code)
         rules = {"validate": {"name": ["dict"]}}
-        result = orch._analyze_test_type_mismatches(tree, rules, {})
+        result = analyze_test_type_mismatches(tree, rules, {})
         assert isinstance(result, list)
 
     def test_matching_type_no_mismatch(self, orch):
@@ -695,7 +720,7 @@ class TestAnalyzeTestTypeMismatchesExtras:
         )
         tree = ast.parse(test_code)
         rules = {"validate": {"name": ["str"]}}
-        result = orch._analyze_test_type_mismatches(tree, rules, {})
+        result = analyze_test_type_mismatches(tree, rules, {})
         assert isinstance(result, list)
 
 

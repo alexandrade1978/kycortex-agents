@@ -848,6 +848,33 @@ def execute_workflow_loop(
             return True
 
 
+def run_active_workflow(
+    project: ProjectState,
+    *,
+    exit_if_workflow_cancelled,
+    exit_if_workflow_paused,
+    ensure_workflow_running,
+    execute_workflow_loop,
+    log_event,
+) -> bool:
+    if exit_if_workflow_cancelled(project):
+        return True
+    if exit_if_workflow_paused(project):
+        return True
+    ensure_workflow_running(project)
+    if execute_workflow_loop(project):
+        return True
+    log_event(
+        "info",
+        "workflow_finished",
+        project_name=project.project_name,
+        phase=project.phase,
+        terminal_outcome=project.terminal_outcome,
+        workflow_telemetry=project.internal_runtime_telemetry()["workflow"],
+    )
+    return False
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

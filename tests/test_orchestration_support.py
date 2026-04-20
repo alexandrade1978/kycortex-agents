@@ -264,6 +264,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	execute_workflow_loop,
 	execute_runnable_tasks,
 	execute_workflow_task,
+	run_active_workflow,
 	fail_workflow_after_task_failure,
 	fail_workflow_for_definition_error,
 	fail_workflow_when_blocked,
@@ -3440,6 +3441,38 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		execute_runnable_frontier=lambda _project: loop_return_calls.append("frontier") or True,
 	) is True
 	assert loop_return_calls == ["frontier"]
+	active_project = ProjectState(project_name="Demo", goal="Build demo")
+	active_project.repair_max_cycles = 1
+	active_project.mark_workflow_finished("completed", acceptance_policy="strict", terminal_outcome=WorkflowOutcome.COMPLETED.value)
+	active_logs: list[tuple[str, str, dict[str, object]]] = []
+	assert run_active_workflow(
+		active_project,
+		exit_if_workflow_cancelled=lambda _project: False,
+		exit_if_workflow_paused=lambda _project: False,
+		ensure_workflow_running=lambda _project: None,
+		execute_workflow_loop=lambda _project: False,
+		log_event=lambda level, event, **details: active_logs.append((level, event, details)),
+	) is False
+	assert active_logs == [
+		(
+			"info",
+			"workflow_finished",
+			{
+				"project_name": "Demo",
+				"phase": "completed",
+				"terminal_outcome": WorkflowOutcome.COMPLETED.value,
+				"workflow_telemetry": active_project.internal_runtime_telemetry()["workflow"],
+			},
+		)
+	]
+	assert run_active_workflow(
+		active_project,
+		exit_if_workflow_cancelled=lambda _project: True,
+		exit_if_workflow_paused=lambda _project: False,
+		ensure_workflow_running=lambda _project: (_ for _ in ()).throw(RuntimeError("should not run")),
+		execute_workflow_loop=lambda _project: False,
+		log_event=lambda *_args, **_kwargs: None,
+	) is True
 
 
 def test_repair_instruction_owner_mapping_directly():

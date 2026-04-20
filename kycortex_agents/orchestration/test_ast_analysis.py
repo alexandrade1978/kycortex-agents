@@ -13,6 +13,7 @@ from kycortex_agents.orchestration.ast_tools import (
     callable_name,
     expression_root_name,
     first_call_argument,
+    is_pytest_fixture,
     render_expression,
 )
 
@@ -1021,6 +1022,244 @@ def auto_fix_test_type_mismatches(
     return "\n".join(lines)
 
 
+def analyze_test_module(
+    raw_content: str,
+    module_name: str,
+    module_symbols: set[str],
+    function_names: set[str],
+    function_map: Dict[str, Any],
+    class_map: Dict[str, Any],
+    helper_class_names_to_avoid: set[str],
+    entrypoint_names: set[str],
+    validation_rules: Dict[str, list[str]],
+    field_value_rules: Dict[str, Dict[str, list[str]]],
+    batch_rules: Dict[str, Dict[str, Any]],
+    sequence_input_functions: set[str],
+    type_constraint_rules: Dict[str, Dict[str, list[str]]],
+    reserved_fixture_names: set[str],
+    pytest_builtin_fixtures: set[str],
+    code_behavior_contract: str = "",
+) -> Dict[str, Any]:
+    analysis: Dict[str, Any] = {
+        "syntax_ok": True,
+        "syntax_error": None,
+        "imported_module_symbols": [],
+        "missing_function_imports": [],
+        "unknown_module_symbols": [],
+        "invalid_member_references": [],
+        "call_arity_mismatches": [],
+        "constructor_arity_mismatches": [],
+        "payload_contract_violations": [],
+        "non_batch_sequence_calls": [],
+        "helper_surface_usages": [],
+        "reserved_fixture_names": [],
+        "undefined_fixtures": [],
+        "undefined_local_names": [],
+        "imported_entrypoint_symbols": [],
+        "unsafe_entrypoint_calls": [],
+        "unsupported_mock_assertions": [],
+        "top_level_test_count": 0,
+        "fixture_count": 0,
+        "assertion_like_count": 0,
+        "tests_without_assertions": [],
+        "contract_overreach_signals": [],
+        "type_mismatches": [],
+    }
+    if not raw_content.strip():
+        return analysis
+    try:
+        tree = ast.parse(raw_content)
+    except SyntaxError as exc:
+        analysis["syntax_ok"] = False
+        analysis["syntax_error"] = f"{exc.msg} at line {exc.lineno}"
+        return analysis
+
+    module_defined_names = collect_module_defined_names(tree)
+    analysis["top_level_test_count"] = sum(
+        1
+        for stmt in tree.body
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_")
+    )
+    analysis["fixture_count"] = sum(
+        1
+        for stmt in tree.body
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and is_pytest_fixture(stmt)
+    )
+
+    imported_symbols: set[str] = set()
+    called_names: list[tuple[str, int]] = []
+    attribute_refs: list[tuple[str, str, int]] = []
+    constructor_calls: list[tuple[str, int, int]] = []
+    call_arity_mismatches: list[str] = []
+    defined_fixtures: set[str] = set()
+    reserved_fixture_name_matches: list[str] = []
+    referenced_fixtures: list[tuple[str, int]] = []
+    undefined_local_names: set[str] = set()
+    unsafe_entrypoint_calls: list[str] = []
+    assertion_like_count = 0
+    tests_without_assertions: list[str] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == module_name:
+            for alias in node.names:
+                imported_symbols.add(alias.asname or alias.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if is_pytest_fixture(node):
+                defined_fixtures.add(node.name)
+                undefined_local_names.update(
+                    collect_undefined_local_names(node, module_defined_names)
+                )
+                if node.name in reserved_fixture_names:
+                    reserved_fixture_name_matches.append(f"{node.name} (line {node.lineno})")
+            if node.name.startswith("test_"):
+                test_assertion_like_count = count_test_assertion_like_checks(node)
+                assertion_like_count += test_assertion_like_count
+                if test_assertion_like_count == 0:
+                    tests_without_assertions.append(f"{node.name} (line {node.lineno})")
+                parametrized_arguments = collect_parametrized_argument_names(node)
+                for arg_name in function_argument_names(node):
+                    if arg_name not in parametrized_arguments:
+                        referenced_fixtures.append((arg_name, node.lineno))
+                undefined_local_names.update(
+                    collect_undefined_local_names(node, module_defined_names)
+                )
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                called_names.append((node.func.id, node.lineno))
+                if node.func.id in class_map:
+                    constructor_calls.append((node.func.id, len(node.args) + len(node.keywords), node.lineno))
+                if node.func.id in imported_symbols and node.func.id in entrypoint_names:
+                    unsafe_entrypoint_calls.append(f"{node.func.id}() (line {node.lineno})")
+            elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                attribute_refs.append((node.func.value.id, node.func.attr, node.lineno))
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            attribute_refs.append((node.value.id, node.attr, node.lineno))
+
+    missing_imports = sorted(
+        {
+            f"{name} (line {lineno})"
+            for name, lineno in called_names
+            if name in function_names and name not in imported_symbols
+        }
+    )
+    unknown_symbols = sorted(symbol for symbol in imported_symbols if symbol not in module_symbols)
+
+    invalid_member_refs: list[str] = []
+    unsupported_mock_assertions: list[str] = []
+    contract_overreach_signals: list[str] = []
+    for owner, member, lineno in attribute_refs:
+        if owner not in imported_symbols or owner not in class_map:
+            continue
+        class_info = class_map[owner]
+        allowed = set(class_info.get("attributes") or [])
+        if not class_info.get("is_enum"):
+            allowed.update(class_info.get("fields") or [])
+        allowed.update((class_info.get("method_signatures") or {}).keys())
+        if member not in allowed:
+            invalid_member_refs.append(f"{owner}.{member} (line {lineno})")
+
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
+            continue
+        bindings = collect_local_bindings(node)
+        local_types = collect_test_local_types(
+            node,
+            class_map,
+            function_map,
+            infer_call_result_type,
+        )
+        typed_invalid_refs, typed_arity_mismatches = analyze_typed_test_member_usage(
+            node,
+            local_types,
+            class_map,
+            function_map,
+        )
+        invalid_member_refs.extend(typed_invalid_refs)
+        call_arity_mismatches.extend(typed_arity_mismatches)
+        unsupported_mock_assertions.extend(
+            find_unsupported_mock_assertions(node, local_types, class_map)
+        )
+        contract_overreach_signals.extend(
+            find_contract_overreach_signals(
+                node,
+                bindings,
+                code_behavior_contract if isinstance(code_behavior_contract, str) else "",
+            )
+        )
+
+    arity_mismatches: list[str] = []
+    for class_name, actual_count, lineno in constructor_calls:
+        class_info = class_map.get(class_name, {})
+        expected_params = class_info.get("constructor_params") or []
+        min_expected = class_info.get("constructor_min_args")
+        max_expected = class_info.get("constructor_max_args")
+        if not isinstance(min_expected, int) or not isinstance(max_expected, int):
+            min_expected = len(expected_params)
+            max_expected = len(expected_params)
+        if min_expected <= actual_count <= max_expected:
+            continue
+        if min_expected == max_expected:
+            arity_mismatches.append(
+                f"{class_name} expects {max_expected} args but test uses {actual_count} at line {lineno}"
+            )
+            continue
+        arity_mismatches.append(
+            f"{class_name} expects {min_expected}-{max_expected} args but test uses {actual_count} at line {lineno}"
+        )
+
+    undefined_fixtures = sorted(
+        {
+            f"{fixture_name} (line {lineno})"
+            for fixture_name, lineno in referenced_fixtures
+            if fixture_name not in defined_fixtures and fixture_name not in pytest_builtin_fixtures
+        }
+    )
+    imported_entrypoint_symbols = sorted(symbol for symbol in imported_symbols if symbol in entrypoint_names)
+    helper_surface_usages = sorted(
+        {symbol for symbol in imported_symbols if symbol in helper_class_names_to_avoid}
+        | {
+            f"{name} (line {lineno})"
+            for name, lineno in called_names
+            if name in helper_class_names_to_avoid
+        }
+    )
+    payload_contract_violations, non_batch_sequence_calls = analyze_test_behavior_contracts(
+        tree,
+        validation_rules,
+        field_value_rules,
+        batch_rules,
+        sequence_input_functions,
+        function_names,
+        class_map,
+    )
+    type_mismatches = analyze_test_type_mismatches(
+        tree,
+        type_constraint_rules,
+        class_map,
+    )
+
+    analysis["imported_module_symbols"] = sorted(imported_symbols)
+    analysis["missing_function_imports"] = missing_imports
+    analysis["unknown_module_symbols"] = unknown_symbols
+    analysis["invalid_member_references"] = sorted(set(invalid_member_refs))
+    analysis["call_arity_mismatches"] = sorted(set(call_arity_mismatches))
+    analysis["constructor_arity_mismatches"] = sorted(set(arity_mismatches))
+    analysis["payload_contract_violations"] = payload_contract_violations
+    analysis["non_batch_sequence_calls"] = non_batch_sequence_calls
+    analysis["helper_surface_usages"] = helper_surface_usages
+    analysis["reserved_fixture_names"] = sorted(set(reserved_fixture_name_matches))
+    analysis["undefined_fixtures"] = undefined_fixtures
+    analysis["undefined_local_names"] = sorted(undefined_local_names)
+    analysis["imported_entrypoint_symbols"] = imported_entrypoint_symbols
+    analysis["unsafe_entrypoint_calls"] = sorted(set(unsafe_entrypoint_calls))
+    analysis["unsupported_mock_assertions"] = sorted(set(unsupported_mock_assertions))
+    analysis["assertion_like_count"] = assertion_like_count
+    analysis["tests_without_assertions"] = sorted(set(tests_without_assertions))
+    analysis["contract_overreach_signals"] = sorted(set(contract_overreach_signals))
+    analysis["type_mismatches"] = type_mismatches
+    return analysis
+
+
 def assert_limits_batch_result(
     test: ast.AST,
     result_name: Optional[str],
@@ -1336,6 +1575,7 @@ __all__ = [
     "call_argument_count",
     "call_argument_value",
     "analyze_typed_test_member_usage",
+    "analyze_test_module",
     "collect_local_bindings",
     "collect_local_name_bindings",
     "collect_module_defined_names",

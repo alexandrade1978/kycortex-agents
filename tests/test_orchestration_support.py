@@ -91,6 +91,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	self_assigned_attributes,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+	analyze_test_module,
 	analyze_test_behavior_contracts,
 	analyze_test_type_mismatches,
 	auto_fix_test_type_mismatches,
@@ -751,6 +752,71 @@ def test_auto_fix_test_type_mismatches_reuses_existing_dict_variable_and_skips_n
 
 	assert "s.handle(details=details)" in fixed
 	assert "details='bad'" in fixed
+
+
+def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_input():
+	blank_analysis = analyze_test_module(
+		"   ",
+		"module_under_test",
+		set(),
+		set(),
+		{},
+		{},
+		set(),
+		set(),
+		{},
+		{},
+		{},
+		set(),
+		{},
+		{"request"},
+		{"cache", "capsys", "monkeypatch", "tmp_path"},
+	)
+	syntax_error_analysis = analyze_test_module(
+		"def broken(:\n    pass",
+		"module_under_test",
+		set(),
+		set(),
+		{},
+		{},
+		set(),
+		set(),
+		{},
+		{},
+		{},
+		set(),
+		{},
+		{"request"},
+		{"cache", "capsys", "monkeypatch", "tmp_path"},
+	)
+
+	assert blank_analysis == {
+		"syntax_ok": True,
+		"syntax_error": None,
+		"imported_module_symbols": [],
+		"missing_function_imports": [],
+		"unknown_module_symbols": [],
+		"invalid_member_references": [],
+		"call_arity_mismatches": [],
+		"constructor_arity_mismatches": [],
+		"payload_contract_violations": [],
+		"non_batch_sequence_calls": [],
+		"helper_surface_usages": [],
+		"reserved_fixture_names": [],
+		"undefined_fixtures": [],
+		"undefined_local_names": [],
+		"imported_entrypoint_symbols": [],
+		"unsafe_entrypoint_calls": [],
+		"unsupported_mock_assertions": [],
+		"top_level_test_count": 0,
+		"fixture_count": 0,
+		"assertion_like_count": 0,
+		"tests_without_assertions": [],
+		"contract_overreach_signals": [],
+		"type_mismatches": [],
+	}
+	assert syntax_error_analysis["syntax_ok"] is False
+	assert syntax_error_analysis["syntax_error"] == "invalid syntax at line 1"
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

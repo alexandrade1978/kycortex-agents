@@ -265,6 +265,7 @@ from kycortex_agents.orchestration.workflow_control import (
     pause_workflow,
     privacy_safe_log_fields,
     repair_task_ids_for_cycle,
+    resume_failed_tasks_with_repair_cycle,
     replay_workflow,
     resume_workflow,
     skip_task,
@@ -3664,47 +3665,17 @@ class Orchestrator:
                     raise AgentExecutionError(
                         "Workflow contains non-repairable failed tasks and cannot resume automatically"
                     )
-                if not project.can_start_repair_cycle():
-                    acceptance_evaluation = evaluate_workflow_acceptance(
-                        project,
-                        self.config.workflow_acceptance_policy,
-                        _ZERO_BUDGET_FAILURE_CATEGORIES,
-                    )
-                    project.mark_workflow_finished(
-                        "failed",
-                        acceptance_policy=self.config.workflow_acceptance_policy,
-                        terminal_outcome=WorkflowOutcome.FAILED.value,
-                        failure_category=FailureCategory.REPAIR_BUDGET_EXHAUSTED.value,
-                        acceptance_criteria_met=False,
-                        acceptance_evaluation=acceptance_evaluation,
-                    )
-                    project.save()
-                    self._log_event(
-                        "error",
-                        "workflow_repair_budget_exhausted",
-                        project_name=project.project_name,
-                        failed_task_ids=list(failed_task_ids),
-                        repair_cycle_count=project.repair_cycle_count,
-                        repair_max_cycles=project.repair_max_cycles,
-                    )
-                    raise AgentExecutionError(
-                        "Workflow repair budget exhausted before resuming failed tasks"
-                    )
-                project.start_repair_cycle(
-                    reason="resume_failed_tasks",
-                    failure_category=(
-                        next(iter(failure_categories)) if len(failure_categories) == 1 else FailureCategory.UNKNOWN.value
-                    ),
-                    failed_task_ids=failed_task_ids,
-                )
-                self._configure_repair_attempts(project, failed_task_ids, project.repair_history[-1])
-                repair_task_ids = self._repair_task_ids_for_cycle(project, failed_task_ids)
-                resumed_task_ids.extend(repair_task_ids)
                 resumed_task_ids.extend(
-                    project.resume_failed_tasks(
-                        include_failed_tasks=False,
-                        failed_task_ids=failed_task_ids,
-                        additional_task_ids=repair_task_ids,
+                    resume_failed_tasks_with_repair_cycle(
+                        project,
+                        list(failed_task_ids),
+                        failure_categories,
+                        workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                        zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                        configure_repair_attempts=self._configure_repair_attempts,
+                        repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
+                        log_event=self._log_event,
                     )
                 )
         if resumed_task_ids:

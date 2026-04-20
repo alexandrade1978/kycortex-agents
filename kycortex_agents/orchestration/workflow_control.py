@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, cast
+from typing import AbstractSet, Any, Callable, Optional, cast
 
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
-from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus
+from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus, WorkflowOutcome
 
 
 def log_event(logger: Any, level: str, event: str, **fields: Any) -> None:
@@ -370,6 +370,66 @@ def queue_active_cycle_repair(
         repair_cycle_count=project.repair_cycle_count,
     )
     return True
+
+
+def resume_failed_tasks_with_repair_cycle(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    failure_categories: AbstractSet[str],
+    *,
+    workflow_acceptance_policy: str,
+    zero_budget_failure_categories: AbstractSet[str],
+    evaluate_workflow_acceptance,
+    configure_repair_attempts,
+    repair_task_ids_for_cycle,
+    log_event,
+) -> list[str]:
+    if not project.can_start_repair_cycle():
+        acceptance_evaluation = evaluate_workflow_acceptance(
+            project,
+            workflow_acceptance_policy,
+            zero_budget_failure_categories,
+        )
+        project.mark_workflow_finished(
+            "failed",
+            acceptance_policy=workflow_acceptance_policy,
+            terminal_outcome=WorkflowOutcome.FAILED.value,
+            failure_category=FailureCategory.REPAIR_BUDGET_EXHAUSTED.value,
+            acceptance_criteria_met=False,
+            acceptance_evaluation=acceptance_evaluation,
+        )
+        project.save()
+        log_event(
+            "error",
+            "workflow_repair_budget_exhausted",
+            project_name=project.project_name,
+            failed_task_ids=list(failed_task_ids),
+            repair_cycle_count=project.repair_cycle_count,
+            repair_max_cycles=project.repair_max_cycles,
+        )
+        raise AgentExecutionError(
+            "Workflow repair budget exhausted before resuming failed tasks"
+        )
+
+    project.start_repair_cycle(
+        reason="resume_failed_tasks",
+        failure_category=(
+            next(iter(failure_categories)) if len(failure_categories) == 1 else FailureCategory.UNKNOWN.value
+        ),
+        failed_task_ids=failed_task_ids,
+    )
+    current_cycle = project.repair_history[-1]
+    configure_repair_attempts(project, failed_task_ids, current_cycle)
+    repair_task_ids = repair_task_ids_for_cycle(project, failed_task_ids)
+    resumed_task_ids = list(repair_task_ids)
+    resumed_task_ids.extend(
+        project.resume_failed_tasks(
+            include_failed_tasks=False,
+            failed_task_ids=failed_task_ids,
+            additional_task_ids=repair_task_ids,
+        )
+    )
+    return resumed_task_ids
 
 
 def build_repair_context(

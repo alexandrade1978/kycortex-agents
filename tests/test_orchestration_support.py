@@ -262,6 +262,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	privacy_safe_log_fields,
 	queue_active_cycle_repair,
 	repair_task_ids_for_cycle,
+	resume_failed_tasks_with_repair_cycle,
 	task_id_collection_count,
 	task_id_count_log_field_name,
 	validate_agent_resolution,
@@ -2911,6 +2912,70 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 				"task_id": "tests",
 				"repair_task_ids": ["tests__repair_1"],
 				"repair_cycle_count": 0,
+			},
+		)
+	]
+	resume_project = ProjectState(project_name="Demo", goal="Build demo")
+	resume_project.repair_max_cycles = 2
+	resume_project.add_task(
+		Task(
+			id="code",
+			title="Code",
+			description="Code",
+			assigned_to="code_engineer",
+			status=TaskStatus.FAILED.value,
+		)
+	)
+	resume_configure_calls: list[tuple[list[str], dict[str, object]]] = []
+	resumed_ids = resume_failed_tasks_with_repair_cycle(
+		resume_project,
+		["code"],
+		{FailureCategory.CODE_VALIDATION.value},
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		configure_repair_attempts=lambda _project, failed_task_ids, cycle: resume_configure_calls.append((failed_task_ids, cycle)),
+		repair_task_ids_for_cycle=lambda _project, failed_task_ids: ["code__repair_1"],
+		log_event=lambda *_args, **_kwargs: None,
+	)
+	assert resumed_ids == ["code__repair_1"]
+	assert resume_project.repair_cycle_count == 1
+	assert resume_project.repair_history[-1]["failed_task_ids"] == ["code"]
+	assert resume_configure_calls == [(["code"], resume_project.repair_history[-1])]
+	assert any(
+		event["event"] == "workflow_repair_cycle_started"
+		and event["details"]["failed_task_ids"] == ["code"]
+		for event in resume_project.execution_events
+	)
+	budget_project = ProjectState(project_name="Demo", goal="Build demo")
+	budget_project.repair_max_cycles = 0
+	budget_saved: list[bool] = []
+	budget_project.save = lambda: budget_saved.append(True)
+	budget_logs: list[tuple[str, str, dict[str, object]]] = []
+	with pytest.raises(AgentExecutionError, match="Workflow repair budget exhausted before resuming failed tasks"):
+		resume_failed_tasks_with_repair_cycle(
+			budget_project,
+			["code"],
+			{FailureCategory.CODE_VALIDATION.value},
+			workflow_acceptance_policy="strict",
+			zero_budget_failure_categories=set(),
+			evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+			configure_repair_attempts=lambda *_args, **_kwargs: None,
+			repair_task_ids_for_cycle=lambda *_args, **_kwargs: [],
+			log_event=lambda level, event, **details: budget_logs.append((level, event, details)),
+		)
+	assert budget_saved == [True]
+	assert budget_project.phase == "failed"
+	assert budget_project.failure_category == FailureCategory.REPAIR_BUDGET_EXHAUSTED.value
+	assert budget_logs == [
+		(
+			"error",
+			"workflow_repair_budget_exhausted",
+			{
+				"project_name": "Demo",
+				"failed_task_ids": ["code"],
+				"repair_cycle_count": 0,
+				"repair_max_cycles": 0,
 			},
 		)
 	]

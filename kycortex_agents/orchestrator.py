@@ -140,18 +140,11 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     call_argument_count,
     bound_target_names,
     call_argument_value,
-    collect_local_bindings,
-    collect_local_name_bindings,
-    collect_module_defined_names,
-    collect_parametrized_argument_names,
     collect_test_local_types,
-    collect_undefined_local_names,
     extract_literal_dict_keys,
     extract_literal_field_values,
     extract_literal_list_items,
-    extract_parametrize_argument_names,
     extract_string_literals,
-    function_argument_names,
     infer_argument_type,
     infer_call_result_type,
     infer_expression_type,
@@ -1205,34 +1198,6 @@ class Orchestrator:
 
     def _with_uses_pytest_assertion_context(self, node: ast.With | ast.AsyncWith) -> bool:
         return with_uses_pytest_assertion_context(node)
-
-    def _collect_local_bindings(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, ast.AST]:
-        return collect_local_bindings(node)
-
-    def _collect_module_defined_names(self, tree: ast.AST) -> set[str]:
-        return collect_module_defined_names(tree)
-
-    def _function_argument_names(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
-        return function_argument_names(node)
-
-    def _collect_parametrized_argument_names(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-    ) -> set[str]:
-        return collect_parametrized_argument_names(node)
-
-    def _extract_parametrize_argument_names(self, decorator: ast.Call) -> set[str]:
-        return extract_parametrize_argument_names(decorator)
-
-    def _collect_undefined_local_names(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        module_defined_names: set[str],
-    ) -> list[str]:
-        return collect_undefined_local_names(node, module_defined_names)
-
-    def _collect_local_name_bindings(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
-        return collect_local_name_bindings(node)
 
     def _call_signature_details(
         self,

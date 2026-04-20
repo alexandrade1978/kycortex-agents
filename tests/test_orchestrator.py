@@ -36,7 +36,14 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     batch_call_allows_partial_invalid_items,
     call_expects_invalid_outcome,
     call_has_negative_expectation,
+    collect_local_bindings,
+    collect_local_name_bindings,
+    collect_module_defined_names,
+    collect_parametrized_argument_names,
+    collect_undefined_local_names,
     comparison_implies_partial_batch_result,
+    extract_parametrize_argument_names,
+    function_argument_names,
     int_constant_value,
     len_call_matches_batch_result,
     parent_map,
@@ -3958,7 +3965,7 @@ def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(t
     )
     call_nodes = [node for node in ast.walk(function_node) if isinstance(node, ast.Call)]
 
-    bindings = orchestrator._collect_local_bindings(function_node)
+    bindings = collect_local_bindings(function_node)
 
     assert isinstance(bindings["payload"], ast.Dict)
     assert callable_name(call_nodes[0]) == "validate_request"
@@ -5240,9 +5247,9 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
 
-    assert orchestrator._collect_module_defined_names(ast.Constant(1)) == set()
-    assert orchestrator._collect_module_defined_names(ast.parse("annotated_only: int\n")) == {"annotated_only"}
-    assert orchestrator._collect_module_defined_names(ast.parse("42\nannotated_only: int\n")) == {"annotated_only"}
+    assert collect_module_defined_names(ast.Constant(1)) == set()
+    assert collect_module_defined_names(ast.parse("annotated_only: int\n")) == {"annotated_only"}
+    assert collect_module_defined_names(ast.parse("42\nannotated_only: int\n")) == {"annotated_only"}
     module_tree = ast.parse(
         "from pkg import *\n"
         "import os as operating_system\n"
@@ -5250,7 +5257,7 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
         "annotated: int = 2\n"
         "holder.value: int = 3\n"
     )
-    assert orchestrator._collect_module_defined_names(module_tree) == {"operating_system", "value", "annotated"}
+    assert collect_module_defined_names(module_tree) == {"operating_system", "value", "annotated"}
 
     function_node = parse_function_node(
         "@plain\n"
@@ -5290,9 +5297,9 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
         "    local = 2\n"
     )
 
-    assert orchestrator._function_argument_names(function_node) == {"base", "args", "kwargs"}
-    assert orchestrator._collect_parametrized_argument_names(function_node) == {"left", "right"}
-    bindings = orchestrator._collect_local_name_bindings(function_node)
+    assert function_argument_names(function_node) == {"base", "args", "kwargs"}
+    assert collect_parametrized_argument_names(function_node) == {"left", "right"}
+    bindings = collect_local_name_bindings(function_node)
     assert {
         "total",
         "item",
@@ -5304,7 +5311,7 @@ def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):
         "os_path",
         "values",
     } <= bindings
-    assert "missing" not in orchestrator._collect_undefined_local_names(function_node, {"items", "manager", "source"})
+    assert "missing" not in collect_undefined_local_names(function_node, {"items", "manager", "source"})
     assert self_assigned_attributes(class_init) == ["value"]
     assert self_assigned_attributes(class_init_with_local) == ["value"]
     starred_assign = ast.parse("first, *rest = values").body[0]
@@ -5519,7 +5526,7 @@ def test_analyze_test_module_reports_constructor_arity_when_limits_fall_back_or_
 
 def test_extract_parametrize_argument_names_skips_irrelevant_keywords(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     keyword_decorator = parse_function_node(
         "@pytest.mark.parametrize(values=[1], argnames=['left'])\n"
         "def test_case():\n"
@@ -5534,8 +5541,8 @@ def test_extract_parametrize_argument_names_skips_irrelevant_keywords(tmp_path):
     assert isinstance(keyword_decorator, ast.Call)
     assert isinstance(missing_decorator, ast.Call)
 
-    assert orchestrator._extract_parametrize_argument_names(keyword_decorator) == {"left"}
-    assert orchestrator._extract_parametrize_argument_names(missing_decorator) == set()
+    assert extract_parametrize_argument_names(keyword_decorator) == {"left"}
+    assert extract_parametrize_argument_names(missing_decorator) == set()
 
 
 def test_build_code_behavior_contract_ignores_non_function_class_members(tmp_path):

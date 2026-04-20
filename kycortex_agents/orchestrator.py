@@ -143,21 +143,15 @@ from kycortex_agents.orchestration.task_constraints import (
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
     assert_expects_false,
-    assert_expects_invalid_outcome,
-    assert_limits_batch_result,
-    assigned_name_for_call,
     analyze_test_module,
     analyze_test_behavior_contracts,
     auto_fix_test_type_mismatches,
     analyze_test_type_mismatches,
     analyze_typed_test_member_usage,
     behavior_contract_explicitly_limits_score_state_to_valid_requests,
-    batch_call_allows_partial_invalid_items,
     call_argument_count,
     bound_target_names,
     call_argument_value,
-    call_expects_invalid_outcome,
-    call_has_negative_expectation,
     collect_local_bindings,
     collect_local_name_bindings,
     collect_module_defined_names,
@@ -176,12 +170,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     infer_call_result_type,
     infer_expression_type,
     int_constant_value,
-    invalid_outcome_marker_matches,
-    invalid_outcome_subject_matches,
     is_internal_score_state_target,
     iter_relevant_test_body_nodes,
-    len_call_matches_batch_result,
-    parent_map,
     payload_argument_for_validation,
     resolve_bound_value,
     name_suggests_validation_failure,
@@ -1262,68 +1252,6 @@ class Orchestrator:
         class_map: Dict[str, Any],
     ) -> str:
         return infer_argument_type(payload_node, bindings, field_name, class_map)
-
-    def _parent_map(self, root: ast.AST) -> Dict[ast.AST, ast.AST]:
-        return parent_map(root)
-
-    def _call_has_negative_expectation(self, node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> bool:
-        return call_has_negative_expectation(node, parent_map)
-
-    def _call_expects_invalid_outcome(
-        self,
-        test_node: ast.FunctionDef | ast.AsyncFunctionDef,
-        call_node: ast.Call,
-        parent_map: Dict[ast.AST, ast.AST],
-    ) -> bool:
-        return call_expects_invalid_outcome(test_node, call_node, parent_map)
-
-    def _assert_expects_invalid_outcome(
-        self,
-        node: ast.AST,
-        result_name: Optional[str],
-        payload_name: Optional[str],
-    ) -> bool:
-        return assert_expects_invalid_outcome(node, result_name, payload_name)
-
-    def _invalid_outcome_subject_matches(
-        self,
-        node: ast.AST,
-        result_name: Optional[str],
-        payload_name: Optional[str],
-    ) -> bool:
-        return invalid_outcome_subject_matches(node, result_name, payload_name)
-
-    def _invalid_outcome_marker_matches(self, node: ast.AST) -> bool:
-        return invalid_outcome_marker_matches(node)
-
-    def _batch_call_allows_partial_invalid_items(
-        self,
-        test_node: ast.FunctionDef | ast.AsyncFunctionDef,
-        call_node: ast.Call,
-        bindings: Dict[str, ast.AST],
-        parent_map: Dict[ast.AST, ast.AST],
-    ) -> bool:
-        return batch_call_allows_partial_invalid_items(test_node, call_node, bindings, parent_map)
-
-    def _assigned_name_for_call(self, call_node: ast.Call, parent_map: Dict[ast.AST, ast.AST]) -> Optional[str]:
-        return assigned_name_for_call(call_node, parent_map)
-
-    def _assert_limits_batch_result(
-        self,
-        test: ast.AST,
-        result_name: Optional[str],
-        call_node: ast.Call,
-        batch_size: int,
-    ) -> bool:
-        return assert_limits_batch_result(test, result_name, call_node, batch_size)
-
-    def _len_call_matches_batch_result(
-        self,
-        node: ast.AST,
-        result_name: Optional[str],
-        call_node: ast.Call,
-    ) -> bool:
-        return len_call_matches_batch_result(node, result_name, call_node)
 
     def _int_constant_value(self, node: ast.AST) -> Optional[int]:
         return int_constant_value(node)

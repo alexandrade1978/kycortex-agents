@@ -26,7 +26,18 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     normalized_helper_surface_symbols,
     qa_repair_should_reuse_failed_test_artifact,
 )
-from kycortex_agents.orchestration.test_ast_analysis import analyze_typed_test_member_usage
+from kycortex_agents.orchestration.test_ast_analysis import (
+    analyze_typed_test_member_usage,
+    assert_expects_false,
+    assert_expects_invalid_outcome,
+    assert_limits_batch_result,
+    assigned_name_for_call,
+    batch_call_allows_partial_invalid_items,
+    call_expects_invalid_outcome,
+    call_has_negative_expectation,
+    len_call_matches_batch_result,
+    parent_map,
+)
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output
 from kycortex_agents.orchestration import (
@@ -4267,13 +4278,13 @@ def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_pa
         for node in ast.walk(test_node)
         if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
     ]
-    parent_map = orchestrator._parent_map(tree)
+    parent_map_by_node = parent_map(tree)
 
     negative_call = next(node for node in call_nodes if node.lineno == 4)
     followup_call = next(node for node in call_nodes if node.lineno == 5)
 
-    assert orchestrator._call_has_negative_expectation(negative_call, parent_map) is True
-    assert orchestrator._call_expects_invalid_outcome(test_node, followup_call, parent_map) is True
+    assert call_has_negative_expectation(negative_call, parent_map_by_node) is True
+    assert call_expects_invalid_outcome(test_node, followup_call, parent_map_by_node) is True
     with_node = parse_with_node("with pytest.raises(ValueError):\n    validate_request(data)\n")
     assert orchestrator._with_uses_pytest_raises(with_node) is True
     assert orchestrator._with_uses_pytest_assertion_context(with_node) is True
@@ -5143,12 +5154,12 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     orchestrator = Orchestrator(config)
     call_node = parse_call_node("process_batch(requests)")
 
-    assert orchestrator._call_has_negative_expectation(call_node, {}) is False
-    assert orchestrator._call_has_negative_expectation(
+    assert call_has_negative_expectation(call_node, {}) is False
+    assert call_has_negative_expectation(
         call_node,
-        orchestrator._parent_map(ast.parse("process_batch(requests)")),
+        parent_map(ast.parse("process_batch(requests)")),
     ) is False
-    assert orchestrator._batch_call_allows_partial_invalid_items(
+    assert batch_call_allows_partial_invalid_items(
         parse_function_node("def test_case():\n    result = process_batch(requests)\n"),
         parse_call_node("process_batch(requests)"),
         {},
@@ -5158,22 +5169,22 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     ann_assign = ann_assign_module.body[0]
     assert isinstance(ann_assign, ast.AnnAssign)
     assert isinstance(ann_assign.value, ast.Call)
-    parent_map = orchestrator._parent_map(ann_assign_module)
-    assert orchestrator._assigned_name_for_call(ann_assign.value, parent_map) == "results"
-    assert orchestrator._assigned_name_for_call(call_node, {}) is None
-    assert orchestrator._assert_limits_batch_result(
+    parent_map_by_node = parent_map(ann_assign_module)
+    assert assigned_name_for_call(ann_assign.value, parent_map_by_node) == "results"
+    assert assigned_name_for_call(call_node, {}) is None
+    assert assert_limits_batch_result(
         parse_expr_node("1 > len(results)"),
         "results",
         call_node,
         3,
     ) is True
-    assert orchestrator._assert_limits_batch_result(parse_expr_node("len(results)"), "results", call_node, 3) is False
-    assert orchestrator._assert_limits_batch_result(parse_expr_node("count == 1"), "results", call_node, 3) is False
-    assert orchestrator._len_call_matches_batch_result(ast.Name("results"), "results", call_node) is False
-    assert orchestrator._len_call_matches_batch_result(parse_expr_node("count(results)"), "results", call_node) is False
+    assert assert_limits_batch_result(parse_expr_node("len(results)"), "results", call_node, 3) is False
+    assert assert_limits_batch_result(parse_expr_node("count == 1"), "results", call_node, 3) is False
+    assert len_call_matches_batch_result(ast.Name("results"), "results", call_node) is False
+    assert len_call_matches_batch_result(parse_expr_node("count(results)"), "results", call_node) is False
     direct_len = parse_call_node("len(process_batch(requests))")
     assert isinstance(direct_len.args[0], ast.Call)
-    assert orchestrator._len_call_matches_batch_result(direct_len, None, direct_len.args[0]) is True
+    assert len_call_matches_batch_result(direct_len, None, direct_len.args[0]) is True
     assert orchestrator._int_constant_value(ast.Constant("x")) is None
     assert orchestrator._comparison_implies_partial_batch_result(ast.Gt(), 1, 3) is False
     assert orchestrator._comparison_implies_partial_batch_result(ast.Lt(), 3, 3) is True
@@ -5182,18 +5193,18 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     false_compare = parse_assert_node("assert False == validate_request(data)")
     assert isinstance(false_compare.test, ast.Compare)
     assert isinstance(false_compare.test.comparators[0], ast.Call)
-    assert orchestrator._assert_expects_false(false_compare, false_compare.test.comparators[0]) is True
+    assert assert_expects_false(false_compare, false_compare.test.comparators[0]) is True
     plain_assert = parse_assert_node("assert validate_request(data)")
     assert isinstance(plain_assert.test, ast.Call)
-    assert orchestrator._assert_expects_false(plain_assert, plain_assert.test) is False
+    assert assert_expects_false(plain_assert, plain_assert.test) is False
     unrelated_compare = parse_assert_node("assert other_result == False")
-    assert orchestrator._assert_expects_false(unrelated_compare, call_node) is False
+    assert assert_expects_false(unrelated_compare, call_node) is False
     invalid_status_assert = parse_assert_node("assert request.status == 'Invalid'")
-    assert orchestrator._assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
+    assert assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
     pending_status_assert = parse_assert_node("assert request.status == 'Pending'")
-    assert orchestrator._assert_expects_invalid_outcome(pending_status_assert.test, None, "request") is True
+    assert assert_expects_invalid_outcome(pending_status_assert.test, None, "request") is True
     false_result_assert = parse_assert_node("assert result is False")
-    assert orchestrator._assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
+    assert assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")
     assert orchestrator._with_uses_pytest_raises(with_node) is False
     warns_with_node = parse_with_node("with pytest.warns(ValueError):\n    validate_request(data)\n")
@@ -5202,7 +5213,7 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
 
 def test_batch_partial_invalid_detection_returns_false_when_asserts_do_not_limit_batch(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     function_node = parse_function_node(
         "def test_batch():\n"
         "    result = process_batch([1, 2, 3])\n"
@@ -5217,9 +5228,9 @@ def test_batch_partial_invalid_detection_returns_false_when_asserts_do_not_limit
     assert isinstance(first_statement, ast.Assign)
     assert isinstance(first_statement.value, ast.Call)
     call_node = first_statement.value
-    parent_map = orchestrator._parent_map(tree)
+    parent_map_by_node = parent_map(tree)
 
-    assert orchestrator._batch_call_allows_partial_invalid_items(function_node, call_node, {}, parent_map) is False
+    assert batch_call_allows_partial_invalid_items(function_node, call_node, {}, parent_map_by_node) is False
 
 
 def test_name_binding_and_type_helpers_cover_remaining_edge_cases(tmp_path):

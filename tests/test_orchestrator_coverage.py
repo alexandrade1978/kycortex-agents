@@ -10,7 +10,7 @@ import pytest
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.orchestration.repair_test_analysis import module_defined_symbol_names
-from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support, known_type_allows_member, patched_target_name_from_call
+from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support, known_type_allows_member, parent_map, patched_target_name_from_call
 from kycortex_agents.orchestration import (
     ast_is_empty_literal,
     default_value_for_annotation,
@@ -487,7 +487,7 @@ class TestPatchedTargetNameFromCall:
 class TestParentMap:
     def test_basic_tree(self, orch):
         tree = ast.parse("x = 1")
-        pm = orch._parent_map(tree)
+        pm = parent_map(tree)
         assert isinstance(pm, dict)
         assert len(pm) > 0
 

@@ -5,7 +5,6 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
 
@@ -31,10 +30,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
     normalize_package_name,
 )
 from kycortex_agents.orchestration.context_building import (
-    apply_task_public_contract_context,
-    apply_completed_tasks_to_context,
-    apply_repair_context_to_context,
-    build_task_context_base,
+    build_task_context_runtime,
 )
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
@@ -797,56 +793,33 @@ class Orchestrator:
         }
 
     def _build_context(self, task: Task, project: ProjectState) -> Dict[str, Any]:
-        snapshot = project.snapshot()
-        agent_view = self._build_agent_view(task, project, snapshot)
-        agent_view_snapshot = asdict(agent_view)
-        visible_task_ids = self._task_dependency_closure_ids(task, project)
-        execution_agent_name = self._execution_agent_name(task)
-        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-        budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
-        if not isinstance(budget_decomposition_plan_task_id, str) or not budget_decomposition_plan_task_id.strip():
-            budget_decomposition_plan_task_id = None
-        ctx = build_task_context_base(
+        return build_task_context_runtime(
             task,
             project,
-            execution_agent_name=execution_agent_name,
             provider_max_tokens=self.config.max_tokens,
-            agent_view_snapshot=agent_view_snapshot,
-            planned_module_context=self._planned_module_context(project, visible_task_ids, current_task=task),
-        )
-        task_public_contract_anchor = self._task_public_contract_anchor(task.description)
-        compact_architecture_context = apply_task_public_contract_context(
-            ctx,
-            task_public_contract_anchor=task_public_contract_anchor,
-            should_compact_architecture_context=lambda: self._should_compact_architecture_context(task, task_public_contract_anchor),
-            compact_architecture_context=lambda: self._compact_architecture_context(task, task_public_contract_anchor),
-        )
-        apply_completed_tasks_to_context(
-            ctx,
-            project_tasks=project.tasks,
-            visible_task_ids=visible_task_ids,
-            budget_decomposition_plan_task_id=budget_decomposition_plan_task_id,
-            compact_architecture_context=compact_architecture_context,
+            build_agent_view=self._build_agent_view,
+            task_dependency_closure_ids=self._task_dependency_closure_ids,
+            execution_agent_name=self._execution_agent_name,
+            planned_module_context=lambda current_project, visible_task_ids, current_task: self._planned_module_context(
+                current_project,
+                visible_task_ids,
+                current_task=current_task,
+            ),
+            task_public_contract_anchor=self._task_public_contract_anchor,
+            should_compact_architecture_context=self._should_compact_architecture_context,
+            compact_architecture_context=self._compact_architecture_context,
             task_context_output=self._task_context_output,
             is_budget_decomposition_planner=self._is_budget_decomposition_planner,
             semantic_output_key=semantic_output_key,
             normalize_assigned_to=AgentRegistry.normalize_key,
-            code_artifact_context=lambda prev_task: self._code_artifact_context(prev_task, project),
-            dependency_artifact_context=lambda prev_task, current_ctx: self._dependency_artifact_context(prev_task, current_ctx),
-            test_artifact_context=lambda prev_task, current_ctx: self._test_artifact_context(prev_task, current_ctx),
+            code_artifact_context=self._code_artifact_context,
+            dependency_artifact_context=self._dependency_artifact_context,
+            test_artifact_context=self._test_artifact_context,
+            agent_visible_repair_context=self._agent_visible_repair_context,
+            normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
+            qa_repair_should_reuse_failed_test_artifact=self._qa_repair_should_reuse_failed_test_artifact,
+            redact_sensitive_data=redact_sensitive_data,
         )
-        if repair_context:
-            apply_repair_context_to_context(
-                ctx,
-                repair_context,
-                execution_agent_name,
-                budget_decomposition_plan_task_id,
-                agent_visible_repair_context=self._agent_visible_repair_context,
-                normalized_execution_agent=AgentRegistry.normalize_key(execution_agent_name),
-                normalized_helper_surface_symbols=self._normalized_helper_surface_symbols,
-                qa_repair_should_reuse_failed_test_artifact=self._qa_repair_should_reuse_failed_test_artifact,
-            )
-        return cast(Dict[str, Any], redact_sensitive_data(ctx))
 
     def _task_dependency_closure_ids(self, task: Task, project: ProjectState) -> set[str]:
         visible_task_ids = {task.id}

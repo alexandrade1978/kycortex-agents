@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+from typing import cast
 from typing import Any, Callable, Optional
 
 
@@ -205,3 +207,79 @@ def apply_repair_context_to_context(
             ctx["existing_dependency_manifest"] = repair_content
         if "dependency_validation_summary" not in ctx and isinstance(validation_summary, str) and validation_summary.strip():
             ctx["dependency_validation_summary"] = validation_summary
+
+
+def build_task_context_runtime(
+    task: Any,
+    project: Any,
+    *,
+    provider_max_tokens: int,
+    build_agent_view: Callable[[Any, Any, Any], Any],
+    task_dependency_closure_ids: Callable[[Any, Any], set[str]],
+    execution_agent_name: Callable[[Any], str],
+    planned_module_context: Callable[[Any, set[str], Any], dict[str, Any]],
+    task_public_contract_anchor: Callable[[str], str],
+    should_compact_architecture_context: Callable[[Any, str], bool],
+    compact_architecture_context: Callable[[Any, str], str],
+    task_context_output: Callable[[Any], Optional[str]],
+    is_budget_decomposition_planner: Callable[[Any], bool],
+    semantic_output_key: Callable[[str, str], Optional[str]],
+    normalize_assigned_to: Callable[[str], str],
+    code_artifact_context: Callable[[Any, Any], dict[str, Any]],
+    dependency_artifact_context: Callable[[Any, dict[str, Any]], dict[str, Any]],
+    test_artifact_context: Callable[[Any, dict[str, Any]], dict[str, Any]],
+    agent_visible_repair_context: Callable[[dict[str, Any], str], dict[str, Any]],
+    normalized_helper_surface_symbols: Callable[[object], list[str]],
+    qa_repair_should_reuse_failed_test_artifact: Callable[[object, object, object], bool],
+    redact_sensitive_data: Callable[[Any], Any],
+) -> dict[str, Any]:
+    snapshot = project.snapshot()
+    agent_view = build_agent_view(task, project, snapshot)
+    agent_view_snapshot = asdict(agent_view)
+    visible_task_ids = task_dependency_closure_ids(task, project)
+    current_execution_agent_name = execution_agent_name(task)
+    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    budget_decomposition_plan_task_id = repair_context.get("budget_decomposition_plan_task_id")
+    if not isinstance(budget_decomposition_plan_task_id, str) or not budget_decomposition_plan_task_id.strip():
+        budget_decomposition_plan_task_id = None
+    ctx = build_task_context_base(
+        task,
+        project,
+        execution_agent_name=current_execution_agent_name,
+        provider_max_tokens=provider_max_tokens,
+        agent_view_snapshot=agent_view_snapshot,
+        planned_module_context=planned_module_context(project, visible_task_ids, task),
+    )
+    public_contract_anchor = task_public_contract_anchor(task.description)
+    compacted_architecture_context = apply_task_public_contract_context(
+        ctx,
+        task_public_contract_anchor=public_contract_anchor,
+        should_compact_architecture_context=lambda: should_compact_architecture_context(task, public_contract_anchor),
+        compact_architecture_context=lambda: compact_architecture_context(task, public_contract_anchor),
+    )
+    apply_completed_tasks_to_context(
+        ctx,
+        project_tasks=project.tasks,
+        visible_task_ids=visible_task_ids,
+        budget_decomposition_plan_task_id=budget_decomposition_plan_task_id,
+        compact_architecture_context=compacted_architecture_context,
+        task_context_output=task_context_output,
+        is_budget_decomposition_planner=is_budget_decomposition_planner,
+        semantic_output_key=semantic_output_key,
+        normalize_assigned_to=normalize_assigned_to,
+        code_artifact_context=lambda prev_task: code_artifact_context(prev_task, project),
+        dependency_artifact_context=dependency_artifact_context,
+        test_artifact_context=test_artifact_context,
+    )
+    if repair_context:
+        apply_repair_context_to_context(
+            ctx,
+            repair_context,
+            current_execution_agent_name,
+            budget_decomposition_plan_task_id,
+            agent_visible_repair_context=agent_visible_repair_context,
+            normalized_execution_agent=normalize_assigned_to(current_execution_agent_name),
+            normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+            qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
+        )
+    return cast(dict[str, Any], redact_sensitive_data(ctx))

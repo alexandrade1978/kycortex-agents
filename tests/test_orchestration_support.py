@@ -33,6 +33,7 @@ from kycortex_agents.orchestration.context_building import (
 	apply_completed_tasks_to_context,
 	apply_completed_task_output_to_context,
 	apply_repair_context_to_context,
+	build_task_context_runtime,
 	build_task_context_base,
 )
 from kycortex_agents.orchestration.output_helpers import (
@@ -330,7 +331,7 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 	task_acceptance_lists,
 )
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, AgentOutput, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus, WorkflowOutcome
+from kycortex_agents.types import AgentInput, AgentOutput, AgentView, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskStatus, WorkflowOutcome
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -394,6 +395,69 @@ def test_apply_repair_context_to_context_populates_code_repair_fields():
 	assert ctx["repair_validation_summary"] == "code summary"
 	assert ctx["existing_code"] == "def repaired():\n    return 2"
 	assert ctx["existing_tests"] == "def test_existing():\n    assert True"
+
+
+def test_build_task_context_runtime_builds_redacted_context_directly():
+	task = SimpleNamespace(
+		id="code",
+		title="Implement",
+		description="Public contract: return a dict",
+		assigned_to="code_engineer",
+		repair_context={
+			"validation_summary": "repair summary",
+			"failed_artifact_content": "def repaired():\n    return 2",
+		},
+	)
+	completed_task = SimpleNamespace(id="done_task", status="done", assigned_to="code_engineer", title="Implement done")
+	project = SimpleNamespace(
+		goal="ship",
+		project_name="demo",
+		phase="build",
+		tasks=[completed_task],
+		snapshot=lambda: {"workflow_status": "running"},
+	)
+
+	ctx = build_task_context_runtime(
+		task,
+		project,
+		provider_max_tokens=4096,
+		build_agent_view=lambda current_task, current_project, snapshot: AgentView(
+			project_name="demo",
+			goal="ship",
+			decisions=["d1"],
+			artifacts=["a1"],
+		),
+		task_dependency_closure_ids=lambda current_task, current_project: {"done_task"},
+		execution_agent_name=lambda current_task: "code_engineer",
+		planned_module_context=lambda current_project, visible_task_ids, current_task: {
+			"planned_module_name": "code_implementation",
+			"planned_module_filename": "code_implementation.py",
+		},
+		task_public_contract_anchor=lambda description: "anchor",
+		should_compact_architecture_context=lambda current_task, anchor: False,
+		compact_architecture_context=lambda current_task, anchor: "compact architecture",
+		task_context_output=lambda current_task: "existing output",
+		is_budget_decomposition_planner=lambda current_task: False,
+		semantic_output_key=lambda assigned_to, title: "code" if assigned_to == "code_engineer" else None,
+		normalize_assigned_to=lambda assigned_to: assigned_to,
+		code_artifact_context=lambda current_task, current_project: {"code_artifact": current_task.id},
+		dependency_artifact_context=lambda current_task, current_ctx: {"dependency_artifact": current_task.id},
+		test_artifact_context=lambda current_task, current_ctx: {"test_artifact": current_task.id},
+		agent_visible_repair_context=lambda repair_context, execution_agent_name: {"owner": execution_agent_name},
+		normalized_helper_surface_symbols=lambda value: [],
+		qa_repair_should_reuse_failed_test_artifact=lambda *_args: False,
+		redact_sensitive_data=lambda value: {**value, "redacted": True},
+	)
+
+	assert ctx["goal"] == "ship"
+	assert ctx["task"]["execution_agent"] == "code_engineer"
+	assert ctx["task_public_contract_anchor"] == "anchor"
+	assert ctx["completed_tasks"] == {"done_task": "existing output"}
+	assert ctx["code_artifact"] == "done_task"
+	assert ctx["repair_context"] == {"owner": "code_engineer"}
+	assert ctx["repair_validation_summary"] == "repair summary"
+	assert ctx["existing_code"] == "def repaired():\n    return 2"
+	assert ctx["redacted"] is True
 
 
 def test_build_task_context_base_applies_planned_module_aliases_directly():

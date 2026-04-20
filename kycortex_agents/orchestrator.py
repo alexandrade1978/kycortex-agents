@@ -139,7 +139,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     auto_fix_test_type_mismatches,
     analyze_test_type_mismatches,
     analyze_typed_test_member_usage,
-    behavior_contract_explicitly_limits_score_state_to_valid_requests,
     call_argument_count,
     bound_target_names,
     call_argument_value,
@@ -158,10 +157,8 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     infer_argument_type,
     infer_call_result_type,
     infer_expression_type,
-    is_internal_score_state_target,
     payload_argument_for_validation,
     resolve_bound_value,
-    name_suggests_validation_failure,
     validate_batch_call,
     with_uses_pytest_assertion_context,
     with_uses_pytest_raises,
@@ -1204,24 +1201,6 @@ class Orchestrator:
         class_map: Dict[str, Any],
     ) -> str:
         return infer_argument_type(payload_node, bindings, field_name, class_map)
-
-    @staticmethod
-    def _test_name_suggests_validation_failure(test_name: str) -> bool:
-        return name_suggests_validation_failure(test_name)
-
-    @staticmethod
-    def _is_internal_score_state_target(rendered_target: str) -> bool:
-        return is_internal_score_state_target(rendered_target)
-
-    @staticmethod
-    def _behavior_contract_explicitly_limits_score_state_to_valid_requests(
-        code_behavior_contract: str,
-        rendered_target: str,
-    ) -> bool:
-        return behavior_contract_explicitly_limits_score_state_to_valid_requests(
-            code_behavior_contract,
-            rendered_target,
-        )
 
     def _with_uses_pytest_raises(self, node: ast.With | ast.AsyncWith) -> bool:
         return with_uses_pytest_raises(node)

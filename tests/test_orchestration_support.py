@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	build_code_repair_context_from_test_failure,
 	configure_repair_attempts,
 	build_repair_context,
+	ensure_workflow_running,
 	ensure_budget_decomposition_task,
 	failed_task_ids_for_repair,
 	has_repair_task_for_cycle,
@@ -3046,6 +3047,23 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			},
 		)
 	]
+	start_project = ProjectState(project_name="Demo", goal="Build demo")
+	start_logs: list[tuple[str, str, dict[str, object]]] = []
+	assert ensure_workflow_running(
+		start_project,
+		workflow_acceptance_policy="strict",
+		workflow_max_repair_cycles=2,
+		log_event=lambda level, event, **details: start_logs.append((level, event, details)),
+	) is True
+	assert start_project.phase == "execution"
+	assert start_project.repair_max_cycles == 2
+	assert start_logs == [("info", "workflow_started", {"project_name": "Demo", "phase": "execution"})]
+	assert ensure_workflow_running(
+		start_project,
+		workflow_acceptance_policy="strict",
+		workflow_max_repair_cycles=2,
+		log_event=lambda *_args, **_kwargs: None,
+	) is False
 
 
 def test_repair_instruction_owner_mapping_directly():

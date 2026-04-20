@@ -505,6 +505,23 @@ def resume_workflow_tasks(
     return resumed_task_ids
 
 
+def ensure_workflow_running(
+    project: ProjectState,
+    *,
+    workflow_acceptance_policy: str,
+    workflow_max_repair_cycles: int,
+    log_event,
+) -> bool:
+    if project.workflow_started_at is not None and project.phase == "execution":
+        return False
+    project.mark_workflow_running(
+        acceptance_policy=workflow_acceptance_policy,
+        repair_max_cycles=workflow_max_repair_cycles,
+    )
+    log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
+    return True
+
+
 def build_repair_context(
     task: Task,
     cycle: dict[str, Any],

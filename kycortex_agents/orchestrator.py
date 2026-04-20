@@ -252,6 +252,7 @@ from kycortex_agents.orchestration.workflow_control import (
     build_code_repair_context_from_test_failure,
     configure_repair_attempts,
     build_repair_context,
+    ensure_workflow_running,
     ensure_budget_decomposition_task,
     failed_task_ids_for_repair,
     has_repair_task_for_cycle,
@@ -3660,12 +3661,12 @@ class Orchestrator:
             return
         if self._exit_if_workflow_paused(project):
             return
-        if project.workflow_started_at is None or project.phase != "execution":
-            project.mark_workflow_running(
-                acceptance_policy=self.config.workflow_acceptance_policy,
-                repair_max_cycles=self.config.workflow_max_repair_cycles,
-            )
-            self._log_event("info", "workflow_started", project_name=project.project_name, phase=project.phase)
+        ensure_workflow_running(
+            project,
+            workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+            workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
+            log_event=self._log_event,
+        )
         while True:
             if self._exit_if_workflow_cancelled(project):
                 return

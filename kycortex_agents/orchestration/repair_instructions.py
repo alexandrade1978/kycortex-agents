@@ -254,3 +254,38 @@ def build_code_repair_instruction_from_test_failure(
 			f"{rendered_missing_fields} during the cited valid pytest cases."
 		)
 	return f"{instruction} Derive those internal values or give them safe defaults instead of demanding new input fields."
+
+
+def build_code_repair_instruction_from_test_failure_runtime(
+	code_task: Any,
+	validation_summary: str,
+	*,
+	failed_artifact_content: Callable[[Any, Any], str],
+	artifact_type: Any,
+	duplicate_constructor_argument_details: Callable[[str], Optional[tuple[str, str]]],
+	duplicate_constructor_argument_call_hint: Callable[[str, str], Optional[str]],
+	duplicate_constructor_explicit_rewrite_hint: Callable[[str, str], Optional[str]],
+	plain_class_field_default_factory_details: Callable[[str, str], Optional[tuple[str, str]]],
+	missing_object_attribute_details: Callable[[str, str], Optional[tuple[str, str, list[str]]]],
+	suggest_declared_attribute_replacement: Callable[[str, list[str]], Optional[str]],
+	render_name_list: Callable[[list[str]], str],
+	nested_payload_wrapper_field_validation_details: Callable[[str, str], Optional[tuple[str, list[str], str]]],
+	invalid_outcome_missing_audit_trail_details: Callable[[str, object, str], Optional[tuple[list[str], str, str, bool]]],
+	internal_constructor_strictness_details: Callable[[str, str], Optional[tuple[str, list[str], list[str]]]],
+	existing_tests: object = "",
+) -> str:
+	return build_code_repair_instruction_from_test_failure(
+		validation_summary,
+		failed_artifact_content(code_task, artifact_type),
+		duplicate_constructor_argument_details=duplicate_constructor_argument_details,
+		duplicate_constructor_argument_call_hint=duplicate_constructor_argument_call_hint,
+		duplicate_constructor_explicit_rewrite_hint=duplicate_constructor_explicit_rewrite_hint,
+		plain_class_field_default_factory_details=plain_class_field_default_factory_details,
+		missing_object_attribute_details=missing_object_attribute_details,
+		suggest_declared_attribute_replacement=suggest_declared_attribute_replacement,
+		render_name_list=render_name_list,
+		nested_payload_wrapper_field_validation_details=nested_payload_wrapper_field_validation_details,
+		invalid_outcome_missing_audit_trail_details=invalid_outcome_missing_audit_trail_details,
+		internal_constructor_strictness_details=internal_constructor_strictness_details,
+		existing_tests=existing_tests,
+	)

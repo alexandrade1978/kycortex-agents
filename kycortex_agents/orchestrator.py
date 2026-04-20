@@ -151,7 +151,7 @@ from kycortex_agents.orchestration.repair_focus import (
     build_repair_focus_lines,
 )
 from kycortex_agents.orchestration.repair_instructions import (
-    build_code_repair_instruction_from_test_failure,
+    build_code_repair_instruction_from_test_failure_runtime,
     build_repair_instruction,
     repair_owner_for_category,
 )
@@ -1026,9 +1026,11 @@ class Orchestrator:
         validation_summary: str,
         existing_tests: object = "",
     ) -> str:
-        return build_code_repair_instruction_from_test_failure(
+        return build_code_repair_instruction_from_test_failure_runtime(
+            code_task,
             validation_summary,
-            self._failed_artifact_content(code_task, ArtifactType.CODE),
+            failed_artifact_content=self._failed_artifact_content,
+            artifact_type=ArtifactType.CODE,
             duplicate_constructor_argument_details=self._duplicate_constructor_argument_details,
             duplicate_constructor_argument_call_hint=self._duplicate_constructor_argument_call_hint,
             duplicate_constructor_explicit_rewrite_hint=self._duplicate_constructor_explicit_rewrite_hint,

@@ -172,6 +172,7 @@ from kycortex_agents.orchestration.repair_test_structure import (
 )
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
+	build_code_repair_instruction_from_test_failure_runtime,
 	build_repair_instruction,
 	repair_owner_for_category,
 )
@@ -456,6 +457,7 @@ __all__ = [
 	"build_repair_focus_lines",
 	"build_test_validation_repair_lines",
 	"build_code_repair_instruction_from_test_failure",
+	"build_code_repair_instruction_from_test_failure_runtime",
 	"build_generated_test_env",
 	"build_sandbox_preexec_fn",
 	"build_repair_instruction",

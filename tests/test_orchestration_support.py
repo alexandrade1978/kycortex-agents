@@ -171,6 +171,7 @@ from kycortex_agents.orchestration.repair_test_structure import (
 )
 from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
+	build_code_repair_instruction_from_test_failure_runtime,
 	build_repair_instruction,
 	repair_owner_for_category,
 )
@@ -2486,6 +2487,27 @@ def test_build_code_repair_instruction_from_test_failure_covers_remaining_branch
 	)
 
 	assert "returns TriageOutcome(outcome='invalid', audit_log='') with an empty audit_log" in invalid_outcome_instruction
+
+
+def test_build_code_repair_instruction_from_test_failure_runtime_reads_code_artifact_directly():
+	instruction = build_code_repair_instruction_from_test_failure_runtime(
+		SimpleNamespace(id="code_task"),
+		"TypeError: Example.__init__() got multiple values for argument 'status'",
+		failed_artifact_content=lambda task, artifact_type: "Example(status=request.status, **request.details)",
+		artifact_type=ArtifactType.CODE,
+		duplicate_constructor_argument_details=lambda summary: ("Example", "status"),
+		duplicate_constructor_argument_call_hint=lambda summary, content: "Example(status=request.status, **request.details)",
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, content: "Example(status=request.status)",
+		plain_class_field_default_factory_details=lambda *_args: None,
+		missing_object_attribute_details=lambda *_args: None,
+		suggest_declared_attribute_replacement=lambda *_args: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda *_args: None,
+		invalid_outcome_missing_audit_trail_details=lambda *_args: None,
+		internal_constructor_strictness_details=lambda *_args: None,
+	)
+
+	assert "status twice" in instruction
 
 	strictness_instruction = build_code_repair_instruction_from_test_failure(
 		"summary",

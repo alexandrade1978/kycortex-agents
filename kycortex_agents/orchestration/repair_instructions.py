@@ -101,6 +101,31 @@ def build_repair_instruction(
 	return instructions.get(failure_category, f"Repair the previous failure for task '{task_id}' using the preserved evidence.")
 
 
+def build_repair_instruction_runtime(
+	task: Any,
+	failure_category: str,
+	*,
+	failed_artifact_content: Callable[[Any, Any], str],
+	artifact_type: Any,
+	validation_payload: Callable[[Any], Dict[str, Any]],
+	dataclass_default_order_repair_examples: Callable[[str], Sequence[str]],
+	missing_import_nameerror_details: Callable[[str, str], Optional[tuple[str, str]]],
+	plain_class_field_default_factory_details: Callable[[str, str], Optional[tuple[str, str]]],
+	test_validation_has_only_warnings: Callable[[Dict[str, Any]], bool],
+) -> str:
+	return build_repair_instruction(
+		task.id,
+		failure_category,
+		last_error=task.last_error if isinstance(task.last_error, str) else "",
+		failed_code=failed_artifact_content(task, artifact_type),
+		validation=validation_payload(task),
+		dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
+		missing_import_nameerror_details=missing_import_nameerror_details,
+		plain_class_field_default_factory_details=plain_class_field_default_factory_details,
+		test_validation_has_only_warnings=test_validation_has_only_warnings,
+	)
+
+
 def build_code_repair_instruction_from_test_failure(
 	validation_summary: str,
 	failed_artifact_content: str,

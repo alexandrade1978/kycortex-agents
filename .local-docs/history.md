@@ -70,6 +70,12 @@ This file summarizes the evolution of the project in operational language, based
 - the extracted support now owns failed-artifact lookup plus the final code-repair instruction dispatch through `build_code_repair_instruction_from_test_failure_runtime(...)`
 - `Orchestrator` now delegates that code-repair instruction shell through shared repair-instruction support, while focused regressions re-cleared locally at `766 passed`, with `ruff` and `mypy` also green across 69 source files
 
+## Local operational milestone on 2026-04-20 - Repair-instruction runtime slice recorded
+
+- the next deterministic refactor slice co-located `_build_repair_instruction(...)` into `kycortex_agents/orchestration/repair_instructions.py`
+- the extracted support now owns failed-artifact lookup plus the final repair-instruction runtime dispatch through `build_repair_instruction_runtime(...)`
+- `Orchestrator` now delegates that repair-instruction shell through shared repair-instruction support, while focused regressions re-cleared locally at `767 passed`, with `ruff` and `mypy` also green across 69 source files
+
 ## Local operational milestone on 2026-04-20 - Test validation runtime façade slice recorded
 
 - the next deterministic refactor slice co-located the remaining `_validate_test_output(...)` orchestration shell into `kycortex_agents/orchestration/validation_runtime.py`

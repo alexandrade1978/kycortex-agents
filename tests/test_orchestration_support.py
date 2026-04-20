@@ -173,6 +173,7 @@ from kycortex_agents.orchestration.repair_instructions import (
 	build_code_repair_instruction_from_test_failure,
 	build_code_repair_instruction_from_test_failure_runtime,
 	build_repair_instruction,
+	build_repair_instruction_runtime,
 	repair_owner_for_category,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
@@ -2404,6 +2405,22 @@ def test_build_repair_instruction_covers_missing_import_plain_class_and_warning_
 	)
 
 	assert "Focus on the actual pytest failure details" in warning_only_instruction
+
+
+def test_build_repair_instruction_runtime_reads_code_artifact_directly():
+	instruction = build_repair_instruction_runtime(
+		SimpleNamespace(id="code-task", last_error="NameError: name 'logging' is not defined"),
+		FailureCategory.CODE_VALIDATION.value,
+		failed_artifact_content=lambda task, artifact_type: "logger = logging.getLogger(__name__)",
+		artifact_type=ArtifactType.CODE,
+		validation_payload=lambda task: {},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: ("logging", "logger = logging.getLogger(__name__)"),
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: False,
+	)
+
+	assert "references logging during module import but never imports it" in instruction
 
 
 def test_build_code_repair_instruction_from_test_failure_handles_duplicate_constructor_binding_directly():

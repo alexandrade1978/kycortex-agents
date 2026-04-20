@@ -152,7 +152,7 @@ from kycortex_agents.orchestration.repair_focus import (
 )
 from kycortex_agents.orchestration.repair_instructions import (
     build_code_repair_instruction_from_test_failure_runtime,
-    build_repair_instruction,
+    build_repair_instruction_runtime,
     repair_owner_for_category,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
@@ -865,12 +865,12 @@ class Orchestrator:
         return build_agent_view_artifacts(artifacts, visible_task_ids, direct_dependency_ids)
 
     def _build_repair_instruction(self, task: Task, failure_category: str) -> str:
-        return build_repair_instruction(
-            task.id,
+        return build_repair_instruction_runtime(
+            task,
             failure_category,
-            last_error=task.last_error if isinstance(task.last_error, str) else "",
-            failed_code=self._failed_artifact_content(task, ArtifactType.CODE),
-            validation=self._validation_payload(task),
+            failed_artifact_content=self._failed_artifact_content,
+            artifact_type=ArtifactType.CODE,
+            validation_payload=self._validation_payload,
             dataclass_default_order_repair_examples=self._dataclass_default_order_repair_examples,
             missing_import_nameerror_details=self._missing_import_nameerror_details,
             plain_class_field_default_factory_details=self._plain_class_field_default_factory_details,

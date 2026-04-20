@@ -88,6 +88,13 @@ Recommended format for new entries:
 - result: the local code-repair instruction runtime is now also consolidated into shared repair-instruction support; direct coverage was added for the runtime helper's failed-artifact lookup path, and focused regressions re-cleared locally at `766 passed`, with `ruff` and `mypy` still green across 69 source files
 - next steps: continue remapping the next deterministic repair/output boundary still embedded in `Orchestrator`
 
+## 2026-04-20 - Repair-instruction runtime slice recorded
+
+- context: after moving the adjacent code-repair instruction runtime shell out, the next smallest sibling shell still embedded in `Orchestrator` was `_build_repair_instruction(...)`, which only combined failed-artifact lookup and validation payload recovery with the already-extracted pure repair-instruction builder
+- decision: co-locate that shell in `kycortex_agents/orchestration/repair_instructions.py` as `build_repair_instruction_runtime(...)`, leaving `Orchestrator` with a thin delegating façade
+- result: the local repair-instruction runtime is now also consolidated into shared repair-instruction support; direct coverage was added for the runtime helper's failed-artifact lookup path, and focused regressions re-cleared locally at `767 passed`, with `ruff` and `mypy` still green across 69 source files
+- next steps: continue remapping the next deterministic repair/output boundary still embedded in `Orchestrator`
+
 ## 2026-04-20 - Test validation runtime façade slice recorded
 
 - context: after moving both the bootstrap and the runtime-state preparation pieces out, `_validate_test_output(...)` was reduced to a final orchestration shell that still coordinated syntax gating, helper dispatch, validation metadata persistence, issue collection, and final error raising

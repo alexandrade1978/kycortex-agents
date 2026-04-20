@@ -256,6 +256,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	configure_repair_attempts,
 	build_repair_context,
 	continue_workflow_after_task_failure,
+	emit_workflow_progress_and_save,
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
 	fail_workflow_after_task_failure,
@@ -3133,6 +3134,19 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			{"project_name": "Demo", "phase": "failed", "blocked_task_ids": "blocked"},
 		)
 	]
+	progress_project = ProjectState(project_name="Demo", goal="Build demo")
+	progress_task = Task(id="done", title="Done", description="Done", assigned_to="architect")
+	progress_project.add_task(progress_task)
+	progress_saved: list[bool] = []
+	progress_project.save = lambda: progress_saved.append(True)
+	progress_calls: list[tuple[str, str]] = []
+	emit_workflow_progress_and_save(
+		progress_project,
+		task=progress_task,
+		emit_workflow_progress=lambda project, *, task: progress_calls.append((project.project_name, task.id)),
+	)
+	assert progress_saved == [True]
+	assert progress_calls == [("Demo", "done")]
 	continue_project = ProjectState(project_name="Demo", goal="Build demo")
 	continue_project.add_task(
 		Task(id="failed", title="Failed", description="Fail", assigned_to="architect", status=TaskStatus.FAILED.value)

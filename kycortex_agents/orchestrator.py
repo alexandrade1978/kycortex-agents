@@ -252,6 +252,7 @@ from kycortex_agents.orchestration.workflow_control import (
     build_code_repair_context_from_test_failure,
     configure_repair_attempts,
     continue_workflow_after_task_failure,
+    emit_workflow_progress_and_save,
     build_repair_context,
     ensure_workflow_running,
     ensure_budget_decomposition_task,
@@ -3720,8 +3721,11 @@ class Orchestrator:
                         return
                     failure_category = self._classify_task_failure(task, exc)
                     if project.should_retry_task(task.id):
-                        self._emit_workflow_progress(project, task=task)
-                        project.save()
+                        emit_workflow_progress_and_save(
+                            project,
+                            task=task,
+                            emit_workflow_progress=self._emit_workflow_progress,
+                        )
                         continue
                     if not self._is_repairable_failure(failure_category):
                         if self.config.workflow_failure_policy == "continue":
@@ -3742,8 +3746,11 @@ class Orchestrator:
                         )
                         raise
                     if self._queue_active_cycle_repair(project, task):
-                        self._emit_workflow_progress(project, task=task)
-                        project.save()
+                        emit_workflow_progress_and_save(
+                            project,
+                            task=task,
+                            emit_workflow_progress=self._emit_workflow_progress,
+                        )
                         continue
                     if self.config.workflow_failure_policy == "continue":
                         continue_workflow_after_task_failure(
@@ -3762,8 +3769,11 @@ class Orchestrator:
                         log_event=self._log_event,
                     )
                     raise
-                self._emit_workflow_progress(project, task=task)
-                project.save()
+                emit_workflow_progress_and_save(
+                    project,
+                    task=task,
+                    emit_workflow_progress=self._emit_workflow_progress,
+                )
         self._log_event(
             "info",
             "workflow_finished",

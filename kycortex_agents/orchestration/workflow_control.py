@@ -625,8 +625,11 @@ def continue_workflow_after_task_failure(
         task.id,
         f"Skipped because dependency '{task.id}' failed",
     )
-    emit_workflow_progress(project, task=task)
-    project.save()
+    emit_workflow_progress_and_save(
+        project,
+        task=task,
+        emit_workflow_progress=emit_workflow_progress,
+    )
     if skipped:
         log_event(
             "warning",
@@ -635,6 +638,16 @@ def continue_workflow_after_task_failure(
             task_id=task.id,
             skipped_task_ids=list(skipped),
         )
+
+
+def emit_workflow_progress_and_save(
+    project: ProjectState,
+    *,
+    task: Task,
+    emit_workflow_progress,
+) -> None:
+    emit_workflow_progress(project, task=task)
+    project.save()
 
 
 def fail_workflow_after_task_failure(

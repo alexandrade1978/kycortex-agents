@@ -51,6 +51,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_behavior_contract,
     build_code_exact_test_contract,
     build_code_public_api,
+    build_code_test_targets,
     build_code_outline,
     callable_parameter_names,
     collect_isinstance_calls,
@@ -2085,39 +2086,7 @@ class Orchestrator:
         return exposed_test_class_names(code_analysis, preferred_classes)
 
     def _build_code_test_targets(self, code_analysis: Dict[str, Any]) -> str:
-        if not code_analysis.get("syntax_ok", True):
-            return "Test targets unavailable because module syntax is invalid."
-
-        entrypoint_names = self._entrypoint_symbol_names(code_analysis)
-        preferred_classes = self._preferred_test_class_names(code_analysis)
-        helper_classes_to_avoid = self._helper_classes_to_avoid(code_analysis, preferred_classes)
-        batch_capable_functions = [
-            item["signature"]
-            for item in code_analysis.get("functions") or []
-            if item["name"] not in entrypoint_names and item.get("accepts_sequence_input")
-        ]
-        scalar_functions = [
-            item["signature"]
-            for item in code_analysis.get("functions") or []
-            if item["name"] not in entrypoint_names and not item.get("accepts_sequence_input")
-        ]
-        testable_functions = [
-            item["signature"]
-            for item in code_analysis.get("functions") or []
-            if item["name"] not in entrypoint_names
-        ]
-        classes = self._exposed_test_class_names(code_analysis, preferred_classes)
-        lines = ["Test targets:"]
-        lines.append(f"- Functions to test: {', '.join(testable_functions or ['none'])}")
-        lines.append(f"- Batch-capable functions: {', '.join(batch_capable_functions or ['none'])}")
-        lines.append(f"- Scalar-only functions: {', '.join(scalar_functions or ['none'])}")
-        lines.append(f"- Classes to test: {', '.join(classes or ['none'])}")
-        lines.append(f"- Preferred workflow classes: {', '.join(preferred_classes or ['none'])}")
-        lines.append(
-            f"- Helper classes to avoid in compact workflow tests: {', '.join(helper_classes_to_avoid or ['none'])}"
-        )
-        lines.append(f"- Entry points to avoid in tests: {', '.join(sorted(entrypoint_names) or ['none'])}")
-        return "\n".join(lines)
+        return build_code_test_targets(code_analysis)
 
     def _preferred_test_class_names(self, code_analysis: Dict[str, Any]) -> list[str]:
         return preferred_test_class_names(code_analysis)

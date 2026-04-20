@@ -416,6 +416,42 @@ def build_code_exact_test_contract(code_analysis: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def build_code_test_targets(code_analysis: Dict[str, Any]) -> str:
+    if not code_analysis.get("syntax_ok", True):
+        return "Test targets unavailable because module syntax is invalid."
+
+    entrypoints = entrypoint_symbol_names(code_analysis)
+    preferred_classes = preferred_test_class_names(code_analysis)
+    helpers_to_avoid = helper_classes_to_avoid(code_analysis, preferred_classes)
+    batch_capable_functions = [
+        item["signature"]
+        for item in code_analysis.get("functions") or []
+        if item["name"] not in entrypoints and item.get("accepts_sequence_input")
+    ]
+    scalar_functions = [
+        item["signature"]
+        for item in code_analysis.get("functions") or []
+        if item["name"] not in entrypoints and not item.get("accepts_sequence_input")
+    ]
+    testable_functions = [
+        item["signature"]
+        for item in code_analysis.get("functions") or []
+        if item["name"] not in entrypoints
+    ]
+    classes = exposed_test_class_names(code_analysis, preferred_classes)
+    lines = ["Test targets:"]
+    lines.append(f"- Functions to test: {', '.join(testable_functions or ['none'])}")
+    lines.append(f"- Batch-capable functions: {', '.join(batch_capable_functions or ['none'])}")
+    lines.append(f"- Scalar-only functions: {', '.join(scalar_functions or ['none'])}")
+    lines.append(f"- Classes to test: {', '.join(classes or ['none'])}")
+    lines.append(f"- Preferred workflow classes: {', '.join(preferred_classes or ['none'])}")
+    lines.append(
+        f"- Helper classes to avoid in compact workflow tests: {', '.join(helpers_to_avoid or ['none'])}"
+    )
+    lines.append(f"- Entry points to avoid in tests: {', '.join(sorted(entrypoints) or ['none'])}")
+    return "\n".join(lines)
+
+
 def build_code_public_api(code_analysis: Dict[str, Any]) -> str:
     if not code_analysis.get("syntax_ok", True):
         return f"Module syntax error: {code_analysis.get('syntax_error') or 'unknown syntax error'}"

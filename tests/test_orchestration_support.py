@@ -45,6 +45,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	build_code_behavior_contract,
 	build_code_exact_test_contract,
 	build_code_public_api,
+	build_code_test_targets,
 	build_code_outline,
 	callable_parameter_names,
 	collect_isinstance_calls,
@@ -606,6 +607,37 @@ def test_build_code_exact_test_contract_formats_allowed_imports_and_methods():
 	assert "Exact public callables: helper(payload)" in summary
 	assert "Exact public class methods: ComplianceWorkflow.intake_request" in summary
 	assert "Exact constructor fields: ComplianceRequest(request_id, details)" in summary
+
+
+def test_build_code_test_targets_formats_function_and_class_buckets():
+	summary = build_code_test_targets(
+		{
+			"syntax_ok": True,
+			"functions": [
+				{"name": "main", "signature": "main()", "accepts_sequence_input": False},
+				{"name": "process_batch", "signature": "process_batch(items)", "accepts_sequence_input": True},
+				{"name": "score_one", "signature": "score_one(item)", "accepts_sequence_input": False},
+			],
+			"classes": {
+				"AuditLogger": {"constructor_params": [], "method_signatures": {}},
+				"BillingCLI": {"constructor_params": [], "method_signatures": {}},
+				"ComplianceService": {
+					"constructor_params": ["audit_logger"],
+					"method_signatures": {"process_batch": {}, "validate_request": {}},
+				},
+				"ComplianceRepository": {"constructor_params": [], "method_signatures": {}},
+			},
+		}
+	)
+
+	assert "Test targets:" in summary
+	assert "Functions to test: process_batch(items), score_one(item)" in summary
+	assert "Batch-capable functions: process_batch(items)" in summary
+	assert "Scalar-only functions: score_one(item)" in summary
+	assert "Classes to test: AuditLogger, ComplianceService" in summary
+	assert "Preferred workflow classes: ComplianceService" in summary
+	assert "Helper classes to avoid in compact workflow tests: ComplianceRepository" in summary
+	assert "Entry points to avoid in tests: BillingCLI, main" in summary
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

@@ -263,6 +263,7 @@ from kycortex_agents.orchestration.validation_reporting import (
 from kycortex_agents.orchestration.validation_runtime import (
 	provider_call_metadata,
 	redact_validation_execution_result,
+	replace_test_output_content,
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
 )
@@ -4109,6 +4110,31 @@ def test_validation_analysis_helpers_extract_failure_details_and_origin_directly
 	]
 	assert pytest_failure_origin({"stdout": "tests_tests.py:24: AssertionError\n", "stderr": ""}, "code.py", "tests_tests.py") == "tests"
 	assert pytest_failure_is_semantic_assertion_mismatch(test_execution) is True
+
+
+def test_replace_test_output_content_updates_test_artifact_and_summary_directly():
+	output = AgentOutput(
+		raw_content="old",
+		summary="old summary",
+		artifacts=[
+			ArtifactRecord(name="tests", artifact_type=ArtifactType.TEST, path="tests.py", content="old"),
+			ArtifactRecord(name="code", artifact_type=ArtifactType.CODE, path="code.py", content="def ok():\n    return 1"),
+		],
+	)
+
+	new_content, updated_artifact_content = replace_test_output_content(
+		output,
+		"old",
+		"def test_example():\n    assert True\n",
+		lambda content: f"summary:{len(content)}",
+	)
+
+	assert new_content == "def test_example():\n    assert True\n"
+	assert updated_artifact_content == "def test_example():\n    assert True\n"
+	assert output.raw_content == "def test_example():\n    assert True\n"
+	assert output.summary == "summary:36"
+	assert output.artifacts[0].content == "def test_example():\n    assert True\n"
+	assert output.artifacts[1].content == "def ok():\n    return 1"
 
 
 def test_validation_analysis_helpers_classify_blocking_and_warning_issues_directly():

@@ -250,6 +250,7 @@ from kycortex_agents.orchestration.validation_reporting import (
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     redact_validation_execution_result,
+    replace_test_output_content,
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
 )
@@ -648,14 +649,12 @@ class Orchestrator:
             code_exact_test_contract=code_exact_test_contract if isinstance(code_exact_test_contract, str) else "",
         )
         if finalized_test_content != test_content:
-            output.raw_content = finalized_test_content
-            output.summary = summarize_output(finalized_test_content)
-            for artifact in output.artifacts:
-                if artifact.artifact_type != ArtifactType.TEST:
-                    continue
-                artifact.content = finalized_test_content
-            test_artifact_content = finalized_test_content if test_artifact_content else test_artifact_content
-            test_content = finalized_test_content
+            test_content, test_artifact_content = replace_test_output_content(
+                output,
+                test_artifact_content,
+                finalized_test_content,
+                summarize_output,
+            )
         if not self._should_validate_test_content(test_content, has_typed_artifact=bool(test_artifact_content)):
             return
         test_filename = self._artifact_filename(output, ArtifactType.TEST, default_filename="tests_tests.py")
@@ -673,14 +672,12 @@ class Orchestrator:
                 test_content, code_content
             )
             if fixed_test_content != test_content:
-                test_content = fixed_test_content
-                output.raw_content = test_content
-                output.summary = summarize_output(test_content)
-                for artifact in output.artifacts:
-                    if artifact.artifact_type != ArtifactType.TEST:
-                        continue
-                    artifact.content = test_content
-                test_artifact_content = test_content if test_artifact_content else test_artifact_content
+                test_content, test_artifact_content = replace_test_output_content(
+                    output,
+                    test_artifact_content,
+                    fixed_test_content,
+                    summarize_output,
+                )
                 test_analysis = self._analyze_test_module(
                     test_content,
                     module_name,

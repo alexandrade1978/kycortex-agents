@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional, cast
 
 from kycortex_agents.providers.base import redact_sensitive_data, sanitize_provider_call_metadata
-from kycortex_agents.types import AgentOutput
+from kycortex_agents.types import AgentOutput, ArtifactType
 
 
 def summarize_pytest_output(stdout: str, stderr: str, returncode: int) -> str:
@@ -42,3 +42,19 @@ def provider_call_metadata(agent: Any, output: Optional[AgentOutput] = None) -> 
         if isinstance(metadata, dict):
             return sanitize_provider_call_metadata(metadata)
     return None
+
+
+def replace_test_output_content(
+    output: AgentOutput,
+    test_artifact_content: str,
+    new_test_content: str,
+    summarize_output: Any,
+) -> tuple[str, str]:
+    output.raw_content = new_test_content
+    output.summary = summarize_output(new_test_content)
+    for artifact in output.artifacts:
+        if artifact.artifact_type != ArtifactType.TEST:
+            continue
+        artifact.content = new_test_content
+    updated_test_artifact_content = new_test_content if test_artifact_content else test_artifact_content
+    return new_test_content, updated_test_artifact_content

@@ -5,6 +5,37 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 
+def apply_completed_task_output_to_context(
+    ctx: dict[str, Any],
+    *,
+    task_id: str,
+    assigned_to: str,
+    title: str,
+    visible_output: str,
+    budget_decomposition_plan_task_id: Optional[str],
+    compact_architecture_context: Optional[str],
+    is_budget_decomposition_planner: Callable[[], bool],
+    semantic_output_key: Callable[[str, str], Optional[str]],
+) -> bool:
+    ctx[task_id] = visible_output
+    completed_tasks = ctx.setdefault("completed_tasks", {})
+    if isinstance(completed_tasks, dict):
+        completed_tasks[task_id] = visible_output
+
+    if budget_decomposition_plan_task_id == task_id:
+        ctx["budget_decomposition_brief"] = visible_output
+    if is_budget_decomposition_planner():
+        return False
+
+    semantic_key = semantic_output_key(assigned_to, title)
+    if semantic_key:
+        semantic_output = visible_output
+        if semantic_key == "architecture" and compact_architecture_context:
+            semantic_output = compact_architecture_context
+        ctx[semantic_key] = semantic_output
+    return True
+
+
 def apply_repair_context_to_context(
     ctx: dict[str, Any],
     repair_context: dict[str, Any],

@@ -27,7 +27,10 @@ from kycortex_agents.orchestration.dependency_analysis import (
 	normalize_import_name,
 	normalize_package_name,
 )
-from kycortex_agents.orchestration.context_building import apply_repair_context_to_context
+from kycortex_agents.orchestration.context_building import (
+	apply_completed_task_output_to_context,
+	apply_repair_context_to_context,
+)
 from kycortex_agents.orchestration.output_helpers import (
 	normalize_agent_result,
 	semantic_output_key,
@@ -355,6 +358,49 @@ def test_apply_repair_context_to_context_populates_code_repair_fields():
 	assert ctx["repair_validation_summary"] == "code summary"
 	assert ctx["existing_code"] == "def repaired():\n    return 2"
 	assert ctx["existing_tests"] == "def test_existing():\n    assert True"
+
+
+def test_apply_completed_task_output_to_context_tracks_completed_and_semantic_outputs():
+	ctx = {"completed_tasks": {}}
+
+	should_apply_artifact_context = apply_completed_task_output_to_context(
+		ctx,
+		task_id="architecture_task",
+		assigned_to="planner",
+		title="Architecture",
+		visible_output="full architecture",
+		budget_decomposition_plan_task_id="architecture_task",
+		compact_architecture_context="compact architecture",
+		is_budget_decomposition_planner=lambda: False,
+		semantic_output_key=lambda assigned_to, title: "architecture" if assigned_to == "planner" and title == "Architecture" else None,
+	)
+
+	assert should_apply_artifact_context is True
+	assert ctx["architecture_task"] == "full architecture"
+	assert ctx["completed_tasks"] == {"architecture_task": "full architecture"}
+	assert ctx["budget_decomposition_brief"] == "full architecture"
+	assert ctx["architecture"] == "compact architecture"
+
+
+def test_apply_completed_task_output_to_context_skips_artifact_context_for_budget_planner():
+	ctx = {"completed_tasks": {}}
+
+	should_apply_artifact_context = apply_completed_task_output_to_context(
+		ctx,
+		task_id="budget_task",
+		assigned_to="planner",
+		title="Budget plan",
+		visible_output="budget brief",
+		budget_decomposition_plan_task_id=None,
+		compact_architecture_context=None,
+		is_budget_decomposition_planner=lambda: True,
+		semantic_output_key=lambda *_args: "architecture",
+	)
+
+	assert should_apply_artifact_context is False
+	assert ctx["budget_task"] == "budget brief"
+	assert ctx["completed_tasks"] == {"budget_task": "budget brief"}
+	assert "architecture" not in ctx
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

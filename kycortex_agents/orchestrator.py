@@ -34,7 +34,10 @@ from kycortex_agents.orchestration.dependency_analysis import (
     normalize_import_name,
     normalize_package_name,
 )
-from kycortex_agents.orchestration.context_building import apply_repair_context_to_context
+from kycortex_agents.orchestration.context_building import (
+    apply_completed_task_output_to_context,
+    apply_repair_context_to_context,
+)
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
     semantic_output_key,
@@ -1033,18 +1036,19 @@ class Orchestrator:
                 continue
             visible_output = self._task_context_output(prev_task)
             if prev_task.status == TaskStatus.DONE.value and visible_output:
-                ctx[prev_task.id] = visible_output
-                ctx["completed_tasks"][prev_task.id] = visible_output
-                if budget_decomposition_plan_task_id == prev_task.id:
-                    ctx["budget_decomposition_brief"] = visible_output
-                if self._is_budget_decomposition_planner(prev_task):
+                should_apply_artifact_context = apply_completed_task_output_to_context(
+                    ctx,
+                    task_id=prev_task.id,
+                    assigned_to=prev_task.assigned_to,
+                    title=prev_task.title,
+                    visible_output=visible_output,
+                    budget_decomposition_plan_task_id=budget_decomposition_plan_task_id,
+                    compact_architecture_context=compact_architecture_context,
+                    is_budget_decomposition_planner=lambda: self._is_budget_decomposition_planner(prev_task),
+                    semantic_output_key=semantic_output_key,
+                )
+                if not should_apply_artifact_context:
                     continue
-                semantic_key = semantic_output_key(prev_task.assigned_to, prev_task.title)
-                if semantic_key:
-                    semantic_output = visible_output
-                    if semantic_key == "architecture" and compact_architecture_context:
-                        semantic_output = compact_architecture_context
-                    ctx[semantic_key] = semantic_output
                 if AgentRegistry.normalize_key(prev_task.assigned_to) == "code_engineer":
                     ctx.update(self._code_artifact_context(prev_task, project))
                 if AgentRegistry.normalize_key(prev_task.assigned_to) == "dependency_manager":

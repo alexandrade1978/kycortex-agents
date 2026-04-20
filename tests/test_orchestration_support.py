@@ -160,6 +160,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 	previous_valid_test_surface,
 	qa_repair_should_reuse_failed_test_artifact,
 	helper_surface_usages_for_test_repair,
+	helper_surface_usages_for_test_repair_runtime,
 	upstream_code_task_for_test_failure,
 	validation_summary_helper_alias_names,
 )
@@ -4430,6 +4431,19 @@ def test_repair_instruction_owner_mapping_directly():
 		FailureCategory.TEST_VALIDATION.value,
 	) == ["RiskScoringService (line 33)", "ComplianceRepository"]
 	assert helper_surface_usages_for_test_repair({}, FailureCategory.CODE_VALIDATION.value) == []
+	assert helper_surface_usages_for_test_repair_runtime(
+		SimpleNamespace(),
+		FailureCategory.TEST_VALIDATION.value,
+		validation_payload=lambda task: {
+			"test_analysis": {
+				"helper_surface_usages": [
+					"RiskScoringService (line 33)",
+					"  ",
+					"ComplianceRepository",
+				]
+			}
+		},
+	) == ["RiskScoringService (line 33)", "ComplianceRepository"]
 	assert task_id_collection_count(None) == 0
 	assert task_id_collection_count(3) is None
 	assert task_id_count_log_field_name("task_ids") == "task_count"

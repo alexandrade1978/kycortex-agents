@@ -58,6 +58,18 @@ def helper_surface_usages_for_test_repair(
     return [item.strip() for item in raw_usages if isinstance(item, str) and item.strip()]
 
 
+def helper_surface_usages_for_test_repair_runtime(
+    task: Task,
+    failure_category: str,
+    *,
+    validation_payload,
+) -> list[str]:
+    return helper_surface_usages_for_test_repair(
+        validation_payload(task),
+        failure_category,
+    )
+
+
 def validation_summary_symbols(validation_summary: str, label: str) -> list[str]:
     prefix = f"- {label}:"
     for line in validation_summary.splitlines():

@@ -161,6 +161,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 	imported_code_task_for_failed_test,
 	upstream_code_task_for_test_failure,
 	helper_surface_usages_for_test_repair,
+	helper_surface_usages_for_test_repair_runtime,
 	validation_summary_helper_alias_names,
 	validation_summary_symbols,
 )
@@ -565,6 +566,7 @@ __all__ = [
 	"imported_code_task_for_failed_test",
 	"upstream_code_task_for_test_failure",
 	"helper_surface_usages_for_test_repair",
+	"helper_surface_usages_for_test_repair_runtime",
 	"validation_has_blocking_issues",
 	"validation_has_only_warnings",
 	"validation_has_static_issues",

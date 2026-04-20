@@ -142,7 +142,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     normalized_helper_surface_symbols,
     previous_valid_test_surface,
     qa_repair_should_reuse_failed_test_artifact,
-    helper_surface_usages_for_test_repair,
+    helper_surface_usages_for_test_repair_runtime,
     upstream_code_task_for_test_failure,
     validation_summary_helper_alias_names,
     validation_summary_symbols,
@@ -1102,7 +1102,11 @@ class Orchestrator:
         merge_prior_repair_context(task, repair_context)
 
     def _test_repair_helper_surface_usages(self, task: Task, failure_category: str) -> list[str]:
-        return helper_surface_usages_for_test_repair(self._validation_payload(task), failure_category)
+        return helper_surface_usages_for_test_repair_runtime(
+            task,
+            failure_category,
+            validation_payload=self._validation_payload,
+        )
 
     def _normalized_helper_surface_symbols(self, raw_values: object) -> list[str]:
         return normalized_helper_surface_symbols(raw_values)

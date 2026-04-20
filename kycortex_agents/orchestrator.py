@@ -253,6 +253,7 @@ from kycortex_agents.orchestration.validation_runtime import (
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
     validate_code_output_runtime,
+    validate_dependency_output_runtime,
     validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
@@ -515,23 +516,12 @@ class Orchestrator:
             return
         if normalized_role != "dependency_manager":
             return
-        raw_code_analysis = context.get("code_analysis")
-        code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
-        dependency_analysis = self._analyze_dependency_manifest(output.raw_content, code_analysis)
-        self._record_output_validation(output, "dependency_analysis", dependency_analysis)
-        if dependency_analysis.get("is_valid"):
-            return
-        validation_failures: list[str] = []
-        missing_entries = ", ".join(dependency_analysis.get("missing_manifest_entries") or [])
-        if missing_entries:
-            validation_failures.append(f"missing manifest entries for {missing_entries}")
-        provenance_violations = ", ".join(dependency_analysis.get("provenance_violations") or [])
-        if provenance_violations:
-            validation_failures.append(
-                f"unsupported dependency sources or installer directives: {provenance_violations}"
-            )
-        failure_summary = "; ".join(validation_failures) or "unknown dependency validation failure"
-        raise AgentExecutionError(f"Dependency manifest validation failed: {failure_summary}")
+        validate_dependency_output_runtime(
+            context,
+            output,
+            self._analyze_dependency_manifest,
+            self._record_output_validation,
+        )
 
     def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
         validate_code_output_runtime(

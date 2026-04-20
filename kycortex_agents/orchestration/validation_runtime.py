@@ -228,6 +228,31 @@ def validate_code_output_runtime(
         raise AgentExecutionError(f"Generated code validation failed: {'; '.join(validation_issues)}")
 
 
+def validate_dependency_output_runtime(
+    context: dict[str, Any],
+    output: AgentOutput,
+    analyze_dependency_manifest: Any,
+    record_output_validation: Any,
+) -> None:
+    raw_code_analysis = context.get("code_analysis")
+    code_analysis = cast(dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
+    dependency_analysis = analyze_dependency_manifest(output.raw_content, code_analysis)
+    record_output_validation(output, "dependency_analysis", dependency_analysis)
+    if dependency_analysis.get("is_valid"):
+        return
+    validation_failures: list[str] = []
+    missing_entries = ", ".join(dependency_analysis.get("missing_manifest_entries") or [])
+    if missing_entries:
+        validation_failures.append(f"missing manifest entries for {missing_entries}")
+    provenance_violations = ", ".join(dependency_analysis.get("provenance_violations") or [])
+    if provenance_violations:
+        validation_failures.append(
+            f"unsupported dependency sources or installer directives: {provenance_violations}"
+        )
+    failure_summary = "; ".join(validation_failures) or "unknown dependency validation failure"
+    raise AgentExecutionError(f"Dependency manifest validation failed: {failure_summary}")
+
+
 def build_test_validation_runtime_state(
     output: AgentOutput,
     test_artifact_content: str,

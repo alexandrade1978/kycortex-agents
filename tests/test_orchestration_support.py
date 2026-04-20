@@ -273,6 +273,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	sanitize_output_provider_call_metadata,
 	summarize_pytest_output,
 	validate_code_output_runtime,
+	validate_dependency_output_runtime,
 	validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
@@ -4218,6 +4219,31 @@ def test_validate_code_output_runtime_rejects_missing_cli_entrypoint_directly():
 			lambda *args, **kwargs: None,
 			lambda diagnostics: "truncated",
 		)
+
+
+def test_validate_dependency_output_runtime_records_analysis_and_rejects_invalid_manifest_directly():
+	output = AgentOutput(summary="deps", raw_content="requests>=2\n")
+	recorded: dict[str, object] = {}
+
+	with pytest.raises(AgentExecutionError, match="missing manifest entries for numpy"):
+		validate_dependency_output_runtime(
+			{"code_analysis": {"third_party_imports": ["numpy"]}},
+			output,
+			lambda manifest_content, code_analysis: {
+				"is_valid": False,
+				"missing_manifest_entries": ["numpy"],
+				"provenance_violations": [],
+			},
+			lambda agent_output, key, value: recorded.__setitem__(key, value),
+		)
+
+	assert recorded == {
+		"dependency_analysis": {
+			"is_valid": False,
+			"missing_manifest_entries": ["numpy"],
+			"provenance_violations": [],
+		}
+	}
 
 
 def test_build_test_validation_runtime_input_normalizes_context_and_artifacts_directly():

@@ -261,6 +261,8 @@ from kycortex_agents.orchestration.validation_reporting import (
 	looks_structurally_truncated,
 )
 from kycortex_agents.orchestration.validation_runtime import (
+	ValidationRuntimeState,
+	build_test_validation_runtime_state,
 	provider_call_metadata,
 	redact_validation_execution_result,
 	record_test_validation_metadata,
@@ -4165,6 +4167,88 @@ def test_record_test_validation_metadata_persists_expected_fields_directly():
 		"test_filename": "tests_tests.py",
 		"pytest_failure_origin": "tests",
 	}
+
+
+def test_build_test_validation_runtime_state_runs_finalize_autofix_analysis_and_execution_directly():
+	output = AgentOutput(
+		raw_content="initial tests",
+		summary="initial summary",
+		artifacts=[ArtifactRecord(name="tests", artifact_type=ArtifactType.TEST, path="tests.py", content="initial tests")],
+	)
+	analyzed_contents: list[str] = []
+	execution_calls: list[tuple[str, str, str, str]] = []
+
+	def finalize_generated_test_suite(test_content, *, module_name, implementation_code, code_exact_test_contract):
+		assert test_content == "initial tests"
+		assert module_name == "code_implementation"
+		assert implementation_code == "def ok():\n    return 1"
+		assert code_exact_test_contract == "exact contract"
+		return "finalized tests"
+
+	def analyze_test_module(test_content, module_name, code_analysis, code_behavior_contract):
+		analyzed_contents.append(test_content)
+		assert module_name == "code_implementation"
+		assert code_analysis == {"syntax_ok": True}
+		assert code_behavior_contract == "behavior contract"
+		return {"syntax_ok": True, "analysis_of": test_content}
+
+	def auto_fix_test_type_mismatches(test_content, code_content):
+		assert test_content == "finalized tests"
+		assert code_content == "def ok():\n    return 1"
+		return "fixed tests"
+
+	def execute_generated_tests(module_filename, code_content, test_filename, test_content):
+		execution_calls.append((module_filename, code_content, test_filename, test_content))
+		return {"ran": True, "returncode": 0, "summary": "1 passed"}
+
+	state = build_test_validation_runtime_state(
+		output,
+		"initial tests",
+		"initial tests",
+		"code_implementation",
+		"code_implementation.py",
+		"def ok():\n    return 1",
+		{"syntax_ok": True},
+		"exact contract",
+		"behavior contract",
+		"tests_tests.py",
+		12,
+		3,
+		5,
+		1,
+		finalize_generated_test_suite,
+		lambda content, has_typed_artifact: bool(content.strip()) and has_typed_artifact,
+		analyze_test_module,
+		auto_fix_test_type_mismatches,
+		lambda content: len(content.splitlines()),
+		execute_generated_tests,
+		lambda agent_output, **kwargs: {"raw_content": kwargs["raw_content"], "syntax_ok": kwargs["syntax_ok"]},
+		lambda test_execution, module_filename, test_filename: f"{module_filename}:{test_filename}:{test_execution['returncode']}",
+		lambda content: f"summary:{content}",
+	)
+
+	assert isinstance(state, ValidationRuntimeState)
+	assert state.test_content == "fixed tests"
+	assert state.test_artifact_content == "fixed tests"
+	assert state.test_analysis == {
+		"syntax_ok": True,
+		"analysis_of": "fixed tests",
+		"line_count": 1,
+		"line_budget": 12,
+		"expected_top_level_test_count": 3,
+		"max_top_level_test_count": 5,
+		"fixture_budget": 1,
+	}
+	assert state.test_execution == {"ran": True, "returncode": 0, "summary": "1 passed"}
+	assert state.completion_diagnostics == {"raw_content": "fixed tests", "syntax_ok": True}
+	assert state.module_filename == "code_implementation.py"
+	assert state.test_filename == "tests_tests.py"
+	assert state.pytest_failure_origin == "code_implementation.py:tests_tests.py:0"
+	assert analyzed_contents == ["finalized tests", "fixed tests"]
+	assert execution_calls == [("code_implementation.py", "def ok():\n    return 1", "tests_tests.py", "fixed tests")]
+	assert output.raw_content == "fixed tests"
+	assert output.summary == "summary:fixed tests"
+	assert output.artifacts[0].content == "fixed tests"
 
 
 def test_validation_analysis_helpers_classify_blocking_and_warning_issues_directly():

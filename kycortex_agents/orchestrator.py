@@ -248,10 +248,10 @@ from kycortex_agents.orchestration.validation_reporting import (
     looks_structurally_truncated,
 )
 from kycortex_agents.orchestration.validation_runtime import (
+    build_test_validation_runtime_state,
     provider_call_metadata,
     redact_validation_execution_result,
     record_test_validation_metadata,
-    replace_test_output_content,
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
 )
@@ -642,86 +642,51 @@ class Orchestrator:
 
         test_artifact_content = self._artifact_content(output, ArtifactType.TEST)
         test_content = test_artifact_content or output.raw_content
-        code_exact_test_contract = context.get("code_exact_test_contract", "")
-        finalized_test_content = QATesterAgent._finalize_generated_test_suite(
-            test_content,
-            module_name=module_name,
-            implementation_code=code_content,
-            code_exact_test_contract=code_exact_test_contract if isinstance(code_exact_test_contract, str) else "",
-        )
-        if finalized_test_content != test_content:
-            test_content, test_artifact_content = replace_test_output_content(
-                output,
-                test_artifact_content,
-                finalized_test_content,
-                summarize_output,
-            )
-        if not self._should_validate_test_content(test_content, has_typed_artifact=bool(test_artifact_content)):
-            return
         test_filename = self._artifact_filename(output, ArtifactType.TEST, default_filename="tests_tests.py")
+        code_exact_test_contract = context.get("code_exact_test_contract", "")
         code_behavior_contract = context.get("code_behavior_contract")
-        test_analysis = self._analyze_test_module(
+        runtime_state = build_test_validation_runtime_state(
+            output,
+            test_artifact_content,
             test_content,
             module_name,
+            module_filename,
+            code_content,
             code_analysis,
+            code_exact_test_contract if isinstance(code_exact_test_contract, str) else "",
             code_behavior_contract if isinstance(code_behavior_contract, str) else "",
+            test_filename,
+            self._task_line_budget(task),
+            self._task_exact_top_level_test_count(task),
+            self._task_max_top_level_test_count(task),
+            self._task_fixture_budget(task),
+            QATesterAgent._finalize_generated_test_suite,
+            self._should_validate_test_content,
+            self._analyze_test_module,
+            self._auto_fix_test_type_mismatches,
+            self._output_line_count,
+            self._execute_generated_tests,
+            self._completion_diagnostics_from_output,
+            self._pytest_failure_origin,
+            summarize_output,
         )
-
-        # --- Auto-fix type mismatches (str → dict) before pytest ---
-        if isinstance(code_content, str):
-            fixed_test_content = self._auto_fix_test_type_mismatches(
-                test_content, code_content
-            )
-            if fixed_test_content != test_content:
-                test_content, test_artifact_content = replace_test_output_content(
-                    output,
-                    test_artifact_content,
-                    fixed_test_content,
-                    summarize_output,
-                )
-                test_analysis = self._analyze_test_module(
-                    test_content,
-                    module_name,
-                    code_analysis,
-                    code_behavior_contract if isinstance(code_behavior_contract, str) else "",
-                )
-
-        test_analysis["line_count"] = self._output_line_count(test_content)
-        line_budget = self._task_line_budget(task)
-        if line_budget is not None:
-            test_analysis["line_budget"] = line_budget
-        exact_test_count = self._task_exact_top_level_test_count(task)
-        if exact_test_count is not None:
-            test_analysis["expected_top_level_test_count"] = exact_test_count
-        max_test_count = self._task_max_top_level_test_count(task)
-        if max_test_count is not None:
-            test_analysis["max_top_level_test_count"] = max_test_count
-        fixture_budget = self._task_fixture_budget(task)
-        if fixture_budget is not None:
-            test_analysis["fixture_budget"] = fixture_budget
-        test_execution = self._execute_generated_tests(module_filename, code_content, test_filename, test_content)
-        completion_diagnostics = self._completion_diagnostics_from_output(
-            output,
-            raw_content=test_content,
-            syntax_ok=test_analysis.get("syntax_ok", True),
-            syntax_error=test_analysis.get("syntax_error"),
-        )
-        pytest_failure_origin = self._pytest_failure_origin(test_execution, module_filename, test_filename)
+        if runtime_state is None:
+            return
         record_test_validation_metadata(
             output,
-            test_analysis,
-            test_execution,
-            completion_diagnostics,
-            module_filename,
-            test_filename,
-            pytest_failure_origin,
+            runtime_state.test_analysis,
+            runtime_state.test_execution,
+            runtime_state.completion_diagnostics,
+            runtime_state.module_filename,
+            runtime_state.test_filename,
+            runtime_state.pytest_failure_origin,
             self._record_output_validation,
         )
 
         validation_issues, warning_issues, pytest_passed = collect_test_validation_issues(
-            test_analysis,
-            test_execution,
-            completion_diagnostics,
+            runtime_state.test_analysis,
+            runtime_state.test_execution,
+            runtime_state.completion_diagnostics,
             self._completion_validation_issue,
         )
 

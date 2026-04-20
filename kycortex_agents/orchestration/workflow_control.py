@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import AbstractSet, Any, Callable, Optional, cast
+from typing import AbstractSet, Any, Callable, Literal, Optional, cast
 
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.memory.project_state import ProjectState, Task
@@ -673,6 +673,71 @@ def fail_workflow_after_task_failure(
     )
     project.save()
     log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
+
+
+def dispatch_task_failure(
+    project: ProjectState,
+    *,
+    task: Task,
+    failure_category: str,
+    workflow_failure_policy: str,
+    workflow_acceptance_policy: str,
+    zero_budget_failure_categories: AbstractSet[str],
+    is_repairable_failure,
+    queue_active_cycle_repair,
+    emit_workflow_progress,
+    evaluate_workflow_acceptance,
+    log_event,
+) -> Literal["continue", "raise"]:
+    if project.should_retry_task(task.id):
+        emit_workflow_progress_and_save(
+            project,
+            task=task,
+            emit_workflow_progress=emit_workflow_progress,
+        )
+        return "continue"
+    if not is_repairable_failure(failure_category):
+        if workflow_failure_policy == "continue":
+            continue_workflow_after_task_failure(
+                project,
+                task=task,
+                emit_workflow_progress=emit_workflow_progress,
+                log_event=log_event,
+            )
+            return "continue"
+        fail_workflow_after_task_failure(
+            project,
+            failure_category=failure_category,
+            workflow_acceptance_policy=workflow_acceptance_policy,
+            zero_budget_failure_categories=zero_budget_failure_categories,
+            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+            log_event=log_event,
+        )
+        return "raise"
+    if queue_active_cycle_repair(project, task):
+        emit_workflow_progress_and_save(
+            project,
+            task=task,
+            emit_workflow_progress=emit_workflow_progress,
+        )
+        return "continue"
+    if workflow_failure_policy == "continue":
+        continue_workflow_after_task_failure(
+            project,
+            task=task,
+            emit_workflow_progress=emit_workflow_progress,
+            log_event=log_event,
+        )
+        return "continue"
+    fail_workflow_after_task_failure(
+        project,
+        failure_category=failure_category,
+        workflow_acceptance_policy=workflow_acceptance_policy,
+        zero_budget_failure_categories=zero_budget_failure_categories,
+        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+        log_event=log_event,
+    )
+    return "raise"
 
 
 def build_repair_context(

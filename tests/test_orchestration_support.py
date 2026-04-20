@@ -256,6 +256,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	configure_repair_attempts,
 	build_repair_context,
 	continue_workflow_after_task_failure,
+	dispatch_task_failure,
 	emit_workflow_progress_and_save,
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
@@ -3201,6 +3202,98 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	assert fail_task_project.terminal_outcome == WorkflowOutcome.FAILED.value
 	assert fail_task_saved == [True]
 	assert fail_task_logs == [
+		(
+			"error",
+			"workflow_failed",
+			{"project_name": "Demo", "phase": "failed"},
+		)
+	]
+	dispatch_project = ProjectState(project_name="Demo", goal="Build demo")
+	retry_task = Task(id="retry", title="Retry", description="Retry", assigned_to="architect")
+	dispatch_project.add_task(retry_task)
+	dispatch_project.should_retry_task = lambda task_id: task_id == "retry"
+	dispatch_saved: list[bool] = []
+	dispatch_project.save = lambda: dispatch_saved.append(True)
+	dispatch_progress: list[str] = []
+	assert dispatch_task_failure(
+		dispatch_project,
+		task=retry_task,
+		failure_category=FailureCategory.UNKNOWN.value,
+		workflow_failure_policy="fail_fast",
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		is_repairable_failure=lambda _category: False,
+		queue_active_cycle_repair=lambda _project, _task: False,
+		emit_workflow_progress=lambda _project, *, task: dispatch_progress.append(task.id),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		log_event=lambda *_args, **_kwargs: None,
+	) == "continue"
+	assert dispatch_saved == [True]
+	assert dispatch_progress == ["retry"]
+	continue_dispatch_project = ProjectState(project_name="Demo", goal="Build demo")
+	continue_dispatch_project.add_task(Task(id="failed", title="Failed", description="Fail", assigned_to="architect"))
+	continue_dispatch_project.add_task(
+		Task(id="downstream_2", title="Downstream", description="Wait", assigned_to="architect", dependencies=["failed"])
+	)
+	continue_dispatch_logs: list[tuple[str, str, dict[str, object]]] = []
+	assert dispatch_task_failure(
+		continue_dispatch_project,
+		task=continue_dispatch_project.get_task("failed") or Task(id="failed", title="Failed", description="Fail", assigned_to="architect"),
+		failure_category=FailureCategory.UNKNOWN.value,
+		workflow_failure_policy="continue",
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		is_repairable_failure=lambda _category: False,
+		queue_active_cycle_repair=lambda _project, _task: False,
+		emit_workflow_progress=lambda *_args, **_kwargs: None,
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		log_event=lambda level, event, **details: continue_dispatch_logs.append((level, event, details)),
+	) == "continue"
+	downstream_task = continue_dispatch_project.get_task("downstream_2")
+	assert downstream_task is not None
+	assert downstream_task.status == TaskStatus.SKIPPED.value
+	assert continue_dispatch_logs == [
+		(
+			"warning",
+			"dependent_tasks_skipped",
+			{"project_name": "Demo", "task_id": "failed", "skipped_task_ids": ["downstream_2"]},
+		)
+	]
+	repair_dispatch_project = ProjectState(project_name="Demo", goal="Build demo")
+	repair_task = Task(id="repairable", title="Repairable", description="Repairable", assigned_to="architect")
+	repair_dispatch_project.add_task(repair_task)
+	repair_progress: list[str] = []
+	assert dispatch_task_failure(
+		repair_dispatch_project,
+		task=repair_task,
+		failure_category=FailureCategory.CODE_VALIDATION.value,
+		workflow_failure_policy="fail_fast",
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		is_repairable_failure=lambda _category: True,
+		queue_active_cycle_repair=lambda _project, _task: True,
+		emit_workflow_progress=lambda _project, *, task: repair_progress.append(task.id),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		log_event=lambda *_args, **_kwargs: None,
+	) == "continue"
+	assert repair_progress == ["repairable"]
+	raise_dispatch_project = ProjectState(project_name="Demo", goal="Build demo")
+	raise_logs: list[tuple[str, str, dict[str, object]]] = []
+	assert dispatch_task_failure(
+		raise_dispatch_project,
+		task=Task(id="fatal", title="Fatal", description="Fatal", assigned_to="architect"),
+		failure_category=FailureCategory.UNKNOWN.value,
+		workflow_failure_policy="fail_fast",
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		is_repairable_failure=lambda _category: False,
+		queue_active_cycle_repair=lambda _project, _task: False,
+		emit_workflow_progress=lambda *_args, **_kwargs: None,
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		log_event=lambda level, event, **details: raise_logs.append((level, event, details)),
+	) == "raise"
+	assert raise_dispatch_project.phase == "failed"
+	assert raise_logs == [
 		(
 			"error",
 			"workflow_failed",

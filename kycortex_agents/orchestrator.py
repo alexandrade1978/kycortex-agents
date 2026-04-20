@@ -251,12 +251,11 @@ from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
     build_code_repair_context_from_test_failure,
     configure_repair_attempts,
-    continue_workflow_after_task_failure,
+    dispatch_task_failure,
     emit_workflow_progress_and_save,
     build_repair_context,
     ensure_workflow_running,
     ensure_budget_decomposition_task,
-    fail_workflow_after_task_failure,
     fail_workflow_for_definition_error,
     fail_workflow_when_blocked,
     failed_task_ids_for_repair,
@@ -3720,54 +3719,20 @@ class Orchestrator:
                     if self._exit_if_workflow_cancelled(project):
                         return
                     failure_category = self._classify_task_failure(task, exc)
-                    if project.should_retry_task(task.id):
-                        emit_workflow_progress_and_save(
-                            project,
-                            task=task,
-                            emit_workflow_progress=self._emit_workflow_progress,
-                        )
-                        continue
-                    if not self._is_repairable_failure(failure_category):
-                        if self.config.workflow_failure_policy == "continue":
-                            continue_workflow_after_task_failure(
-                                project,
-                                task=task,
-                                emit_workflow_progress=self._emit_workflow_progress,
-                                log_event=self._log_event,
-                            )
-                            continue
-                        fail_workflow_after_task_failure(
-                            project,
-                            failure_category=failure_category,
-                            workflow_acceptance_policy=self.config.workflow_acceptance_policy,
-                            zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                            log_event=self._log_event,
-                        )
-                        raise
-                    if self._queue_active_cycle_repair(project, task):
-                        emit_workflow_progress_and_save(
-                            project,
-                            task=task,
-                            emit_workflow_progress=self._emit_workflow_progress,
-                        )
-                        continue
-                    if self.config.workflow_failure_policy == "continue":
-                        continue_workflow_after_task_failure(
-                            project,
-                            task=task,
-                            emit_workflow_progress=self._emit_workflow_progress,
-                            log_event=self._log_event,
-                        )
-                        continue
-                    fail_workflow_after_task_failure(
+                    if dispatch_task_failure(
                         project,
+                        task=task,
                         failure_category=failure_category,
+                        workflow_failure_policy=self.config.workflow_failure_policy,
                         workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                        is_repairable_failure=self._is_repairable_failure,
+                        queue_active_cycle_repair=self._queue_active_cycle_repair,
+                        emit_workflow_progress=self._emit_workflow_progress,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                         log_event=self._log_event,
-                    )
+                    ) == "continue":
+                        continue
                     raise
                 emit_workflow_progress_and_save(
                     project,

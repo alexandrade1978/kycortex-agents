@@ -50,11 +50,14 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	comparison_required_field,
 	call_signature_details,
 	call_expression_basename,
+	constructor_param_matches_class,
 	dataclass_field_has_default,
 	dataclass_field_is_init_enabled,
 	dict_accessed_keys_from_tree,
 	direct_return_expression,
+	entrypoint_symbol_names,
 	example_from_default,
+	exposed_test_class_names,
 	extract_batch_rule,
 	extract_class_definition_style,
 	extract_constructor_storage_rule,
@@ -71,6 +74,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	first_user_parameter,
 	function_returns_score_value,
 	has_dataclass_decorator,
+	helper_classes_to_avoid,
 	infer_dict_key_value_examples,
 	inline_score_helper_expression,
 	is_probable_third_party_import,
@@ -78,6 +82,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 	isinstance_type_names,
 	method_binding_kind,
 	parameter_is_iterated,
+	preferred_test_class_names,
 	render_score_expression,
 	self_assigned_attributes,
 )
@@ -548,6 +553,29 @@ def test_build_code_behavior_contract_reports_storage_score_and_sequence_rules()
 	assert "process_batch accepts sequence inputs via parameter `items`" in contract
 	assert "process_batch derives score from len(items)" in contract
 	assert "intake_request stores full request_data in returned Payload.data" in contract
+
+
+def test_test_target_classification_helpers_exclude_entrypoints_and_optional_helpers():
+	code_analysis = {
+		"functions": [{"name": "main"}],
+		"classes": {
+			"AuditLogger": {"constructor_params": [], "method_signatures": {}},
+			"BillingCLI": {"constructor_params": [], "method_signatures": {}},
+			"InvoiceRepository": {"constructor_params": [], "method_signatures": {}},
+			"RequestWorkflow": {
+				"constructor_params": ["audit_logger"],
+				"method_signatures": {"process_batch": {}, "render": {}},
+			},
+		},
+	}
+
+	preferred = preferred_test_class_names(code_analysis)
+
+	assert preferred == ["RequestWorkflow"]
+	assert constructor_param_matches_class("audit_logger", "AuditLogger") is True
+	assert entrypoint_symbol_names(code_analysis) == {"BillingCLI", "main"}
+	assert helper_classes_to_avoid(code_analysis, preferred) == ["InvoiceRepository"]
+	assert exposed_test_class_names(code_analysis, preferred) == ["AuditLogger", "RequestWorkflow"]
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

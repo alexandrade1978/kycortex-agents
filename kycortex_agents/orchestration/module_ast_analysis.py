@@ -258,6 +258,120 @@ def analyze_python_module(raw_content: str) -> Dict[str, Any]:
     return analysis
 
 
+def entrypoint_function_names(code_analysis: Dict[str, Any]) -> set[str]:
+    function_names = {item["name"] for item in code_analysis.get("functions") or []}
+    return {
+        name
+        for name in function_names
+        if name == "main" or name.startswith("cli_") or name.endswith("_cli") or name.endswith("_demo")
+    }
+
+
+def entrypoint_class_names(code_analysis: Dict[str, Any]) -> set[str]:
+    class_names = set((code_analysis.get("classes") or {}).keys())
+    return {
+        name
+        for name in class_names
+        if name.lower().endswith("cli") or name.lower().endswith("_cli") or name.lower().endswith("demo")
+    }
+
+
+def entrypoint_symbol_names(code_analysis: Dict[str, Any]) -> set[str]:
+    return entrypoint_function_names(code_analysis) | entrypoint_class_names(code_analysis)
+
+
+def preferred_test_class_names(code_analysis: Dict[str, Any]) -> list[str]:
+    entrypoints = entrypoint_symbol_names(code_analysis)
+    workflow_method_prefixes = (
+        "process_",
+        "validate_",
+        "intake_",
+        "handle_",
+        "submit_",
+        "batch_",
+        "export_",
+    )
+    preferred: list[str] = []
+    for class_name, class_info in sorted((code_analysis.get("classes") or {}).items()):
+        if class_name in entrypoints:
+            continue
+        method_names = list((class_info.get("method_signatures") or {}).keys())
+        if any(method_name.startswith(workflow_method_prefixes) for method_name in method_names):
+            preferred.append(class_name)
+    return preferred
+
+
+def constructor_param_matches_class(param_name: str, class_name: str) -> bool:
+    normalized_param = param_name.strip().lower()
+    if not normalized_param:
+        return False
+
+    snake_name = re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
+    candidate_names = {snake_name}
+    parts = snake_name.split("_")
+    if len(parts) > 2:
+        for start in range(1, len(parts) - 1):
+            candidate_names.add("_".join(parts[start:]))
+
+    if normalized_param in candidate_names:
+        return True
+
+    suffix = snake_name.split("_")[-1]
+    return suffix in {"logger", "repository", "service"} and normalized_param == suffix
+
+
+def helper_classes_to_avoid(
+    code_analysis: Dict[str, Any],
+    preferred_classes: list[str] | None = None,
+) -> list[str]:
+    preferred = set(preferred_classes or preferred_test_class_names(code_analysis))
+    if not preferred:
+        return []
+    class_map = code_analysis.get("classes") or {}
+    entrypoints = entrypoint_symbol_names(code_analysis)
+    helper_suffixes = ("service", "repository", "logger")
+    required_constructor_helpers: set[str] = set()
+    for preferred_name in preferred:
+        class_info = class_map.get(preferred_name) or {}
+        constructor_params = [
+            param_name
+            for param_name in (class_info.get("constructor_params") or [])
+            if isinstance(param_name, str)
+        ]
+        for helper_name in class_map.keys():
+            if helper_name in preferred or helper_name in entrypoints:
+                continue
+            if not helper_name.lower().endswith(helper_suffixes):
+                continue
+            if any(
+                constructor_param_matches_class(param_name, helper_name)
+                for param_name in constructor_params
+            ):
+                required_constructor_helpers.add(helper_name)
+    helper_names: list[str] = []
+    for class_name in sorted(class_map.keys()):
+        if class_name in entrypoints or class_name in preferred or class_name in required_constructor_helpers:
+            continue
+        if class_name.lower().endswith(helper_suffixes):
+            helper_names.append(class_name)
+    return helper_names
+
+
+def exposed_test_class_names(
+    code_analysis: Dict[str, Any],
+    preferred_classes: list[str] | None = None,
+) -> list[str]:
+    class_map = code_analysis.get("classes") or {}
+    entrypoints = entrypoint_symbol_names(code_analysis)
+    preferred = preferred_classes or preferred_test_class_names(code_analysis)
+    helpers_to_avoid = set(helper_classes_to_avoid(code_analysis, preferred))
+    return sorted(
+        class_name
+        for class_name in class_map.keys()
+        if class_name not in entrypoints and class_name not in helpers_to_avoid
+    )
+
+
 def build_code_public_api(code_analysis: Dict[str, Any]) -> str:
     if not code_analysis.get("syntax_ok", True):
         return f"Module syntax error: {code_analysis.get('syntax_error') or 'unknown syntax error'}"

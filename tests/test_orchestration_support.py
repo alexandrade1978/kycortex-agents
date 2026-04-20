@@ -258,6 +258,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	continue_workflow_after_task_failure,
 	ensure_workflow_running,
 	ensure_budget_decomposition_task,
+	fail_workflow_after_task_failure,
 	fail_workflow_for_definition_error,
 	fail_workflow_when_blocked,
 	failed_task_ids_for_repair,
@@ -3167,6 +3168,29 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 			"warning",
 			"dependent_tasks_skipped",
 			{"project_name": "Demo", "task_id": "failed", "skipped_task_ids": ["downstream"]},
+		)
+	]
+	fail_task_project = ProjectState(project_name="Demo", goal="Build demo")
+	fail_task_saved: list[bool] = []
+	fail_task_project.save = lambda: fail_task_saved.append(True)
+	fail_task_logs: list[tuple[str, str, dict[str, object]]] = []
+	fail_workflow_after_task_failure(
+		fail_task_project,
+		failure_category=FailureCategory.UNKNOWN.value,
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		log_event=lambda level, event, **details: fail_task_logs.append((level, event, details)),
+	)
+	assert fail_task_project.phase == "failed"
+	assert fail_task_project.failure_category == FailureCategory.UNKNOWN.value
+	assert fail_task_project.terminal_outcome == WorkflowOutcome.FAILED.value
+	assert fail_task_saved == [True]
+	assert fail_task_logs == [
+		(
+			"error",
+			"workflow_failed",
+			{"project_name": "Demo", "phase": "failed"},
 		)
 	]
 

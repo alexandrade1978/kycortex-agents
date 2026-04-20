@@ -255,6 +255,7 @@ from kycortex_agents.orchestration.workflow_control import (
     build_repair_context,
     ensure_workflow_running,
     ensure_budget_decomposition_task,
+    fail_workflow_after_task_failure,
     fail_workflow_for_definition_error,
     fail_workflow_when_blocked,
     failed_task_ids_for_repair,
@@ -300,7 +301,6 @@ from kycortex_agents.types import (
     ProjectSnapshot,
     TaskStatus,
     TaskResult,
-    WorkflowOutcome,
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -3732,20 +3732,14 @@ class Orchestrator:
                                 log_event=self._log_event,
                             )
                             continue
-                        project.mark_workflow_finished(
-                            "failed",
-                            acceptance_policy=self.config.workflow_acceptance_policy,
-                            terminal_outcome=WorkflowOutcome.FAILED.value,
+                        fail_workflow_after_task_failure(
+                            project,
                             failure_category=failure_category,
-                            acceptance_criteria_met=False,
-                            acceptance_evaluation=evaluate_workflow_acceptance(
-                                project,
-                                self.config.workflow_acceptance_policy,
-                                _ZERO_BUDGET_FAILURE_CATEGORIES,
-                            ),
+                            workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                            zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                            log_event=self._log_event,
                         )
-                        project.save()
-                        self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                         raise
                     if self._queue_active_cycle_repair(project, task):
                         self._emit_workflow_progress(project, task=task)
@@ -3759,20 +3753,14 @@ class Orchestrator:
                             log_event=self._log_event,
                         )
                         continue
-                    project.mark_workflow_finished(
-                        "failed",
-                        acceptance_policy=self.config.workflow_acceptance_policy,
-                        terminal_outcome=WorkflowOutcome.FAILED.value,
+                    fail_workflow_after_task_failure(
+                        project,
                         failure_category=failure_category,
-                        acceptance_criteria_met=False,
-                        acceptance_evaluation=evaluate_workflow_acceptance(
-                            project,
-                            self.config.workflow_acceptance_policy,
-                            _ZERO_BUDGET_FAILURE_CATEGORIES,
-                        ),
+                        workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                        zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                        log_event=self._log_event,
                     )
-                    project.save()
-                    self._log_event("error", "workflow_failed", project_name=project.project_name, phase=project.phase)
                     raise
                 self._emit_workflow_progress(project, task=task)
                 project.save()

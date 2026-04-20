@@ -42,6 +42,7 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
 	analyze_python_module,
 	annotation_accepts_sequence_input,
+	build_code_behavior_contract,
 	build_code_public_api,
 	build_code_outline,
 	callable_parameter_names,
@@ -521,6 +522,32 @@ def test_build_code_public_api_formats_constructors_and_entrypoint():
 	assert "tests must instantiate with all listed constructor fields explicitly: name, count" in summary
 	assert "methods: render(self)" in summary
 	assert "Entrypoint: python MODULE_FILE" in summary
+
+
+def test_build_code_behavior_contract_reports_storage_score_and_sequence_rules():
+	contract = build_code_behavior_contract(
+		"from dataclasses import dataclass\n"
+		"\n"
+		"@dataclass\n"
+		"class Payload:\n"
+		"    data: dict[str, str]\n"
+		"\n"
+		"@dataclass\n"
+		"class Score:\n"
+		"    score: int\n"
+		"\n"
+		"def process_batch(items: list[dict[str, str]]) -> Score:\n"
+		"    score = len(items)\n"
+		"    return Score(score=score)\n"
+		"\n"
+		"def intake_request(request_data: dict[str, str]) -> Payload:\n"
+		"    return Payload(data=request_data)\n"
+	)
+
+	assert "Behavior contract:" in contract
+	assert "process_batch accepts sequence inputs via parameter `items`" in contract
+	assert "process_batch derives score from len(items)" in contract
+	assert "intake_request stores full request_data in returned Payload.data" in contract
 
 
 def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():

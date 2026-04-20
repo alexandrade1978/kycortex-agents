@@ -304,6 +304,164 @@ def build_code_public_api(code_analysis: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def build_code_behavior_contract(raw_content: str) -> str:
+    if not raw_content.strip():
+        return ""
+    try:
+        tree = ast.parse(raw_content)
+    except SyntaxError:
+        return ""
+
+    validation_rules: dict[str, list[str]] = {}
+    field_value_rules: dict[str, Dict[str, list[str]]] = {}
+    type_constraints: dict[str, Dict[str, list[str]]] = {}
+    batch_rules: list[str] = []
+    constructor_storage_rules: list[str] = []
+    score_derivation_rules: list[str] = []
+    sequence_input_rules: list[str] = []
+    function_map: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            function_nodes = [stmt for stmt in node.body if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            function_nodes = [node]
+        else:
+            continue
+
+        for function_node in function_nodes:
+            function_map[function_node.name] = function_node
+            required_fields = extract_required_fields(function_node)
+            if required_fields:
+                validation_rules[function_node.name] = required_fields
+
+    for function_name, function_node in function_map.items():
+        if function_name in validation_rules:
+            continue
+        propagated_fields = extract_indirect_required_fields(function_node, validation_rules)
+        if propagated_fields:
+            validation_rules[function_name] = propagated_fields
+
+    for function_name, function_node in function_map.items():
+        lookup_rules = extract_lookup_field_rules(function_node)
+        if lookup_rules:
+            field_value_rules[function_name] = lookup_rules
+
+    for function_name, function_node in function_map.items():
+        constraints = extract_type_constraints(function_node)
+        if constraints:
+            type_constraints[function_name] = constraints
+
+    for function_node in function_map.values():
+        batch_rule = extract_batch_rule(function_node, validation_rules)
+        if batch_rule:
+            batch_rules.append(batch_rule)
+
+    for function_node in function_map.values():
+        constructor_storage_rule = extract_constructor_storage_rule(function_node)
+        if constructor_storage_rule:
+            constructor_storage_rules.append(constructor_storage_rule)
+
+    for function_node in function_map.values():
+        score_derivation_rule = extract_score_derivation_rule(function_node, function_map)
+        if score_derivation_rule:
+            score_derivation_rules.append(score_derivation_rule)
+
+    for function_node in function_map.values():
+        sequence_rule = extract_sequence_input_rule(function_node)
+        if sequence_rule:
+            sequence_input_rules.append(sequence_rule)
+
+    literal_examples = extract_valid_literal_examples(raw_content)
+
+    class_definition_styles: list[str] = []
+    return_type_annotations: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            style = extract_class_definition_style(node)
+            if style:
+                class_definition_styles.append(style)
+            for stmt in node.body:
+                if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    annotation = extract_return_type_annotation(node.name, stmt)
+                    if annotation:
+                        return_type_annotations.append(annotation)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            annotation = extract_return_type_annotation(None, node)
+            if annotation:
+                return_type_annotations.append(annotation)
+
+    if not (
+        validation_rules
+        or field_value_rules
+        or type_constraints
+        or batch_rules
+        or constructor_storage_rules
+        or score_derivation_rules
+        or sequence_input_rules
+        or literal_examples
+        or class_definition_styles
+        or return_type_annotations
+    ):
+        return ""
+
+    lines = ["Behavior contract:"]
+    for function_name in sorted(validation_rules):
+        lines.append(
+            f"- {function_name} requires fields: {', '.join(validation_rules[function_name])}"
+        )
+    dict_accessed_keys = dict_accessed_keys_from_tree(tree) if type_constraints else {}
+    dict_key_examples = infer_dict_key_value_examples(tree) if type_constraints else {}
+    for function_name in sorted(type_constraints):
+        for field_name in sorted(type_constraints[function_name]):
+            type_list = ", ".join(type_constraints[function_name][field_name])
+            keys_hint = ""
+            dict_example = ""
+            if "dict" in type_constraints[function_name][field_name]:
+                keys = dict_accessed_keys.get(field_name)
+                if keys:
+                    sorted_keys = sorted(keys)
+                    keys_hint = f" (keys used: {', '.join(sorted_keys)})"
+                    inferred = dict_key_examples.get(field_name, {})
+                    example_pairs = ", ".join(
+                        f"'{k}': {inferred.get(k, repr('value'))}"
+                        for k in sorted_keys
+                    )
+                    if example_pairs:
+                        dict_example = (
+                            f"- EXAMPLE: {field_name}={{{example_pairs}}} "
+                            f"— NEVER pass a plain string for `{field_name}`"
+                        )
+            lines.append(
+                f"- {function_name} requires parameter `{field_name}` to be of type: {type_list}{keys_hint}"
+            )
+            if dict_example:
+                lines.append(dict_example)
+    for function_name in sorted(field_value_rules):
+        for field_name in sorted(field_value_rules[function_name]):
+            lines.append(
+                f"- {function_name} expects field `{field_name}` to be one of: {', '.join(field_value_rules[function_name][field_name])}"
+            )
+    for rule in sorted(dict.fromkeys(constructor_storage_rules)):
+        lines.append(f"- {rule}")
+    for rule in sorted(dict.fromkeys(score_derivation_rules)):
+        lines.append(f"- {rule}")
+    for rule in sorted(sequence_input_rules):
+        lines.append(f"- {rule}")
+    for rule in batch_rules:
+        lines.append(f"- {rule}")
+    for style in class_definition_styles:
+        lines.append(f"- {style}")
+    for annotation in return_type_annotations:
+        lines.append(f"- {annotation}")
+    if literal_examples:
+        lines.append("")
+        lines.append("Fixture example patterns:")
+        for var_name, example_literal in sorted(literal_examples.items()):
+            lines.append(f"- {var_name} = {example_literal}")
+    return "\n".join(lines)
+
+
 def extract_sequence_input_rule(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     parameter = first_user_parameter(node)
     if parameter is None:

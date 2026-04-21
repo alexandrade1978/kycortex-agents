@@ -230,7 +230,7 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
         is_budget_decomposition_planner=is_budget_decomposition_planner,
         semantic_output_key=semantic_output_key,
         normalize_assigned_to=AgentRegistry.normalize_key,
-        code_artifact_context=orchestrator._code_artifact_context,
+        code_artifact_context=orchestrator_module.code_artifact_context_runtime,
         dependency_artifact_context=orchestrator_module.dependency_artifact_context_runtime,
         test_artifact_context=orchestrator_module.test_artifact_context_runtime,
         agent_visible_repair_context=orchestrator_module.agent_visible_repair_context,
@@ -2698,22 +2698,22 @@ def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, m
 
 def test_artifact_context_helpers_return_empty_for_invalid_payload_shapes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(id="task", title="Task", description="Task", assigned_to="architect")
 
-    assert orchestrator._code_artifact_context(task) == {}
+    assert orchestrator_module.code_artifact_context_runtime(task) == {}
     assert orchestrator_module.test_artifact_context_runtime(task, {}) == {}
     assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
 
     task.output_payload = {"artifacts": "invalid"}
-    assert orchestrator._code_artifact_context(task) == {}
+    assert orchestrator_module.code_artifact_context_runtime(task) == {}
     assert orchestrator_module.test_artifact_context_runtime(task, {}) == {}
     assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
 
 
 def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_context(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
     code_task = Task(
         id="code",
@@ -2758,7 +2758,7 @@ def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_contex
         },
     )
 
-    code_ctx = orchestrator._code_artifact_context(code_task)
+    code_ctx = orchestrator_module.code_artifact_context_runtime(code_task)
     assert code_ctx.get("module_name") == "code_implementation"
     assert orchestrator_module.test_artifact_context_runtime(test_task, {}) == {}
     assert orchestrator_module.test_artifact_context_runtime(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}

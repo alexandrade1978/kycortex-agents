@@ -16,10 +16,10 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import ExecutionSandboxPolicy
-from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
+from kycortex_agents.orchestration.agent_runtime import build_agent_input_runtime, execute_agent
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.context_building import (
-    build_task_context_for_agent_runtime,
+    build_task_context_for_agent_runtime as _build_task_context_for_agent_runtime,
     code_artifact_context_runtime as _code_artifact_context_runtime,
     dependency_artifact_context_runtime as _dependency_artifact_context_runtime,
     planned_module_context_runtime as _planned_module_context_runtime,
@@ -32,9 +32,6 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
-)
-from kycortex_agents.orchestration.repair_focus import (
-    build_repair_focus_lines,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
     execute_generated_module_import_runtime as _execute_generated_module_import_runtime,
@@ -105,7 +102,6 @@ from kycortex_agents.orchestration.workflow_control import (
 )
 from kycortex_agents.orchestration.workflow_acceptance import evaluate_workflow_acceptance
 from kycortex_agents.types import (
-    AgentInput,
     AgentOutput,
     FailureCategory,
 )
@@ -119,6 +115,7 @@ active_repair_cycle = _active_repair_cycle
 has_repair_task_for_cycle = _has_repair_task_for_cycle
 should_validate_code_content = _should_validate_code_content
 should_validate_test_content = _should_validate_test_content
+build_task_context_for_agent_runtime = _build_task_context_for_agent_runtime
 planned_module_context_runtime = _planned_module_context_runtime
 code_artifact_context_runtime = _code_artifact_context_runtime
 dependency_artifact_context_runtime = _dependency_artifact_context_runtime
@@ -225,18 +222,6 @@ def validate_test_output_for_task_runtime(
         completion_diagnostics_from_provider_call=completion_diagnostics_from_provider_call,
         completion_validation_issue=completion_validation_issue,
         summarize_output=summarize_output,
-    )
-
-
-def build_agent_input_runtime(orchestrator: "Orchestrator", task: Task, project: ProjectState) -> AgentInput:
-    context = build_task_context_for_agent_runtime(orchestrator, task, project)
-    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-    repair_focus_lines = build_repair_focus_lines(repair_context, context) if repair_context else []
-    return build_agent_input(
-        task,
-        project,
-        context,
-        repair_focus_lines=repair_focus_lines,
     )
 
 

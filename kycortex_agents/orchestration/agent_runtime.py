@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration.context_building import build_task_context_for_agent_runtime
+from kycortex_agents.orchestration.repair_focus import build_repair_focus_lines
 from kycortex_agents.providers.base import redact_sensitive_text
 from kycortex_agents.types import FailureCategory
 from kycortex_agents.types import AgentInput
@@ -63,3 +65,15 @@ def execute_agent(agent: Any, agent_input: AgentInput) -> Any:
 	if hasattr(agent, "run_with_input"):
 		return agent.run_with_input(agent_input)
 	return agent.run(agent_input.task_description, agent_input.context)
+
+
+def build_agent_input_runtime(orchestrator: Any, task: Task, project: ProjectState) -> AgentInput:
+	context = build_task_context_for_agent_runtime(orchestrator, task, project)
+	repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+	repair_focus_lines = build_repair_focus_lines(repair_context, context) if repair_context else []
+	return build_agent_input(
+		task,
+		project,
+		context,
+		repair_focus_lines=repair_focus_lines,
+	)

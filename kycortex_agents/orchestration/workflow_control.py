@@ -32,15 +32,24 @@ from kycortex_agents.orchestration.repair_analysis import (
     suggest_declared_attribute_replacement,
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
+    failed_test_requires_code_repair_runtime,
     helper_surface_usages_for_test_repair_runtime,
+    imported_code_task_for_failed_test,
     normalized_helper_surface_symbols,
+    upstream_code_task_for_test_failure,
 )
+from kycortex_agents.orchestration.ast_tools import python_import_roots
+from kycortex_agents.orchestration.context_building import default_module_name_for_task
 from kycortex_agents.orchestration.sandbox_execution import sandbox_security_violation
 from kycortex_agents.orchestration.task_constraints import (
     build_budget_decomposition_task_context,
     repair_requires_budget_decomposition,
 )
 from kycortex_agents.orchestration.validation_analysis import (
+    pytest_contract_overreach_signals,
+    pytest_failure_is_semantic_assertion_mismatch,
+    pytest_failure_origin,
+    validation_has_blocking_issues,
     validation_has_only_warnings,
 )
 from kycortex_agents.orchestration.validation_reporting import build_repair_validation_summary
@@ -358,6 +367,43 @@ def repair_task_ids_for_cycle(
                 repair_task.dependencies.append(code_repair_task.id)
             repair_task_ids.append(repair_task.id)
     return repair_task_ids
+
+
+def plan_repair_task_ids_for_cycle(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    *,
+    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
+) -> list[str]:
+    return repair_task_ids_for_cycle(
+        project,
+        failed_task_ids,
+        test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
+            task,
+            validation_payload=validation_payload,
+            pytest_failure_origin=pytest_failure_origin,
+            pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+            test_validation_has_blocking_issues=validation_has_blocking_issues,
+            pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+        ),
+        upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
+            current_project,
+            current_task,
+            imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
+                imported_project,
+                imported_task,
+                failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
+                    artifact_task.output,
+                    artifact_task.output_payload,
+                    artifact_type,
+                ),
+                python_import_roots=python_import_roots,
+                default_module_name_for_task=default_module_name_for_task,
+            ),
+        ),
+        ensure_budget_decomposition_task=ensure_budget_decomposition_task,
+        execution_agent_name=execution_agent_name,
+    )
 
 
 def configure_repair_attempts(

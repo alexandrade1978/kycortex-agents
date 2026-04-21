@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import cast
 from typing import Any, Callable, Optional
 
+from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.dependency_analysis import analyze_dependency_manifest
 from kycortex_agents.orchestration.module_ast_analysis import (
@@ -53,6 +54,25 @@ class TaskContextRuntimeCallbacks:
     normalized_helper_surface_symbols: Callable[[object], list[str]]
     qa_repair_should_reuse_failed_test_artifact: Callable[[object, object, object], bool]
     redact_sensitive_data: Callable[[Any], Any]
+
+
+def agent_visible_repair_context(repair_context: dict[str, Any], execution_agent_name: str) -> dict[str, Any]:
+    normalized_execution_agent = AgentRegistry.normalize_key(execution_agent_name)
+    if normalized_execution_agent not in {"code_engineer", "qa_tester", "dependency_manager"}:
+        return dict(repair_context)
+    visible_keys = (
+        "cycle",
+        "failure_category",
+        "repair_owner",
+        "original_assigned_to",
+        "source_failure_task_id",
+        "source_failure_category",
+    )
+    return {
+        key: repair_context[key]
+        for key in visible_keys
+        if key in repair_context
+    }
 
 
 def default_module_name_for_task(task: Task) -> str | None:

@@ -26,6 +26,7 @@ from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.orchestration.context_building import (
     TaskContextRuntimeCallbacks,
+    agent_visible_repair_context,
     build_agent_view_runtime,
     build_task_context_runtime,
     code_artifact_context_runtime,
@@ -189,25 +190,6 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 def _example_from_default(node: ast.expr) -> str | None:
     """Return an example literal string for a .get() default AST node."""
     return example_from_default(node)
-
-
-def agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:
-    normalized_execution_agent = AgentRegistry.normalize_key(execution_agent_name)
-    if normalized_execution_agent not in {"code_engineer", "qa_tester", "dependency_manager"}:
-        return dict(repair_context)
-    visible_keys = (
-        "cycle",
-        "failure_category",
-        "repair_owner",
-        "original_assigned_to",
-        "source_failure_task_id",
-        "source_failure_category",
-    )
-    return {
-        key: repair_context[key]
-        for key in visible_keys
-        if key in repair_context
-    }
 
 
 def plan_repair_task_ids_for_cycle(

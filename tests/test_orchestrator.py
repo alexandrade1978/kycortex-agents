@@ -213,7 +213,7 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
         ),
         task_dependency_closure_ids=task_dependency_closure_ids,
         execution_agent_name=orchestrator_module.execution_agent_name,
-        planned_module_context=lambda current_project, visible_task_ids, current_task: orchestrator._planned_module_context(
+        planned_module_context=lambda current_project, visible_task_ids, current_task: orchestrator_module.planned_module_context_runtime(
             current_project,
             visible_task_ids,
             current_task=current_task,
@@ -2681,7 +2681,7 @@ def test_repair_task_ids_for_cycle_skips_none_repair_tasks(tmp_path, monkeypatch
 
 def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -2693,7 +2693,7 @@ def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, m
     )
     monkeypatch.setattr(orchestrator_module, "default_module_name_for_task", lambda task: None)
 
-    assert orchestrator._planned_module_context(project) == {}
+    assert orchestrator_module.planned_module_context_runtime(project) == {}
 
 
 def test_artifact_context_helpers_return_empty_for_invalid_payload_shapes(tmp_path):

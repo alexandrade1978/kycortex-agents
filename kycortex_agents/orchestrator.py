@@ -752,6 +752,61 @@ def dependency_artifact_context_runtime(task: Task, context: Dict[str, Any]) -> 
     return {}
 
 
+def context_module_task_runtime(
+    project: ProjectState,
+    current_task: Optional[Task],
+    visible_task_ids: Optional[set[str]] = None,
+) -> Optional[Task]:
+    if current_task is not None and current_task.repair_origin_task_id:
+        origin_task = project.get_task(current_task.repair_origin_task_id)
+        if (
+            origin_task is not None
+            and AgentRegistry.normalize_key(origin_task.assigned_to) == "code_engineer"
+            and (visible_task_ids is None or origin_task.id in visible_task_ids)
+            and default_module_name_for_task(origin_task)
+        ):
+            return origin_task
+
+    for existing_task in project.tasks:
+        if visible_task_ids is not None and existing_task.id not in visible_task_ids:
+            continue
+        if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
+            continue
+        if existing_task.repair_origin_task_id:
+            continue
+        if default_module_name_for_task(existing_task):
+            return existing_task
+
+    if current_task is not None and default_module_name_for_task(current_task):
+        return current_task
+
+    for existing_task in project.tasks:
+        if visible_task_ids is not None and existing_task.id not in visible_task_ids:
+            continue
+        if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
+            continue
+        if default_module_name_for_task(existing_task):
+            return existing_task
+
+    return None
+
+
+def planned_module_context_runtime(
+    project: ProjectState,
+    visible_task_ids: Optional[set[str]] = None,
+    current_task: Optional[Task] = None,
+) -> Dict[str, Any]:
+    module_task = context_module_task_runtime(project, current_task, visible_task_ids)
+    if module_task is not None:
+        module_name = default_module_name_for_task(module_task)
+        if module_name:
+            return {
+                "planned_module_name": module_name,
+                "planned_module_filename": f"{module_name}.py",
+            }
+    return {}
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -892,61 +947,6 @@ class Orchestrator:
         )
         return normalized_output.raw_content
 
-    def _planned_module_context(
-        self,
-        project: ProjectState,
-        visible_task_ids: Optional[set[str]] = None,
-        current_task: Optional[Task] = None,
-    ) -> Dict[str, Any]:
-        module_task = self._context_module_task(project, current_task, visible_task_ids)
-        if module_task is not None:
-            module_name = default_module_name_for_task(module_task)
-            if module_name:
-                return {
-                    "planned_module_name": module_name,
-                    "planned_module_filename": f"{module_name}.py",
-                }
-        return {}
-
-    def _context_module_task(
-        self,
-        project: ProjectState,
-        current_task: Optional[Task],
-        visible_task_ids: Optional[set[str]] = None,
-    ) -> Optional[Task]:
-        if current_task is not None and current_task.repair_origin_task_id:
-            origin_task = project.get_task(current_task.repair_origin_task_id)
-            if (
-                origin_task is not None
-                and AgentRegistry.normalize_key(origin_task.assigned_to) == "code_engineer"
-                and (visible_task_ids is None or origin_task.id in visible_task_ids)
-                and default_module_name_for_task(origin_task)
-            ):
-                return origin_task
-
-        for existing_task in project.tasks:
-            if visible_task_ids is not None and existing_task.id not in visible_task_ids:
-                continue
-            if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
-                continue
-            if existing_task.repair_origin_task_id:
-                continue
-            if default_module_name_for_task(existing_task):
-                return existing_task
-
-        if current_task is not None and default_module_name_for_task(current_task):
-            return current_task
-
-        for existing_task in project.tasks:
-            if visible_task_ids is not None and existing_task.id not in visible_task_ids:
-                continue
-            if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
-                continue
-            if default_module_name_for_task(existing_task):
-                return existing_task
-
-        return None
-
     def _code_artifact_context(
         self,
         task: Task,
@@ -1064,7 +1064,7 @@ class Orchestrator:
             ),
             task_dependency_closure_ids=task_dependency_closure_ids,
             execution_agent_name=execution_agent_name,
-            planned_module_context=lambda current_project, visible_task_ids, current_task: self._planned_module_context(
+            planned_module_context=lambda current_project, visible_task_ids, current_task: planned_module_context_runtime(
                 current_project,
                 visible_task_ids,
                 current_task=current_task,

@@ -189,6 +189,7 @@ from kycortex_agents.orchestration.repair_instructions import (
 )
 from kycortex_agents.orchestration.sandbox_execution import (
 	execute_generated_module_import,
+	execute_generated_module_import_runtime,
 	execute_generated_tests,
 	sandbox_security_violation,
 	write_generated_import_runner,
@@ -566,6 +567,7 @@ __all__ = [
 	"task_public_contract_anchor",
 	"task_public_contract_preflight",
 	"sandbox_security_violation",
+	"execute_generated_module_import_runtime",
 	"skip_task",
 	"suggest_declared_attribute_replacement",
 	"test_function_targets_invalid_path",

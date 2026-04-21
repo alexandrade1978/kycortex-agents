@@ -368,7 +368,7 @@ class Orchestrator:
             task_line_budget(task),
             task_requires_cli_entrypoint(task),
             self._should_validate_code_content,
-            self._analyze_python_module,
+            analyze_python_module,
             self._output_line_count,
             lambda code_analysis: task_public_contract_preflight(task, code_analysis),
             self._completion_diagnostics_from_output,
@@ -905,19 +905,19 @@ class Orchestrator:
             return {}
 
         path_obj = Path(artifact_path)
-        code_analysis = self._analyze_python_module(code_content)
+        code_analysis = analyze_python_module(code_content)
         return {
             "code_artifact_path": artifact_path,
             "module_name": path_obj.stem,
             "module_filename": path_obj.name,
             "code_summary": summarize_output(code_content),
-            "code_outline": self._build_code_outline(code_content),
+            "code_outline": build_code_outline(code_content),
             "code_analysis": code_analysis,
-            "code_public_api": self._build_code_public_api(code_analysis),
-            "code_exact_test_contract": self._build_code_exact_test_contract(code_analysis),
-            "code_test_targets": self._build_code_test_targets(code_analysis),
-            "code_behavior_contract": self._build_code_behavior_contract(code_content),
-            "module_run_command": self._build_module_run_command(path_obj.name, code_analysis),
+            "code_public_api": build_code_public_api(code_analysis),
+            "code_exact_test_contract": build_code_exact_test_contract(code_analysis),
+            "code_test_targets": build_code_test_targets(code_analysis),
+            "code_behavior_contract": build_code_behavior_contract(code_content),
+            "module_run_command": build_module_run_command(path_obj.name, code_analysis),
         }
         return {}
 
@@ -981,27 +981,6 @@ class Orchestrator:
                 "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
             }
         return {}
-
-    def _build_code_outline(self, raw_content: str) -> str:
-        return build_code_outline(raw_content)
-
-    def _analyze_python_module(self, raw_content: str) -> Dict[str, Any]:
-        return analyze_python_module(raw_content)
-
-    def _build_code_public_api(self, code_analysis: Dict[str, Any]) -> str:
-        return build_code_public_api(code_analysis)
-
-    def _build_code_exact_test_contract(self, code_analysis: Dict[str, Any]) -> str:
-        return build_code_exact_test_contract(code_analysis)
-
-    def _build_module_run_command(self, module_filename: str, code_analysis: Dict[str, Any]) -> str:
-        return build_module_run_command(module_filename, code_analysis)
-
-    def _build_code_test_targets(self, code_analysis: Dict[str, Any]) -> str:
-        return build_code_test_targets(code_analysis)
-
-    def _build_code_behavior_contract(self, raw_content: str) -> str:
-        return build_code_behavior_contract(raw_content)
 
     @staticmethod
     def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:

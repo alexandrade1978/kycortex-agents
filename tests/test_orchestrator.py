@@ -19,6 +19,13 @@ from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientErr
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.module_ast_analysis import (
+    analyze_python_module,
+    build_code_behavior_contract,
+    build_code_exact_test_contract,
+    build_code_outline,
+    build_code_public_api,
+    build_code_test_targets,
+    build_module_run_command,
     comparison_required_field,
     extract_batch_rule,
     extract_indirect_required_fields,
@@ -1395,8 +1402,8 @@ def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_pat
     )
 
     monkeypatch.setattr(
-        orchestrator,
-        "_analyze_python_module",
+        orchestrator_module,
+        "analyze_python_module",
         lambda *args, **kwargs: {"syntax_ok": True, "has_main_guard": True, "third_party_imports": []},
     )
     monkeypatch.setattr(
@@ -1478,8 +1485,8 @@ def test_validate_code_output_skips_import_validation_for_third_party_imports(tm
     )
 
     monkeypatch.setattr(
-        orchestrator,
-        "_analyze_python_module",
+        orchestrator_module,
+        "analyze_python_module",
         lambda *args, **kwargs: {
             "syntax_ok": True,
             "has_main_guard": True,
@@ -2257,7 +2264,7 @@ def test_build_code_validation_summary_includes_task_public_contract_preflight(t
 
 def test_task_public_contract_preflight_accepts_annotated_function_anchor(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     task = Task(
         id="code",
         title="Implementation",
@@ -2271,7 +2278,7 @@ def test_task_public_contract_preflight_accepts_annotated_function_anchor(tmp_pa
         assigned_to="code_engineer",
     )
 
-    code_analysis = orchestrator._analyze_python_module(
+    code_analysis = analyze_python_module(
         "import sys\n\n"
         "def calculate_budget_balance(income: float, expenses: list[float]) -> float:\n"
         "    return income - sum(expenses)\n\n"
@@ -2297,9 +2304,9 @@ def test_task_public_contract_preflight_accepts_annotated_function_anchor(tmp_pa
 
 def test_build_code_public_api_marks_constructor_fields_explicit_for_tests(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    code_analysis = orchestrator._analyze_python_module(
+    code_analysis = analyze_python_module(
         "from dataclasses import dataclass\n\n"
         "@dataclass\n"
         "class ComplianceRequest:\n"
@@ -2310,7 +2317,7 @@ def test_build_code_public_api_marks_constructor_fields_explicit_for_tests(tmp_p
         "    status: str = 'pending'\n"
     )
 
-    summary = orchestrator._build_code_public_api(code_analysis)
+    summary = build_code_public_api(code_analysis)
 
     assert "ComplianceRequest(id, user_id, data, timestamp, status)" in summary
     assert "tests must instantiate with all listed constructor fields explicitly: id, user_id, data, timestamp, status" in summary
@@ -2318,9 +2325,9 @@ def test_build_code_public_api_marks_constructor_fields_explicit_for_tests(tmp_p
 
 def test_build_code_behavior_contract_includes_payload_storage_and_score_formula(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    contract = orchestrator._build_code_behavior_contract(
+    contract = build_code_behavior_contract(
         "from dataclasses import dataclass\n"
         "from datetime import datetime\n\n"
         "@dataclass\n"
@@ -2348,9 +2355,9 @@ def test_build_code_behavior_contract_includes_payload_storage_and_score_formula
 
 def test_build_code_behavior_contract_inlines_helper_score_formula_for_service_methods(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    contract = orchestrator._build_code_behavior_contract(
+    contract = build_code_behavior_contract(
         "from dataclasses import dataclass\n"
         "from typing import Any, Dict\n\n"
         "@dataclass\n"
@@ -2378,9 +2385,9 @@ def test_build_code_behavior_contract_inlines_helper_score_formula_for_service_m
 
 def test_build_code_behavior_contract_expands_local_score_aliases(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    contract = orchestrator._build_code_behavior_contract(
+    contract = build_code_behavior_contract(
         "from dataclasses import dataclass\n"
         "from typing import Any, Dict\n\n"
         "@dataclass\n"
@@ -2755,14 +2762,14 @@ def test_build_dependency_validation_summary_formats_failures_and_passes(tmp_pat
 
 def test_build_code_outline_returns_empty_for_blank_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._build_code_outline("   ") == ""
+    assert build_code_outline("   ") == ""
 
 
 def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     raw_content = (
         "import requests\n"
         "from package.module import helper\n"
@@ -2780,7 +2787,7 @@ def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(
         "        return payload\n"
     )
 
-    analysis = orchestrator._analyze_python_module(raw_content)
+    analysis = analyze_python_module(raw_content)
 
     assert analysis["syntax_ok"] is True
     assert analysis["imports"] == ["package", "requests"]
@@ -2824,7 +2831,7 @@ def test_analyze_python_module_covers_public_symbols_imports_and_class_metadata(
 
 def test_analyze_python_module_covers_enum_fields_and_public_async_methods(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     raw_content = (
         "import pkg.submodule, pkg.extra\n"
         "from service.api import Client\n\n"
@@ -2839,7 +2846,7 @@ def test_analyze_python_module_covers_enum_fields_and_public_async_methods(tmp_p
         "        return self.value\n"
     )
 
-    analysis = orchestrator._analyze_python_module(raw_content)
+    analysis = analyze_python_module(raw_content)
 
     assert analysis["imports"] == ["pkg", "service"]
     assert analysis["classes"]["Payload"]["fields"] == ["request_id"]
@@ -2851,7 +2858,7 @@ def test_analyze_python_module_covers_enum_fields_and_public_async_methods(tmp_p
 
 def test_analyze_python_module_keeps_plain_class_fields_off_constructor_and_preserves_staticmethod_args(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     raw_content = (
         "from dataclasses import field\n\n"
         "class ComplianceIntakeService:\n"
@@ -2863,7 +2870,7 @@ def test_analyze_python_module_keeps_plain_class_fields_off_constructor_and_pres
         "        return self.validate_request(request)\n"
     )
 
-    analysis = orchestrator._analyze_python_module(raw_content)
+    analysis = analyze_python_module(raw_content)
     class_info = analysis["classes"]["ComplianceIntakeService"]
 
     assert class_info["fields"] == ["audit_history"]
@@ -2886,7 +2893,7 @@ def test_analyze_python_module_keeps_plain_class_fields_off_constructor_and_pres
 
 def test_analyze_python_module_includes_public_module_variables_in_symbols(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     raw_content = (
         "PUBLIC_COUNT = 1\n"
         "_internal_state = []\n"
@@ -2895,7 +2902,7 @@ def test_analyze_python_module_includes_public_module_variables_in_symbols(tmp_p
         "    return PUBLIC_COUNT\n"
     )
 
-    analysis = orchestrator._analyze_python_module(raw_content)
+    analysis = analyze_python_module(raw_content)
 
     assert analysis["module_variables"] == ["PUBLIC_COUNT", "audit_logs"]
     assert analysis["symbols"] == ["run"]
@@ -2903,9 +2910,9 @@ def test_analyze_python_module_includes_public_module_variables_in_symbols(tmp_p
 
 def test_analyze_python_module_returns_default_shape_for_blank_content(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    analysis = orchestrator._analyze_python_module("   ")
+    analysis = analyze_python_module("   ")
 
     assert analysis == {
         "syntax_ok": True,
@@ -2931,34 +2938,34 @@ def test_is_probable_third_party_import_rejects_blank_and_future(tmp_path):
 
 def test_build_code_public_api_reports_syntax_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_public_api({"syntax_ok": False, "syntax_error": "invalid syntax"})
+    summary = build_code_public_api({"syntax_ok": False, "syntax_error": "invalid syntax"})
 
     assert summary == "Module syntax error: invalid syntax"
 
 
 def test_build_module_run_command_returns_python_command_for_main_guard(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._build_module_run_command("app.py", {"has_main_guard": True}) == "python app.py"
+    assert build_module_run_command("app.py", {"has_main_guard": True}) == "python app.py"
 
 
 def test_build_code_test_targets_reports_invalid_syntax(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_test_targets({"syntax_ok": False})
+    summary = build_code_test_targets({"syntax_ok": False})
 
     assert summary == "Test targets unavailable because module syntax is invalid."
 
 
 def test_build_code_test_targets_excludes_cli_wrapper_classes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_test_targets(
+    summary = build_code_test_targets(
         {
             "syntax_ok": True,
             "functions": [
@@ -2982,9 +2989,9 @@ def test_build_code_test_targets_excludes_cli_wrapper_classes(tmp_path):
 
 def test_build_code_test_targets_marks_preferred_and_helper_classes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_test_targets(
+    summary = build_code_test_targets(
         {
             "syntax_ok": True,
             "functions": [],
@@ -3009,9 +3016,9 @@ def test_build_code_test_targets_marks_preferred_and_helper_classes(tmp_path):
 
 def test_build_code_exact_test_contract_excludes_helper_classes_when_facade_exists(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_exact_test_contract(
+    summary = build_code_exact_test_contract(
         {
             "syntax_ok": True,
             "functions": [],
@@ -3056,9 +3063,9 @@ def test_build_code_exact_test_contract_excludes_helper_classes_when_facade_exis
 
 def test_build_code_test_targets_keeps_required_constructor_logger_off_helper_avoid_list(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_test_targets(
+    summary = build_code_test_targets(
         {
             "syntax_ok": True,
             "functions": [],
@@ -3081,9 +3088,9 @@ def test_build_code_test_targets_keeps_required_constructor_logger_off_helper_av
 
 def test_build_code_test_targets_keeps_multi_token_constructor_helpers_off_helper_avoid_list(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    summary = orchestrator._build_code_test_targets(
+    summary = build_code_test_targets(
         {
             "syntax_ok": True,
             "functions": [],
@@ -3114,10 +3121,10 @@ def test_build_code_test_targets_keeps_multi_token_constructor_helpers_off_helpe
 
 def test_build_code_behavior_contract_returns_empty_for_blank_and_syntax_invalid_modules(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._build_code_behavior_contract("   ") == ""
-    assert orchestrator._build_code_behavior_contract("def broken(:\n    pass") == ""
+    assert build_code_behavior_contract("   ") == ""
+    assert build_code_behavior_contract("def broken(:\n    pass") == ""
 
 
 def test_extract_required_fields_returns_declared_required_fields_list(tmp_path):
@@ -3413,7 +3420,7 @@ def test_analyze_test_module_allows_existing_class_methods(tmp_path):
 def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    module_analysis = orchestrator._analyze_python_module(
+    module_analysis = analyze_python_module(
         "audit_logs: list[str] = []\n\n"
         "def log_audit():\n"
         "    audit_logs.append('ok')\n"
@@ -3434,7 +3441,7 @@ def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path)
 def test_analyze_test_module_tracks_assertion_strength(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    module_analysis = orchestrator._analyze_python_module(
+    module_analysis = analyze_python_module(
         "def add(a, b):\n"
         "    return a + b\n"
     )
@@ -3460,7 +3467,7 @@ def test_analyze_test_module_tracks_assertion_strength(tmp_path):
 def test_analyze_test_module_flags_batch_audit_length_contract_overreach(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    module_analysis = orchestrator._analyze_python_module(
+    module_analysis = analyze_python_module(
         "class ComplianceRequest:\n"
         "    pass\n\n"
         "class ComplianceIntakeService:\n"
@@ -3489,7 +3496,7 @@ def test_analyze_test_module_flags_batch_audit_length_contract_overreach(tmp_pat
 def test_analyze_test_module_flags_validation_failure_score_state_emptiness_contract_overreach(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    module_analysis = orchestrator._analyze_python_module(
+    module_analysis = analyze_python_module(
         "class ComplianceRequest:\n"
         "    pass\n\n"
         "class ComplianceIntakeService:\n"
@@ -3519,7 +3526,7 @@ def test_analyze_test_module_flags_validation_failure_score_state_emptiness_cont
 def test_analyze_test_module_allows_validation_failure_score_state_assertion_when_behavior_contract_defines_it(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    module_analysis = orchestrator._analyze_python_module(
+    module_analysis = analyze_python_module(
         "class ComplianceRequest:\n"
         "    pass\n\n"
         "class ComplianceIntakeService:\n"
@@ -4159,9 +4166,9 @@ def test_analyze_test_module_allows_optional_constructor_arguments(tmp_path):
 
 def test_analyze_python_module_tracks_optional_dataclass_constructor_fields(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    analysis = orchestrator._analyze_python_module(
+    analysis = analyze_python_module(
         "from dataclasses import dataclass, field\n"
         "from datetime import datetime\n\n"
         "@dataclass\n"
@@ -4187,7 +4194,7 @@ def test_analyze_python_module_tracks_optional_dataclass_constructor_fields(tmp_
 def test_analyze_test_module_allows_omitted_defaulted_dataclass_field_from_module_analysis(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     orchestrator = Orchestrator(config)
-    module_analysis = orchestrator._analyze_python_module(
+    module_analysis = analyze_python_module(
         "from dataclasses import dataclass, field\n"
         "from datetime import datetime\n\n"
         "@dataclass\n"
@@ -5572,8 +5579,8 @@ def test_extract_parametrize_argument_names_skips_irrelevant_keywords(tmp_path):
 
 def test_build_code_behavior_contract_ignores_non_function_class_members(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
-    contract = orchestrator._build_code_behavior_contract(
+    Orchestrator(config)
+    contract = build_code_behavior_contract(
         "class Request:\n"
         "    request_id: str\n"
         "    status = 'ok'\n"
@@ -5588,9 +5595,9 @@ def test_build_code_behavior_contract_ignores_non_function_class_members(tmp_pat
 
 def test_build_code_behavior_contract_reports_sequence_accepting_functions(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    contract = orchestrator._build_code_behavior_contract(
+    contract = build_code_behavior_contract(
         "from typing import List\n\n"
         "def process_requests(requests: List[str]) -> None:\n"
         "    for request in requests:\n"

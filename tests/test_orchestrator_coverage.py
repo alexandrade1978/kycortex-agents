@@ -10,6 +10,7 @@ import pytest
 
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.orchestration.module_ast_analysis import (
+    build_code_behavior_contract,
     extract_type_constraints,
     infer_dict_key_value_examples,
     isinstance_subject_name,
@@ -875,7 +876,7 @@ class TestBehaviorContractTypedExamples:
             "        items = details.get('items', [])\n"
             "        return n\n"
         )
-        contract = orch._build_code_behavior_contract(code)
+        contract = build_code_behavior_contract(code)
         assert "'prior_returns': 1" in contract
         assert "'receipt_present': False" in contract
         assert "'items': ['sample']" in contract
@@ -892,5 +893,5 @@ class TestBehaviorContractTypedExamples:
             "        x = details['unknown_key']\n"
             "        return x\n"
         )
-        contract = orch._build_code_behavior_contract(code)
+        contract = build_code_behavior_contract(code)
         assert "'unknown_key': 'value'" in contract

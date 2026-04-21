@@ -810,21 +810,6 @@ class Orchestrator:
         )
         # If only warnings and pytest passed → accept (warnings are false positives)
 
-    def _execute_generated_tests(
-        self,
-        module_filename: str,
-        code_content: str,
-        test_filename: str,
-        test_content: str,
-    ) -> Dict[str, Any]:
-        return execute_generated_tests_runtime(
-            self.config.execution_sandbox_policy(),
-            module_filename,
-            code_content,
-            test_filename,
-            test_content,
-        )
-
     def _planned_module_context(
         self,
         project: ProjectState,

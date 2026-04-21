@@ -416,6 +416,85 @@ def configure_repair_attempts_runtime(
     )
 
 
+def ensure_budget_decomposition_task_runtime(
+    project: ProjectState,
+    task: Task,
+    repair_context: Dict[str, Any],
+) -> Optional[Task]:
+    return ensure_budget_decomposition_task(
+        project,
+        task,
+        repair_context,
+        requires_budget_decomposition=repair_requires_budget_decomposition,
+        build_budget_decomposition_task_context=lambda current_task, current_repair_context: build_budget_decomposition_task_context(
+            current_task,
+            current_repair_context,
+            execution_agent_name(current_task),
+        ),
+    )
+
+
+def build_repair_context_runtime(task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
+    def current_repair_owner_for_category(current_task: Task, failure_category: str) -> str:
+        return repair_owner_for_category(
+            current_task.assigned_to,
+            failure_category,
+        )
+
+    def current_failed_artifact_content(current_task: Task, artifact_type: Any) -> str:
+        return failed_artifact_content(
+            current_task.output,
+            current_task.output_payload,
+            artifact_type,
+        )
+
+    def current_repair_instruction(current_task: Task, failure_category: str) -> str:
+        return build_repair_instruction_runtime(
+            current_task,
+            failure_category,
+            failed_artifact_content=current_failed_artifact_content,
+            artifact_type=ArtifactType.CODE,
+            validation_payload=validation_payload,
+            dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
+            missing_import_nameerror_details=missing_import_nameerror_details,
+            plain_class_field_default_factory_details=plain_class_field_default_factory_details,
+            test_validation_has_only_warnings=validation_has_only_warnings,
+        )
+
+    def current_repair_validation_summary(current_task: Task, failure_category: str) -> str:
+        return build_repair_validation_summary(
+            current_task,
+            failure_category,
+            validation_payload(current_task),
+        )
+
+    def current_failed_artifact_content_for_category(current_task: Task, failure_category: str) -> str:
+        return failed_artifact_content_for_category(
+            current_task.output,
+            current_task.output_payload,
+            failure_category,
+        )
+
+    def current_test_repair_helper_surface_usages(current_task: Task, failure_category: str) -> list[str]:
+        return helper_surface_usages_for_test_repair_runtime(
+            current_task,
+            failure_category,
+            validation_payload=validation_payload,
+        )
+
+    return build_repair_context(
+        task,
+        cycle,
+        repair_owner_for_category=current_repair_owner_for_category,
+        build_repair_instruction=current_repair_instruction,
+        build_repair_validation_summary=current_repair_validation_summary,
+        failed_artifact_content_for_category=current_failed_artifact_content_for_category,
+        test_repair_helper_surface_usages=current_test_repair_helper_surface_usages,
+        normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+        merge_prior_repair_context=merge_prior_repair_context,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -711,90 +790,6 @@ class Orchestrator:
             failed_artifact_content=current_failed_artifact_content,
             build_repair_validation_summary=current_repair_validation_summary,
             build_code_repair_instruction_from_test_failure=current_code_repair_instruction,
-            merge_prior_repair_context=merge_prior_repair_context,
-        )
-
-    def _ensure_budget_decomposition_task(
-        self,
-        project: ProjectState,
-        task: Task,
-        repair_context: Dict[str, Any],
-    ) -> Optional[Task]:
-        def current_budget_decomposition_task_context(
-            current_task: Task,
-            current_repair_context: Dict[str, Any],
-        ) -> Dict[str, Any]:
-            return build_budget_decomposition_task_context(
-                current_task,
-                current_repair_context,
-                execution_agent_name(current_task),
-            )
-
-        return ensure_budget_decomposition_task(
-            project,
-            task,
-            repair_context,
-            requires_budget_decomposition=repair_requires_budget_decomposition,
-            build_budget_decomposition_task_context=current_budget_decomposition_task_context,
-        )
-
-    def _build_repair_context(self, task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
-        def current_repair_owner_for_category(current_task: Task, failure_category: str) -> str:
-            return repair_owner_for_category(
-                current_task.assigned_to,
-                failure_category,
-            )
-
-        def current_failed_artifact_content(current_task: Task, artifact_type: Any) -> str:
-            return failed_artifact_content(
-                current_task.output,
-                current_task.output_payload,
-                artifact_type,
-            )
-
-        def current_repair_instruction(current_task: Task, failure_category: str) -> str:
-            return build_repair_instruction_runtime(
-                current_task,
-                failure_category,
-                failed_artifact_content=current_failed_artifact_content,
-                artifact_type=ArtifactType.CODE,
-                validation_payload=validation_payload,
-                dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
-                missing_import_nameerror_details=missing_import_nameerror_details,
-                plain_class_field_default_factory_details=plain_class_field_default_factory_details,
-                test_validation_has_only_warnings=validation_has_only_warnings,
-            )
-
-        def current_repair_validation_summary(current_task: Task, failure_category: str) -> str:
-            return build_repair_validation_summary(
-                current_task,
-                failure_category,
-                validation_payload(current_task),
-            )
-
-        def current_failed_artifact_content_for_category(current_task: Task, failure_category: str) -> str:
-            return failed_artifact_content_for_category(
-                current_task.output,
-                current_task.output_payload,
-                failure_category,
-            )
-
-        def current_test_repair_helper_surface_usages(current_task: Task, failure_category: str) -> list[str]:
-            return helper_surface_usages_for_test_repair_runtime(
-                current_task,
-                failure_category,
-                validation_payload=validation_payload,
-            )
-
-        return build_repair_context(
-            task,
-            cycle,
-            repair_owner_for_category=current_repair_owner_for_category,
-            build_repair_instruction=current_repair_instruction,
-            build_repair_validation_summary=current_repair_validation_summary,
-            failed_artifact_content_for_category=current_failed_artifact_content_for_category,
-            test_repair_helper_surface_usages=current_test_repair_helper_surface_usages,
-            normalized_helper_surface_symbols=normalized_helper_surface_symbols,
             merge_prior_repair_context=merge_prior_repair_context,
         )
 
@@ -1102,13 +1097,13 @@ class Orchestrator:
                             failed_task_ids,
                             cycle,
                             build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
-                            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
-                            build_repair_context=self._build_repair_context,
+                            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+                            build_repair_context=build_repair_context_runtime,
                         ),
                         repair_task_ids_for_cycle=lambda current_project, failed_task_ids: plan_repair_task_ids_for_cycle(
                             current_project,
                             failed_task_ids,
-                            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+                            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
                         ),
                         log_event=self._log_event,
                         **kwargs,
@@ -1177,10 +1172,10 @@ class Orchestrator:
                                             failed_task_ids,
                                             cycle,
                                             build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
-                                            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
-                                            build_repair_context=self._build_repair_context,
+                                            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+                                            build_repair_context=build_repair_context_runtime,
                                         ),
-                                        ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+                                        ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
                                         log_event=self._log_event,
                                     ),
                                     emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(

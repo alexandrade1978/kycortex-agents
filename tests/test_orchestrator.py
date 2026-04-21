@@ -2567,10 +2567,10 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             failed_task_ids,
             cycle,
             build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
-            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
-            build_repair_context=orchestrator._build_repair_context,
+            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
         log_event=orchestrator._log_event,
     ) is False
 
@@ -2585,10 +2585,10 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             failed_task_ids,
             cycle,
             build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
-            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
-            build_repair_context=orchestrator._build_repair_context,
+            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
         log_event=orchestrator._log_event,
     ) is False
 
@@ -2604,10 +2604,10 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             failed_task_ids,
             cycle,
             build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
-            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
-            build_repair_context=orchestrator._build_repair_context,
+            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
         log_event=orchestrator._log_event,
     ) is False
 
@@ -2636,20 +2636,16 @@ def test_failed_artifact_content_for_dependency_validation_uses_config_artifact(
 
 
 def test_repair_task_ids_for_cycle_skips_missing_tasks(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
 
     assert orchestrator_module.plan_repair_task_ids_for_cycle(
         project,
         ["missing-task"],
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
     ) == []
 
 
 def test_repair_task_ids_for_cycle_skips_none_repair_tasks(tmp_path, monkeypatch):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -2665,7 +2661,7 @@ def test_repair_task_ids_for_cycle_skips_none_repair_tasks(tmp_path, monkeypatch
     assert orchestrator_module.plan_repair_task_ids_for_cycle(
         project,
         ["code"],
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
     ) == []
 
 
@@ -12597,10 +12593,10 @@ def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_f
             failed_task_ids,
             cycle,
             build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
-            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
-            build_repair_context=orchestrator._build_repair_context,
+            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
         log_event=orchestrator._log_event,
     ) is True
 
@@ -15441,8 +15437,6 @@ def test_build_agent_input_adds_truncation_test_repair_priority(tmp_path):
 
 
 def test_build_repair_context_extracts_helper_surface_names_from_test_validation(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     task = Task(
         id="tests",
         title="Tests",
@@ -15468,7 +15462,7 @@ def test_build_repair_context_extracts_helper_surface_names_from_test_validation
         },
     )
 
-    repair_context = orchestrator._build_repair_context(task, {"cycle": 1})
+    repair_context = orchestrator_module.build_repair_context_runtime(task, {"cycle": 1})
 
     assert repair_context["helper_surface_usages"] == [
         "RiskScoringService (line 33)",
@@ -15481,8 +15475,6 @@ def test_build_repair_context_extracts_helper_surface_names_from_test_validation
 
 
 def test_build_repair_context_preserves_prior_repair_objective_for_repair_tasks(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     task = Task(
         id="code__repair_1",
         title="Repair implementation",
@@ -15543,7 +15535,7 @@ def test_build_repair_context_preserves_prior_repair_objective_for_repair_tasks(
         },
     )
 
-    repair_context = orchestrator._build_repair_context(task, {"cycle": 2})
+    repair_context = orchestrator_module.build_repair_context_runtime(task, {"cycle": 2})
 
     assert "Repair the generated Python module by reordering any dataclass fields" in repair_context["instruction"]
     assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in repair_context["instruction"]
@@ -15983,8 +15975,8 @@ def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_t
         ["tests__repair_1"],
         {"cycle": 2},
         build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
-        build_repair_context=orchestrator._build_repair_context,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        build_repair_context=orchestrator_module.build_repair_context_runtime,
     )
 
     code_task = require_task(project, "code")
@@ -16103,8 +16095,8 @@ def test_configure_repair_attempts_prefers_imported_repaired_code_module_for_ori
         ["tests"],
         {"cycle": 2},
         build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
-        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
-        build_repair_context=orchestrator._build_repair_context,
+        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        build_repair_context=orchestrator_module.build_repair_context_runtime,
     )
 
     code_task = require_task(project, "code")

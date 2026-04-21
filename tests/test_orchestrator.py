@@ -1606,7 +1606,7 @@ def test_classify_task_failure_returns_workflow_definition_for_definition_errors
 
 def test_artifact_helpers_return_matching_content_and_filename(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     output = AgentOutput(
         summary="artifacts",
         raw_content="fallback",
@@ -1633,8 +1633,14 @@ def test_artifact_helpers_return_matching_content_and_filename(tmp_path):
         for artifact in output.artifacts
         if artifact.artifact_type == ArtifactType.CODE and isinstance(artifact.content, str) and artifact.content.strip()
     ) == "def ok():\n    return 1"
-    assert orchestrator._artifact_filename(output, ArtifactType.TEST, "default_test.py") == "generated_tests.py"
-    assert orchestrator._artifact_filename(output, ArtifactType.DOCUMENT, "default_doc.md") == "default_doc.md"
+    assert next(
+        (pathlib.Path(artifact.path).name for artifact in output.artifacts if artifact.artifact_type == ArtifactType.TEST and artifact.path),
+        "default_test.py",
+    ) == "generated_tests.py"
+    assert next(
+        (pathlib.Path(artifact.path).name for artifact in output.artifacts if artifact.artifact_type == ArtifactType.DOCUMENT and artifact.path),
+        "default_doc.md",
+    ) == "default_doc.md"
 
 
 def test_record_output_validation_ignores_non_mapping_validation_metadata(tmp_path):

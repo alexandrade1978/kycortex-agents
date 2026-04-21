@@ -375,7 +375,14 @@ class Orchestrator:
                 syntax_ok=kwargs.get("syntax_ok", False),
                 syntax_error=kwargs.get("syntax_error"),
             ),
-            self._artifact_filename,
+            lambda current_output, artifact_type, default_filename: next(
+                (
+                    Path(artifact.path).name
+                    for artifact in current_output.artifacts
+                    if artifact.artifact_type == artifact_type and artifact.path
+                ),
+                default_filename,
+            ),
             self._execute_generated_module_import,
             lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
             if isinstance(current_output.metadata.setdefault("validation", {}), dict)
@@ -458,14 +465,6 @@ class Orchestrator:
         if isinstance(repair_owner, str) and repair_owner.strip():
             return repair_owner
         return task.assigned_to
-
-    def _artifact_filename(self, output: AgentOutput, artifact_type: ArtifactType, default_filename: str) -> str:
-        for artifact in output.artifacts:
-            if artifact.artifact_type != artifact_type:
-                continue
-            if artifact.path:
-                return Path(artifact.path).name
-        return default_filename
 
     def _should_validate_code_content(self, content: str, has_typed_artifact: bool) -> bool:
         if has_typed_artifact:

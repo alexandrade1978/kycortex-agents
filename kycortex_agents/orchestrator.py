@@ -67,6 +67,20 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
 _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
+_REPAIRABLE_FAILURE_CATEGORIES = frozenset(
+    {
+        FailureCategory.UNKNOWN.value,
+        FailureCategory.TASK_EXECUTION.value,
+        FailureCategory.CODE_VALIDATION.value,
+        FailureCategory.TEST_VALIDATION.value,
+        FailureCategory.DEPENDENCY_VALIDATION.value,
+        FailureCategory.PROVIDER_TRANSIENT.value,
+    }
+)
+
+
+def _is_repairable_failure_category(failure_category: str) -> bool:
+    return failure_category in _REPAIRABLE_FAILURE_CATEGORIES
 
 
 class Orchestrator:
@@ -214,9 +228,25 @@ class Orchestrator:
 
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""
+        def workflow_exit_if_cancelled(current_project: ProjectState) -> bool:
+            return exit_if_workflow_cancelled(self.logger, current_project)
+
+        def workflow_exit_if_paused(current_project: ProjectState) -> bool:
+            return exit_if_workflow_paused(self.logger, current_project)
+
+        def workflow_log_event(level: str, event: str, **fields: object) -> None:
+            log_event(self.logger, level, event, **fields)
+
+        def workflow_emit_progress(progress_project: ProjectState, *, task: Task | None = None) -> None:
+            emit_workflow_progress(
+                self.logger,
+                progress_project,
+                task=task,
+            )
+
         execute_workflow_runtime(
             project,
-            exit_if_workflow_cancelled=lambda current_project: exit_if_workflow_cancelled(self.logger, current_project),
+            exit_if_workflow_cancelled=workflow_exit_if_cancelled,
             execution_plan=project.execution_plan,
             validate_agent_resolution=validate_agent_resolution,
             registry=self.registry,
@@ -229,14 +259,7 @@ class Orchestrator:
                     resume_project,
                     current_failed_task_ids,
                     current_failure_categories,
-                    is_repairable_failure=lambda failure_category: failure_category in {
-                        FailureCategory.UNKNOWN.value,
-                        FailureCategory.TASK_EXECUTION.value,
-                        FailureCategory.CODE_VALIDATION.value,
-                        FailureCategory.TEST_VALIDATION.value,
-                        FailureCategory.DEPENDENCY_VALIDATION.value,
-                        FailureCategory.PROVIDER_TRANSIENT.value,
-                    },
+                    is_repairable_failure=_is_repairable_failure_category,
                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
@@ -257,26 +280,26 @@ class Orchestrator:
                             failed_task_ids,
                             ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
                         ),
-                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                        log_event=workflow_log_event,
                         **kwargs,
                     ),
                 ),
-                log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                log_event=workflow_log_event,
             ),
             run_active_workflow=lambda current_project: run_active_workflow(
                 current_project,
-                exit_if_workflow_cancelled=lambda active_project: exit_if_workflow_cancelled(self.logger, active_project),
-                exit_if_workflow_paused=lambda active_project: exit_if_workflow_paused(self.logger, active_project),
+                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+                exit_if_workflow_paused=workflow_exit_if_paused,
                 ensure_workflow_running=lambda active_project: ensure_workflow_running(
                     active_project,
                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                     workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
-                    log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                    log_event=workflow_log_event,
                 ),
                 execute_workflow_loop=lambda active_project: execute_workflow_loop(
                     active_project,
-                    exit_if_workflow_cancelled=lambda loop_project: exit_if_workflow_cancelled(self.logger, loop_project),
-                    exit_if_workflow_paused=lambda loop_project: exit_if_workflow_paused(self.logger, loop_project),
+                    exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+                    exit_if_workflow_paused=workflow_exit_if_paused,
                     pending_tasks=active_project.pending_tasks,
                     finish_workflow_if_no_pending_tasks=lambda loop_project, pending: finish_workflow_if_no_pending_tasks(
                         loop_project,
@@ -284,7 +307,7 @@ class Orchestrator:
                         workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                        log_event=workflow_log_event,
                     ),
                     execute_runnable_frontier=lambda loop_project: execute_runnable_frontier(
                         loop_project,
@@ -297,8 +320,8 @@ class Orchestrator:
                                 task_project,
                                 task=task,
                                 run_task=self.run_task,
-                                exit_if_workflow_cancelled=lambda current_task_project: exit_if_workflow_cancelled(self.logger, current_task_project),
-                                exit_if_workflow_paused=lambda current_task_project: exit_if_workflow_paused(self.logger, current_task_project),
+                                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+                                exit_if_workflow_paused=workflow_exit_if_paused,
                                 classify_task_failure=classify_task_failure,
                                 dispatch_task_failure=lambda dispatch_project, *, task, failure_category: dispatch_task_failure(
                                     dispatch_project,
@@ -307,14 +330,7 @@ class Orchestrator:
                                     workflow_failure_policy=self.config.workflow_failure_policy,
                                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                                    is_repairable_failure=lambda current_failure_category: current_failure_category in {
-                                        FailureCategory.UNKNOWN.value,
-                                        FailureCategory.TASK_EXECUTION.value,
-                                        FailureCategory.CODE_VALIDATION.value,
-                                        FailureCategory.TEST_VALIDATION.value,
-                                        FailureCategory.DEPENDENCY_VALIDATION.value,
-                                        FailureCategory.PROVIDER_TRANSIENT.value,
-                                    },
+                                    is_repairable_failure=_is_repairable_failure_category,
                                     queue_active_cycle_repair=lambda current_project, current_task: _queue_active_cycle_repair_runtime(
                                         current_project,
                                         current_task,
@@ -328,29 +344,21 @@ class Orchestrator:
                                             build_repair_context=build_repair_context_runtime,
                                         ),
                                         ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-                                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                                        log_event=workflow_log_event,
                                     ),
-                                    emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
-                                        self.logger,
-                                        progress_project,
-                                        task=task,
-                                    ),
+                                    emit_workflow_progress=workflow_emit_progress,
                                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                                    log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                                    log_event=workflow_log_event,
                                 ),
-                                emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
-                                    self.logger,
-                                    progress_project,
-                                    task=task,
-                                ),
+                                emit_workflow_progress=workflow_emit_progress,
                             ),
                         ),
                         workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                        log_event=workflow_log_event,
                     ),
                 ),
-                log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
+                log_event=workflow_log_event,
             ),
         )

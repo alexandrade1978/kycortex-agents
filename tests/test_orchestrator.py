@@ -1238,11 +1238,12 @@ def test_summarize_pytest_output_handles_empty_and_fallback_cases(tmp_path):
 
 def test_validate_test_output_rejects_syntax_invalid_code_under_test(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     with pytest.raises(AgentExecutionError, match="code under test has syntax error invalid syntax"):
-        orchestrator._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
             {
                 "code_analysis": {"syntax_ok": False, "syntax_error": "invalid syntax"},
                 "module_name": "code_implementation",
@@ -1254,7 +1255,7 @@ def test_validate_test_output_rejects_syntax_invalid_code_under_test(tmp_path):
 
 def test_validate_test_output_uses_default_module_filename_when_missing(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
     captured: dict[str, str] = {}
 
@@ -1267,7 +1268,8 @@ def test_validate_test_output_uses_default_module_filename_when_missing(tmp_path
 
     monkeypatch.setattr(orchestrator_module, "execute_generated_tests_runtime", lambda *args, **kwargs: fake_execute_generated_tests(*args[1:], **kwargs))
 
-    orchestrator._validate_test_output(
+    orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
         {
             "module_name": "code_implementation",
             "module_filename": "   ",
@@ -1281,7 +1283,7 @@ def test_validate_test_output_uses_default_module_filename_when_missing(tmp_path
 
 def test_validate_test_output_returns_early_when_context_is_incomplete(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     monkeypatch.setattr(
@@ -1290,13 +1292,15 @@ def test_validate_test_output_returns_early_when_context_is_incomplete(tmp_path,
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not execute generated tests")),
     )
 
-    assert orchestrator._validate_test_output({"module_name": "", "code": "def ok():\n    return 1"}, output) is None
-    assert orchestrator._validate_test_output({"module_name": "code_implementation", "code": "   "}, output) is None
+    assert orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,{"module_name": "", "code": "def ok():\n    return 1"}, output) is None
+    assert orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,{"module_name": "code_implementation", "code": "   "}, output) is None
 
 
 def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     monkeypatch.setattr(
@@ -1315,7 +1319,8 @@ def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_p
     )
 
     with pytest.raises(AgentExecutionError) as excinfo:
-        orchestrator._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
             {
                 "module_name": "code_implementation",
                 "code": "def ok():\n    return 1",
@@ -1347,7 +1352,7 @@ def test_validate_code_output_rejects_missing_required_cli_entrypoint(tmp_path):
 
 def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(
         summary="tests",
         raw_content="def test_one():\n    assert True\n\n\ndef test_two():\n    assert True\n",
@@ -1367,7 +1372,8 @@ def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch)
     )
 
     with pytest.raises(AgentExecutionError, match="line count 6 exceeds maximum 3"):
-        orchestrator._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
             {
                 "module_name": "code_implementation",
                 "code": "def ok():\n    return 1",
@@ -1379,7 +1385,6 @@ def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch)
 
 def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     task = Task(
         id="repair",
         title="Repair",
@@ -1399,7 +1404,12 @@ def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
                 current_output,
                 task,
             ),
-            validate_test_output=orchestrator._validate_test_output,
+            validate_test_output=lambda context, current_output, task=None: orchestrator_module.validate_test_output_for_task_runtime(
+                config.execution_sandbox_policy(),
+                context,
+                current_output,
+                task,
+            ),
         )
 
 
@@ -4500,7 +4510,7 @@ def test_literal_helpers_cover_missing_keys_nested_data_and_non_string_values(tm
 
 def test_validate_test_output_rejects_top_level_test_count_mismatch(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(
         summary="tests",
         raw_content="def test_one():\n    assert True\n\n\ndef test_two():\n    assert True\n",
@@ -4519,7 +4529,8 @@ def test_validate_test_output_rejects_top_level_test_count_mismatch(tmp_path, mo
     )
 
     with pytest.raises(AgentExecutionError, match="top-level test count 2 does not match required 3"):
-        orchestrator._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
             {
                 "module_name": "code_implementation",
                 "code": "def ok():\n    return 1",
@@ -4531,7 +4542,7 @@ def test_validate_test_output_rejects_top_level_test_count_mismatch(tmp_path, mo
 
 def test_validate_test_output_rejects_top_level_test_count_maximum(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(
         summary="tests",
         raw_content="def test_one():\n    assert True\n\n\ndef test_two():\n    assert True\n",
@@ -4550,7 +4561,8 @@ def test_validate_test_output_rejects_top_level_test_count_maximum(tmp_path, mon
     )
 
     with pytest.raises(AgentExecutionError, match="top-level test count 2 exceeds maximum 1"):
-        orchestrator._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
             {
                 "module_name": "code_implementation",
                 "code": "def ok():\n    return 1",
@@ -4562,7 +4574,7 @@ def test_validate_test_output_rejects_top_level_test_count_maximum(tmp_path, mon
 
 def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="tests", raw_content="def test_one():\n    assert True\n")
     task = Task(
         id="tests",
@@ -4591,7 +4603,8 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
         AgentExecutionError,
         match="fixture count 2 exceeds maximum 1; output likely truncated before the file ended cleanly",
     ):
-        orchestrator._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
             {
                 "module_name": "code_implementation",
                 "code": "def ok():\n    return 1",
@@ -4603,7 +4616,7 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
 
 def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="tests", raw_content="def test_one():\n    pass\n")
 
     monkeypatch.setattr(
@@ -4632,7 +4645,8 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
         AgentExecutionError,
         match="tests without assertion-like checks: test_one \\(line 1\\), test_two \\(line 4\\)",
     ):
-        orchestrator._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+            sandbox_policy,
             {
                 "module_name": "code_implementation",
                 "code": "def ok():\n    return 1",
@@ -17883,7 +17897,8 @@ class TestValidateTestOutputPytestArbiter:
         )
 
         # Should NOT raise — warnings overridden by pytest passing
-        orch._validate_test_output(
+        orchestrator_module.validate_test_output_for_task_runtime(
+                orch.config.execution_sandbox_policy(),
             {"module_name": "my_module", "code": "def ok():\n    return 1"},
             output,
         )
@@ -17908,7 +17923,8 @@ class TestValidateTestOutputPytestArbiter:
         )
 
         with pytest.raises(AgentExecutionError, match="pytest failed"):
-            orch._validate_test_output(
+            orchestrator_module.validate_test_output_for_task_runtime(
+                orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,
             )
@@ -17933,7 +17949,8 @@ class TestValidateTestOutputPytestArbiter:
         )
 
         with pytest.raises(AgentExecutionError, match="pytest did not confirm correctness"):
-            orch._validate_test_output(
+            orchestrator_module.validate_test_output_for_task_runtime(
+                orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,
             )
@@ -17959,7 +17976,8 @@ class TestValidateTestOutputPytestArbiter:
         )
 
         with pytest.raises(AgentExecutionError, match="missing function imports"):
-            orch._validate_test_output(
+            orchestrator_module.validate_test_output_for_task_runtime(
+                orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,
             )
@@ -17985,7 +18003,8 @@ class TestValidateTestOutputPytestArbiter:
         )
 
         with pytest.raises(AgentExecutionError) as excinfo:
-            orch._validate_test_output(
+            orchestrator_module.validate_test_output_for_task_runtime(
+                orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,
             )

@@ -685,6 +685,46 @@ def analyze_test_module_runtime(
     )
 
 
+def validate_test_output_for_task_runtime(
+    sandbox_policy: ExecutionSandboxPolicy,
+    context: Dict[str, Any],
+    output: AgentOutput,
+    task: Optional[Task] = None,
+) -> None:
+    validate_test_output_runtime(
+        context,
+        output,
+        task_line_budget(task),
+        task_exact_top_level_test_count(task),
+        task_max_top_level_test_count(task),
+        task_fixture_budget(task),
+        QATesterAgent._finalize_generated_test_suite,
+        should_validate_test_content,
+        analyze_test_module_runtime,
+        auto_fix_test_type_mismatches,
+        lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
+        lambda module_filename, code_content, test_filename, test_content: execute_generated_tests_runtime(
+            sandbox_policy,
+            module_filename,
+            code_content,
+            test_filename,
+            test_content,
+        ),
+        lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
+            current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
+            raw_content=kwargs.get("raw_content", ""),
+            syntax_ok=kwargs.get("syntax_ok", False),
+            syntax_error=kwargs.get("syntax_error"),
+        ),
+        pytest_failure_origin,
+        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+        else None,
+        completion_validation_issue,
+        summarize_output,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -761,7 +801,12 @@ class Orchestrator:
                     output,
                     task,
                 ),
-                validate_test_output=self._validate_test_output,
+                validate_test_output=lambda context, output, task=None: validate_test_output_for_task_runtime(
+                    self.config.execution_sandbox_policy(),
+                    context,
+                    output,
+                    task,
+                ),
             )
             ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:
@@ -818,41 +863,6 @@ class Orchestrator:
             total_tokens=(provider_call.get("usage") or {}).get("total_tokens") if provider_call else None,
         )
         return normalized_output.raw_content
-
-    def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:
-        validate_test_output_runtime(
-            context,
-            output,
-            task_line_budget(task),
-            task_exact_top_level_test_count(task),
-            task_max_top_level_test_count(task),
-            task_fixture_budget(task),
-            QATesterAgent._finalize_generated_test_suite,
-            should_validate_test_content,
-            analyze_test_module_runtime,
-            auto_fix_test_type_mismatches,
-            lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
-            lambda module_filename, code_content, test_filename, test_content: execute_generated_tests_runtime(
-                self.config.execution_sandbox_policy(),
-                module_filename,
-                code_content,
-                test_filename,
-                test_content,
-            ),
-            lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
-                current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
-                raw_content=kwargs.get("raw_content", ""),
-                syntax_ok=kwargs.get("syntax_ok", False),
-                syntax_error=kwargs.get("syntax_error"),
-            ),
-            pytest_failure_origin,
-            lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
-            if isinstance(current_output.metadata.setdefault("validation", {}), dict)
-            else None,
-            completion_validation_issue,
-            summarize_output,
-        )
-        # If only warnings and pytest passed → accept (warnings are false positives)
 
     def _planned_module_context(
         self,

@@ -232,7 +232,7 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
         normalize_assigned_to=AgentRegistry.normalize_key,
         code_artifact_context=orchestrator._code_artifact_context,
         dependency_artifact_context=orchestrator_module.dependency_artifact_context_runtime,
-        test_artifact_context=orchestrator._test_artifact_context,
+        test_artifact_context=orchestrator_module.test_artifact_context_runtime,
         agent_visible_repair_context=orchestrator_module.agent_visible_repair_context,
         normalized_helper_surface_symbols=normalized_helper_surface_symbols,
         qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
@@ -2702,12 +2702,12 @@ def test_artifact_context_helpers_return_empty_for_invalid_payload_shapes(tmp_pa
     task = Task(id="task", title="Task", description="Task", assigned_to="architect")
 
     assert orchestrator._code_artifact_context(task) == {}
-    assert orchestrator._test_artifact_context(task, {}) == {}
+    assert orchestrator_module.test_artifact_context_runtime(task, {}) == {}
     assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
 
     task.output_payload = {"artifacts": "invalid"}
     assert orchestrator._code_artifact_context(task) == {}
-    assert orchestrator._test_artifact_context(task, {}) == {}
+    assert orchestrator_module.test_artifact_context_runtime(task, {}) == {}
     assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
 
 
@@ -2760,8 +2760,8 @@ def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_contex
 
     code_ctx = orchestrator._code_artifact_context(code_task)
     assert code_ctx.get("module_name") == "code_implementation"
-    assert orchestrator._test_artifact_context(test_task, {}) == {}
-    assert orchestrator._test_artifact_context(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}
+    assert orchestrator_module.test_artifact_context_runtime(test_task, {}) == {}
+    assert orchestrator_module.test_artifact_context_runtime(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}
     assert orchestrator_module.dependency_artifact_context_runtime(dep_task, {}) == {}
 
 

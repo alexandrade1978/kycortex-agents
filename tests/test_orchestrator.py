@@ -2531,7 +2531,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
     project.add_task(task)
 
     project.repair_history.append({"cycle": 0})
-    assert orchestrator_module.queue_active_cycle_repair_runtime(
+    assert workflow_control_module.queue_active_cycle_repair_runtime(
         project,
         task,
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,
@@ -2549,7 +2549,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
 
     project.repair_history[-1] = {"cycle": 1}
     monkeypatch.setattr(workflow_control_module, "has_repair_task_for_cycle", lambda *args, **kwargs: True)
-    assert orchestrator_module.queue_active_cycle_repair_runtime(
+    assert workflow_control_module.queue_active_cycle_repair_runtime(
         project,
         task,
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,
@@ -2568,7 +2568,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
     monkeypatch.setattr(workflow_control_module, "has_repair_task_for_cycle", lambda *args, **kwargs: False)
     monkeypatch.setattr(project, "_plan_task_repair", lambda *args, **kwargs: None)
     monkeypatch.setattr(workflow_control_module, "plan_repair_task_ids_for_cycle", lambda *args, **kwargs: [])
-    assert orchestrator_module.queue_active_cycle_repair_runtime(
+    assert workflow_control_module.queue_active_cycle_repair_runtime(
         project,
         task,
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,
@@ -12642,7 +12642,7 @@ def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_f
         )
     )
 
-    assert orchestrator_module.queue_active_cycle_repair_runtime(
+    assert workflow_control_module.queue_active_cycle_repair_runtime(
         project,
         require_task(project, "tests"),
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,

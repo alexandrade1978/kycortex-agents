@@ -75,7 +75,6 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 
 active_repair_cycle = _active_repair_cycle
 has_repair_task_for_cycle = _has_repair_task_for_cycle
-queue_active_cycle_repair_runtime = _queue_active_cycle_repair_runtime
 execute_generated_tests_runtime = _execute_generated_tests_runtime
 
 
@@ -325,7 +324,7 @@ class Orchestrator:
                                         FailureCategory.DEPENDENCY_VALIDATION.value,
                                         FailureCategory.PROVIDER_TRANSIENT.value,
                                     },
-                                    queue_active_cycle_repair=lambda current_project, current_task: queue_active_cycle_repair_runtime(
+                                    queue_active_cycle_repair=lambda current_project, current_task: _queue_active_cycle_repair_runtime(
                                         current_project,
                                         current_task,
                                         workflow_resume_policy=self.config.workflow_resume_policy,

@@ -33,6 +33,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     extract_required_fields,
     field_selector_name,
     is_probable_third_party_import,
+    parse_behavior_contract,
     self_assigned_attributes,
 )
 from kycortex_agents.orchestration.repair_analysis import (
@@ -1163,7 +1164,7 @@ def test_is_sandbox_security_violation_returns_false_for_unrelated_errors(tmp_pa
 
 def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     contract = "\n".join(
         [
             "- intake_request requires fields: request_id, compliance_data",
@@ -1175,7 +1176,7 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = orchestrator._parse_behavior_contract(
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
         contract
     )
 
@@ -1204,7 +1205,7 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
 
 def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     contract = "\n".join(
         [
             "  ",
@@ -1215,7 +1216,7 @@ def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = orchestrator._parse_behavior_contract(
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
         contract
     )
 

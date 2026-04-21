@@ -984,7 +984,7 @@ class Orchestrator:
         class_map = code_analysis.get("classes") or {}
         helper_class_names_to_avoid = set(helper_classes_to_avoid(code_analysis))
         entrypoint_names = entrypoint_symbol_names(code_analysis)
-        validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = self._parse_behavior_contract(
+        validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
             code_behavior_contract
         )
         return analyze_test_module(
@@ -1005,12 +1005,6 @@ class Orchestrator:
             _PYTEST_BUILTIN_FIXTURES,
             code_behavior_contract,
         )
-
-    def _parse_behavior_contract(
-        self,
-        contract: str,
-    ) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]], set[str], Dict[str, Dict[str, list[str]]]]:
-        return parse_behavior_contract(contract)
 
     def _analyze_test_behavior_contracts(
         self,

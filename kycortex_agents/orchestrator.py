@@ -250,6 +250,20 @@ class Orchestrator:
                 task=task,
             )
 
+        def configure_repair_attempts_for_cycle(
+            current_project: ProjectState,
+            failed_task_ids: list[str],
+            cycle: dict[str, object],
+        ) -> None:
+            configure_repair_attempts_runtime(
+                current_project,
+                failed_task_ids,
+                cycle,
+                build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure_runtime,
+                ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+                build_repair_context=build_repair_context_runtime,
+            )
+
         execute_workflow_runtime(
             project,
             exit_if_workflow_cancelled=workflow_exit_if_cancelled,
@@ -273,14 +287,7 @@ class Orchestrator:
                         repair_project,
                         resume_failed_task_ids,
                         resume_failure_categories,
-                        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: configure_repair_attempts_runtime(
-                            current_project,
-                            failed_task_ids,
-                            cycle,
-                            build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure_runtime,
-                            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-                            build_repair_context=build_repair_context_runtime,
-                        ),
+                        configure_repair_attempts=configure_repair_attempts_for_cycle,
                         repair_task_ids_for_cycle=lambda current_project, failed_task_ids: plan_repair_task_ids_for_cycle(
                             current_project,
                             failed_task_ids,
@@ -341,14 +348,7 @@ class Orchestrator:
                                         current_project,
                                         current_task,
                                         workflow_resume_policy=workflow_resume_policy,
-                                        configure_repair_attempts=lambda repair_project, failed_task_ids, cycle: configure_repair_attempts_runtime(
-                                            repair_project,
-                                            failed_task_ids,
-                                            cycle,
-                                            build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure_runtime,
-                                            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-                                            build_repair_context=build_repair_context_runtime,
-                                        ),
+                                        configure_repair_attempts=configure_repair_attempts_for_cycle,
                                         ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
                                         log_event=workflow_log_event,
                                     ),

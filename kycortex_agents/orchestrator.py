@@ -38,8 +38,6 @@ from kycortex_agents.orchestration.workflow_control import (
     execute_workflow_task,
     failed_task_ids_for_repair,
     finish_workflow_if_no_pending_tasks,
-    active_repair_cycle as _active_repair_cycle,
-    has_repair_task_for_cycle as _has_repair_task_for_cycle,
     plan_repair_task_ids_for_cycle,
     queue_active_cycle_repair_runtime as _queue_active_cycle_repair_runtime,
     run_active_workflow,
@@ -69,9 +67,6 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
 _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
-
-active_repair_cycle = _active_repair_cycle
-has_repair_task_for_cycle = _has_repair_task_for_cycle
 
 
 class Orchestrator:

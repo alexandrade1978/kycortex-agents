@@ -48,10 +48,7 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
-    entrypoint_symbol_names,
     example_from_default,
-    helper_classes_to_avoid,
-    parse_behavior_contract,
 )
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
@@ -107,7 +104,7 @@ from kycortex_agents.orchestration.task_constraints import (
     task_requires_cli_entrypoint,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
-    analyze_test_module,
+    analyze_test_module_runtime,
     auto_fix_test_type_mismatches,
 )
 from kycortex_agents.orchestration.validation_reporting import (
@@ -182,28 +179,7 @@ from kycortex_agents.types import (
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
-_PYTEST_BUILTIN_FIXTURES = {
-    "cache",
-    "capfd",
-    "capfdbinary",
-    "caplog",
-    "capsys",
-    "capsysbinary",
-    "capteesys",
-    "doctest_namespace",
-    "monkeypatch",
-    "pytestconfig",
-    "record_property",
-    "record_testsuite_property",
-    "record_xml_attribute",
-    "recwarn",
-    "tmp_path",
-    "tmp_path_factory",
-    "tmpdir",
-    "tmpdir_factory",
-}
 _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
-_RESERVED_FIXTURE_NAMES = {"request"}
 
 # ---------------------------------------------------------------------------
 # Test issue severity classification — Phase 3 (Model Adaptation Layer)
@@ -641,43 +617,6 @@ def execute_generated_tests_runtime(
         summarize_output=summarize_pytest_output,
         redact_result=redact_validation_execution_result,
     )
-
-
-def analyze_test_module_runtime(
-    raw_content: str,
-    module_name: str,
-    code_analysis: Dict[str, Any],
-    code_behavior_contract: str = "",
-) -> Dict[str, Any]:
-    module_symbols = set(code_analysis.get("symbols") or []) | set(code_analysis.get("module_variables") or [])
-    function_names = {item["name"] for item in code_analysis.get("functions") or []}
-    function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
-    class_map = code_analysis.get("classes") or {}
-    helper_class_names_to_avoid = set(helper_classes_to_avoid(code_analysis))
-    entrypoint_names = entrypoint_symbol_names(code_analysis)
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
-        code_behavior_contract
-    )
-    return analyze_test_module(
-        raw_content,
-        module_name,
-        module_symbols,
-        function_names,
-        function_map,
-        class_map,
-        helper_class_names_to_avoid,
-        entrypoint_names,
-        validation_rules,
-        field_value_rules,
-        batch_rules,
-        sequence_input_functions,
-        type_constraint_rules,
-        _RESERVED_FIXTURE_NAMES,
-        _PYTEST_BUILTIN_FIXTURES,
-        code_behavior_contract,
-    )
-
-
 def validate_test_output_for_task_runtime(
     sandbox_policy: ExecutionSandboxPolicy,
     context: Dict[str, Any],

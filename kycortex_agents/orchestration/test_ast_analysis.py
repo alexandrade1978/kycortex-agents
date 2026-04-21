@@ -16,7 +16,6 @@ from kycortex_agents.orchestration.ast_tools import (
     is_pytest_fixture,
     render_expression,
 )
-
 MOCK_ASSERTION_ATTRIBUTES = {"call_count"}
 MOCK_ASSERTION_METHODS = {
     "assert_any_call",
@@ -27,6 +26,68 @@ MOCK_ASSERTION_METHODS = {
     "assert_has_calls",
     "assert_not_called",
 }
+PYTEST_BUILTIN_FIXTURES = {
+    "cache",
+    "capfd",
+    "capfdbinary",
+    "caplog",
+    "capsys",
+    "capsysbinary",
+    "capteesys",
+    "doctest_namespace",
+    "monkeypatch",
+    "pytestconfig",
+    "record_property",
+    "record_testsuite_property",
+    "record_xml_attribute",
+    "recwarn",
+    "tmp_path",
+    "tmp_path_factory",
+    "tmpdir",
+    "tmpdir_factory",
+}
+RESERVED_FIXTURE_NAMES = {"request"}
+
+
+def analyze_test_module_runtime(
+    raw_content: str,
+    module_name: str,
+    code_analysis: Dict[str, Any],
+    code_behavior_contract: str = "",
+) -> Dict[str, Any]:
+    from kycortex_agents.orchestration.module_ast_analysis import (
+        entrypoint_symbol_names,
+        helper_classes_to_avoid,
+        parse_behavior_contract,
+    )
+
+    module_symbols = set(code_analysis.get("symbols") or []) | set(code_analysis.get("module_variables") or [])
+    function_names = {item["name"] for item in code_analysis.get("functions") or []}
+    function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
+    class_map = code_analysis.get("classes") or {}
+    helper_class_names_to_avoid = set(helper_classes_to_avoid(code_analysis))
+    entrypoint_names = entrypoint_symbol_names(code_analysis)
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
+        code_behavior_contract
+    )
+    return analyze_test_module(
+        raw_content,
+        module_name,
+        module_symbols,
+        function_names,
+        function_map,
+        class_map,
+        helper_class_names_to_avoid,
+        entrypoint_names,
+        validation_rules,
+        field_value_rules,
+        batch_rules,
+        sequence_input_functions,
+        type_constraint_rules,
+        RESERVED_FIXTURE_NAMES,
+        PYTEST_BUILTIN_FIXTURES,
+        code_behavior_contract,
+    )
 
 
 def function_argument_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:

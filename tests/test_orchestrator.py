@@ -42,7 +42,6 @@ from kycortex_agents.orchestration.repair_analysis import (
     plain_class_field_default_factory_details,
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
-    normalized_helper_surface_symbols,
     qa_repair_should_reuse_failed_test_artifact,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
@@ -89,14 +88,11 @@ from kycortex_agents.orchestration import (
     active_repair_cycle,
     analyze_dependency_manifest,
     attribute_chain,
-    build_agent_view_runtime,
     completion_diagnostics_summary,
     completion_diagnostics_from_provider_call,
     completion_validation_issue,
-    compact_architecture_context,
     build_repair_validation_summary,
     build_repair_instruction_runtime,
-    build_task_context_runtime,
     build_code_validation_summary,
     build_dependency_validation_summary,
     build_repair_focus_lines,
@@ -107,7 +103,6 @@ from kycortex_agents.orchestration import (
     failed_artifact_content_for_category,
     failed_test_requires_code_repair_runtime,
     first_call_argument,
-    is_budget_decomposition_planner,
     is_pytest_fixture,
     looks_structurally_truncated,
     pytest_contract_overreach_signals,
@@ -119,16 +114,11 @@ from kycortex_agents.orchestration import (
     render_expression,
     sandbox_security_violation,
     semantic_output_key,
-    should_compact_architecture_context,
     summarize_output,
     has_repair_task_for_cycle,
     task_fixture_budget,
-    task_context_output,
-    task_public_contract_anchor,
     task_public_contract_preflight,
     task_requires_cli_entrypoint,
-    direct_dependency_ids,
-    task_dependency_closure_ids,
     validation_has_blocking_issues,
     validation_has_only_warnings,
     validation_payload,
@@ -200,44 +190,7 @@ def repair_owner_for_category_for_test(task: Task, failure_category: str) -> str
 
 
 def build_context_for_test(orchestrator: Orchestrator, task: Task, project: ProjectState) -> dict[str, Any]:
-    return build_task_context_runtime(
-        task,
-        project,
-        provider_max_tokens=orchestrator.config.max_tokens,
-        build_agent_view=lambda current_task, current_project, snapshot: build_agent_view_runtime(
-            current_task,
-            current_project,
-            snapshot,
-            task_dependency_closure_ids=task_dependency_closure_ids,
-            direct_dependency_ids=direct_dependency_ids,
-        ),
-        task_dependency_closure_ids=task_dependency_closure_ids,
-        execution_agent_name=orchestrator_module.execution_agent_name,
-        planned_module_context=lambda current_project, visible_task_ids, current_task: orchestrator_module.planned_module_context_runtime(
-            current_project,
-            visible_task_ids,
-            current_task=current_task,
-        ),
-        task_public_contract_anchor=task_public_contract_anchor,
-        should_compact_architecture_context=lambda task, task_public_contract_anchor: should_compact_architecture_context(
-            task,
-            task_public_contract_anchor,
-            orchestrator_module.execution_agent_name(task) if task is not None else None,
-            orchestrator.config.max_tokens,
-        ),
-        compact_architecture_context=compact_architecture_context,
-        task_context_output=task_context_output,
-        is_budget_decomposition_planner=is_budget_decomposition_planner,
-        semantic_output_key=semantic_output_key,
-        normalize_assigned_to=AgentRegistry.normalize_key,
-        code_artifact_context=orchestrator_module.code_artifact_context_runtime,
-        dependency_artifact_context=orchestrator_module.dependency_artifact_context_runtime,
-        test_artifact_context=orchestrator_module.test_artifact_context_runtime,
-        agent_visible_repair_context=orchestrator_module.agent_visible_repair_context,
-        normalized_helper_surface_symbols=normalized_helper_surface_symbols,
-        qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
-        redact_sensitive_data=orchestrator_module.redact_sensitive_data,
-    )
+    return orchestrator_module.build_task_context_for_agent_runtime(orchestrator, task, project)
 
 
 class FailingAgent:

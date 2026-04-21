@@ -910,8 +910,12 @@ def code_artifact_context_runtime(
     }
 
 
-def build_agent_input_runtime(orchestrator: "Orchestrator", task: Task, project: ProjectState) -> AgentInput:
-    context = build_task_context_runtime(
+def build_task_context_for_agent_runtime(
+    orchestrator: "Orchestrator",
+    task: Task,
+    project: ProjectState,
+) -> Dict[str, Any]:
+    return build_task_context_runtime(
         task,
         project,
         provider_max_tokens=orchestrator.config.max_tokens,
@@ -949,6 +953,10 @@ def build_agent_input_runtime(orchestrator: "Orchestrator", task: Task, project:
         qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
         redact_sensitive_data=redact_sensitive_data,
     )
+
+
+def build_agent_input_runtime(orchestrator: "Orchestrator", task: Task, project: ProjectState) -> AgentInput:
+    context = build_task_context_for_agent_runtime(orchestrator, task, project)
     repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
     repair_focus_lines = build_repair_focus_lines(repair_context, context) if repair_context else []
     return build_agent_input(

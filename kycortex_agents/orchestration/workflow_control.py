@@ -499,6 +499,34 @@ def queue_active_cycle_repair(
     return True
 
 
+def queue_active_cycle_repair_runtime(
+    project: ProjectState,
+    task: Task,
+    *,
+    workflow_resume_policy: str,
+    configure_repair_attempts: Callable[[ProjectState, list[str], dict[str, Any]], None],
+    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
+    log_event: Callable[..., None],
+    active_repair_cycle_cb: Callable[[ProjectState], dict[str, Any] | None] = active_repair_cycle,
+    has_repair_task_for_cycle_cb: Callable[[ProjectState, str, int], bool] = has_repair_task_for_cycle,
+    plan_repair_task_ids_for_cycle_cb: Callable[..., list[str]] = plan_repair_task_ids_for_cycle,
+) -> bool:
+    return queue_active_cycle_repair(
+        project,
+        task,
+        workflow_resume_policy=workflow_resume_policy,
+        active_repair_cycle=active_repair_cycle_cb,
+        has_repair_task_for_cycle=has_repair_task_for_cycle_cb,
+        configure_repair_attempts=configure_repair_attempts,
+        repair_task_ids_for_cycle=lambda current_project, failed_task_ids: plan_repair_task_ids_for_cycle_cb(
+            current_project,
+            failed_task_ids,
+            ensure_budget_decomposition_task=ensure_budget_decomposition_task,
+        ),
+        log_event=log_event,
+    )
+
+
 def resume_failed_tasks_with_repair_cycle(
     project: ProjectState,
     failed_task_ids: list[str],

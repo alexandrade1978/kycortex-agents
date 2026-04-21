@@ -102,7 +102,6 @@ from kycortex_agents.orchestration.validation_analysis import (
     validation_has_blocking_issues,
 )
 from kycortex_agents.orchestration.workflow_control import (
-    active_repair_cycle,
     build_code_repair_context_from_test_failure_runtime,
     classify_task_failure,
     configure_repair_attempts,
@@ -117,9 +116,11 @@ from kycortex_agents.orchestration.workflow_control import (
     execute_workflow_task,
     failed_task_ids_for_repair,
     finish_workflow_if_no_pending_tasks,
+    active_repair_cycle as _active_repair_cycle,
+    has_repair_task_for_cycle as _has_repair_task_for_cycle,
     plan_repair_task_ids_for_cycle,
+    queue_active_cycle_repair_runtime as _queue_active_cycle_repair_runtime,
     run_active_workflow,
-    has_repair_task_for_cycle,
     cancel_workflow,
     emit_workflow_progress,
     execution_agent_name,
@@ -135,7 +136,6 @@ from kycortex_agents.orchestration.workflow_control import (
     resume_workflow,
     skip_task,
     validate_agent_resolution,
-    queue_active_cycle_repair,
 )
 from kycortex_agents.orchestration.workflow_acceptance import evaluate_workflow_acceptance
 from kycortex_agents.providers.base import (
@@ -152,6 +152,10 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
 
+active_repair_cycle = _active_repair_cycle
+has_repair_task_for_cycle = _has_repair_task_for_cycle
+
+
 def queue_active_cycle_repair_runtime(
     project: ProjectState,
     task: Task,
@@ -161,21 +165,17 @@ def queue_active_cycle_repair_runtime(
     ensure_budget_decomposition_task: Callable[..., Optional[Task]],
     log_event: Callable[..., None],
 ) -> bool:
-    return queue_active_cycle_repair(
+    return _queue_active_cycle_repair_runtime(
         project,
         task,
         workflow_resume_policy=workflow_resume_policy,
-        active_repair_cycle=active_repair_cycle,
-        has_repair_task_for_cycle=has_repair_task_for_cycle,
         configure_repair_attempts=configure_repair_attempts,
-        repair_task_ids_for_cycle=lambda current_project, failed_task_ids: plan_repair_task_ids_for_cycle(
-            current_project,
-            failed_task_ids,
-            ensure_budget_decomposition_task=ensure_budget_decomposition_task,
-        ),
+        ensure_budget_decomposition_task=ensure_budget_decomposition_task,
         log_event=log_event,
+        active_repair_cycle_cb=active_repair_cycle,
+        has_repair_task_for_cycle_cb=has_repair_task_for_cycle,
+        plan_repair_task_ids_for_cycle_cb=plan_repair_task_ids_for_cycle,
     )
-
 
 def configure_repair_attempts_runtime(
     project: ProjectState,

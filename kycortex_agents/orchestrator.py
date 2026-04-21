@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Optional
+from typing import AbstractSet, Literal, Optional
 
 try:
     import resource
@@ -292,7 +292,7 @@ class Orchestrator:
             *,
             task: Task,
             failure_category: str,
-        ) -> bool:
+        ) -> Literal["continue", "raise"]:
             return dispatch_task_failure(
                 dispatch_project,
                 task=task,
@@ -310,24 +310,29 @@ class Orchestrator:
         def resume_failed_tasks_with_repair_cycle_for_resume(
             repair_project: ProjectState,
             resume_failed_task_ids: list[str],
-            resume_failure_categories: list[str],
-            **kwargs: object,
-        ) -> bool:
+            resume_failure_categories: AbstractSet[str],
+            *,
+            workflow_acceptance_policy: str,
+            zero_budget_failure_categories: AbstractSet[str],
+            evaluate_workflow_acceptance,
+        ) -> list[str]:
             return resume_failed_tasks_with_repair_cycle(
                 repair_project,
                 resume_failed_task_ids,
                 resume_failure_categories,
+                workflow_acceptance_policy=workflow_acceptance_policy,
+                zero_budget_failure_categories=zero_budget_failure_categories,
+                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                 configure_repair_attempts=configure_repair_attempts_for_cycle,
                 repair_task_ids_for_cycle=plan_repair_task_ids_for_cycle_for_resume,
                 log_event=workflow_log_event,
-                **kwargs,
             )
 
         def resume_failed_workflow_tasks_for_resume(
             resume_project: ProjectState,
             current_failed_task_ids: list[str],
-            current_failure_categories: list[str],
-        ) -> bool:
+            current_failure_categories: AbstractSet[str],
+        ) -> list[str]:
             return resume_failed_workflow_tasks(
                 resume_project,
                 current_failed_task_ids,
@@ -339,7 +344,7 @@ class Orchestrator:
                 resume_failed_tasks_with_repair_cycle=resume_failed_tasks_with_repair_cycle_for_resume,
             )
 
-        def resume_workflow_tasks_for_execution(current_project: ProjectState) -> bool:
+        def resume_workflow_tasks_for_execution(current_project: ProjectState) -> list[str]:
             return resume_workflow_tasks(
                 current_project,
                 workflow_resume_policy=workflow_resume_policy,

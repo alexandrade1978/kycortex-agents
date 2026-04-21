@@ -353,6 +353,85 @@ class Orchestrator:
                 log_event=workflow_log_event,
             )
 
+        def ensure_workflow_running_for_active(active_project: ProjectState) -> bool:
+            return ensure_workflow_running(
+                active_project,
+                workflow_acceptance_policy=workflow_acceptance_policy,
+                workflow_max_repair_cycles=workflow_max_repair_cycles,
+                log_event=workflow_log_event,
+            )
+
+        def finish_workflow_if_no_pending_tasks_for_loop(
+            loop_project: ProjectState,
+            pending: list[Task],
+        ) -> bool:
+            return finish_workflow_if_no_pending_tasks(
+                loop_project,
+                pending,
+                workflow_acceptance_policy=workflow_acceptance_policy,
+                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                log_event=workflow_log_event,
+            )
+
+        def execute_workflow_task_for_task(
+            task_project: ProjectState,
+            *,
+            task: Task,
+        ) -> Literal["continue", "return"]:
+            return execute_workflow_task(
+                task_project,
+                task=task,
+                run_task=self.run_task,
+                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+                exit_if_workflow_paused=workflow_exit_if_paused,
+                classify_task_failure=classify_task_failure,
+                dispatch_task_failure=dispatch_task_failure_for_workflow,
+                emit_workflow_progress=workflow_emit_progress,
+            )
+
+        def execute_runnable_tasks_for_frontier(
+            runnable_project: ProjectState,
+            current_runnable: list[Task],
+        ) -> bool:
+            return execute_runnable_tasks(
+                runnable_project,
+                current_runnable,
+                execute_workflow_task=execute_workflow_task_for_task,
+            )
+
+        def execute_runnable_frontier_for_loop(loop_project: ProjectState) -> bool:
+            return execute_runnable_frontier(
+                loop_project,
+                runnable_tasks=loop_project.runnable_tasks,
+                blocked_tasks=loop_project.blocked_tasks,
+                execute_runnable_tasks=execute_runnable_tasks_for_frontier,
+                workflow_acceptance_policy=workflow_acceptance_policy,
+                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                log_event=workflow_log_event,
+            )
+
+        def execute_workflow_loop_for_active(active_project: ProjectState) -> bool:
+            return execute_workflow_loop(
+                active_project,
+                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+                exit_if_workflow_paused=workflow_exit_if_paused,
+                pending_tasks=active_project.pending_tasks,
+                finish_workflow_if_no_pending_tasks=finish_workflow_if_no_pending_tasks_for_loop,
+                execute_runnable_frontier=execute_runnable_frontier_for_loop,
+            )
+
+        def run_active_workflow_for_execution(current_project: ProjectState) -> bool:
+            return run_active_workflow(
+                current_project,
+                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+                exit_if_workflow_paused=workflow_exit_if_paused,
+                ensure_workflow_running=ensure_workflow_running_for_active,
+                execute_workflow_loop=execute_workflow_loop_for_active,
+                log_event=workflow_log_event,
+            )
+
         execute_workflow_runtime(
             project,
             exit_if_workflow_cancelled=workflow_exit_if_cancelled,
@@ -361,53 +440,5 @@ class Orchestrator:
             registry=self.registry,
             workflow_max_repair_cycles=workflow_max_repair_cycles,
             resume_workflow_tasks=resume_workflow_tasks_for_execution,
-            run_active_workflow=lambda current_project: run_active_workflow(
-                current_project,
-                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-                exit_if_workflow_paused=workflow_exit_if_paused,
-                ensure_workflow_running=lambda active_project: ensure_workflow_running(
-                    active_project,
-                    workflow_acceptance_policy=workflow_acceptance_policy,
-                    workflow_max_repair_cycles=workflow_max_repair_cycles,
-                    log_event=workflow_log_event,
-                ),
-                execute_workflow_loop=lambda active_project: execute_workflow_loop(
-                    active_project,
-                    exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-                    exit_if_workflow_paused=workflow_exit_if_paused,
-                    pending_tasks=active_project.pending_tasks,
-                    finish_workflow_if_no_pending_tasks=lambda loop_project, pending: finish_workflow_if_no_pending_tasks(
-                        loop_project,
-                        pending,
-                        workflow_acceptance_policy=workflow_acceptance_policy,
-                        zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                        log_event=workflow_log_event,
-                    ),
-                    execute_runnable_frontier=lambda loop_project: execute_runnable_frontier(
-                        loop_project,
-                        runnable_tasks=loop_project.runnable_tasks,
-                        blocked_tasks=loop_project.blocked_tasks,
-                        execute_runnable_tasks=lambda runnable_project, current_runnable: execute_runnable_tasks(
-                            runnable_project,
-                            current_runnable,
-                            execute_workflow_task=lambda task_project, *, task: execute_workflow_task(
-                                task_project,
-                                task=task,
-                                run_task=self.run_task,
-                                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-                                exit_if_workflow_paused=workflow_exit_if_paused,
-                                classify_task_failure=classify_task_failure,
-                                dispatch_task_failure=dispatch_task_failure_for_workflow,
-                                emit_workflow_progress=workflow_emit_progress,
-                            ),
-                        ),
-                        workflow_acceptance_policy=workflow_acceptance_policy,
-                        zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                        evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                        log_event=workflow_log_event,
-                    ),
-                ),
-                log_event=workflow_log_event,
-            ),
+            run_active_workflow=run_active_workflow_for_execution,
         )

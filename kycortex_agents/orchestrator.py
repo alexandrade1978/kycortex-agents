@@ -307,6 +307,47 @@ class Orchestrator:
                 log_event=workflow_log_event,
             )
 
+        def resume_failed_tasks_with_repair_cycle_for_resume(
+            repair_project: ProjectState,
+            resume_failed_task_ids: list[str],
+            resume_failure_categories: list[str],
+            **kwargs: object,
+        ) -> bool:
+            return resume_failed_tasks_with_repair_cycle(
+                repair_project,
+                resume_failed_task_ids,
+                resume_failure_categories,
+                configure_repair_attempts=configure_repair_attempts_for_cycle,
+                repair_task_ids_for_cycle=plan_repair_task_ids_for_cycle_for_resume,
+                log_event=workflow_log_event,
+                **kwargs,
+            )
+
+        def resume_failed_workflow_tasks_for_resume(
+            resume_project: ProjectState,
+            current_failed_task_ids: list[str],
+            current_failure_categories: list[str],
+        ) -> bool:
+            return resume_failed_workflow_tasks(
+                resume_project,
+                current_failed_task_ids,
+                current_failure_categories,
+                is_repairable_failure=_is_repairable_failure_category,
+                workflow_acceptance_policy=workflow_acceptance_policy,
+                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                resume_failed_tasks_with_repair_cycle=resume_failed_tasks_with_repair_cycle_for_resume,
+            )
+
+        def resume_workflow_tasks_for_execution(current_project: ProjectState) -> bool:
+            return resume_workflow_tasks(
+                current_project,
+                workflow_resume_policy=workflow_resume_policy,
+                failed_task_ids_for_repair=failed_task_ids_for_repair,
+                resume_failed_workflow_tasks=resume_failed_workflow_tasks_for_resume,
+                log_event=workflow_log_event,
+            )
+
         execute_workflow_runtime(
             project,
             exit_if_workflow_cancelled=workflow_exit_if_cancelled,
@@ -314,30 +355,7 @@ class Orchestrator:
             validate_agent_resolution=validate_agent_resolution,
             registry=self.registry,
             workflow_max_repair_cycles=workflow_max_repair_cycles,
-            resume_workflow_tasks=lambda current_project: resume_workflow_tasks(
-                current_project,
-                workflow_resume_policy=workflow_resume_policy,
-                failed_task_ids_for_repair=failed_task_ids_for_repair,
-                resume_failed_workflow_tasks=lambda resume_project, current_failed_task_ids, current_failure_categories: resume_failed_workflow_tasks(
-                    resume_project,
-                    current_failed_task_ids,
-                    current_failure_categories,
-                    is_repairable_failure=_is_repairable_failure_category,
-                    workflow_acceptance_policy=workflow_acceptance_policy,
-                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                    resume_failed_tasks_with_repair_cycle=lambda repair_project, resume_failed_task_ids, resume_failure_categories, **kwargs: resume_failed_tasks_with_repair_cycle(
-                        repair_project,
-                        resume_failed_task_ids,
-                        resume_failure_categories,
-                        configure_repair_attempts=configure_repair_attempts_for_cycle,
-                        repair_task_ids_for_cycle=plan_repair_task_ids_for_cycle_for_resume,
-                        log_event=workflow_log_event,
-                        **kwargs,
-                    ),
-                ),
-                log_event=workflow_log_event,
-            ),
+            resume_workflow_tasks=resume_workflow_tasks_for_execution,
             run_active_workflow=lambda current_project: run_active_workflow(
                 current_project,
                 exit_if_workflow_cancelled=workflow_exit_if_cancelled,

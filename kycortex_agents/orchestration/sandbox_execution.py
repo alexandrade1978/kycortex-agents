@@ -271,6 +271,50 @@ def execute_generated_tests(
 	return redact_result(result)
 
 
+def execute_generated_tests_runtime(
+	sandbox_policy: ExecutionSandboxPolicy,
+	module_filename: str,
+	code_content: str,
+	test_filename: str,
+	test_content: str,
+	*,
+	python_executable: str = sys.executable,
+	host_env: Mapping[str, str] | None = None,
+	pytest_spec_finder: Callable[[str], Any] = importlib.util.find_spec,
+	subprocess_run: Callable[..., Any] = subprocess.run,
+	os_module: Any = os,
+	resource_module: Any = resource,
+	summarize_output: Callable[[str, str, int], str] = summarize_pytest_output,
+	redact_result: Callable[[Dict[str, Any]], Dict[str, Any]] = redact_validation_execution_result,
+) -> Dict[str, Any]:
+	resolved_host_env = host_env or os_module.environ
+	return execute_generated_tests(
+		module_filename,
+		code_content,
+		test_filename,
+		test_content,
+		sandbox_policy,
+		python_executable=python_executable,
+		host_env=resolved_host_env,
+		pytest_spec_finder=pytest_spec_finder,
+		subprocess_run=subprocess_run,
+		sanitize_filename=sanitize_generated_filename,
+		write_test_runner_fn=write_generated_test_runner,
+		build_env_fn=lambda tmp_path, current_sandbox_policy: build_generated_test_env(
+			tmp_path,
+			current_sandbox_policy,
+			host_env=resolved_host_env,
+		),
+		build_preexec_fn=lambda current_sandbox_policy: build_sandbox_preexec_fn(
+			current_sandbox_policy,
+			os_module=os_module,
+			resource_module=resource_module,
+		),
+		summarize_output=summarize_output,
+		redact_result=redact_result,
+	)
+
+
 def _sandbox_metadata(sandbox_policy: ExecutionSandboxPolicy) -> Dict[str, Any]:
 	return {
 		"enabled": sandbox_policy.enabled,

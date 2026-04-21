@@ -47,10 +47,8 @@ from kycortex_agents.orchestration.repair_focus import (
 )
 from kycortex_agents.orchestration.sandbox_execution import (
     execute_generated_module_import_runtime as _execute_generated_module_import_runtime,
-    execute_generated_tests,
-    write_generated_test_runner,
+    execute_generated_tests_runtime as _execute_generated_tests_runtime,
 )
-from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.task_constraints import (
     compact_architecture_context,
     is_budget_decomposition_planner,
@@ -223,28 +221,18 @@ def execute_generated_tests_runtime(
     test_filename: str,
     test_content: str,
 ) -> Dict[str, Any]:
-    return execute_generated_tests(
+    return _execute_generated_tests_runtime(
+        sandbox_policy,
         module_filename,
         code_content,
         test_filename,
         test_content,
-        sandbox_policy,
         python_executable=sys.executable,
         host_env=os.environ,
         pytest_spec_finder=importlib.util.find_spec,
         subprocess_run=subprocess.run,
-        sanitize_filename=sanitize_generated_filename,
-        write_test_runner_fn=write_generated_test_runner,
-        build_env_fn=lambda tmp_path, current_sandbox_policy: build_generated_test_env(
-            tmp_path,
-            current_sandbox_policy,
-            host_env=os.environ,
-        ),
-        build_preexec_fn=lambda current_sandbox_policy: build_sandbox_preexec_fn(
-            current_sandbox_policy,
-            os_module=os,
-            resource_module=resource,
-        ),
+        os_module=os,
+        resource_module=resource,
         summarize_output=summarize_pytest_output,
         redact_result=redact_validation_execution_result,
     )

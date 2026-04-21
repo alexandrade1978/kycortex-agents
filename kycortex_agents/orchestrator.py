@@ -650,6 +650,41 @@ def execute_generated_tests_runtime(
     )
 
 
+def analyze_test_module_runtime(
+    raw_content: str,
+    module_name: str,
+    code_analysis: Dict[str, Any],
+    code_behavior_contract: str = "",
+) -> Dict[str, Any]:
+    module_symbols = set(code_analysis.get("symbols") or []) | set(code_analysis.get("module_variables") or [])
+    function_names = {item["name"] for item in code_analysis.get("functions") or []}
+    function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
+    class_map = code_analysis.get("classes") or {}
+    helper_class_names_to_avoid = set(helper_classes_to_avoid(code_analysis))
+    entrypoint_names = entrypoint_symbol_names(code_analysis)
+    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
+        code_behavior_contract
+    )
+    return analyze_test_module(
+        raw_content,
+        module_name,
+        module_symbols,
+        function_names,
+        function_map,
+        class_map,
+        helper_class_names_to_avoid,
+        entrypoint_names,
+        validation_rules,
+        field_value_rules,
+        batch_rules,
+        sequence_input_functions,
+        type_constraint_rules,
+        _RESERVED_FIXTURE_NAMES,
+        _PYTEST_BUILTIN_FIXTURES,
+        code_behavior_contract,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -794,7 +829,7 @@ class Orchestrator:
             task_fixture_budget(task),
             QATesterAgent._finalize_generated_test_suite,
             should_validate_test_content,
-            self._analyze_test_module,
+            analyze_test_module_runtime,
             auto_fix_test_type_mismatches,
             lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
             lambda module_filename, code_content, test_filename, test_content: execute_generated_tests_runtime(
@@ -1010,31 +1045,10 @@ class Orchestrator:
         code_analysis: Dict[str, Any],
         code_behavior_contract: str = "",
     ) -> Dict[str, Any]:
-        module_symbols = set(code_analysis.get("symbols") or []) | set(code_analysis.get("module_variables") or [])
-        function_names = {item["name"] for item in code_analysis.get("functions") or []}
-        function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
-        class_map = code_analysis.get("classes") or {}
-        helper_class_names_to_avoid = set(helper_classes_to_avoid(code_analysis))
-        entrypoint_names = entrypoint_symbol_names(code_analysis)
-        validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
-            code_behavior_contract
-        )
-        return analyze_test_module(
+        return analyze_test_module_runtime(
             raw_content,
             module_name,
-            module_symbols,
-            function_names,
-            function_map,
-            class_map,
-            helper_class_names_to_avoid,
-            entrypoint_names,
-            validation_rules,
-            field_value_rules,
-            batch_rules,
-            sequence_input_functions,
-            type_constraint_rules,
-            _RESERVED_FIXTURE_NAMES,
-            _PYTEST_BUILTIN_FIXTURES,
+            code_analysis,
             code_behavior_contract,
         )
 

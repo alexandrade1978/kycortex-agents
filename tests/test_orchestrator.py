@@ -1258,7 +1258,7 @@ def test_validate_test_output_uses_default_module_filename_when_missing(tmp_path
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
     captured: dict[str, str] = {}
 
-    monkeypatch.setattr(orchestrator, "_analyze_test_module", lambda *args, **kwargs: {"syntax_ok": True})
+    monkeypatch.setattr(orchestrator_module, "analyze_test_module_runtime", lambda *args, **kwargs: {"syntax_ok": True})
 
     def fake_execute_generated_tests(module_filename, code_content, test_filename, test_content):
         captured["module_filename"] = module_filename
@@ -1300,8 +1300,8 @@ def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_p
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     monkeypatch.setattr(
-        orchestrator,
-        "_analyze_test_module",
+        orchestrator_module,
+        "analyze_test_module_runtime",
         lambda *args, **kwargs: {
             "syntax_ok": False,
             "missing_function_imports": ["missing_helper"],
@@ -1359,7 +1359,7 @@ def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch)
         assigned_to="qa_tester",
     )
 
-    monkeypatch.setattr(orchestrator, "_analyze_test_module", lambda *args, **kwargs: {"syntax_ok": True})
+    monkeypatch.setattr(orchestrator_module, "analyze_test_module_runtime", lambda *args, **kwargs: {"syntax_ok": True})
     monkeypatch.setattr(
         orchestrator_module,
         "execute_generated_tests_runtime",
@@ -4572,8 +4572,8 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
     )
 
     monkeypatch.setattr(
-        orchestrator,
-        "_analyze_test_module",
+        orchestrator_module,
+        "analyze_test_module_runtime",
         lambda *args, **kwargs: {"syntax_ok": True, "top_level_test_count": 1, "fixture_count": 2},
     )
     monkeypatch.setattr(
@@ -4607,8 +4607,8 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
     output = AgentOutput(summary="tests", raw_content="def test_one():\n    pass\n")
 
     monkeypatch.setattr(
-        orchestrator,
-        "_analyze_test_module",
+        orchestrator_module,
+        "analyze_test_module_runtime",
         lambda *args, **kwargs: {
             "syntax_ok": True,
             "top_level_test_count": 2,
@@ -17867,8 +17867,8 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orch,
-            "_analyze_test_module",
+            orchestrator_module,
+            "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
                 "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
@@ -17893,8 +17893,8 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orch,
-            "_analyze_test_module",
+            orchestrator_module,
+            "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
                 "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
@@ -17918,8 +17918,8 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orch,
-            "_analyze_test_module",
+            orchestrator_module,
+            "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
                 "constructor_arity_mismatches": ["MyClass expected 2, got 3 (line 5)"],
@@ -17943,8 +17943,8 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orch,
-            "_analyze_test_module",
+            orchestrator_module,
+            "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
                 "missing_function_imports": ["helper_function"],
@@ -17969,8 +17969,8 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orch,
-            "_analyze_test_module",
+            orchestrator_module,
+            "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
                 "missing_function_imports": ["helper_function"],

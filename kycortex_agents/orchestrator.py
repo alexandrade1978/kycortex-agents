@@ -1,59 +1,27 @@
 import logging
 import re
-from typing import Dict, Any, Optional
+from typing import Optional
 
 try:
     import resource
 except ImportError:  # pragma: no cover - non-POSIX fallback
     resource = None  # type: ignore[assignment]
 
-from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import ExecutionSandboxPolicy
 from kycortex_agents.orchestration.agent_runtime import build_agent_input_runtime, execute_agent
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
-from kycortex_agents.orchestration.context_building import (
-    build_task_context_for_agent_runtime as _build_task_context_for_agent_runtime,
-    code_artifact_context_runtime as _code_artifact_context_runtime,
-    dependency_artifact_context_runtime as _dependency_artifact_context_runtime,
-    planned_module_context_runtime as _planned_module_context_runtime,
-    test_artifact_context_runtime as _test_artifact_context_runtime,
-)
 from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
-    summarize_output,
     unredacted_agent_result,
 )
-from kycortex_agents.orchestration.module_ast_analysis import (
-    analyze_python_module,
-)
 from kycortex_agents.orchestration.sandbox_execution import (
-    execute_generated_module_import_runtime as _execute_generated_module_import_runtime,
     execute_generated_tests_runtime as _execute_generated_tests_runtime,
-)
-from kycortex_agents.orchestration.task_constraints import (
-    task_public_contract_preflight,
-    task_exact_top_level_test_count,
-    task_fixture_budget,
-    task_line_budget,
-    task_max_top_level_test_count,
-    task_requires_cli_entrypoint,
-)
-from kycortex_agents.orchestration.test_ast_analysis import (
-    analyze_test_module_runtime,
-    auto_fix_test_type_mismatches,
-)
-from kycortex_agents.orchestration.validation_reporting import (
-    completion_diagnostics_from_provider_call,
-    completion_validation_issue,
 )
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     sanitize_output_provider_call_metadata,
-    should_validate_code_content as _should_validate_code_content,
-    should_validate_test_content as _should_validate_test_content,
     validate_code_output_for_task_runtime as _validate_code_output_for_task_runtime,
     validate_task_output,
     validate_test_output_for_task_runtime as _validate_test_output_for_task_runtime,
@@ -108,65 +76,21 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 active_repair_cycle = _active_repair_cycle
 has_repair_task_for_cycle = _has_repair_task_for_cycle
 queue_active_cycle_repair_runtime = _queue_active_cycle_repair_runtime
-should_validate_code_content = _should_validate_code_content
-should_validate_test_content = _should_validate_test_content
-build_task_context_for_agent_runtime = _build_task_context_for_agent_runtime
 execute_generated_tests_runtime = _execute_generated_tests_runtime
-planned_module_context_runtime = _planned_module_context_runtime
-code_artifact_context_runtime = _code_artifact_context_runtime
-dependency_artifact_context_runtime = _dependency_artifact_context_runtime
-test_artifact_context_runtime = _test_artifact_context_runtime
-
-
-def validate_code_output_for_task_runtime(
-    sandbox_policy: ExecutionSandboxPolicy,
-    output: AgentOutput,
-    task: Optional[Task] = None,
-) -> None:
-    _validate_code_output_for_task_runtime(
-        sandbox_policy,
-        output,
-        task_line_budget(task),
-        task_requires_cli_entrypoint(task),
-        analyze_python_module=analyze_python_module,
-        task_public_contract_preflight=lambda code_analysis: task_public_contract_preflight(task, code_analysis),
-        completion_diagnostics_from_provider_call=completion_diagnostics_from_provider_call,
-        execute_generated_module_import_runtime=_execute_generated_module_import_runtime,
-        completion_validation_issue=completion_validation_issue,
-    )
-def validate_test_output_for_task_runtime(
-    sandbox_policy: ExecutionSandboxPolicy,
-    context: Dict[str, Any],
-    output: AgentOutput,
-    task: Optional[Task] = None,
-) -> None:
-    _validate_test_output_for_task_runtime(
-        sandbox_policy,
-        context,
-        output,
-        task_line_budget(task),
-        task_exact_top_level_test_count(task),
-        task_max_top_level_test_count(task),
-        task_fixture_budget(task),
-        finalize_generated_test_suite=QATesterAgent._finalize_generated_test_suite,
-        analyze_test_module_runtime=analyze_test_module_runtime,
-        auto_fix_test_type_mismatches=auto_fix_test_type_mismatches,
-        execute_generated_tests_runtime=execute_generated_tests_runtime,
-        completion_diagnostics_from_provider_call=completion_diagnostics_from_provider_call,
-        completion_validation_issue=completion_validation_issue,
-        summarize_output=summarize_output,
-    )
 
 
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
-    Pass a custom AgentRegistry when consumers need to register their own agent
-    implementations while keeping `execute_workflow()` and `run_task()` as the
-    supported execution entry points.
+    The orchestrator intentionally keeps only class-based runtime orchestration here; deterministic
+    helper logic lives in `kycortex_agents.orchestration.*` owner modules.
     """
 
-    def __init__(self, config: Optional[KYCortexConfig] = None, registry: Optional[AgentRegistry] = None):
+    def __init__(
+        self,
+        config: Optional[KYCortexConfig] = None,
+        registry: Optional[AgentRegistry] = None,
+    ) -> None:
         self.config = config or KYCortexConfig()
         self.registry = registry or build_default_registry(self.config)
         self.logger = logging.getLogger("Orchestrator")
@@ -227,12 +151,12 @@ class Orchestrator:
                 task,
                 agent_input.context,
                 normalized_output,
-                validate_code_output=lambda output, task=None: validate_code_output_for_task_runtime(
+                validate_code_output=lambda output, task=None: _validate_code_output_for_task_runtime(
                     self.config.execution_sandbox_policy(),
                     output,
                     task,
                 ),
-                validate_test_output=lambda context, output, task=None: validate_test_output_for_task_runtime(
+                validate_test_output=lambda context, output, task=None: _validate_test_output_for_task_runtime(
                     self.config.execution_sandbox_policy(),
                     context,
                     output,

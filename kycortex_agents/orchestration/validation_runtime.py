@@ -254,15 +254,49 @@ def validate_code_output_runtime(
 def validate_code_output_for_task_runtime(
     sandbox_policy: ExecutionSandboxPolicy,
     output: AgentOutput,
-    line_budget: Optional[int],
-    requires_cli_entrypoint: bool,
+    task: Task | None = None,
     *,
-    analyze_python_module: Any,
-    task_public_contract_preflight: Any,
-    completion_diagnostics_from_provider_call: Any,
-    execute_generated_module_import_runtime: Any,
-    completion_validation_issue: Any,
+    line_budget: Optional[int] | None = None,
+    requires_cli_entrypoint: bool | None = None,
+    analyze_python_module: Any | None = None,
+    task_public_contract_preflight: Any | None = None,
+    completion_diagnostics_from_provider_call: Any | None = None,
+    execute_generated_module_import_runtime: Any | None = None,
+    completion_validation_issue: Any | None = None,
 ) -> None:
+    if analyze_python_module is None:
+        from kycortex_agents.orchestration.module_ast_analysis import analyze_python_module as default_analyze_python_module
+
+        analyze_python_module = default_analyze_python_module
+    if completion_diagnostics_from_provider_call is None or completion_validation_issue is None:
+        from kycortex_agents.orchestration.validation_reporting import (
+            completion_diagnostics_from_provider_call as default_completion_diagnostics_from_provider_call,
+            completion_validation_issue as default_completion_validation_issue,
+        )
+
+        completion_diagnostics_from_provider_call = (
+            completion_diagnostics_from_provider_call or default_completion_diagnostics_from_provider_call
+        )
+        completion_validation_issue = completion_validation_issue or default_completion_validation_issue
+    if execute_generated_module_import_runtime is None:
+        from kycortex_agents.orchestration.sandbox_execution import (
+            execute_generated_module_import_runtime as default_execute_generated_module_import_runtime,
+        )
+
+        execute_generated_module_import_runtime = default_execute_generated_module_import_runtime
+    if line_budget is None or requires_cli_entrypoint is None or task_public_contract_preflight is None:
+        from kycortex_agents.orchestration.task_constraints import (
+            task_line_budget,
+            task_public_contract_preflight as default_task_public_contract_preflight,
+            task_requires_cli_entrypoint,
+        )
+
+        line_budget = task_line_budget(task) if line_budget is None else line_budget
+        requires_cli_entrypoint = task_requires_cli_entrypoint(task) if requires_cli_entrypoint is None else requires_cli_entrypoint
+        if task_public_contract_preflight is None:
+            def task_public_contract_preflight(code_analysis: Any) -> Any:
+                return default_task_public_contract_preflight(task, code_analysis)
+
     validate_code_output_runtime(
         output,
         line_budget,
@@ -530,19 +564,65 @@ def validate_test_output_for_task_runtime(
     sandbox_policy: ExecutionSandboxPolicy,
     context: dict[str, Any],
     output: AgentOutput,
-    line_budget: Optional[int],
-    exact_test_count: Optional[int],
-    max_test_count: Optional[int],
-    fixture_budget: Optional[int],
+    task: Task | None = None,
     *,
-    finalize_generated_test_suite: Any,
-    analyze_test_module_runtime: Any,
-    auto_fix_test_type_mismatches: Any,
-    execute_generated_tests_runtime: Any,
-    completion_diagnostics_from_provider_call: Any,
-    completion_validation_issue: Any,
-    summarize_output: Any,
+    line_budget: Optional[int] | None = None,
+    exact_test_count: Optional[int] | None = None,
+    max_test_count: Optional[int] | None = None,
+    fixture_budget: Optional[int] | None = None,
+    finalize_generated_test_suite: Any | None = None,
+    analyze_test_module_runtime: Any | None = None,
+    auto_fix_test_type_mismatches: Any | None = None,
+    execute_generated_tests_runtime: Any | None = None,
+    completion_diagnostics_from_provider_call: Any | None = None,
+    completion_validation_issue: Any | None = None,
+    summarize_output: Any | None = None,
 ) -> None:
+    if finalize_generated_test_suite is None:
+        from kycortex_agents.agents.qa_tester import QATesterAgent
+
+        finalize_generated_test_suite = QATesterAgent._finalize_generated_test_suite
+    if analyze_test_module_runtime is None or auto_fix_test_type_mismatches is None:
+        from kycortex_agents.orchestration.test_ast_analysis import (
+            analyze_test_module_runtime as default_analyze_test_module_runtime,
+            auto_fix_test_type_mismatches as default_auto_fix_test_type_mismatches,
+        )
+
+        analyze_test_module_runtime = analyze_test_module_runtime or default_analyze_test_module_runtime
+        auto_fix_test_type_mismatches = auto_fix_test_type_mismatches or default_auto_fix_test_type_mismatches
+    if execute_generated_tests_runtime is None:
+        from kycortex_agents.orchestration.sandbox_execution import (
+            execute_generated_tests_runtime as default_execute_generated_tests_runtime,
+        )
+
+        execute_generated_tests_runtime = default_execute_generated_tests_runtime
+    if completion_diagnostics_from_provider_call is None or completion_validation_issue is None:
+        from kycortex_agents.orchestration.validation_reporting import (
+            completion_diagnostics_from_provider_call as default_completion_diagnostics_from_provider_call,
+            completion_validation_issue as default_completion_validation_issue,
+        )
+
+        completion_diagnostics_from_provider_call = (
+            completion_diagnostics_from_provider_call or default_completion_diagnostics_from_provider_call
+        )
+        completion_validation_issue = completion_validation_issue or default_completion_validation_issue
+    if summarize_output is None:
+        from kycortex_agents.orchestration.output_helpers import summarize_output as default_summarize_output
+
+        summarize_output = default_summarize_output
+    if line_budget is None or exact_test_count is None or max_test_count is None or fixture_budget is None:
+        from kycortex_agents.orchestration.task_constraints import (
+            task_exact_top_level_test_count,
+            task_fixture_budget,
+            task_line_budget,
+            task_max_top_level_test_count,
+        )
+
+        line_budget = task_line_budget(task) if line_budget is None else line_budget
+        exact_test_count = task_exact_top_level_test_count(task) if exact_test_count is None else exact_test_count
+        max_test_count = task_max_top_level_test_count(task) if max_test_count is None else max_test_count
+        fixture_budget = task_fixture_budget(task) if fixture_budget is None else fixture_budget
+
     validate_test_output_runtime(
         context,
         output,

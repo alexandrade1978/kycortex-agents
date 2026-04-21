@@ -10,8 +10,11 @@ from typing import Any, cast
 import pytest
 import kycortex_agents.orchestrator as orchestrator_module
 import kycortex_agents.orchestration.context_building as context_building_module
+import kycortex_agents.orchestration.module_ast_analysis as module_ast_analysis_module
 import kycortex_agents.orchestration.sandbox_execution as sandbox_execution_module
 import kycortex_agents.orchestration.test_ast_analysis as test_ast_analysis_module
+import kycortex_agents.orchestration.validation_runtime as validation_runtime_module
+import kycortex_agents.orchestration.validation_reporting as validation_reporting_module
 import kycortex_agents.orchestration.workflow_control as workflow_control_module
 
 from kycortex_agents.agents.base_agent import BaseAgent
@@ -193,7 +196,7 @@ def repair_owner_for_category_for_test(task: Task, failure_category: str) -> str
 
 
 def build_context_for_test(orchestrator: Orchestrator, task: Task, project: ProjectState) -> dict[str, Any]:
-    return orchestrator_module.build_task_context_for_agent_runtime(orchestrator, task, project)
+    return context_building_module.build_task_context_for_agent_runtime(orchestrator, task, project)
 
 
 class FailingAgent:
@@ -1198,7 +1201,7 @@ def test_validate_test_output_rejects_syntax_invalid_code_under_test(tmp_path):
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     with pytest.raises(AgentExecutionError, match="code under test has syntax error invalid syntax"):
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,
             {
                 "code_analysis": {"syntax_ok": False, "syntax_error": "invalid syntax"},
@@ -1215,16 +1218,16 @@ def test_validate_test_output_uses_default_module_filename_when_missing(tmp_path
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
     captured: dict[str, str] = {}
 
-    monkeypatch.setattr(orchestrator_module, "analyze_test_module_runtime", lambda *args, **kwargs: {"syntax_ok": True})
+    monkeypatch.setattr(test_ast_analysis_module, "analyze_test_module_runtime", lambda *args, **kwargs: {"syntax_ok": True})
 
     def fake_execute_generated_tests(module_filename, code_content, test_filename, test_content):
         captured["module_filename"] = module_filename
         captured["test_filename"] = test_filename
         return {"ran": False, "returncode": None, "summary": "skipped"}
 
-    monkeypatch.setattr(orchestrator_module, "execute_generated_tests_runtime", lambda *args, **kwargs: fake_execute_generated_tests(*args[1:], **kwargs))
+    monkeypatch.setattr(sandbox_execution_module, "execute_generated_tests_runtime", lambda *args, **kwargs: fake_execute_generated_tests(*args[1:], **kwargs))
 
-    orchestrator_module.validate_test_output_for_task_runtime(
+    validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,
         {
             "module_name": "code_implementation",
@@ -1243,14 +1246,14 @@ def test_validate_test_output_returns_early_when_context_is_incomplete(tmp_path,
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_tests_runtime",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not execute generated tests")),
     )
 
-    assert orchestrator_module.validate_test_output_for_task_runtime(
+    assert validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,{"module_name": "", "code": "def ok():\n    return 1"}, output) is None
-    assert orchestrator_module.validate_test_output_for_task_runtime(
+    assert validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,{"module_name": "code_implementation", "code": "   "}, output) is None
 
 
@@ -1260,7 +1263,7 @@ def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_p
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     monkeypatch.setattr(
-        orchestrator_module,
+        test_ast_analysis_module,
         "analyze_test_module_runtime",
         lambda *args, **kwargs: {
             "syntax_ok": False,
@@ -1269,13 +1272,13 @@ def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_p
         },
     )
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": ""},
     )
 
     with pytest.raises(AgentExecutionError) as excinfo:
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,
             {
                 "module_name": "code_implementation",
@@ -1303,7 +1306,7 @@ def test_validate_code_output_rejects_missing_required_cli_entrypoint(tmp_path):
     )
 
     with pytest.raises(AgentExecutionError, match="missing required CLI entrypoint"):
-        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
+        validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
 
 def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch):
@@ -1320,15 +1323,15 @@ def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch)
         assigned_to="qa_tester",
     )
 
-    monkeypatch.setattr(orchestrator_module, "analyze_test_module_runtime", lambda *args, **kwargs: {"syntax_ok": True})
+    monkeypatch.setattr(test_ast_analysis_module, "analyze_test_module_runtime", lambda *args, **kwargs: {"syntax_ok": True})
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
 
     with pytest.raises(AgentExecutionError, match="line count 6 exceeds maximum 3"):
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,
             {
                 "module_name": "code_implementation",
@@ -1355,12 +1358,12 @@ def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
             task,
             {},
             output,
-            validate_code_output=lambda current_output, task=None: orchestrator_module.validate_code_output_for_task_runtime(
+            validate_code_output=lambda current_output, task=None: validation_runtime_module.validate_code_output_for_task_runtime(
                 config.execution_sandbox_policy(),
                 current_output,
                 task,
             ),
-            validate_test_output=lambda context, current_output, task=None: orchestrator_module.validate_test_output_for_task_runtime(
+            validate_test_output=lambda context, current_output, task=None: validation_runtime_module.validate_test_output_for_task_runtime(
                 config.execution_sandbox_policy(),
                 context,
                 current_output,
@@ -1381,12 +1384,12 @@ def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_pat
     )
 
     monkeypatch.setattr(
-        orchestrator_module,
+        module_ast_analysis_module,
         "analyze_python_module",
         lambda *args, **kwargs: {"syntax_ok": True, "has_main_guard": True, "third_party_imports": []},
     )
     monkeypatch.setattr(
-        orchestrator_module,
+        validation_reporting_module,
         "completion_diagnostics_from_provider_call",
         lambda *args, **kwargs: {"likely_truncated": True, "hit_token_limit": True},
     )
@@ -1395,7 +1398,7 @@ def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_pat
         AgentExecutionError,
         match="line count 2 exceeds maximum 1; output likely truncated at the completion token limit",
     ):
-        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
+        validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
 
 def test_validate_code_output_rejects_import_time_errors(tmp_path):
@@ -1422,7 +1425,7 @@ def test_validate_code_output_rejects_import_time_errors(tmp_path):
         AgentExecutionError,
         match="module import failed: TypeError: non-default argument 'value' follows default argument",
     ):
-        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
+        validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
 
 def test_validate_code_output_rejects_field_default_factory_on_plain_class(tmp_path):
@@ -1444,7 +1447,7 @@ def test_validate_code_output_rejects_field_default_factory_on_plain_class(tmp_p
     )
 
     with pytest.raises(AgentExecutionError, match=r"non-dataclass field\(\.\.\.\) usage"):
-        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
+        validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
     code_analysis = output.metadata["validation"]["code_analysis"]
     assert code_analysis["invalid_dataclass_field_usages"] == [
@@ -1464,7 +1467,7 @@ def test_validate_code_output_skips_import_validation_for_third_party_imports(tm
     )
 
     monkeypatch.setattr(
-        orchestrator_module,
+        module_ast_analysis_module,
         "analyze_python_module",
         lambda *args, **kwargs: {
             "syntax_ok": True,
@@ -1478,7 +1481,7 @@ def test_validate_code_output_skips_import_validation_for_third_party_imports(tm
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not run import validation")),
     )
 
-    assert orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task) is None
+    assert validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task) is None
 
 
 def test_validate_code_output_rejects_task_public_contract_mismatches(tmp_path):
@@ -1507,7 +1510,7 @@ def test_validate_code_output_rejects_task_public_contract_mismatches(tmp_path):
     )
 
     with pytest.raises(AgentExecutionError, match="task public contract mismatch") as excinfo:
-        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
+        validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
     message = str(excinfo.value)
     assert "missing public facade ComplianceIntakeService" in message
@@ -1553,7 +1556,7 @@ def test_validate_code_output_accepts_matching_task_public_contract_with_optiona
         assigned_to="code_engineer",
     )
 
-    assert orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task) is None
+    assert validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task) is None
     contract_preflight = output.metadata["validation"]["task_public_contract_preflight"]
     assert contract_preflight["passed"] is True
     assert contract_preflight["issues"] == []
@@ -1624,12 +1627,12 @@ def test_record_output_validation_ignores_non_mapping_validation_metadata(tmp_pa
 
 
 def test_should_validate_content_helpers_cover_typed_and_blank_cases(tmp_path):
-    assert orchestrator_module.should_validate_code_content("anything", has_typed_artifact=True) is True
-    assert orchestrator_module.should_validate_code_content("   ", has_typed_artifact=False) is False
-    assert orchestrator_module.should_validate_code_content("plain prose only", has_typed_artifact=False) is False
-    assert orchestrator_module.should_validate_test_content("anything", has_typed_artifact=True) is True
-    assert orchestrator_module.should_validate_test_content("   ", has_typed_artifact=False) is False
-    assert orchestrator_module.should_validate_test_content("plain prose only", has_typed_artifact=False) is False
+    assert validation_runtime_module.should_validate_code_content("anything", has_typed_artifact=True) is True
+    assert validation_runtime_module.should_validate_code_content("   ", has_typed_artifact=False) is False
+    assert validation_runtime_module.should_validate_code_content("plain prose only", has_typed_artifact=False) is False
+    assert validation_runtime_module.should_validate_test_content("anything", has_typed_artifact=True) is True
+    assert validation_runtime_module.should_validate_test_content("   ", has_typed_artifact=False) is False
+    assert validation_runtime_module.should_validate_test_content("plain prose only", has_typed_artifact=False) is False
 
 
 def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_path, monkeypatch):
@@ -2649,7 +2652,7 @@ def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, m
     )
     monkeypatch.setattr(context_building_module, "default_module_name_for_task", lambda task: None)
 
-    assert orchestrator_module.planned_module_context_runtime(project) == {}
+    assert context_building_module.planned_module_context_runtime(project) == {}
 
 
 def test_artifact_context_helpers_return_empty_for_invalid_payload_shapes(tmp_path):
@@ -2657,14 +2660,14 @@ def test_artifact_context_helpers_return_empty_for_invalid_payload_shapes(tmp_pa
     Orchestrator(config)
     task = Task(id="task", title="Task", description="Task", assigned_to="architect")
 
-    assert orchestrator_module.code_artifact_context_runtime(task) == {}
-    assert orchestrator_module.test_artifact_context_runtime(task, {}) == {}
-    assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
+    assert context_building_module.code_artifact_context_runtime(task) == {}
+    assert context_building_module.test_artifact_context_runtime(task, {}) == {}
+    assert context_building_module.dependency_artifact_context_runtime(task, {}) == {}
 
     task.output_payload = {"artifacts": "invalid"}
-    assert orchestrator_module.code_artifact_context_runtime(task) == {}
-    assert orchestrator_module.test_artifact_context_runtime(task, {}) == {}
-    assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
+    assert context_building_module.code_artifact_context_runtime(task) == {}
+    assert context_building_module.test_artifact_context_runtime(task, {}) == {}
+    assert context_building_module.dependency_artifact_context_runtime(task, {}) == {}
 
 
 def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_context(tmp_path):
@@ -2714,11 +2717,11 @@ def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_contex
         },
     )
 
-    code_ctx = orchestrator_module.code_artifact_context_runtime(code_task)
+    code_ctx = context_building_module.code_artifact_context_runtime(code_task)
     assert code_ctx.get("module_name") == "code_implementation"
-    assert orchestrator_module.test_artifact_context_runtime(test_task, {}) == {}
-    assert orchestrator_module.test_artifact_context_runtime(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}
-    assert orchestrator_module.dependency_artifact_context_runtime(dep_task, {}) == {}
+    assert context_building_module.test_artifact_context_runtime(test_task, {}) == {}
+    assert context_building_module.test_artifact_context_runtime(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}
+    assert context_building_module.dependency_artifact_context_runtime(dep_task, {}) == {}
 
 
 def test_analyze_dependency_manifest_skips_blank_requirement_names(tmp_path):
@@ -3341,8 +3344,8 @@ def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)
 
-    blank_analysis = orchestrator_module.analyze_test_module_runtime("   ", "module_under_test", {})
-    syntax_error_analysis = orchestrator_module.analyze_test_module_runtime("def broken(:\n    pass", "module_under_test", {})
+    blank_analysis = test_ast_analysis_module.analyze_test_module_runtime("   ", "module_under_test", {})
+    syntax_error_analysis = test_ast_analysis_module.analyze_test_module_runtime("def broken(:\n    pass", "module_under_test", {})
 
     assert blank_analysis == {
         "syntax_ok": True,
@@ -3402,7 +3405,7 @@ def test_analyze_test_module_tracks_invalid_member_references_for_non_enum_class
         "    assert Payload.missing == 'oops'\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["invalid_member_references"] == ["Payload.missing (line 5)"]
 
@@ -3444,7 +3447,7 @@ def test_analyze_test_module_allows_existing_class_methods(tmp_path):
         "    assert Validator.validate({'ok': True}) is not None\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["invalid_member_references"] == []
 
@@ -3464,7 +3467,7 @@ def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path)
         "    assert audit_logs == ['ok']\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["imported_module_symbols"] == ["audit_logs", "log_audit"]
     assert analysis["unknown_module_symbols"] == []
@@ -3489,7 +3492,7 @@ def test_analyze_test_module_tracks_assertion_strength(tmp_path):
         "    add(2, 3)\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["assertion_like_count"] == 2
     assert len(analysis["tests_without_assertions"]) == 1
@@ -3518,7 +3521,7 @@ def test_analyze_test_module_flags_batch_audit_length_contract_overreach(tmp_pat
         "    assert len(service.audit_log) == 3\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["contract_overreach_signals"] == [
         "exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)"
@@ -3548,7 +3551,7 @@ def test_analyze_test_module_flags_validation_failure_score_state_emptiness_cont
         "    assert len(service.get_risk_scores()) == 0\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["contract_overreach_signals"] == [
         "exact validation-failure score-state emptiness assertion on 'service.get_risk_scores()' in test_validation_failure (line 7) assumes rejected input leaves internal score state empty"
@@ -3578,7 +3581,7 @@ def test_analyze_test_module_allows_validation_failure_score_state_assertion_whe
         "    assert len(service.get_risk_scores()) == 0\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(
         test_content,
         "module_under_test",
         module_analysis,
@@ -3650,7 +3653,7 @@ def test_analyze_test_module_flags_helper_surface_usages_when_workflow_class_exi
         "    assert service is not None\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["helper_surface_usages"] == ["ComplianceRepository", "RiskScoringService"]
 
@@ -3702,7 +3705,7 @@ def test_analyze_test_module_allows_required_constructor_helper_for_preferred_wo
         "    assert service is not None\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["helper_surface_usages"] == []
 
@@ -3788,7 +3791,7 @@ def test_analyze_test_module_allows_multi_token_constructor_helpers_for_preferre
         "    assert service is not None\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["helper_surface_usages"] == []
 
@@ -3844,7 +3847,7 @@ def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs
         "    assert request.id == 'req-1'\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["call_arity_mismatches"] == [
         "ComplianceIntakeService.intake_request expects 1 args but test uses 2 at line 5"
@@ -3925,7 +3928,7 @@ def test_analyze_test_module_tracks_inline_constructor_member_refs_and_returned_
         "    assert result.invalid is True\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["call_arity_mismatches"] == [
         "ComplianceIntakeService.batch_submit_intakes expects 1 args but test uses 2 at line 6"
@@ -3955,7 +3958,7 @@ def test_analyze_test_module_flags_mock_style_assertions_without_mock_setup(tmp_
         "    assert logging.getLogger().info.call_count == 1\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["unsupported_mock_assertions"] == [
         "logging.getLogger().info.call_count (line 6)"
@@ -3973,7 +3976,7 @@ def test_analyze_test_module_allows_mock_style_assertions_with_explicit_mock_set
         "    assert mock_logger.info.call_count == 1\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", {})
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", {})
 
     assert analysis["unsupported_mock_assertions"] == []
 
@@ -4012,7 +4015,7 @@ def test_analyze_test_module_flags_reserved_request_fixture_and_missing_fixture_
         "    assert validate_request(request)\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["reserved_fixture_names"] == ["request (line 5)"]
     assert analysis["undefined_local_names"] == ["ComplianceRequest (line 6)"]
@@ -4191,7 +4194,7 @@ def test_analyze_test_module_allows_optional_constructor_arguments(tmp_path):
         "    assert request is not None\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["constructor_arity_mismatches"] == []
 
@@ -4243,7 +4246,7 @@ def test_analyze_test_module_allows_omitted_defaulted_dataclass_field_from_modul
         "    assert request.request_id == 'req-1'\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["constructor_arity_mismatches"] == []
 
@@ -4479,13 +4482,13 @@ def test_validate_test_output_rejects_top_level_test_count_mismatch(tmp_path, mo
     )
 
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
 
     with pytest.raises(AgentExecutionError, match="top-level test count 2 does not match required 3"):
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,
             {
                 "module_name": "code_implementation",
@@ -4511,13 +4514,13 @@ def test_validate_test_output_rejects_top_level_test_count_maximum(tmp_path, mon
     )
 
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
 
     with pytest.raises(AgentExecutionError, match="top-level test count 2 exceeds maximum 1"):
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,
             {
                 "module_name": "code_implementation",
@@ -4540,17 +4543,17 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
     )
 
     monkeypatch.setattr(
-        orchestrator_module,
+        test_ast_analysis_module,
         "analyze_test_module_runtime",
         lambda *args, **kwargs: {"syntax_ok": True, "top_level_test_count": 1, "fixture_count": 2},
     )
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
     monkeypatch.setattr(
-        orchestrator_module,
+        validation_reporting_module,
         "completion_diagnostics_from_provider_call",
         lambda *args, **kwargs: {"likely_truncated": True, "hit_token_limit": False},
     )
@@ -4559,7 +4562,7 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
         AgentExecutionError,
         match="fixture count 2 exceeds maximum 1; output likely truncated before the file ended cleanly",
     ):
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
         sandbox_policy,
             {
                 "module_name": "code_implementation",
@@ -4576,7 +4579,7 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
     output = AgentOutput(summary="tests", raw_content="def test_one():\n    pass\n")
 
     monkeypatch.setattr(
-        orchestrator_module,
+        test_ast_analysis_module,
         "analyze_test_module_runtime",
         lambda *args, **kwargs: {
             "syntax_ok": True,
@@ -4587,12 +4590,12 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
     monkeypatch.setattr(
-        orchestrator_module,
+        validation_reporting_module,
         "completion_diagnostics_from_provider_call",
         lambda *args, **kwargs: {"likely_truncated": False, "hit_token_limit": False},
     )
@@ -4601,7 +4604,7 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
         AgentExecutionError,
         match="tests without assertion-like checks: test_one \\(line 1\\), test_two \\(line 4\\)",
     ):
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
             sandbox_policy,
             {
                 "module_name": "code_implementation",
@@ -5583,7 +5586,7 @@ def test_analyze_test_module_reports_constructor_arity_when_limits_fall_back_or_
         "    Envelope(1, 2, 3)\n"
     )
 
-    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["constructor_arity_mismatches"] == [
         "Envelope expects 1-2 args but test uses 3 at line 5",
@@ -9314,7 +9317,7 @@ def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_fixtures(tm
 def test_analyze_test_module_treats_parametrize_arguments_as_bound_names(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)
-    analysis = orchestrator_module.analyze_test_module_runtime(
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(
         "import pytest\n"
         "from module_under_test import batch_process\n\n"
         "@pytest.mark.parametrize(\"requests, expected\", [([1], [1])])\n"
@@ -17846,7 +17849,7 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orchestrator_module,
+            test_ast_analysis_module,
             "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
@@ -17856,13 +17859,13 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orchestrator_module,
+            sandbox_execution_module,
             "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 0, "summary": "1 passed"},
         )
 
         # Should NOT raise — warnings overridden by pytest passing
-        orchestrator_module.validate_test_output_for_task_runtime(
+        validation_runtime_module.validate_test_output_for_task_runtime(
                 orch.config.execution_sandbox_policy(),
             {"module_name": "my_module", "code": "def ok():\n    return 1"},
             output,
@@ -17873,7 +17876,7 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orchestrator_module,
+            test_ast_analysis_module,
             "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
@@ -17882,13 +17885,13 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orchestrator_module,
+            sandbox_execution_module,
             "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": "1 failed"},
         )
 
         with pytest.raises(AgentExecutionError, match="pytest failed"):
-            orchestrator_module.validate_test_output_for_task_runtime(
+            validation_runtime_module.validate_test_output_for_task_runtime(
                 orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,
@@ -17899,7 +17902,7 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orchestrator_module,
+            test_ast_analysis_module,
             "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
@@ -17908,13 +17911,13 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orchestrator_module,
+            sandbox_execution_module,
             "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": False, "returncode": None, "summary": ""},
         )
 
         with pytest.raises(AgentExecutionError, match="pytest did not confirm correctness"):
-            orchestrator_module.validate_test_output_for_task_runtime(
+            validation_runtime_module.validate_test_output_for_task_runtime(
                 orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,
@@ -17925,7 +17928,7 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orchestrator_module,
+            test_ast_analysis_module,
             "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
@@ -17935,13 +17938,13 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orchestrator_module,
+            sandbox_execution_module,
             "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 0, "summary": "1 passed"},
         )
 
         with pytest.raises(AgentExecutionError, match="missing function imports"):
-            orchestrator_module.validate_test_output_for_task_runtime(
+            validation_runtime_module.validate_test_output_for_task_runtime(
                 orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,
@@ -17952,7 +17955,7 @@ class TestValidateTestOutputPytestArbiter:
         output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
         monkeypatch.setattr(
-            orchestrator_module,
+            test_ast_analysis_module,
             "analyze_test_module_runtime",
             lambda *args, **kwargs: {
                 "syntax_ok": True,
@@ -17962,13 +17965,13 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orchestrator_module,
+            sandbox_execution_module,
             "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": "1 failed"},
         )
 
         with pytest.raises(AgentExecutionError) as excinfo:
-            orchestrator_module.validate_test_output_for_task_runtime(
+            validation_runtime_module.validate_test_output_for_task_runtime(
                 orch.config.execution_sandbox_policy(),
                 {"module_name": "my_module", "code": "def ok():\n    return 1"},
                 output,

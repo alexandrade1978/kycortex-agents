@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, cast
+from typing import Callable, Dict, Any, Optional, cast
 
 try:
     import resource
@@ -280,6 +280,38 @@ def classify_task_failure(task: Task, exc: Exception) -> str:
     return FailureCategory.TASK_EXECUTION.value
 
 
+def default_module_name_for_task(task: Task) -> Optional[str]:
+    if AgentRegistry.normalize_key(task.assigned_to) != "code_engineer":
+        return None
+    return f"{task.id}_implementation"
+
+def validate_task_output(
+    task: Task,
+    context: Dict[str, Any],
+    output: AgentOutput,
+    *,
+    validate_code_output: Callable[..., None],
+    validate_test_output: Callable[..., None],
+) -> None:
+    normalized_role = AgentRegistry.normalize_key(execution_agent_name(task))
+    if normalized_role == "code_engineer":
+        validate_code_output(output, task=task)
+        return
+    if normalized_role == "qa_tester":
+        validate_test_output(context, output, task=task)
+        return
+    if normalized_role != "dependency_manager":
+        return
+    validate_dependency_output_runtime(
+        context,
+        output,
+        analyze_dependency_manifest,
+        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+        else None,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -347,7 +379,13 @@ class Orchestrator:
             normalized_output = normalize_agent_result(output)
             normalized_output = unredacted_agent_result(agent, normalized_output)
             normalized_output = sanitize_output_provider_call_metadata(normalized_output)
-            self._validate_task_output(task, agent_input.context, normalized_output)
+            validate_task_output(
+                task,
+                agent_input.context,
+                normalized_output,
+                validate_code_output=self._validate_code_output,
+                validate_test_output=self._validate_test_output,
+            )
             ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:
                 project.add_decision_record(decision)
@@ -403,25 +441,6 @@ class Orchestrator:
             total_tokens=(provider_call.get("usage") or {}).get("total_tokens") if provider_call else None,
         )
         return normalized_output.raw_content
-
-    def _validate_task_output(self, task: Task, context: Dict[str, Any], output: AgentOutput) -> None:
-        normalized_role = AgentRegistry.normalize_key(execution_agent_name(task))
-        if normalized_role == "code_engineer":
-            self._validate_code_output(output, task=task)
-            return
-        if normalized_role == "qa_tester":
-            self._validate_test_output(context, output, task=task)
-            return
-        if normalized_role != "dependency_manager":
-            return
-        validate_dependency_output_runtime(
-            context,
-            output,
-            analyze_dependency_manifest,
-            lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
-            if isinstance(current_output.metadata.setdefault("validation", {}), dict)
-            else None,
-        )
 
     def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
         validate_code_output_runtime(
@@ -712,7 +731,7 @@ class Orchestrator:
                         artifact_type,
                     ),
                     python_import_roots=python_import_roots,
-                    default_module_name_for_task=self._default_module_name_for_task,
+                    default_module_name_for_task=default_module_name_for_task,
                 ),
             ),
             build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
@@ -744,7 +763,7 @@ class Orchestrator:
                         artifact_type,
                     ),
                     python_import_roots=python_import_roots,
-                    default_module_name_for_task=self._default_module_name_for_task,
+                    default_module_name_for_task=default_module_name_for_task,
                 ),
             ),
             ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
@@ -759,7 +778,7 @@ class Orchestrator:
     ) -> Dict[str, Any]:
         module_task = self._context_module_task(project, current_task, visible_task_ids)
         if module_task is not None:
-            module_name = self._default_module_name_for_task(module_task)
+            module_name = default_module_name_for_task(module_task)
             if module_name:
                 return {
                     "planned_module_name": module_name,
@@ -779,7 +798,7 @@ class Orchestrator:
                 origin_task is not None
                 and AgentRegistry.normalize_key(origin_task.assigned_to) == "code_engineer"
                 and (visible_task_ids is None or origin_task.id in visible_task_ids)
-                and self._default_module_name_for_task(origin_task)
+                and default_module_name_for_task(origin_task)
             ):
                 return origin_task
 
@@ -790,10 +809,10 @@ class Orchestrator:
                 continue
             if existing_task.repair_origin_task_id:
                 continue
-            if self._default_module_name_for_task(existing_task):
+            if default_module_name_for_task(existing_task):
                 return existing_task
 
-        if current_task is not None and self._default_module_name_for_task(current_task):
+        if current_task is not None and default_module_name_for_task(current_task):
             return current_task
 
         for existing_task in project.tasks:
@@ -801,15 +820,10 @@ class Orchestrator:
                 continue
             if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
                 continue
-            if self._default_module_name_for_task(existing_task):
+            if default_module_name_for_task(existing_task):
                 return existing_task
 
         return None
-
-    def _default_module_name_for_task(self, task: Task) -> Optional[str]:
-        if AgentRegistry.normalize_key(task.assigned_to) != "code_engineer":
-            return None
-        return f"{task.id}_implementation"
 
     def _code_artifact_context(
         self,
@@ -817,7 +831,7 @@ class Orchestrator:
         project: Optional[ProjectState] = None,
     ) -> Dict[str, Any]:
         if project is None:
-            module_name = self._default_module_name_for_task(task)
+            module_name = default_module_name_for_task(task)
         else:
             current_task = task
             visited_task_ids: set[str] = set()
@@ -831,13 +845,13 @@ class Orchestrator:
                     break
                 visited_task_ids.add(origin_task.id)
                 current_task = origin_task
-            module_name = self._default_module_name_for_task(current_task)
+            module_name = default_module_name_for_task(current_task)
         if not module_name:
             return {}
 
         artifact_path = f"artifacts/{module_name}.py"
         code_content = task.output or ""
-        task_module_name = self._default_module_name_for_task(task)
+        task_module_name = default_module_name_for_task(task)
         allow_artifact_path_override = task_module_name == module_name
 
         if isinstance(task.output_payload, dict):

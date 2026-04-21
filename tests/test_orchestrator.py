@@ -1390,7 +1390,13 @@ def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
     output = AgentOutput(summary="code", raw_content="def run() -> int:\n    return 1\n")
 
     with pytest.raises(AgentExecutionError, match="missing required CLI entrypoint"):
-        orchestrator._validate_task_output(task, {}, output)
+        orchestrator_module.validate_task_output(
+            task,
+            {},
+            output,
+            validate_code_output=orchestrator._validate_code_output,
+            validate_test_output=orchestrator._validate_test_output,
+        )
 
 
 def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_path, monkeypatch):
@@ -2625,7 +2631,7 @@ def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, m
             assigned_to="code_engineer",
         )
     )
-    monkeypatch.setattr(orchestrator, "_default_module_name_for_task", lambda task: None)
+    monkeypatch.setattr(orchestrator_module, "default_module_name_for_task", lambda task: None)
 
     assert orchestrator._planned_module_context(project) == {}
 

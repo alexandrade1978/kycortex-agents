@@ -435,10 +435,6 @@ class Orchestrator:
         )
         # If only warnings and pytest passed → accept (warnings are false positives)
 
-    def _should_compact_architecture_context(self, task: Optional[Task], task_public_contract_anchor: str) -> bool:
-        execution_agent_name = self._execution_agent_name(task) if task is not None else None
-        return should_compact_architecture_context(task, task_public_contract_anchor, execution_agent_name, self.config.max_tokens)
-
     def _classify_task_failure(self, task: Task, exc: Exception) -> str:
         normalized_role = (task.assigned_to or "").strip().lower()
         if isinstance(exc, WorkflowDefinitionError):
@@ -999,7 +995,12 @@ class Orchestrator:
                 current_task=current_task,
             ),
             task_public_contract_anchor=extract_task_public_contract_anchor,
-            should_compact_architecture_context=self._should_compact_architecture_context,
+            should_compact_architecture_context=lambda task, task_public_contract_anchor: should_compact_architecture_context(
+                task,
+                task_public_contract_anchor,
+                self._execution_agent_name(task) if task is not None else None,
+                self.config.max_tokens,
+            ),
             compact_architecture_context=compact_architecture_context,
             task_context_output=task_context_output,
             is_budget_decomposition_planner=is_budget_decomposition_planner,

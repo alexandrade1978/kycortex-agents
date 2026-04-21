@@ -115,6 +115,7 @@ from kycortex_agents.orchestration import (
     provider_call_metadata,
     repair_owner_for_category,
     render_expression,
+    sandbox_security_violation,
     semantic_output_key,
     summarize_output,
     has_repair_task_for_cycle,
@@ -1155,9 +1156,9 @@ def test_classify_task_failure_falls_back_to_task_execution_for_unmapped_agent_e
 
 def test_is_sandbox_security_violation_returns_false_for_unrelated_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._is_sandbox_security_violation(RuntimeError("provider temporarily unavailable")) is False
+    assert sandbox_security_violation(RuntimeError("provider temporarily unavailable")) is False
 
 
 def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
@@ -1407,8 +1408,8 @@ def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_pat
         lambda *args, **kwargs: {"syntax_ok": True, "has_main_guard": True, "third_party_imports": []},
     )
     monkeypatch.setattr(
-        orchestrator,
-        "_completion_diagnostics_from_output",
+        orchestrator_module,
+        "completion_diagnostics_from_provider_call",
         lambda *args, **kwargs: {"likely_truncated": True, "hit_token_limit": True},
     )
 
@@ -4516,8 +4517,8 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
     monkeypatch.setattr(
-        orchestrator,
-        "_completion_diagnostics_from_output",
+        orchestrator_module,
+        "completion_diagnostics_from_provider_call",
         lambda *args, **kwargs: {"likely_truncated": True, "hit_token_limit": False},
     )
 
@@ -4557,8 +4558,8 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
     monkeypatch.setattr(
-        orchestrator,
-        "_completion_diagnostics_from_output",
+        orchestrator_module,
+        "completion_diagnostics_from_provider_call",
         lambda *args, **kwargs: {"likely_truncated": False, "hit_token_limit": False},
     )
 

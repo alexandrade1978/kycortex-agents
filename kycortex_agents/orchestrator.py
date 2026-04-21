@@ -369,7 +369,12 @@ class Orchestrator:
             analyze_python_module,
             self._output_line_count,
             lambda code_analysis: task_public_contract_preflight(task, code_analysis),
-            self._completion_diagnostics_from_output,
+            lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
+                current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
+                raw_content=kwargs.get("raw_content", ""),
+                syntax_ok=kwargs.get("syntax_ok", False),
+                syntax_error=kwargs.get("syntax_error"),
+            ),
             self._artifact_filename,
             self._execute_generated_module_import,
             self._record_output_validation,
@@ -413,7 +418,12 @@ class Orchestrator:
             auto_fix_test_type_mismatches,
             self._output_line_count,
             self._execute_generated_tests,
-            self._completion_diagnostics_from_output,
+            lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
+                current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
+                raw_content=kwargs.get("raw_content", ""),
+                syntax_ok=kwargs.get("syntax_ok", False),
+                syntax_error=kwargs.get("syntax_error"),
+            ),
             pytest_failure_origin,
             self._record_output_validation,
             completion_validation_issue,
@@ -436,7 +446,7 @@ class Orchestrator:
             return FailureCategory.WORKFLOW_DEFINITION.value
         if isinstance(exc, ProviderTransientError):
             return FailureCategory.PROVIDER_TRANSIENT.value
-        if self._is_sandbox_security_violation(exc):
+        if sandbox_security_violation(exc):
             return FailureCategory.SANDBOX_SECURITY_VIOLATION.value
         if isinstance(exc, AgentExecutionError):
             if normalized_role == "code_engineer":
@@ -446,9 +456,6 @@ class Orchestrator:
             if normalized_role == "dependency_manager":
                 return FailureCategory.DEPENDENCY_VALIDATION.value
         return FailureCategory.TASK_EXECUTION.value
-
-    def _is_sandbox_security_violation(self, exc: Exception) -> bool:
-        return sandbox_security_violation(exc)
 
     def _is_repairable_failure(self, failure_category: str) -> bool:
         return failure_category in {
@@ -558,22 +565,6 @@ class Orchestrator:
             for key in visible_keys
             if key in repair_context
         }
-
-    def _completion_diagnostics_from_output(
-        self,
-        output: AgentOutput,
-        *,
-        raw_content: str = "",
-        syntax_ok: bool,
-        syntax_error: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        provider_call = output.metadata.get("provider_call") if isinstance(output.metadata, dict) else None
-        return completion_diagnostics_from_provider_call(
-            provider_call,
-            raw_content=raw_content,
-            syntax_ok=syntax_ok,
-            syntax_error=syntax_error,
-        )
 
     def _build_code_repair_context_from_test_failure(
         self,

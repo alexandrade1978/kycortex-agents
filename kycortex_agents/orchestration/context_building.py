@@ -19,10 +19,21 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_test_targets,
     build_module_run_command,
 )
-from kycortex_agents.orchestration.output_helpers import summarize_output
+from kycortex_agents.orchestration.output_helpers import semantic_output_key, summarize_output, task_context_output
+from kycortex_agents.orchestration.repair_test_analysis import (
+    normalized_helper_surface_symbols,
+    qa_repair_should_reuse_failed_test_artifact,
+)
+from kycortex_agents.orchestration.task_constraints import (
+    compact_architecture_context,
+    is_budget_decomposition_planner,
+    should_compact_architecture_context,
+    task_public_contract_anchor,
+)
 from kycortex_agents.orchestration.test_ast_analysis import analyze_test_module_runtime
 from kycortex_agents.orchestration.validation_reporting import build_dependency_validation_summary
 from kycortex_agents.orchestration.validation_reporting import build_test_validation_summary
+from kycortex_agents.providers.base import redact_sensitive_data
 from kycortex_agents.types import (
     AgentView,
     AgentViewArtifactRecord,
@@ -528,6 +539,56 @@ def build_task_context_runtime(
             qa_repair_should_reuse_failed_test_artifact=callbacks.qa_repair_should_reuse_failed_test_artifact,
         )
     return cast(dict[str, Any], callbacks.redact_sensitive_data(ctx))
+
+
+def build_task_context_for_agent_runtime(
+    orchestrator: Any,
+    task: Task,
+    project: ProjectState,
+) -> dict[str, Any]:
+    from kycortex_agents.orchestration.workflow_control import execution_agent_name
+
+    callbacks = TaskContextRuntimeCallbacks(
+        build_agent_view=lambda current_task, current_project, snapshot: build_agent_view_runtime(
+            current_task,
+            current_project,
+            snapshot,
+            task_dependency_closure_ids=task_dependency_closure_ids,
+            direct_dependency_ids=direct_dependency_ids,
+        ),
+        task_dependency_closure_ids=task_dependency_closure_ids,
+        execution_agent_name=execution_agent_name,
+        planned_module_context=lambda current_project, visible_task_ids, current_task: planned_module_context_runtime(
+            current_project,
+            visible_task_ids,
+            current_task=current_task,
+        ),
+        task_public_contract_anchor=task_public_contract_anchor,
+        should_compact_architecture_context=lambda current_task, public_contract_anchor: should_compact_architecture_context(
+            current_task,
+            public_contract_anchor,
+            execution_agent_name(current_task) if current_task is not None else None,
+            orchestrator.config.max_tokens,
+        ),
+        compact_architecture_context=compact_architecture_context,
+        task_context_output=task_context_output,
+        is_budget_decomposition_planner=is_budget_decomposition_planner,
+        semantic_output_key=semantic_output_key,
+        normalize_assigned_to=AgentRegistry.normalize_key,
+        code_artifact_context=code_artifact_context_runtime,
+        dependency_artifact_context=dependency_artifact_context_runtime,
+        test_artifact_context=test_artifact_context_runtime,
+        agent_visible_repair_context=agent_visible_repair_context,
+        normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+        qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
+        redact_sensitive_data=redact_sensitive_data,
+    )
+    return build_task_context_runtime(
+        task,
+        project,
+        provider_max_tokens=orchestrator.config.max_tokens,
+        callbacks=callbacks,
+    )
 
 
 def build_agent_view_runtime(

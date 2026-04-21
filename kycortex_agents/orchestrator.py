@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, Dict, Any, Optional, cast
+from typing import Callable, Dict, Any, Optional
 
 try:
     import resource
@@ -34,6 +34,7 @@ from kycortex_agents.orchestration.context_building import (
     build_task_context_runtime,
     code_artifact_context_runtime,
     default_module_name_for_task,
+    dependency_artifact_context_runtime,
     direct_dependency_ids,
     planned_module_context_runtime,
     test_artifact_context_runtime,
@@ -109,7 +110,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     auto_fix_test_type_mismatches,
 )
 from kycortex_agents.orchestration.validation_reporting import (
-    build_dependency_validation_summary,
     build_repair_validation_summary,
     completion_diagnostics_from_provider_call,
     completion_validation_issue,
@@ -655,33 +655,6 @@ def validate_test_output_for_task_runtime(
         completion_validation_issue,
         summarize_output,
     )
-
-
-def dependency_artifact_context_runtime(task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(task.output_payload, dict):
-        return {}
-    artifacts = task.output_payload.get("artifacts")
-    if not isinstance(artifacts, list):
-        return {}
-    raw_code_analysis = context.get("code_analysis")
-    code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
-    for artifact in artifacts:
-        if not isinstance(artifact, dict):
-            continue
-        artifact_path = artifact.get("path")
-        if not isinstance(artifact_path, str) or not artifact_path.strip():
-            continue
-        path_obj = Path(artifact_path)
-        if path_obj.name != "requirements.txt":
-            continue
-        dependency_analysis = analyze_dependency_manifest(task.output or "", code_analysis)
-        return {
-            "dependency_manifest": task.output or "",
-            "dependency_manifest_path": artifact_path,
-            "dependency_analysis": dependency_analysis,
-            "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
-        }
-    return {}
 
 
 def build_task_context_for_agent_runtime(

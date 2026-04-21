@@ -8,6 +8,7 @@ from typing import cast
 from typing import Any, Callable, Optional
 
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration.dependency_analysis import analyze_dependency_manifest
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
     build_code_behavior_contract,
@@ -19,6 +20,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 )
 from kycortex_agents.orchestration.output_helpers import summarize_output
 from kycortex_agents.orchestration.test_ast_analysis import analyze_test_module_runtime
+from kycortex_agents.orchestration.validation_reporting import build_dependency_validation_summary
 from kycortex_agents.orchestration.validation_reporting import build_test_validation_summary
 from kycortex_agents.types import (
     AgentView,
@@ -214,6 +216,33 @@ def test_artifact_context_runtime(task: Task, context: dict[str, Any]) -> dict[s
                 test_analysis,
                 test_execution if isinstance(test_execution, dict) else None,
             ),
+        }
+    return {}
+
+
+def dependency_artifact_context_runtime(task: Task, context: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(task.output_payload, dict):
+        return {}
+    artifacts = task.output_payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        return {}
+    raw_code_analysis = context.get("code_analysis")
+    code_analysis = cast(dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        artifact_path = artifact.get("path")
+        if not isinstance(artifact_path, str) or not artifact_path.strip():
+            continue
+        path_obj = Path(artifact_path)
+        if path_obj.name != "requirements.txt":
+            continue
+        dependency_analysis = analyze_dependency_manifest(task.output or "", code_analysis)
+        return {
+            "dependency_manifest": task.output or "",
+            "dependency_manifest_path": artifact_path,
+            "dependency_analysis": dependency_analysis,
+            "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
         }
     return {}
 

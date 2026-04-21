@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Optional, cast
 
 from kycortex_agents.agents.registry import AgentRegistry
@@ -15,7 +16,7 @@ from kycortex_agents.orchestration.validation_analysis import (
     validation_error_message_for_test_result,
 )
 from kycortex_agents.providers.base import redact_sensitive_data, sanitize_provider_call_metadata
-from kycortex_agents.types import AgentOutput, ArtifactType
+from kycortex_agents.types import AgentOutput, ArtifactType, ExecutionSandboxPolicy
 
 
 @dataclass(slots=True)
@@ -247,6 +248,52 @@ def validate_code_output_runtime(
     )
     if validation_issues:
         raise AgentExecutionError(f"Generated code validation failed: {'; '.join(validation_issues)}")
+
+
+def validate_code_output_for_task_runtime(
+    sandbox_policy: ExecutionSandboxPolicy,
+    output: AgentOutput,
+    line_budget: Optional[int],
+    requires_cli_entrypoint: bool,
+    *,
+    analyze_python_module: Any,
+    task_public_contract_preflight: Any,
+    completion_diagnostics_from_provider_call: Any,
+    execute_generated_module_import_runtime: Any,
+    completion_validation_issue: Any,
+) -> None:
+    validate_code_output_runtime(
+        output,
+        line_budget,
+        requires_cli_entrypoint,
+        should_validate_code_content,
+        analyze_python_module,
+        lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
+        task_public_contract_preflight,
+        lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
+            current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
+            raw_content=kwargs.get("raw_content", ""),
+            syntax_ok=kwargs.get("syntax_ok", False),
+            syntax_error=kwargs.get("syntax_error"),
+        ),
+        lambda current_output, artifact_type, default_filename: next(
+            (
+                Path(artifact.path).name
+                for artifact in current_output.artifacts
+                if artifact.artifact_type == artifact_type and artifact.path
+            ),
+            default_filename,
+        ),
+        lambda module_filename, code_content: execute_generated_module_import_runtime(
+            sandbox_policy,
+            module_filename,
+            code_content,
+        ),
+        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+        else None,
+        completion_validation_issue,
+    )
 
 
 def validate_dependency_output_runtime(

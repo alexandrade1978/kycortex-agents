@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 from typing import Callable, Dict, Any, Optional
 
 try:
@@ -73,10 +72,10 @@ from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     redact_validation_execution_result,
     sanitize_output_provider_call_metadata,
-    should_validate_code_content,
+    should_validate_code_content as _should_validate_code_content,
     should_validate_test_content,
     summarize_pytest_output,
-    validate_code_output_runtime,
+    validate_code_output_for_task_runtime as _validate_code_output_for_task_runtime,
     validate_task_output,
     validate_test_output_runtime,
 )
@@ -134,6 +133,7 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 
 active_repair_cycle = _active_repair_cycle
 has_repair_task_for_cycle = _has_repair_task_for_cycle
+should_validate_code_content = _should_validate_code_content
 
 
 def queue_active_cycle_repair_runtime(
@@ -180,37 +180,16 @@ def validate_code_output_for_task_runtime(
     output: AgentOutput,
     task: Optional[Task] = None,
 ) -> None:
-    validate_code_output_runtime(
+    _validate_code_output_for_task_runtime(
+        sandbox_policy,
         output,
         task_line_budget(task),
         task_requires_cli_entrypoint(task),
-        should_validate_code_content,
-        analyze_python_module,
-        lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
-        lambda code_analysis: task_public_contract_preflight(task, code_analysis),
-        lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
-            current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
-            raw_content=kwargs.get("raw_content", ""),
-            syntax_ok=kwargs.get("syntax_ok", False),
-            syntax_error=kwargs.get("syntax_error"),
-        ),
-        lambda current_output, artifact_type, default_filename: next(
-            (
-                Path(artifact.path).name
-                for artifact in current_output.artifacts
-                if artifact.artifact_type == artifact_type and artifact.path
-            ),
-            default_filename,
-        ),
-        lambda module_filename, code_content: execute_generated_module_import_runtime(
-            sandbox_policy,
-            module_filename,
-            code_content,
-        ),
-        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
-        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
-        else None,
-        completion_validation_issue,
+        analyze_python_module=analyze_python_module,
+        task_public_contract_preflight=lambda code_analysis: task_public_contract_preflight(task, code_analysis),
+        completion_diagnostics_from_provider_call=completion_diagnostics_from_provider_call,
+        execute_generated_module_import_runtime=execute_generated_module_import_runtime,
+        completion_validation_issue=completion_validation_issue,
     )
 
 

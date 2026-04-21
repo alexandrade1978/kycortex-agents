@@ -1332,7 +1332,7 @@ def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_p
 
 def test_validate_code_output_rejects_missing_required_cli_entrypoint(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="code", raw_content="def run() -> int:\n    return 1\n")
     task = Task(
         id="code",
@@ -1342,7 +1342,7 @@ def test_validate_code_output_rejects_missing_required_cli_entrypoint(tmp_path):
     )
 
     with pytest.raises(AgentExecutionError, match="missing required CLI entrypoint"):
-        orchestrator._validate_code_output(output, task=task)
+        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
 
 def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch):
@@ -1394,14 +1394,18 @@ def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
             task,
             {},
             output,
-            validate_code_output=orchestrator._validate_code_output,
+            validate_code_output=lambda current_output, task=None: orchestrator_module.validate_code_output_for_task_runtime(
+                config.execution_sandbox_policy(),
+                current_output,
+                task,
+            ),
             validate_test_output=orchestrator._validate_test_output,
         )
 
 
 def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="code", raw_content="def run():\n    return 1\n")
     task = Task(
         id="code",
@@ -1425,12 +1429,12 @@ def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_pat
         AgentExecutionError,
         match="line count 2 exceeds maximum 1; output likely truncated at the completion token limit",
     ):
-        orchestrator._validate_code_output(output, task=task)
+        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
 
 def test_validate_code_output_rejects_import_time_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(
         summary="code",
         raw_content=(
@@ -1452,12 +1456,12 @@ def test_validate_code_output_rejects_import_time_errors(tmp_path):
         AgentExecutionError,
         match="module import failed: TypeError: non-default argument 'value' follows default argument",
     ):
-        orchestrator._validate_code_output(output, task=task)
+        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
 
 def test_validate_code_output_rejects_field_default_factory_on_plain_class(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(
         summary="code",
         raw_content=(
@@ -1474,7 +1478,7 @@ def test_validate_code_output_rejects_field_default_factory_on_plain_class(tmp_p
     )
 
     with pytest.raises(AgentExecutionError, match=r"non-dataclass field\(\.\.\.\) usage"):
-        orchestrator._validate_code_output(output, task=task)
+        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
     code_analysis = output.metadata["validation"]["code_analysis"]
     assert code_analysis["invalid_dataclass_field_usages"] == [
@@ -1484,7 +1488,7 @@ def test_validate_code_output_rejects_field_default_factory_on_plain_class(tmp_p
 
 def test_validate_code_output_skips_import_validation_for_third_party_imports(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(summary="code", raw_content="import requests\n")
     task = Task(
         id="code",
@@ -1508,12 +1512,12 @@ def test_validate_code_output_skips_import_validation_for_third_party_imports(tm
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not run import validation")),
     )
 
-    assert orchestrator._validate_code_output(output, task=task) is None
+    assert orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task) is None
 
 
 def test_validate_code_output_rejects_task_public_contract_mismatches(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(
         summary="code",
         raw_content=(
@@ -1537,7 +1541,7 @@ def test_validate_code_output_rejects_task_public_contract_mismatches(tmp_path):
     )
 
     with pytest.raises(AgentExecutionError, match="task public contract mismatch") as excinfo:
-        orchestrator._validate_code_output(output, task=task)
+        orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
     message = str(excinfo.value)
     assert "missing public facade ComplianceIntakeService" in message
@@ -1550,7 +1554,7 @@ def test_validate_code_output_rejects_task_public_contract_mismatches(tmp_path):
 
 def test_validate_code_output_accepts_matching_task_public_contract_with_optional_request_fields(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    sandbox_policy = config.execution_sandbox_policy()
     output = AgentOutput(
         summary="code",
         raw_content=(
@@ -1583,7 +1587,7 @@ def test_validate_code_output_accepts_matching_task_public_contract_with_optiona
         assigned_to="code_engineer",
     )
 
-    assert orchestrator._validate_code_output(output, task=task) is None
+    assert orchestrator_module.validate_code_output_for_task_runtime(sandbox_policy, output, task) is None
     contract_preflight = output.metadata["validation"]["task_public_contract_preflight"]
     assert contract_preflight["passed"] is True
     assert contract_preflight["issues"] == []

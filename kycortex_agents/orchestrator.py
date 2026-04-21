@@ -577,6 +577,45 @@ def execute_generated_module_import_runtime(
     )
 
 
+def validate_code_output_for_task_runtime(
+    sandbox_policy: ExecutionSandboxPolicy,
+    output: AgentOutput,
+    task: Optional[Task] = None,
+) -> None:
+    validate_code_output_runtime(
+        output,
+        task_line_budget(task),
+        task_requires_cli_entrypoint(task),
+        should_validate_code_content,
+        analyze_python_module,
+        lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
+        lambda code_analysis: task_public_contract_preflight(task, code_analysis),
+        lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
+            current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
+            raw_content=kwargs.get("raw_content", ""),
+            syntax_ok=kwargs.get("syntax_ok", False),
+            syntax_error=kwargs.get("syntax_error"),
+        ),
+        lambda current_output, artifact_type, default_filename: next(
+            (
+                Path(artifact.path).name
+                for artifact in current_output.artifacts
+                if artifact.artifact_type == artifact_type and artifact.path
+            ),
+            default_filename,
+        ),
+        lambda module_filename, code_content: execute_generated_module_import_runtime(
+            sandbox_policy,
+            module_filename,
+            code_content,
+        ),
+        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+        else None,
+        completion_validation_issue,
+    )
+
+
 def execute_generated_tests_runtime(
     sandbox_policy: ExecutionSandboxPolicy,
     module_filename: str,
@@ -682,7 +721,11 @@ class Orchestrator:
                 task,
                 agent_input.context,
                 normalized_output,
-                validate_code_output=self._validate_code_output,
+                validate_code_output=lambda output, task=None: validate_code_output_for_task_runtime(
+                    self.config.execution_sandbox_policy(),
+                    output,
+                    task,
+                ),
                 validate_test_output=self._validate_test_output,
             )
             ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(normalized_output.artifacts)
@@ -740,40 +783,6 @@ class Orchestrator:
             total_tokens=(provider_call.get("usage") or {}).get("total_tokens") if provider_call else None,
         )
         return normalized_output.raw_content
-
-    def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
-        validate_code_output_runtime(
-            output,
-            task_line_budget(task),
-            task_requires_cli_entrypoint(task),
-            should_validate_code_content,
-            analyze_python_module,
-            lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
-            lambda code_analysis: task_public_contract_preflight(task, code_analysis),
-            lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
-                current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
-                raw_content=kwargs.get("raw_content", ""),
-                syntax_ok=kwargs.get("syntax_ok", False),
-                syntax_error=kwargs.get("syntax_error"),
-            ),
-            lambda current_output, artifact_type, default_filename: next(
-                (
-                    Path(artifact.path).name
-                    for artifact in current_output.artifacts
-                    if artifact.artifact_type == artifact_type and artifact.path
-                ),
-                default_filename,
-            ),
-            lambda module_filename, code_content: execute_generated_module_import_runtime(
-                self.config.execution_sandbox_policy(),
-                module_filename,
-                code_content,
-            ),
-            lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
-            if isinstance(current_output.metadata.setdefault("validation", {}), dict)
-            else None,
-            completion_validation_issue,
-        )
 
     def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:
         validate_test_output_runtime(

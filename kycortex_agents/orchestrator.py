@@ -177,7 +177,6 @@ from kycortex_agents.providers.base import (
 from kycortex_agents.types import (
     AgentInput,
     AgentOutput,
-    ArtifactRecord,
     ArtifactType,
     FailureCategory,
 )
@@ -287,7 +286,7 @@ class Orchestrator:
             normalized_output = unredacted_agent_result(agent, normalized_output)
             normalized_output = sanitize_output_provider_call_metadata(normalized_output)
             self._validate_task_output(task, agent_input.context, normalized_output)
-            self._persist_artifacts(normalized_output.artifacts)
+            ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:
                 project.add_decision_record(decision)
             for artifact in normalized_output.artifacts:
@@ -528,9 +527,6 @@ class Orchestrator:
             summarize_output=summarize_pytest_output,
             redact_result=redact_validation_execution_result,
         )
-
-    def _persist_artifacts(self, artifacts: list[ArtifactRecord]) -> None:
-        ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(artifacts)
 
     @staticmethod
     def _agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:

@@ -1881,13 +1881,13 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
 
 def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
     artifacts = [
         ArtifactRecord(name="blank", artifact_type=ArtifactType.TEXT, content="   ", path="ignored.txt"),
         ArtifactRecord(name="Report Draft", artifact_type=ArtifactType.DOCUMENT, content="hello", path="reports/final draft.md"),
     ]
 
-    orchestrator._persist_artifacts(artifacts)
+    support.persist_artifacts(artifacts)
 
     persisted_path = tmp_path / "output" / "reports" / "final_draft.md"
     assert artifacts[0].path == "ignored.txt"
@@ -1897,7 +1897,7 @@ def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
 
 def test_persist_artifacts_redacts_sensitive_content_before_disk_write(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
     artifacts = [
         ArtifactRecord(
             name="credentials",
@@ -1907,7 +1907,7 @@ def test_persist_artifacts_redacts_sensitive_content_before_disk_write(tmp_path)
         )
     ]
 
-    orchestrator._persist_artifacts(artifacts)
+    support.persist_artifacts(artifacts)
 
     persisted_path = tmp_path / "output" / "artifacts" / "credentials.txt"
     persisted_content = persisted_path.read_text(encoding="utf-8")
@@ -1921,7 +1921,7 @@ def test_persist_artifacts_redacts_sensitive_content_before_disk_write(tmp_path)
 @pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
 def test_persist_artifacts_use_private_file_permissions(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
     artifacts = [
         ArtifactRecord(
             name="report",
@@ -1931,7 +1931,7 @@ def test_persist_artifacts_use_private_file_permissions(tmp_path):
         )
     ]
 
-    orchestrator._persist_artifacts(artifacts)
+    support.persist_artifacts(artifacts)
 
     persisted_path = tmp_path / "output" / "artifacts" / "report.txt"
 
@@ -1941,7 +1941,7 @@ def test_persist_artifacts_use_private_file_permissions(tmp_path):
 @pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
 def test_persist_artifacts_use_private_directory_permissions(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
     artifacts = [
         ArtifactRecord(
             name="report",
@@ -1951,7 +1951,7 @@ def test_persist_artifacts_use_private_directory_permissions(tmp_path):
         )
     ]
 
-    orchestrator._persist_artifacts(artifacts)
+    support.persist_artifacts(artifacts)
 
     persisted_dir = tmp_path / "output" / "artifacts"
 
@@ -1960,7 +1960,7 @@ def test_persist_artifacts_use_private_directory_permissions(tmp_path):
 
 def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
     escaped_root = tmp_path / "escaped"
     escaped_root.mkdir()
     (tmp_path / "output").mkdir()
@@ -1976,7 +1976,7 @@ def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
     ]
 
     with pytest.raises(AgentExecutionError, match="resolves outside the output directory"):
-        orchestrator._persist_artifacts(artifacts)
+        support.persist_artifacts(artifacts)
 
     assert not (escaped_root / "final.md").exists()
     assert artifacts[0].path == "artifacts/final.md"

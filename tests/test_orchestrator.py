@@ -2558,16 +2558,58 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
     project.add_task(task)
 
     project.repair_history.append({"cycle": 0})
-    assert orchestrator._queue_active_cycle_repair(project, task) is False
+    assert orchestrator_module.queue_active_cycle_repair_runtime(
+        project,
+        task,
+        workflow_resume_policy=orchestrator.config.workflow_resume_policy,
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+            current_project,
+            failed_task_ids,
+            cycle,
+            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+            build_repair_context=orchestrator._build_repair_context,
+        ),
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        log_event=orchestrator._log_event,
+    ) is False
 
     project.repair_history[-1] = {"cycle": 1}
     monkeypatch.setattr(orchestrator_module, "has_repair_task_for_cycle", lambda *args, **kwargs: True)
-    assert orchestrator._queue_active_cycle_repair(project, task) is False
+    assert orchestrator_module.queue_active_cycle_repair_runtime(
+        project,
+        task,
+        workflow_resume_policy=orchestrator.config.workflow_resume_policy,
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+            current_project,
+            failed_task_ids,
+            cycle,
+            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+            build_repair_context=orchestrator._build_repair_context,
+        ),
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        log_event=orchestrator._log_event,
+    ) is False
 
     monkeypatch.setattr(orchestrator_module, "has_repair_task_for_cycle", lambda *args, **kwargs: False)
     monkeypatch.setattr(project, "_plan_task_repair", lambda *args, **kwargs: None)
-    monkeypatch.setattr(orchestrator, "_repair_task_ids_for_cycle", lambda *args, **kwargs: [])
-    assert orchestrator._queue_active_cycle_repair(project, task) is False
+    monkeypatch.setattr(orchestrator_module, "plan_repair_task_ids_for_cycle", lambda *args, **kwargs: [])
+    assert orchestrator_module.queue_active_cycle_repair_runtime(
+        project,
+        task,
+        workflow_resume_policy=orchestrator.config.workflow_resume_policy,
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+            current_project,
+            failed_task_ids,
+            cycle,
+            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+            build_repair_context=orchestrator._build_repair_context,
+        ),
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        log_event=orchestrator._log_event,
+    ) is False
 
 
 def test_failed_artifact_content_for_dependency_validation_uses_config_artifact(tmp_path):
@@ -2598,7 +2640,11 @@ def test_repair_task_ids_for_cycle_skips_missing_tasks(tmp_path):
     orchestrator = Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
 
-    assert orchestrator._repair_task_ids_for_cycle(project, ["missing-task"]) == []
+    assert orchestrator_module.plan_repair_task_ids_for_cycle(
+        project,
+        ["missing-task"],
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+    ) == []
 
 
 def test_repair_task_ids_for_cycle_skips_none_repair_tasks(tmp_path, monkeypatch):
@@ -2616,7 +2662,11 @@ def test_repair_task_ids_for_cycle_skips_none_repair_tasks(tmp_path, monkeypatch
 
     monkeypatch.setattr(project, "_create_repair_task", lambda *args, **kwargs: None)
 
-    assert orchestrator._repair_task_ids_for_cycle(project, ["code"]) == []
+    assert orchestrator_module.plan_repair_task_ids_for_cycle(
+        project,
+        ["code"],
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+    ) == []
 
 
 def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, monkeypatch):
@@ -12538,7 +12588,21 @@ def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_f
         )
     )
 
-    assert orchestrator._queue_active_cycle_repair(project, require_task(project, "tests")) is True
+    assert orchestrator_module.queue_active_cycle_repair_runtime(
+        project,
+        require_task(project, "tests"),
+        workflow_resume_policy=orchestrator.config.workflow_resume_policy,
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+            current_project,
+            failed_task_ids,
+            cycle,
+            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+            build_repair_context=orchestrator._build_repair_context,
+        ),
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        log_event=orchestrator._log_event,
+    ) is True
 
     tests_task = require_task(project, "tests")
     code_repair_task = require_task(project, "code__repair_1")
@@ -15914,7 +15978,14 @@ def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_t
         )
     )
 
-    orchestrator._configure_repair_attempts(project, ["tests__repair_1"], {"cycle": 2})
+    orchestrator_module.configure_repair_attempts_runtime(
+        project,
+        ["tests__repair_1"],
+        {"cycle": 2},
+        build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        build_repair_context=orchestrator._build_repair_context,
+    )
 
     code_task = require_task(project, "code")
     repaired_code_task = require_task(project, "code__repair_1")
@@ -16027,7 +16098,14 @@ def test_configure_repair_attempts_prefers_imported_repaired_code_module_for_ori
         )
     )
 
-    orchestrator._configure_repair_attempts(project, ["tests"], {"cycle": 2})
+    orchestrator_module.configure_repair_attempts_runtime(
+        project,
+        ["tests"],
+        {"cycle": 2},
+        build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+        ensure_budget_decomposition_task=orchestrator._ensure_budget_decomposition_task,
+        build_repair_context=orchestrator._build_repair_context,
+    )
 
     code_task = require_task(project, "code")
     repaired_code_task = require_task(project, "code__repair_1")

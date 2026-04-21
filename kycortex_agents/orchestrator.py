@@ -312,6 +312,110 @@ def validate_task_output(
     )
 
 
+def plan_repair_task_ids_for_cycle(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    *,
+    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
+) -> list[str]:
+    return repair_task_ids_for_cycle(
+        project,
+        failed_task_ids,
+        test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
+            task,
+            validation_payload=validation_payload,
+            pytest_failure_origin=pytest_failure_origin,
+            pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+            test_validation_has_blocking_issues=validation_has_blocking_issues,
+            pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+        ),
+        upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
+            current_project,
+            current_task,
+            imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
+                imported_project,
+                imported_task,
+                failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
+                    artifact_task.output,
+                    artifact_task.output_payload,
+                    artifact_type,
+                ),
+                python_import_roots=python_import_roots,
+                default_module_name_for_task=default_module_name_for_task,
+            ),
+        ),
+        ensure_budget_decomposition_task=ensure_budget_decomposition_task,
+        execution_agent_name=execution_agent_name,
+    )
+
+
+def queue_active_cycle_repair_runtime(
+    project: ProjectState,
+    task: Task,
+    *,
+    workflow_resume_policy: str,
+    configure_repair_attempts: Callable[[ProjectState, list[str], Dict[str, Any]], None],
+    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
+    log_event: Callable[..., None],
+) -> bool:
+    return queue_active_cycle_repair(
+        project,
+        task,
+        workflow_resume_policy=workflow_resume_policy,
+        active_repair_cycle=active_repair_cycle,
+        has_repair_task_for_cycle=has_repair_task_for_cycle,
+        configure_repair_attempts=configure_repair_attempts,
+        repair_task_ids_for_cycle=lambda current_project, failed_task_ids: plan_repair_task_ids_for_cycle(
+            current_project,
+            failed_task_ids,
+            ensure_budget_decomposition_task=ensure_budget_decomposition_task,
+        ),
+        log_event=log_event,
+    )
+
+
+def configure_repair_attempts_runtime(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    cycle: Dict[str, Any],
+    *,
+    build_code_repair_context_from_test_failure: Callable[..., Dict[str, Any]],
+    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
+    build_repair_context: Callable[..., Dict[str, Any]],
+) -> None:
+    configure_repair_attempts(
+        project,
+        failed_task_ids,
+        cycle,
+        test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
+            task,
+            validation_payload=validation_payload,
+            pytest_failure_origin=pytest_failure_origin,
+            pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+            test_validation_has_blocking_issues=validation_has_blocking_issues,
+            pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+        ),
+        upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
+            current_project,
+            current_task,
+            imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
+                imported_project,
+                imported_task,
+                failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
+                    artifact_task.output,
+                    artifact_task.output_payload,
+                    artifact_type,
+                ),
+                python_import_roots=python_import_roots,
+                default_module_name_for_task=default_module_name_for_task,
+            ),
+        ),
+        build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure,
+        ensure_budget_decomposition_task=ensure_budget_decomposition_task,
+        build_repair_context=build_repair_context,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -694,82 +798,6 @@ class Orchestrator:
             merge_prior_repair_context=merge_prior_repair_context,
         )
 
-    def _queue_active_cycle_repair(self, project: ProjectState, task: Task) -> bool:
-        return queue_active_cycle_repair(
-            project,
-            task,
-            workflow_resume_policy=self.config.workflow_resume_policy,
-            active_repair_cycle=active_repair_cycle,
-            has_repair_task_for_cycle=has_repair_task_for_cycle,
-            configure_repair_attempts=self._configure_repair_attempts,
-            repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
-            log_event=self._log_event,
-        )
-
-    def _configure_repair_attempts(self, project: ProjectState, failed_task_ids: list[str], cycle: Dict[str, Any]) -> None:
-        configure_repair_attempts(
-            project,
-            failed_task_ids,
-            cycle,
-            test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
-                task,
-                validation_payload=validation_payload,
-                pytest_failure_origin=pytest_failure_origin,
-                pytest_contract_overreach_signals=pytest_contract_overreach_signals,
-                test_validation_has_blocking_issues=validation_has_blocking_issues,
-                pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
-            ),
-            upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
-                current_project,
-                current_task,
-                imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
-                    imported_project,
-                    imported_task,
-                    failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
-                        artifact_task.output,
-                        artifact_task.output_payload,
-                        artifact_type,
-                    ),
-                    python_import_roots=python_import_roots,
-                    default_module_name_for_task=default_module_name_for_task,
-                ),
-            ),
-            build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
-            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
-            build_repair_context=self._build_repair_context,
-        )
-
-    def _repair_task_ids_for_cycle(self, project: ProjectState, failed_task_ids: list[str]) -> list[str]:
-        return repair_task_ids_for_cycle(
-            project,
-            failed_task_ids,
-            test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
-                task,
-                validation_payload=validation_payload,
-                pytest_failure_origin=pytest_failure_origin,
-                pytest_contract_overreach_signals=pytest_contract_overreach_signals,
-                test_validation_has_blocking_issues=validation_has_blocking_issues,
-                pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
-            ),
-            upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
-                current_project,
-                current_task,
-                imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
-                    imported_project,
-                    imported_task,
-                    failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
-                        artifact_task.output,
-                        artifact_task.output_payload,
-                        artifact_type,
-                    ),
-                    python_import_roots=python_import_roots,
-                    default_module_name_for_task=default_module_name_for_task,
-                ),
-            ),
-            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
-            execution_agent_name=execution_agent_name,
-        )
-
     def _planned_module_context(
         self,
         project: ProjectState,
@@ -1069,8 +1097,19 @@ class Orchestrator:
                         repair_project,
                         resume_failed_task_ids,
                         resume_failure_categories,
-                        configure_repair_attempts=self._configure_repair_attempts,
-                        repair_task_ids_for_cycle=self._repair_task_ids_for_cycle,
+                        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: configure_repair_attempts_runtime(
+                            current_project,
+                            failed_task_ids,
+                            cycle,
+                            build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
+                            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+                            build_repair_context=self._build_repair_context,
+                        ),
+                        repair_task_ids_for_cycle=lambda current_project, failed_task_ids: plan_repair_task_ids_for_cycle(
+                            current_project,
+                            failed_task_ids,
+                            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+                        ),
                         log_event=self._log_event,
                         **kwargs,
                     ),
@@ -1129,7 +1168,21 @@ class Orchestrator:
                                         FailureCategory.DEPENDENCY_VALIDATION.value,
                                         FailureCategory.PROVIDER_TRANSIENT.value,
                                     },
-                                    queue_active_cycle_repair=self._queue_active_cycle_repair,
+                                    queue_active_cycle_repair=lambda current_project, current_task: queue_active_cycle_repair_runtime(
+                                        current_project,
+                                        current_task,
+                                        workflow_resume_policy=self.config.workflow_resume_policy,
+                                        configure_repair_attempts=lambda repair_project, failed_task_ids, cycle: configure_repair_attempts_runtime(
+                                            repair_project,
+                                            failed_task_ids,
+                                            cycle,
+                                            build_code_repair_context_from_test_failure=self._build_code_repair_context_from_test_failure,
+                                            ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+                                            build_repair_context=self._build_repair_context,
+                                        ),
+                                        ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
+                                        log_event=self._log_event,
+                                    ),
                                     emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
                                         self.logger,
                                         progress_project,

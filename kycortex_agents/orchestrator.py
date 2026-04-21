@@ -36,6 +36,7 @@ from kycortex_agents.orchestration.context_building import (
     default_module_name_for_task,
     direct_dependency_ids,
     planned_module_context_runtime,
+    test_artifact_context_runtime,
     task_dependency_closure_ids,
 )
 from kycortex_agents.orchestration.output_helpers import (
@@ -110,7 +111,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
 from kycortex_agents.orchestration.validation_reporting import (
     build_dependency_validation_summary,
     build_repair_validation_summary,
-    build_test_validation_summary,
     completion_diagnostics_from_provider_call,
     completion_validation_issue,
 )
@@ -680,42 +680,6 @@ def dependency_artifact_context_runtime(task: Task, context: Dict[str, Any]) -> 
             "dependency_manifest_path": artifact_path,
             "dependency_analysis": dependency_analysis,
             "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
-        }
-    return {}
-
-
-def test_artifact_context_runtime(task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(task.output_payload, dict):
-        return {}
-    artifacts = task.output_payload.get("artifacts")
-    if not isinstance(artifacts, list):
-        return {}
-    metadata = task.output_payload.get("metadata")
-    validation = metadata.get("validation") if isinstance(metadata, dict) else None
-    module_name = context.get("module_name")
-    code_analysis = context.get("code_analysis")
-    if not isinstance(module_name, str) or not module_name or not isinstance(code_analysis, dict):
-        return {}
-    for artifact in artifacts:
-        if not isinstance(artifact, dict):
-            continue
-        if artifact.get("artifact_type") != ArtifactType.TEST.value:
-            continue
-        artifact_path = artifact.get("path")
-        if not isinstance(artifact_path, str) or not artifact_path.strip():
-            continue
-        test_analysis = validation.get("test_analysis") if isinstance(validation, dict) else None
-        if not isinstance(test_analysis, dict):
-            test_analysis = analyze_test_module_runtime(task.output or "", module_name, code_analysis)
-        test_execution = validation.get("test_execution") if isinstance(validation, dict) else None
-        return {
-            "tests_artifact_path": artifact_path,
-            "test_analysis": test_analysis,
-            "test_execution": test_execution if isinstance(test_execution, dict) else None,
-            "test_validation_summary": build_test_validation_summary(
-                test_analysis,
-                test_execution if isinstance(test_execution, dict) else None,
-            ),
         }
     return {}
 

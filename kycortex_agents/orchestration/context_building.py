@@ -18,6 +18,8 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_module_run_command,
 )
 from kycortex_agents.orchestration.output_helpers import summarize_output
+from kycortex_agents.orchestration.test_ast_analysis import analyze_test_module_runtime
+from kycortex_agents.orchestration.validation_reporting import build_test_validation_summary
 from kycortex_agents.types import (
     AgentView,
     AgentViewArtifactRecord,
@@ -178,6 +180,42 @@ def code_artifact_context_runtime(
         "code_behavior_contract": build_code_behavior_contract(code_content),
         "module_run_command": build_module_run_command(path_obj.name, code_analysis),
     }
+
+
+def test_artifact_context_runtime(task: Task, context: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(task.output_payload, dict):
+        return {}
+    artifacts = task.output_payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        return {}
+    metadata = task.output_payload.get("metadata")
+    validation = metadata.get("validation") if isinstance(metadata, dict) else None
+    module_name = context.get("module_name")
+    code_analysis = context.get("code_analysis")
+    if not isinstance(module_name, str) or not module_name or not isinstance(code_analysis, dict):
+        return {}
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        if artifact.get("artifact_type") != ArtifactType.TEST.value:
+            continue
+        artifact_path = artifact.get("path")
+        if not isinstance(artifact_path, str) or not artifact_path.strip():
+            continue
+        test_analysis = validation.get("test_analysis") if isinstance(validation, dict) else None
+        if not isinstance(test_analysis, dict):
+            test_analysis = analyze_test_module_runtime(task.output or "", module_name, code_analysis)
+        test_execution = validation.get("test_execution") if isinstance(validation, dict) else None
+        return {
+            "tests_artifact_path": artifact_path,
+            "test_analysis": test_analysis,
+            "test_execution": test_execution if isinstance(test_execution, dict) else None,
+            "test_validation_summary": build_test_validation_summary(
+                test_analysis,
+                test_execution if isinstance(test_execution, dict) else None,
+            ),
+        }
+    return {}
 
 
 def build_task_context_base(

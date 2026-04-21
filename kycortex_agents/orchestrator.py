@@ -452,16 +452,6 @@ class Orchestrator:
                 return FailureCategory.DEPENDENCY_VALIDATION.value
         return FailureCategory.TASK_EXECUTION.value
 
-    def _is_repairable_failure(self, failure_category: str) -> bool:
-        return failure_category in {
-            FailureCategory.UNKNOWN.value,
-            FailureCategory.TASK_EXECUTION.value,
-            FailureCategory.CODE_VALIDATION.value,
-            FailureCategory.TEST_VALIDATION.value,
-            FailureCategory.DEPENDENCY_VALIDATION.value,
-            FailureCategory.PROVIDER_TRANSIENT.value,
-        }
-
     def _execution_agent_name(self, task: Task) -> str:
         repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
         repair_owner = repair_context.get("repair_owner")
@@ -1081,7 +1071,14 @@ class Orchestrator:
                     resume_project,
                     current_failed_task_ids,
                     current_failure_categories,
-                    is_repairable_failure=self._is_repairable_failure,
+                    is_repairable_failure=lambda failure_category: failure_category in {
+                        FailureCategory.UNKNOWN.value,
+                        FailureCategory.TASK_EXECUTION.value,
+                        FailureCategory.CODE_VALIDATION.value,
+                        FailureCategory.TEST_VALIDATION.value,
+                        FailureCategory.DEPENDENCY_VALIDATION.value,
+                        FailureCategory.PROVIDER_TRANSIENT.value,
+                    },
                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
@@ -1141,7 +1138,14 @@ class Orchestrator:
                                     workflow_failure_policy=self.config.workflow_failure_policy,
                                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                                    is_repairable_failure=self._is_repairable_failure,
+                                    is_repairable_failure=lambda current_failure_category: current_failure_category in {
+                                        FailureCategory.UNKNOWN.value,
+                                        FailureCategory.TASK_EXECUTION.value,
+                                        FailureCategory.CODE_VALIDATION.value,
+                                        FailureCategory.TEST_VALIDATION.value,
+                                        FailureCategory.DEPENDENCY_VALIDATION.value,
+                                        FailureCategory.PROVIDER_TRANSIENT.value,
+                                    },
                                     queue_active_cycle_repair=self._queue_active_cycle_repair,
                                     emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
                                         self.logger,

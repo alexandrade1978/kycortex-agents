@@ -10,7 +10,9 @@ from typing import Any, cast
 import pytest
 import kycortex_agents.orchestrator as orchestrator_module
 import kycortex_agents.orchestration.context_building as context_building_module
+import kycortex_agents.orchestration.sandbox_execution as sandbox_execution_module
 import kycortex_agents.orchestration.test_ast_analysis as test_ast_analysis_module
+import kycortex_agents.orchestration.workflow_control as workflow_control_module
 
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
@@ -1471,7 +1473,7 @@ def test_validate_code_output_skips_import_validation_for_third_party_imports(tm
         },
     )
     monkeypatch.setattr(
-        orchestrator_module,
+        sandbox_execution_module,
         "execute_generated_module_import_runtime",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not run import validation")),
     )
@@ -1632,7 +1634,7 @@ def test_should_validate_content_helpers_cover_typed_and_blank_cases(tmp_path):
 
 def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    monkeypatch.setattr(orchestrator_module.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(sandbox_execution_module.importlib.util, "find_spec", lambda name: None)
 
     result = orchestrator_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
@@ -1672,7 +1674,7 @@ def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
 def test_execute_generated_module_import_reports_import_time_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_module_import_runtime(
+    result = sandbox_execution_module.execute_generated_module_import_runtime(
         config.execution_sandbox_policy(),
         "generated_module.py",
         "from dataclasses import dataclass\n\n"
@@ -1691,7 +1693,7 @@ def test_execute_generated_module_import_redacts_sensitive_subprocess_output(tmp
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
     monkeypatch.setattr(
-        orchestrator_module.subprocess,
+        sandbox_execution_module.subprocess,
         "run",
         lambda *args, **kwargs: CompletedProcessStub(
             returncode=1,
@@ -1700,7 +1702,7 @@ def test_execute_generated_module_import_redacts_sensitive_subprocess_output(tmp
         ),
     )
 
-    result = orchestrator_module.execute_generated_module_import_runtime(
+    result = sandbox_execution_module.execute_generated_module_import_runtime(
         config.execution_sandbox_policy(),
         "generated_module.py",
         "def ok():\n    return 1\n",
@@ -1728,7 +1730,7 @@ def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monke
         captured_timeout["value"] = kwargs["timeout"]
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs["timeout"])
 
-    monkeypatch.setattr(orchestrator_module.subprocess, "run", raise_timeout)
+    monkeypatch.setattr(sandbox_execution_module.subprocess, "run", raise_timeout)
 
     result = orchestrator_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
@@ -2543,7 +2545,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
     ) is False
 
     project.repair_history[-1] = {"cycle": 1}
-    monkeypatch.setattr(orchestrator_module, "has_repair_task_for_cycle", lambda *args, **kwargs: True)
+    monkeypatch.setattr(workflow_control_module, "has_repair_task_for_cycle", lambda *args, **kwargs: True)
     assert orchestrator_module.queue_active_cycle_repair_runtime(
         project,
         task,
@@ -2560,9 +2562,9 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
         log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
-    monkeypatch.setattr(orchestrator_module, "has_repair_task_for_cycle", lambda *args, **kwargs: False)
+    monkeypatch.setattr(workflow_control_module, "has_repair_task_for_cycle", lambda *args, **kwargs: False)
     monkeypatch.setattr(project, "_plan_task_repair", lambda *args, **kwargs: None)
-    monkeypatch.setattr(orchestrator_module, "plan_repair_task_ids_for_cycle", lambda *args, **kwargs: [])
+    monkeypatch.setattr(workflow_control_module, "plan_repair_task_ids_for_cycle", lambda *args, **kwargs: [])
     assert orchestrator_module.queue_active_cycle_repair_runtime(
         project,
         task,
@@ -8460,15 +8462,19 @@ def test_sandbox_preexec_fn_sets_restrictive_umask(tmp_path, monkeypatch):
     recorded_calls: list[tuple[object, tuple[int, int]]] = []
     recorded_umasks: list[int] = []
 
-    monkeypatch.setattr(orchestrator_module.os, "name", "posix")
+    monkeypatch.setattr(sandbox_execution_module.os, "name", "posix")
     monkeypatch.setattr(
-        orchestrator_module.resource,
+        sandbox_execution_module.resource,
         "setrlimit",
         lambda limit, values: recorded_calls.append((limit, values)),
     )
-    monkeypatch.setattr(orchestrator_module.os, "umask", lambda value: recorded_umasks.append(value) or 0)
+    monkeypatch.setattr(sandbox_execution_module.os, "umask", lambda value: recorded_umasks.append(value) or 0)
 
-    preexec = build_sandbox_preexec_fn(policy, os_module=orchestrator_module.os, resource_module=orchestrator_module.resource)
+    preexec = build_sandbox_preexec_fn(
+        policy,
+        os_module=sandbox_execution_module.os,
+        resource_module=sandbox_execution_module.resource,
+    )
 
     assert callable(preexec)
     preexec()
@@ -9180,7 +9186,7 @@ def test_run_task_redacts_sensitive_pytest_validation_output_in_live_state(tmp_p
     )
 
     monkeypatch.setattr(
-        orchestrator_module.subprocess,
+        sandbox_execution_module.subprocess,
         "run",
         lambda *args, **kwargs: CompletedProcessStub(
             returncode=1,

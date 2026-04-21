@@ -1,10 +1,6 @@
-import importlib.util
 import logging
-import os
 import re
-import subprocess
-import sys
-from typing import Callable, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
 try:
     import resource
@@ -55,11 +51,9 @@ from kycortex_agents.orchestration.validation_reporting import (
 )
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
-    redact_validation_execution_result,
     sanitize_output_provider_call_metadata,
     should_validate_code_content as _should_validate_code_content,
     should_validate_test_content as _should_validate_test_content,
-    summarize_pytest_output,
     validate_code_output_for_task_runtime as _validate_code_output_for_task_runtime,
     validate_task_output,
     validate_test_output_for_task_runtime as _validate_test_output_for_task_runtime,
@@ -113,52 +107,15 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 
 active_repair_cycle = _active_repair_cycle
 has_repair_task_for_cycle = _has_repair_task_for_cycle
+queue_active_cycle_repair_runtime = _queue_active_cycle_repair_runtime
 should_validate_code_content = _should_validate_code_content
 should_validate_test_content = _should_validate_test_content
 build_task_context_for_agent_runtime = _build_task_context_for_agent_runtime
+execute_generated_tests_runtime = _execute_generated_tests_runtime
 planned_module_context_runtime = _planned_module_context_runtime
 code_artifact_context_runtime = _code_artifact_context_runtime
 dependency_artifact_context_runtime = _dependency_artifact_context_runtime
 test_artifact_context_runtime = _test_artifact_context_runtime
-
-
-def queue_active_cycle_repair_runtime(
-    project: ProjectState,
-    task: Task,
-    *,
-    workflow_resume_policy: str,
-    configure_repair_attempts: Callable[[ProjectState, list[str], Dict[str, Any]], None],
-    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
-    log_event: Callable[..., None],
-) -> bool:
-    return _queue_active_cycle_repair_runtime(
-        project,
-        task,
-        workflow_resume_policy=workflow_resume_policy,
-        configure_repair_attempts=configure_repair_attempts,
-        ensure_budget_decomposition_task=ensure_budget_decomposition_task,
-        log_event=log_event,
-        active_repair_cycle_cb=active_repair_cycle,
-        has_repair_task_for_cycle_cb=has_repair_task_for_cycle,
-        plan_repair_task_ids_for_cycle_cb=plan_repair_task_ids_for_cycle,
-    )
-
-def execute_generated_module_import_runtime(
-    sandbox_policy: ExecutionSandboxPolicy,
-    module_filename: str,
-    code_content: str,
-) -> Dict[str, Any]:
-    return _execute_generated_module_import_runtime(
-        sandbox_policy,
-        module_filename,
-        code_content,
-        python_executable=sys.executable,
-        host_env=os.environ,
-        subprocess_run=subprocess.run,
-        os_module=os,
-        resource_module=resource,
-        redact_result=redact_validation_execution_result,
-    )
 
 
 def validate_code_output_for_task_runtime(
@@ -174,32 +131,8 @@ def validate_code_output_for_task_runtime(
         analyze_python_module=analyze_python_module,
         task_public_contract_preflight=lambda code_analysis: task_public_contract_preflight(task, code_analysis),
         completion_diagnostics_from_provider_call=completion_diagnostics_from_provider_call,
-        execute_generated_module_import_runtime=execute_generated_module_import_runtime,
+        execute_generated_module_import_runtime=_execute_generated_module_import_runtime,
         completion_validation_issue=completion_validation_issue,
-    )
-
-
-def execute_generated_tests_runtime(
-    sandbox_policy: ExecutionSandboxPolicy,
-    module_filename: str,
-    code_content: str,
-    test_filename: str,
-    test_content: str,
-) -> Dict[str, Any]:
-    return _execute_generated_tests_runtime(
-        sandbox_policy,
-        module_filename,
-        code_content,
-        test_filename,
-        test_content,
-        python_executable=sys.executable,
-        host_env=os.environ,
-        pytest_spec_finder=importlib.util.find_spec,
-        subprocess_run=subprocess.run,
-        os_module=os,
-        resource_module=resource,
-        summarize_output=summarize_pytest_output,
-        redact_result=redact_validation_execution_result,
     )
 def validate_test_output_for_task_runtime(
     sandbox_policy: ExecutionSandboxPolicy,

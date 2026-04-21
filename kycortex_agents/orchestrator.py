@@ -148,6 +148,7 @@ from kycortex_agents.orchestration.workflow_control import (
     has_repair_task_for_cycle,
     cancel_workflow,
     emit_workflow_progress,
+    execution_agent_name,
     exit_if_workflow_cancelled,
     exit_if_workflow_paused,
     log_event,
@@ -207,14 +208,6 @@ def should_validate_test_content(content: str, has_typed_artifact: bool) -> bool
     if not stripped:
         return False
     return any(token in stripped for token in ("def test_", "assert ", "import pytest", "pytest."))
-
-
-def execution_agent_name(task: Task) -> str:
-    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-    repair_owner = repair_context.get("repair_owner")
-    if isinstance(repair_owner, str) and repair_owner.strip():
-        return repair_owner
-    return task.assigned_to
 
 
 def agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:

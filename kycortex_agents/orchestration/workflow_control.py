@@ -46,6 +46,14 @@ def task_id_count_log_field_name(field_name: str) -> Optional[str]:
     return None
 
 
+def execution_agent_name(task: Task) -> str:
+    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    repair_owner = repair_context.get("repair_owner")
+    if isinstance(repair_owner, str) and repair_owner.strip():
+        return repair_owner
+    return task.assigned_to
+
+
 def classify_task_failure(task: Task, exc: Exception) -> str:
     normalized_role = (task.assigned_to or "").strip().lower()
     if isinstance(exc, WorkflowDefinitionError):

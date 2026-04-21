@@ -24,9 +24,6 @@ from kycortex_agents.orchestration.ast_tools import (
 )
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
 from kycortex_agents.orchestration.artifacts import failed_artifact_content
-from kycortex_agents.orchestration.dependency_analysis import (
-    analyze_dependency_manifest,
-)
 from kycortex_agents.orchestration.context_building import (
     TaskContextRuntimeCallbacks,
     build_agent_view_runtime,
@@ -118,7 +115,7 @@ from kycortex_agents.orchestration.validation_runtime import (
     sanitize_output_provider_call_metadata,
     summarize_pytest_output,
     validate_code_output_runtime,
-    validate_dependency_output_runtime,
+    validate_task_output,
     validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
@@ -227,33 +224,6 @@ def agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent
         for key in visible_keys
         if key in repair_context
     }
-
-
-def validate_task_output(
-    task: Task,
-    context: Dict[str, Any],
-    output: AgentOutput,
-    *,
-    validate_code_output: Callable[..., None],
-    validate_test_output: Callable[..., None],
-) -> None:
-    normalized_role = AgentRegistry.normalize_key(execution_agent_name(task))
-    if normalized_role == "code_engineer":
-        validate_code_output(output, task=task)
-        return
-    if normalized_role == "qa_tester":
-        validate_test_output(context, output, task=task)
-        return
-    if normalized_role != "dependency_manager":
-        return
-    validate_dependency_output_runtime(
-        context,
-        output,
-        analyze_dependency_manifest,
-        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
-        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
-        else None,
-    )
 
 
 def plan_repair_task_ids_for_cycle(

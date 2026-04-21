@@ -309,6 +309,7 @@ from kycortex_agents.orchestration.validation_runtime import (
 	summarize_pytest_output,
 	validate_code_output_runtime,
 	validate_dependency_output_runtime,
+	validate_task_output,
 	validate_test_output_runtime,
 )
 from kycortex_agents.orchestration.validation_analysis import (
@@ -573,6 +574,7 @@ __all__ = [
 	"summarize_pytest_output",
 	"validate_code_output_runtime",
 	"validate_dependency_output_runtime",
+	"validate_task_output",
 	"validate_test_output_runtime",
 	"is_helper_alias_like_name",
 	"module_defined_symbol_names",

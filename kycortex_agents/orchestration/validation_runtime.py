@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
+from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.exceptions import AgentExecutionError
+from kycortex_agents.memory.project_state import Task
+from kycortex_agents.orchestration.dependency_analysis import analyze_dependency_manifest
 from kycortex_agents.orchestration.validation_analysis import (
     collect_code_validation_issues,
     collect_test_validation_issues,
@@ -251,6 +254,35 @@ def validate_dependency_output_runtime(
         )
     failure_summary = "; ".join(validation_failures) or "unknown dependency validation failure"
     raise AgentExecutionError(f"Dependency manifest validation failed: {failure_summary}")
+
+
+def validate_task_output(
+    task: Task,
+    context: dict[str, Any],
+    output: AgentOutput,
+    *,
+    validate_code_output: Callable[..., None],
+    validate_test_output: Callable[..., None],
+) -> None:
+    from kycortex_agents.orchestration.workflow_control import execution_agent_name
+
+    normalized_role = AgentRegistry.normalize_key(execution_agent_name(task))
+    if normalized_role == "code_engineer":
+        validate_code_output(output, task=task)
+        return
+    if normalized_role == "qa_tester":
+        validate_test_output(context, output, task=task)
+        return
+    if normalized_role != "dependency_manager":
+        return
+    validate_dependency_output_runtime(
+        context,
+        output,
+        analyze_dependency_manifest,
+        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+        else None,
+    )
 
 
 def build_test_validation_runtime_state(

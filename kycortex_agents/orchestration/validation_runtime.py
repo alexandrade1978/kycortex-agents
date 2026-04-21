@@ -13,6 +13,7 @@ from kycortex_agents.orchestration.dependency_analysis import analyze_dependency
 from kycortex_agents.orchestration.validation_analysis import (
     collect_code_validation_issues,
     collect_test_validation_issues,
+    pytest_failure_origin,
     validation_error_message_for_test_result,
 )
 from kycortex_agents.providers.base import redact_sensitive_data, sanitize_provider_call_metadata
@@ -523,3 +524,54 @@ def validate_test_output_runtime(
     )
     if error_message:
         raise AgentExecutionError(error_message)
+
+
+def validate_test_output_for_task_runtime(
+    sandbox_policy: ExecutionSandboxPolicy,
+    context: dict[str, Any],
+    output: AgentOutput,
+    line_budget: Optional[int],
+    exact_test_count: Optional[int],
+    max_test_count: Optional[int],
+    fixture_budget: Optional[int],
+    *,
+    finalize_generated_test_suite: Any,
+    analyze_test_module_runtime: Any,
+    auto_fix_test_type_mismatches: Any,
+    execute_generated_tests_runtime: Any,
+    completion_diagnostics_from_provider_call: Any,
+    completion_validation_issue: Any,
+    summarize_output: Any,
+) -> None:
+    validate_test_output_runtime(
+        context,
+        output,
+        line_budget,
+        exact_test_count,
+        max_test_count,
+        fixture_budget,
+        finalize_generated_test_suite,
+        should_validate_test_content,
+        analyze_test_module_runtime,
+        auto_fix_test_type_mismatches,
+        lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
+        lambda module_filename, code_content, test_filename, test_content: execute_generated_tests_runtime(
+            sandbox_policy,
+            module_filename,
+            code_content,
+            test_filename,
+            test_content,
+        ),
+        lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
+            current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
+            raw_content=kwargs.get("raw_content", ""),
+            syntax_ok=kwargs.get("syntax_ok", False),
+            syntax_error=kwargs.get("syntax_error"),
+        ),
+        pytest_failure_origin,
+        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+        else None,
+        completion_validation_issue,
+        summarize_output,
+    )

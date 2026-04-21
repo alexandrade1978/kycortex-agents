@@ -73,13 +73,12 @@ from kycortex_agents.orchestration.validation_runtime import (
     redact_validation_execution_result,
     sanitize_output_provider_call_metadata,
     should_validate_code_content as _should_validate_code_content,
-    should_validate_test_content,
+    should_validate_test_content as _should_validate_test_content,
     summarize_pytest_output,
     validate_code_output_for_task_runtime as _validate_code_output_for_task_runtime,
     validate_task_output,
-    validate_test_output_runtime,
+    validate_test_output_for_task_runtime as _validate_test_output_for_task_runtime,
 )
-from kycortex_agents.orchestration.validation_analysis import pytest_failure_origin
 from kycortex_agents.orchestration.workflow_control import (
     build_code_repair_context_from_test_failure_runtime,
     classify_task_failure,
@@ -134,6 +133,7 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 active_repair_cycle = _active_repair_cycle
 has_repair_task_for_cycle = _has_repair_task_for_cycle
 should_validate_code_content = _should_validate_code_content
+should_validate_test_content = _should_validate_test_content
 
 
 def queue_active_cycle_repair_runtime(
@@ -221,37 +221,21 @@ def validate_test_output_for_task_runtime(
     output: AgentOutput,
     task: Optional[Task] = None,
 ) -> None:
-    validate_test_output_runtime(
+    _validate_test_output_for_task_runtime(
+        sandbox_policy,
         context,
         output,
         task_line_budget(task),
         task_exact_top_level_test_count(task),
         task_max_top_level_test_count(task),
         task_fixture_budget(task),
-        QATesterAgent._finalize_generated_test_suite,
-        should_validate_test_content,
-        analyze_test_module_runtime,
-        auto_fix_test_type_mismatches,
-        lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
-        lambda module_filename, code_content, test_filename, test_content: execute_generated_tests_runtime(
-            sandbox_policy,
-            module_filename,
-            code_content,
-            test_filename,
-            test_content,
-        ),
-        lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
-            current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
-            raw_content=kwargs.get("raw_content", ""),
-            syntax_ok=kwargs.get("syntax_ok", False),
-            syntax_error=kwargs.get("syntax_error"),
-        ),
-        pytest_failure_origin,
-        lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
-        if isinstance(current_output.metadata.setdefault("validation", {}), dict)
-        else None,
-        completion_validation_issue,
-        summarize_output,
+        finalize_generated_test_suite=QATesterAgent._finalize_generated_test_suite,
+        analyze_test_module_runtime=analyze_test_module_runtime,
+        auto_fix_test_type_mismatches=auto_fix_test_type_mismatches,
+        execute_generated_tests_runtime=execute_generated_tests_runtime,
+        completion_diagnostics_from_provider_call=completion_diagnostics_from_provider_call,
+        completion_validation_issue=completion_validation_issue,
+        summarize_output=summarize_output,
     )
 
 

@@ -177,10 +177,11 @@ class Orchestrator:
             project.complete_task(task.id, normalized_output, provider_call=provider_call)
         except Exception as exc:
             failure_category = classify_task_failure(task, exc)
+            failure_provider_call = provider_call_metadata(agent, normalized_output)
             project.fail_task(
                 task.id,
                 exc,
-                provider_call=provider_call_metadata(agent, normalized_output),
+                provider_call=failure_provider_call,
                 output=normalized_output,
                 error_category=failure_category,
             )
@@ -197,7 +198,6 @@ class Orchestrator:
                     error_type=type(exc).__name__,
                 )
             else:
-                provider_call = provider_call_metadata(agent, normalized_output)
                 log_event(
                     self.logger,
                     "error",
@@ -208,8 +208,8 @@ class Orchestrator:
                     assigned_to=current_execution_agent_name,
                     attempt=task.attempts,
                     error_type=type(exc).__name__,
-                    provider=provider_call.get("provider") if provider_call else None,
-                    model=provider_call.get("model") if provider_call else None,
+                    provider=failure_provider_call.get("provider") if failure_provider_call else None,
+                    model=failure_provider_call.get("model") if failure_provider_call else None,
                 )
             raise
         log_event(

@@ -326,6 +326,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 from kycortex_agents.orchestration.workflow_control import (
 	active_repair_cycle,
 	build_code_repair_context_from_test_failure,
+	classify_task_failure,
 	configure_repair_attempts,
 	build_repair_context,
 	continue_workflow_after_task_failure,
@@ -593,6 +594,7 @@ __all__ = [
 	"validation_summary_has_required_evidence_runtime_issue",
 	"active_repair_cycle",
 	"build_code_repair_context_from_test_failure",
+	"classify_task_failure",
 	"configure_repair_attempts",
 	"build_repair_context",
 	"continue_workflow_after_task_failure",

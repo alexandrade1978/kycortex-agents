@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import AbstractSet, Any, Callable, Literal, Optional, cast
 
-from kycortex_agents.exceptions import AgentExecutionError, WorkflowDefinitionError
+from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
+from kycortex_agents.orchestration.sandbox_execution import sandbox_security_violation
 from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus, WorkflowOutcome
 
 
@@ -43,6 +44,24 @@ def task_id_count_log_field_name(field_name: str) -> Optional[str]:
     if field_name == "task_ids" or field_name.endswith("_task_ids"):
         return f"{field_name[:-len('_ids')]}_count"
     return None
+
+
+def classify_task_failure(task: Task, exc: Exception) -> str:
+    normalized_role = (task.assigned_to or "").strip().lower()
+    if isinstance(exc, WorkflowDefinitionError):
+        return FailureCategory.WORKFLOW_DEFINITION.value
+    if isinstance(exc, ProviderTransientError):
+        return FailureCategory.PROVIDER_TRANSIENT.value
+    if sandbox_security_violation(exc):
+        return FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+    if isinstance(exc, AgentExecutionError):
+        if normalized_role == "code_engineer":
+            return FailureCategory.CODE_VALIDATION.value
+        if normalized_role == "qa_tester":
+            return FailureCategory.TEST_VALIDATION.value
+        if normalized_role == "dependency_manager":
+            return FailureCategory.DEPENDENCY_VALIDATION.value
+    return FailureCategory.TASK_EXECUTION.value
 
 
 def emit_workflow_progress(logger: Any, project: ProjectState, *, task: Optional[Task] = None) -> None:

@@ -16,7 +16,6 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
 from kycortex_agents.agents.qa_tester import QATesterAgent
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import ExecutionSandboxPolicy
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
@@ -86,7 +85,6 @@ from kycortex_agents.orchestration.repair_instructions import (
 from kycortex_agents.orchestration.sandbox_execution import (
     execute_generated_module_import,
     execute_generated_tests,
-    sandbox_security_violation,
     write_generated_import_runner,
     write_generated_test_runner,
 )
@@ -133,6 +131,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
     build_code_repair_context_from_test_failure,
+    classify_task_failure,
     configure_repair_attempts,
     dispatch_task_failure,
     build_repair_context,
@@ -235,24 +234,6 @@ def agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent
         for key in visible_keys
         if key in repair_context
     }
-
-
-def classify_task_failure(task: Task, exc: Exception) -> str:
-    normalized_role = (task.assigned_to or "").strip().lower()
-    if isinstance(exc, WorkflowDefinitionError):
-        return FailureCategory.WORKFLOW_DEFINITION.value
-    if isinstance(exc, ProviderTransientError):
-        return FailureCategory.PROVIDER_TRANSIENT.value
-    if sandbox_security_violation(exc):
-        return FailureCategory.SANDBOX_SECURITY_VIOLATION.value
-    if isinstance(exc, AgentExecutionError):
-        if normalized_role == "code_engineer":
-            return FailureCategory.CODE_VALIDATION.value
-        if normalized_role == "qa_tester":
-            return FailureCategory.TEST_VALIDATION.value
-        if normalized_role == "dependency_manager":
-            return FailureCategory.DEPENDENCY_VALIDATION.value
-    return FailureCategory.TASK_EXECUTION.value
 
 
 def validate_task_output(

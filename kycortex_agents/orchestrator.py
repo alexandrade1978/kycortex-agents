@@ -264,6 +264,29 @@ class Orchestrator:
                 build_repair_context=build_repair_context_runtime,
             )
 
+        def plan_repair_task_ids_for_cycle_for_resume(
+            current_project: ProjectState,
+            failed_task_ids: list[str],
+        ) -> list[str]:
+            return plan_repair_task_ids_for_cycle(
+                current_project,
+                failed_task_ids,
+                ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+            )
+
+        def queue_active_cycle_repair_for_failure(
+            current_project: ProjectState,
+            current_task: Task,
+        ) -> bool:
+            return _queue_active_cycle_repair_runtime(
+                current_project,
+                current_task,
+                workflow_resume_policy=workflow_resume_policy,
+                configure_repair_attempts=configure_repair_attempts_for_cycle,
+                ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+                log_event=workflow_log_event,
+            )
+
         execute_workflow_runtime(
             project,
             exit_if_workflow_cancelled=workflow_exit_if_cancelled,
@@ -288,11 +311,7 @@ class Orchestrator:
                         resume_failed_task_ids,
                         resume_failure_categories,
                         configure_repair_attempts=configure_repair_attempts_for_cycle,
-                        repair_task_ids_for_cycle=lambda current_project, failed_task_ids: plan_repair_task_ids_for_cycle(
-                            current_project,
-                            failed_task_ids,
-                            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-                        ),
+                        repair_task_ids_for_cycle=plan_repair_task_ids_for_cycle_for_resume,
                         log_event=workflow_log_event,
                         **kwargs,
                     ),
@@ -344,14 +363,7 @@ class Orchestrator:
                                     workflow_acceptance_policy=workflow_acceptance_policy,
                                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                                     is_repairable_failure=_is_repairable_failure_category,
-                                    queue_active_cycle_repair=lambda current_project, current_task: _queue_active_cycle_repair_runtime(
-                                        current_project,
-                                        current_task,
-                                        workflow_resume_policy=workflow_resume_policy,
-                                        configure_repair_attempts=configure_repair_attempts_for_cycle,
-                                        ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-                                        log_event=workflow_log_event,
-                                    ),
+                                    queue_active_cycle_repair=queue_active_cycle_repair_for_failure,
                                     emit_workflow_progress=workflow_emit_progress,
                                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                                     log_event=workflow_log_event,

@@ -217,6 +217,51 @@ def _example_from_default(node: ast.expr) -> str | None:
     return example_from_default(node)
 
 
+def should_validate_code_content(content: str, has_typed_artifact: bool) -> bool:
+    if has_typed_artifact:
+        return True
+    stripped = content.strip()
+    if not stripped:
+        return False
+    return any(token in stripped for token in ("def ", "class ", "import ", "from ", "if __name__"))
+
+
+def should_validate_test_content(content: str, has_typed_artifact: bool) -> bool:
+    if has_typed_artifact:
+        return True
+    stripped = content.strip()
+    if not stripped:
+        return False
+    return any(token in stripped for token in ("def test_", "assert ", "import pytest", "pytest."))
+
+
+def execution_agent_name(task: Task) -> str:
+    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    repair_owner = repair_context.get("repair_owner")
+    if isinstance(repair_owner, str) and repair_owner.strip():
+        return repair_owner
+    return task.assigned_to
+
+
+def agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:
+    normalized_execution_agent = AgentRegistry.normalize_key(execution_agent_name)
+    if normalized_execution_agent not in {"code_engineer", "qa_tester", "dependency_manager"}:
+        return dict(repair_context)
+    visible_keys = (
+        "cycle",
+        "failure_category",
+        "repair_owner",
+        "original_assigned_to",
+        "source_failure_task_id",
+        "source_failure_category",
+    )
+    return {
+        key: repair_context[key]
+        for key in visible_keys
+        if key in repair_context
+    }
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -265,17 +310,17 @@ class Orchestrator:
 
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""
-        execution_agent_name = self._execution_agent_name(task)
+        current_execution_agent_name = execution_agent_name(task)
         self._log_event(
             "info",
             "task_started",
             project_name=project.project_name,
             task_id=task.id,
             task_title=task.title,
-            assigned_to=execution_agent_name,
+            assigned_to=current_execution_agent_name,
             attempt=task.attempts + 1,
         )
-        agent = self.registry.get(execution_agent_name)
+        agent = self.registry.get(current_execution_agent_name)
         agent_input = self._build_agent_input(task, project)
         project.start_task(task.id)
         normalized_output: Optional[AgentOutput] = None
@@ -308,7 +353,7 @@ class Orchestrator:
                     project_name=project.project_name,
                     task_id=task.id,
                     task_title=task.title,
-                    assigned_to=execution_agent_name,
+                    assigned_to=current_execution_agent_name,
                     attempt=task.attempts,
                     error_type=type(exc).__name__,
                 )
@@ -320,7 +365,7 @@ class Orchestrator:
                     project_name=project.project_name,
                     task_id=task.id,
                     task_title=task.title,
-                    assigned_to=execution_agent_name,
+                    assigned_to=current_execution_agent_name,
                     attempt=task.attempts,
                     error_type=type(exc).__name__,
                     provider=provider_call.get("provider") if provider_call else None,
@@ -333,7 +378,7 @@ class Orchestrator:
             project_name=project.project_name,
             task_id=task.id,
             task_title=task.title,
-            assigned_to=execution_agent_name,
+            assigned_to=current_execution_agent_name,
             attempt=task.attempts,
             provider=provider_call.get("provider") if provider_call else None,
             model=provider_call.get("model") if provider_call else None,
@@ -342,7 +387,7 @@ class Orchestrator:
         return normalized_output.raw_content
 
     def _validate_task_output(self, task: Task, context: Dict[str, Any], output: AgentOutput) -> None:
-        normalized_role = AgentRegistry.normalize_key(self._execution_agent_name(task))
+        normalized_role = AgentRegistry.normalize_key(execution_agent_name(task))
         if normalized_role == "code_engineer":
             self._validate_code_output(output, task=task)
             return
@@ -365,7 +410,7 @@ class Orchestrator:
             output,
             task_line_budget(task),
             task_requires_cli_entrypoint(task),
-            self._should_validate_code_content,
+            should_validate_code_content,
             analyze_python_module,
             lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
             lambda code_analysis: task_public_contract_preflight(task, code_analysis),
@@ -422,7 +467,7 @@ class Orchestrator:
             task_max_top_level_test_count(task),
             task_fixture_budget(task),
             QATesterAgent._finalize_generated_test_suite,
-            self._should_validate_test_content,
+            should_validate_test_content,
             self._analyze_test_module,
             auto_fix_test_type_mismatches,
             lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
@@ -459,29 +504,6 @@ class Orchestrator:
                 return FailureCategory.DEPENDENCY_VALIDATION.value
         return FailureCategory.TASK_EXECUTION.value
 
-    def _execution_agent_name(self, task: Task) -> str:
-        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-        repair_owner = repair_context.get("repair_owner")
-        if isinstance(repair_owner, str) and repair_owner.strip():
-            return repair_owner
-        return task.assigned_to
-
-    def _should_validate_code_content(self, content: str, has_typed_artifact: bool) -> bool:
-        if has_typed_artifact:
-            return True
-        stripped = content.strip()
-        if not stripped:
-            return False
-        return any(token in stripped for token in ("def ", "class ", "import ", "from ", "if __name__"))
-
-    def _should_validate_test_content(self, content: str, has_typed_artifact: bool) -> bool:
-        if has_typed_artifact:
-            return True
-        stripped = content.strip()
-        if not stripped:
-            return False
-        return any(token in stripped for token in ("def test_", "assert ", "import pytest", "pytest."))
-
     def _execute_generated_tests(
         self,
         module_filename: str,
@@ -514,25 +536,6 @@ class Orchestrator:
             summarize_output=summarize_pytest_output,
             redact_result=redact_validation_execution_result,
         )
-
-    @staticmethod
-    def _agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:
-        normalized_execution_agent = AgentRegistry.normalize_key(execution_agent_name)
-        if normalized_execution_agent not in {"code_engineer", "qa_tester", "dependency_manager"}:
-            return dict(repair_context)
-        visible_keys = (
-            "cycle",
-            "failure_category",
-            "repair_owner",
-            "original_assigned_to",
-            "source_failure_task_id",
-            "source_failure_category",
-        )
-        return {
-            key: repair_context[key]
-            for key in visible_keys
-            if key in repair_context
-        }
 
     def _build_code_repair_context_from_test_failure(
         self,
@@ -600,7 +603,7 @@ class Orchestrator:
             return build_budget_decomposition_task_context(
                 current_task,
                 current_repair_context,
-                self._execution_agent_name(current_task),
+                execution_agent_name(current_task),
             )
 
         return ensure_budget_decomposition_task(
@@ -744,7 +747,7 @@ class Orchestrator:
                 ),
             ),
             ensure_budget_decomposition_task=self._ensure_budget_decomposition_task,
-            execution_agent_name=self._execution_agent_name,
+            execution_agent_name=execution_agent_name,
         )
 
     def _planned_module_context(
@@ -987,7 +990,7 @@ class Orchestrator:
                 direct_dependency_ids=direct_dependency_ids,
             ),
             task_dependency_closure_ids=task_dependency_closure_ids,
-            execution_agent_name=self._execution_agent_name,
+            execution_agent_name=execution_agent_name,
             planned_module_context=lambda current_project, visible_task_ids, current_task: self._planned_module_context(
                 current_project,
                 visible_task_ids,
@@ -997,7 +1000,7 @@ class Orchestrator:
             should_compact_architecture_context=lambda task, task_public_contract_anchor: should_compact_architecture_context(
                 task,
                 task_public_contract_anchor,
-                self._execution_agent_name(task) if task is not None else None,
+                execution_agent_name(task) if task is not None else None,
                 self.config.max_tokens,
             ),
             compact_architecture_context=compact_architecture_context,
@@ -1008,7 +1011,7 @@ class Orchestrator:
             code_artifact_context=self._code_artifact_context,
             dependency_artifact_context=self._dependency_artifact_context,
             test_artifact_context=self._test_artifact_context,
-            agent_visible_repair_context=self._agent_visible_repair_context,
+            agent_visible_repair_context=agent_visible_repair_context,
             normalized_helper_surface_symbols=normalized_helper_surface_symbols,
             qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
             redact_sensitive_data=redact_sensitive_data,

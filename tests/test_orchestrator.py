@@ -212,7 +212,7 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
             direct_dependency_ids=direct_dependency_ids,
         ),
         task_dependency_closure_ids=task_dependency_closure_ids,
-        execution_agent_name=orchestrator._execution_agent_name,
+        execution_agent_name=orchestrator_module.execution_agent_name,
         planned_module_context=lambda current_project, visible_task_ids, current_task: orchestrator._planned_module_context(
             current_project,
             visible_task_ids,
@@ -222,7 +222,7 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
         should_compact_architecture_context=lambda task, task_public_contract_anchor: should_compact_architecture_context(
             task,
             task_public_contract_anchor,
-            orchestrator._execution_agent_name(task) if task is not None else None,
+            orchestrator_module.execution_agent_name(task) if task is not None else None,
             orchestrator.config.max_tokens,
         ),
         compact_architecture_context=compact_architecture_context,
@@ -233,7 +233,7 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
         code_artifact_context=orchestrator._code_artifact_context,
         dependency_artifact_context=orchestrator._dependency_artifact_context,
         test_artifact_context=orchestrator._test_artifact_context,
-        agent_visible_repair_context=orchestrator._agent_visible_repair_context,
+        agent_visible_repair_context=orchestrator_module.agent_visible_repair_context,
         normalized_helper_surface_symbols=normalized_helper_surface_symbols,
         qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
         redact_sensitive_data=orchestrator_module.redact_sensitive_data,
@@ -1656,15 +1656,12 @@ def test_record_output_validation_ignores_non_mapping_validation_metadata(tmp_pa
 
 
 def test_should_validate_content_helpers_cover_typed_and_blank_cases(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
-
-    assert orchestrator._should_validate_code_content("anything", has_typed_artifact=True) is True
-    assert orchestrator._should_validate_code_content("   ", has_typed_artifact=False) is False
-    assert orchestrator._should_validate_code_content("plain prose only", has_typed_artifact=False) is False
-    assert orchestrator._should_validate_test_content("anything", has_typed_artifact=True) is True
-    assert orchestrator._should_validate_test_content("   ", has_typed_artifact=False) is False
-    assert orchestrator._should_validate_test_content("plain prose only", has_typed_artifact=False) is False
+    assert orchestrator_module.should_validate_code_content("anything", has_typed_artifact=True) is True
+    assert orchestrator_module.should_validate_code_content("   ", has_typed_artifact=False) is False
+    assert orchestrator_module.should_validate_code_content("plain prose only", has_typed_artifact=False) is False
+    assert orchestrator_module.should_validate_test_content("anything", has_typed_artifact=True) is True
+    assert orchestrator_module.should_validate_test_content("   ", has_typed_artifact=False) is False
+    assert orchestrator_module.should_validate_test_content("plain prose only", has_typed_artifact=False) is False
 
 
 def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_path, monkeypatch):

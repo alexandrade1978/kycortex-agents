@@ -2566,7 +2566,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
             ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
@@ -2584,7 +2584,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
             ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
@@ -2603,7 +2603,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
             ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
@@ -5788,8 +5788,6 @@ def test_build_agent_input_includes_source_failure_metadata_for_code_repair(tmp_
 
 
 def test_build_code_repair_context_from_test_failure_specializes_internal_constructor_strictness(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     code_task = Task(
         id="code",
         title="Implementation",
@@ -5879,7 +5877,7 @@ def test_build_code_repair_context_from_test_failure_specializes_internal_constr
         },
     )
 
-    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -5893,8 +5891,6 @@ def test_build_code_repair_context_from_test_failure_specializes_internal_constr
 
 
 def test_build_code_repair_context_from_test_failure_specializes_duplicate_constructor_binding(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     code_task = Task(
         id="code",
         title="Implementation",
@@ -5954,7 +5950,7 @@ def test_build_code_repair_context_from_test_failure_specializes_duplicate_const
         },
     )
 
-    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -5967,8 +5963,6 @@ def test_build_code_repair_context_from_test_failure_specializes_duplicate_const
 
 
 def test_build_code_repair_context_from_test_failure_specializes_missing_object_attribute(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     code_task = Task(
         id="code",
         title="Implementation",
@@ -6040,7 +6034,7 @@ def test_build_code_repair_context_from_test_failure_specializes_missing_object_
         },
     )
 
-    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -12592,7 +12586,7 @@ def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_f
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
             ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
@@ -15545,8 +15539,6 @@ def test_build_repair_context_preserves_prior_repair_objective_for_repair_tasks(
 
 
 def test_build_code_repair_context_from_test_failure_preserves_prior_repair_objective_for_repair_tasks(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     failed_code = (
         "from dataclasses import dataclass\n\n"
         "@dataclass\n"
@@ -15627,7 +15619,7 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
         },
     )
 
-    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 2},
@@ -15643,8 +15635,6 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
 
 
 def test_build_code_repair_context_from_test_failure_specializes_nested_payload_wrapper_field_validation(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     failed_code = (
         "from dataclasses import dataclass, field\n"
         "from datetime import datetime\n\n"
@@ -15711,7 +15701,7 @@ def test_build_code_repair_context_from_test_failure_specializes_nested_payload_
         },
     )
 
-    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -15724,8 +15714,6 @@ def test_build_code_repair_context_from_test_failure_specializes_nested_payload_
 
 
 def test_build_code_repair_context_from_test_failure_specializes_plain_class_field_default_factory_runtime_error(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     failed_code = (
         "from dataclasses import dataclass, field\n"
         "from datetime import datetime\n"
@@ -15774,7 +15762,7 @@ def test_build_code_repair_context_from_test_failure_specializes_plain_class_fie
         output="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
     )
 
-    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -15786,8 +15774,6 @@ def test_build_code_repair_context_from_test_failure_specializes_plain_class_fie
 
 
 def test_build_code_repair_context_from_test_failure_specializes_invalid_path_audit_trail_requirements(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     failed_code = (
         "from dataclasses import dataclass\n\n"
         "@dataclass\n"
@@ -15857,7 +15843,7 @@ def test_build_code_repair_context_from_test_failure_specializes_invalid_path_au
         },
     )
 
-    repair_context = orchestrator._build_code_repair_context_from_test_failure(
+    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -15870,8 +15856,6 @@ def test_build_code_repair_context_from_test_failure_specializes_invalid_path_au
 
 
 def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_test_repairs(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -15974,7 +15958,7 @@ def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_t
         project,
         ["tests__repair_1"],
         {"cycle": 2},
-        build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
         ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
         build_repair_context=orchestrator_module.build_repair_context_runtime,
     )
@@ -15989,8 +15973,6 @@ def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_t
 
 
 def test_configure_repair_attempts_prefers_imported_repaired_code_module_for_original_failed_tests(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(
         Task(
@@ -16094,7 +16076,7 @@ def test_configure_repair_attempts_prefers_imported_repaired_code_module_for_ori
         project,
         ["tests"],
         {"cycle": 2},
-        build_code_repair_context_from_test_failure=orchestrator._build_code_repair_context_from_test_failure,
+        build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
         ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
         build_repair_context=orchestrator_module.build_repair_context_runtime,
     )

@@ -457,14 +457,6 @@ class Orchestrator:
             return repair_owner
         return task.assigned_to
 
-    def _artifact_content(self, output: AgentOutput, artifact_type: ArtifactType) -> str:
-        for artifact in output.artifacts:
-            if artifact.artifact_type != artifact_type:
-                continue
-            if isinstance(artifact.content, str) and artifact.content.strip():
-                return artifact.content
-        return ""
-
     def _artifact_filename(self, output: AgentOutput, artifact_type: ArtifactType, default_filename: str) -> str:
         for artifact in output.artifacts:
             if artifact.artifact_type != artifact_type:

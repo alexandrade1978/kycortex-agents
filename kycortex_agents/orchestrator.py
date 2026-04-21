@@ -287,6 +287,26 @@ class Orchestrator:
                 log_event=workflow_log_event,
             )
 
+        def dispatch_task_failure_for_workflow(
+            dispatch_project: ProjectState,
+            *,
+            task: Task,
+            failure_category: str,
+        ) -> bool:
+            return dispatch_task_failure(
+                dispatch_project,
+                task=task,
+                failure_category=failure_category,
+                workflow_failure_policy=workflow_failure_policy,
+                workflow_acceptance_policy=workflow_acceptance_policy,
+                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                is_repairable_failure=_is_repairable_failure_category,
+                queue_active_cycle_repair=queue_active_cycle_repair_for_failure,
+                emit_workflow_progress=workflow_emit_progress,
+                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+                log_event=workflow_log_event,
+            )
+
         execute_workflow_runtime(
             project,
             exit_if_workflow_cancelled=workflow_exit_if_cancelled,
@@ -355,19 +375,7 @@ class Orchestrator:
                                 exit_if_workflow_cancelled=workflow_exit_if_cancelled,
                                 exit_if_workflow_paused=workflow_exit_if_paused,
                                 classify_task_failure=classify_task_failure,
-                                dispatch_task_failure=lambda dispatch_project, *, task, failure_category: dispatch_task_failure(
-                                    dispatch_project,
-                                    task=task,
-                                    failure_category=failure_category,
-                                    workflow_failure_policy=workflow_failure_policy,
-                                    workflow_acceptance_policy=workflow_acceptance_policy,
-                                    zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                                    is_repairable_failure=_is_repairable_failure_category,
-                                    queue_active_cycle_repair=queue_active_cycle_repair_for_failure,
-                                    emit_workflow_progress=workflow_emit_progress,
-                                    evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                                    log_event=workflow_log_event,
-                                ),
+                                dispatch_task_failure=dispatch_task_failure_for_workflow,
                                 emit_workflow_progress=workflow_emit_progress,
                             ),
                         ),

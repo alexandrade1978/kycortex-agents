@@ -367,7 +367,7 @@ class Orchestrator:
             task_requires_cli_entrypoint(task),
             self._should_validate_code_content,
             analyze_python_module,
-            self._output_line_count,
+            lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
             lambda code_analysis: task_public_contract_preflight(task, code_analysis),
             lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
                 current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
@@ -416,7 +416,7 @@ class Orchestrator:
             self._should_validate_test_content,
             self._analyze_test_module,
             auto_fix_test_type_mismatches,
-            self._output_line_count,
+            lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
             self._execute_generated_tests,
             lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
                 current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
@@ -430,11 +430,6 @@ class Orchestrator:
             summarize_output,
         )
         # If only warnings and pytest passed → accept (warnings are false positives)
-
-    def _output_line_count(self, raw_content: str) -> int:
-        if not raw_content:
-            return 0
-        return len(raw_content.splitlines())
 
     def _should_compact_architecture_context(self, task: Optional[Task], task_public_contract_anchor: str) -> bool:
         execution_agent_name = self._execution_agent_name(task) if task is not None else None

@@ -5155,9 +5155,8 @@ def test_run_task_fails_qa_tester_when_compact_suite_imports_helper_surfaces(tmp
 
 def test_output_and_task_budget_helpers_handle_empty_and_optional_inputs(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    assert orchestrator._output_line_count("") == 0
     assert task_requires_cli_entrypoint(None) is False
     assert task_fixture_budget(
         Task(id="tests", title="Tests", description="Write at most 3 fixtures.", assigned_to="qa_tester")

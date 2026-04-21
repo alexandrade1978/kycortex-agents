@@ -1639,7 +1639,7 @@ def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_pat
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     monkeypatch.setattr(sandbox_execution_module.importlib.util, "find_spec", lambda name: None)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "generated_module.py",
         "def ok():\n    return 1",
@@ -1658,7 +1658,7 @@ def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_pat
 def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "generated_module.py",
         "   ",
@@ -1735,7 +1735,7 @@ def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monke
 
     monkeypatch.setattr(sandbox_execution_module.subprocess, "run", raise_timeout)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "generated_module.py",
         "def ok():\n    return 1",
@@ -6072,7 +6072,7 @@ def test_execute_workflow_marks_blocked_when_no_runnable_tasks_exist(tmp_path, m
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import subprocess\n\n"
@@ -6092,7 +6092,7 @@ def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_os_spawn_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\nimport sys\n\n"
@@ -6112,7 +6112,7 @@ def test_execute_generated_tests_blocks_os_spawn_calls_in_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_network_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import socket\n\n"
@@ -6132,7 +6132,7 @@ def test_execute_generated_tests_blocks_network_calls_in_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_getaddrinfo_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import socket\n\n"
@@ -6152,7 +6152,7 @@ def test_execute_generated_tests_blocks_getaddrinfo_in_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_gethostbyname_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import socket\n\n"
@@ -6172,7 +6172,7 @@ def test_execute_generated_tests_blocks_gethostbyname_in_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_ctypes_loading_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import ctypes\nimport ctypes.util\n\n"
@@ -6192,7 +6192,7 @@ def test_execute_generated_tests_blocks_ctypes_loading_in_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_mmap_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import mmap\n\n"
@@ -6214,7 +6214,7 @@ def test_execute_generated_tests_blocks_chdir_outside_sandbox(tmp_path):
     escaped_dir = (tmp_path / "escaped_chdir").resolve()
     escaped_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
@@ -6233,7 +6233,7 @@ def test_execute_generated_tests_blocks_chdir_outside_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_fd_duplication_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
@@ -6252,7 +6252,7 @@ def test_execute_generated_tests_blocks_fd_duplication_in_sandbox(tmp_path):
 def test_execute_generated_tests_blocks_fd_wrapping_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import io\nimport os\n\n"
@@ -6284,7 +6284,7 @@ def test_execute_generated_tests_blocks_xattr_reads_outside_sandbox_when_support
 
     os.setxattr(escaped_file, attribute_name, attribute_value)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
@@ -6310,7 +6310,7 @@ def test_execute_generated_tests_blocks_xattr_mutation_outside_sandbox_when_supp
     if not supports_user_xattrs(escaped_file):
         pytest.skip("user xattrs unsupported")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
@@ -6330,7 +6330,7 @@ def test_execute_generated_tests_blocks_filesystem_writes_outside_sandbox(tmp_pa
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     escaped_path = (tmp_path / "escaped.txt").resolve()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         config.execution_sandbox_policy(),
         "code_under_test.py",
         "def write_outside_sandbox(target_path):\n"
@@ -6353,7 +6353,7 @@ def test_execute_generated_tests_blocks_file_reads_outside_sandbox(tmp_path):
     escaped_path = (tmp_path / "escaped_read.txt").resolve()
     escaped_path.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "def read_outside_sandbox(target_path):\n"
@@ -6376,7 +6376,7 @@ def test_execute_generated_tests_blocks_directory_enumeration_outside_sandbox(tm
     escaped_dir.mkdir()
     (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6398,7 +6398,7 @@ def test_execute_generated_tests_blocks_file_metadata_probes_outside_sandbox(tmp
     escaped_file = (tmp_path / "escaped_meta.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6420,7 +6420,7 @@ def test_execute_generated_tests_blocks_os_path_getsize_outside_sandbox(tmp_path
     escaped_file = (tmp_path / "escaped_getsize.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6442,7 +6442,7 @@ def test_execute_generated_tests_blocks_os_path_getmtime_outside_sandbox(tmp_pat
     escaped_file = (tmp_path / "escaped_getmtime.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6464,7 +6464,7 @@ def test_execute_generated_tests_blocks_os_path_getctime_outside_sandbox(tmp_pat
     escaped_file = (tmp_path / "escaped_getctime.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6486,7 +6486,7 @@ def test_execute_generated_tests_blocks_os_path_getatime_outside_sandbox(tmp_pat
     escaped_file = (tmp_path / "escaped_getatime.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6509,7 +6509,7 @@ def test_execute_generated_tests_blocks_glob_enumeration_outside_sandbox(tmp_pat
     escaped_dir.mkdir()
     (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import glob\n\n"
@@ -6532,7 +6532,7 @@ def test_execute_generated_tests_blocks_pathlib_iteration_outside_sandbox(tmp_pa
     escaped_dir.mkdir()
     (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6555,7 +6555,7 @@ def test_execute_generated_tests_blocks_os_walk_outside_sandbox(tmp_path):
     escaped_dir.mkdir()
     (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6578,7 +6578,7 @@ def test_execute_generated_tests_blocks_os_fwalk_outside_sandbox(tmp_path):
     escaped_dir.mkdir()
     (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6602,7 +6602,7 @@ def test_execute_generated_tests_blocks_path_readlink_outside_sandbox(tmp_path):
     escaped_link = (tmp_path / "escaped_link_meta").resolve()
     escaped_link.symlink_to(escaped_target)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6626,7 +6626,7 @@ def test_execute_generated_tests_blocks_os_readlink_outside_sandbox(tmp_path):
     escaped_link = (tmp_path / "escaped_os_readlink_link").resolve()
     escaped_link.symlink_to(escaped_target)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6648,7 +6648,7 @@ def test_execute_generated_tests_blocks_samefile_outside_sandbox(tmp_path):
     escaped_file = (tmp_path / "escaped_samefile.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6672,7 +6672,7 @@ def test_execute_generated_tests_blocks_os_path_realpath_outside_sandbox(tmp_pat
     escaped_link = (tmp_path / "escaped_realpath_link.txt").resolve()
     escaped_link.symlink_to(escaped_target)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6694,7 +6694,7 @@ def test_execute_generated_tests_blocks_os_path_isabs_outside_sandbox(tmp_path):
     escaped_file = (tmp_path / "escaped_isabs_target.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6716,7 +6716,7 @@ def test_execute_generated_tests_blocks_os_path_samefile_outside_sandbox(tmp_pat
     escaped_file = (tmp_path / "escaped_os_path_samefile.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6738,7 +6738,7 @@ def test_execute_generated_tests_blocks_path_owner_outside_sandbox(tmp_path):
     escaped_file = (tmp_path / "escaped_path_owner.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6760,7 +6760,7 @@ def test_execute_generated_tests_blocks_path_group_outside_sandbox(tmp_path):
     escaped_file = (tmp_path / "escaped_path_group.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6782,7 +6782,7 @@ def test_execute_generated_tests_blocks_os_path_ismount_outside_sandbox(tmp_path
     escaped_dir = (tmp_path / "escaped_os_path_ismount").resolve()
     escaped_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6804,7 +6804,7 @@ def test_execute_generated_tests_blocks_path_is_mount_outside_sandbox(tmp_path):
     escaped_dir = (tmp_path / "escaped_path_is_mount").resolve()
     escaped_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6826,7 +6826,7 @@ def test_execute_generated_tests_blocks_path_type_helpers_outside_sandbox(tmp_pa
     escaped_file = (tmp_path / "escaped_path_type_helpers.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6854,7 +6854,7 @@ def test_execute_generated_tests_blocks_os_path_isjunction_outside_sandbox_when_
     escaped_dir = (tmp_path / "escaped_os_path_isjunction").resolve()
     escaped_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6885,7 +6885,7 @@ def test_execute_generated_tests_blocks_path_is_junction_outside_sandbox_when_su
     escaped_dir = (tmp_path / "escaped_path_is_junction").resolve()
     escaped_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6918,7 +6918,7 @@ def test_execute_generated_tests_blocks_os_stat_outside_sandbox(tmp_path):
     escaped_file = (tmp_path / "escaped_stat.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6942,7 +6942,7 @@ def test_execute_generated_tests_blocks_os_lstat_outside_sandbox(tmp_path):
     escaped_link = (tmp_path / "escaped_lstat_link.txt").resolve()
     escaped_link.symlink_to(escaped_target)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -6964,7 +6964,7 @@ def test_execute_generated_tests_blocks_path_stat_outside_sandbox(tmp_path):
     escaped_file = (tmp_path / "escaped_path_stat.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -6988,7 +6988,7 @@ def test_execute_generated_tests_blocks_path_lstat_outside_sandbox(tmp_path):
     escaped_link = (tmp_path / "escaped_path_lstat_link.txt").resolve()
     escaped_link.symlink_to(escaped_target)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7012,7 +7012,7 @@ def test_execute_generated_tests_blocks_path_resolve_outside_sandbox(tmp_path):
     escaped_link = (tmp_path / "escaped_resolve_link").resolve()
     escaped_link.symlink_to(escaped_target)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7034,7 +7034,7 @@ def test_execute_generated_tests_blocks_path_walk_outside_sandbox_when_supported
     escaped_dir.mkdir()
     (escaped_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7066,7 +7066,7 @@ def test_execute_generated_tests_blocks_directory_creation_outside_sandbox(tmp_p
     sandbox_policy = config.execution_sandbox_policy()
     escaped_dir = (tmp_path / "escaped_dir").resolve()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7088,7 +7088,7 @@ def test_execute_generated_tests_blocks_symlink_creation_outside_sandbox(tmp_pat
     sandbox_policy = config.execution_sandbox_policy()
     escaped_link = (tmp_path / "escaped_link").resolve()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7111,7 +7111,7 @@ def test_execute_generated_tests_blocks_metadata_mutation_outside_sandbox(tmp_pa
     escaped_file = (tmp_path / "escaped_file.txt").resolve()
     escaped_file.write_text("data", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7133,7 +7133,7 @@ def test_execute_generated_tests_blocks_pathlib_mutation_outside_sandbox(tmp_pat
     escaped_file = (tmp_path / "escaped_pathlib.txt").resolve()
     escaped_file.write_text("data", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -7155,7 +7155,7 @@ def test_execute_generated_tests_blocks_pathlib_write_text_outside_sandbox(tmp_p
     sandbox_policy = config.execution_sandbox_policy()
     escaped_file = (tmp_path / "escaped_write_text.txt").resolve()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -7178,7 +7178,7 @@ def test_execute_generated_tests_blocks_pathlib_read_text_outside_sandbox(tmp_pa
     escaped_file = (tmp_path / "escaped_read_text.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -7200,7 +7200,7 @@ def test_execute_generated_tests_blocks_pathlib_read_bytes_outside_sandbox(tmp_p
     escaped_file = (tmp_path / "escaped_read_bytes.bin").resolve()
     escaped_file.write_bytes(b"secret")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -7223,7 +7223,7 @@ def test_execute_generated_tests_blocks_shutil_rmtree_outside_sandbox(tmp_path):
     escaped_dir.mkdir()
     (escaped_dir / "data.txt").write_text("data", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import shutil\n\n"
@@ -7247,7 +7247,7 @@ def test_execute_generated_tests_blocks_shutil_move_outside_sandbox(tmp_path):
     escaped_target = (tmp_path / "escaped_target.txt").resolve()
     escaped_source.write_text("data", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import shutil\n\n"
@@ -7272,7 +7272,7 @@ def test_execute_generated_tests_allows_subprocesses_when_sandbox_disabled(tmp_p
     )
     sandbox_policy = config.execution_sandbox_policy()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import subprocess\n\n"
@@ -7296,7 +7296,7 @@ def test_execute_generated_tests_allows_ctypes_loading_when_sandbox_disabled(tmp
     )
     sandbox_policy = config.execution_sandbox_policy()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import ctypes\nimport ctypes.util\n\n"
@@ -7321,7 +7321,7 @@ def test_execute_generated_tests_allows_mmap_when_sandbox_disabled(tmp_path):
     )
     sandbox_policy = config.execution_sandbox_policy()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import mmap\n\n"
@@ -7351,7 +7351,7 @@ def test_execute_generated_tests_allows_chdir_when_sandbox_disabled(tmp_path):
     target_dir = tmp_path / "chdir_target"
     target_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7379,7 +7379,7 @@ def test_execute_generated_tests_allows_fd_duplication_and_wrapping_when_sandbox
     )
     sandbox_policy = config.execution_sandbox_policy()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import io\nimport os\n\n"
@@ -7421,7 +7421,7 @@ def test_execute_generated_tests_allows_xattr_helpers_when_sandbox_disabled_when
     attribute_name = "user.kycortex_allowed"
     attribute_value = b"secret"
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7452,7 +7452,7 @@ def test_execute_generated_tests_allows_file_reads_when_sandbox_disabled(tmp_pat
     target_file = tmp_path / "read_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "def read_file(target_path):\n"
@@ -7478,7 +7478,7 @@ def test_execute_generated_tests_allows_directory_enumeration_when_sandbox_disab
     target_dir.mkdir()
     (target_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7503,7 +7503,7 @@ def test_execute_generated_tests_allows_file_metadata_probes_when_sandbox_disabl
     target_file = tmp_path / "meta_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7528,7 +7528,7 @@ def test_execute_generated_tests_allows_os_path_metadata_helpers_when_sandbox_di
     target_file = tmp_path / "os_path_meta_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7563,7 +7563,7 @@ def test_execute_generated_tests_allows_glob_enumeration_when_sandbox_disabled(t
     target_dir.mkdir()
     (target_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import glob\n\n"
@@ -7590,7 +7590,7 @@ def test_execute_generated_tests_allows_os_fwalk_when_sandbox_disabled(tmp_path)
     target_dir.mkdir()
     (target_dir / "secret.txt").write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7618,7 +7618,7 @@ def test_execute_generated_tests_allows_path_readlink_when_sandbox_disabled(tmp_
     target_link = tmp_path / "readlink_link.txt"
     target_link.symlink_to(target_file)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7645,7 +7645,7 @@ def test_execute_generated_tests_allows_os_readlink_when_sandbox_disabled(tmp_pa
     target_link = tmp_path / "os_readlink_link.txt"
     target_link.symlink_to(target_file)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7670,7 +7670,7 @@ def test_execute_generated_tests_allows_samefile_when_sandbox_disabled(tmp_path)
     target_file = tmp_path / "samefile_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7697,7 +7697,7 @@ def test_execute_generated_tests_allows_os_path_realpath_when_sandbox_disabled(t
     target_link = tmp_path / "os_path_realpath_link.txt"
     target_link.symlink_to(target_file)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7722,7 +7722,7 @@ def test_execute_generated_tests_allows_os_path_isabs_when_sandbox_disabled(tmp_
     target_file = tmp_path / "os_path_isabs_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7747,7 +7747,7 @@ def test_execute_generated_tests_allows_os_path_samefile_when_sandbox_disabled(t
     target_file = tmp_path / "os_path_samefile_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7772,7 +7772,7 @@ def test_execute_generated_tests_allows_path_owner_group_when_sandbox_disabled(t
     target_file = tmp_path / "path_owner_group_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7800,7 +7800,7 @@ def test_execute_generated_tests_allows_mount_helpers_when_sandbox_disabled(tmp_
     target_dir = tmp_path / "mount_helper_target"
     target_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n"
@@ -7829,7 +7829,7 @@ def test_execute_generated_tests_allows_path_type_helpers_when_sandbox_disabled(
     target_file = tmp_path / "path_type_helpers_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7864,7 +7864,7 @@ def test_execute_generated_tests_allows_junction_helpers_when_sandbox_disabled_w
     target_dir = tmp_path / "junction_helper_target"
     target_dir.mkdir()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n"
@@ -7903,7 +7903,7 @@ def test_execute_generated_tests_allows_os_stat_when_sandbox_disabled(tmp_path):
     target_file = tmp_path / "stat_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7930,7 +7930,7 @@ def test_execute_generated_tests_allows_os_lstat_when_sandbox_disabled(tmp_path)
     target_link = tmp_path / "lstat_link.txt"
     target_link.symlink_to(target_file)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -7955,7 +7955,7 @@ def test_execute_generated_tests_allows_path_stat_when_sandbox_disabled(tmp_path
     target_file = tmp_path / "path_stat_target.txt"
     target_file.write_text("secret", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -7982,7 +7982,7 @@ def test_execute_generated_tests_allows_path_lstat_when_sandbox_disabled(tmp_pat
     target_link = tmp_path / "path_lstat_link.txt"
     target_link.symlink_to(target_file)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -8009,7 +8009,7 @@ def test_execute_generated_tests_allows_path_resolve_when_sandbox_disabled(tmp_p
     target_link = tmp_path / "resolve_link.txt"
     target_link.symlink_to(target_file)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "from pathlib import Path\n\n"
@@ -8036,7 +8036,7 @@ def test_execute_generated_tests_allows_pathlib_mutation_when_sandbox_disabled(t
     target_file = tmp_path / "pathlib_target.txt"
     target_file.write_text("data", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -8062,7 +8062,7 @@ def test_execute_generated_tests_allows_pathlib_write_text_when_sandbox_disabled
     sandbox_policy = config.execution_sandbox_policy()
     target_file = tmp_path / "pathlib_write_text_target.txt"
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -8089,7 +8089,7 @@ def test_execute_generated_tests_allows_pathlib_read_text_when_sandbox_disabled(
     target_file = tmp_path / "pathlib_read_text_target.txt"
     target_file.write_text("ok", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -8114,7 +8114,7 @@ def test_execute_generated_tests_allows_pathlib_read_bytes_when_sandbox_disabled
     target_file = tmp_path / "pathlib_read_bytes_target.bin"
     target_file.write_bytes(b"ok")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\n\n"
@@ -8140,7 +8140,7 @@ def test_execute_generated_tests_allows_shutil_move_when_sandbox_disabled(tmp_pa
     target_file = tmp_path / "shutil_target.txt"
     source_file.write_text("data", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import pathlib\nimport shutil\n\n"
@@ -8167,7 +8167,7 @@ def test_execute_generated_tests_allows_directory_creation_when_sandbox_disabled
     sandbox_policy = config.execution_sandbox_policy()
     created_dir = tmp_path / "created_dir"
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -8193,7 +8193,7 @@ def test_execute_generated_tests_allows_symlink_creation_when_sandbox_disabled(t
     sandbox_policy = config.execution_sandbox_policy()
     created_link = tmp_path / "created_link"
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\n\n"
@@ -8220,7 +8220,7 @@ def test_execute_generated_tests_allows_metadata_mutation_when_sandbox_disabled(
     target_file = tmp_path / "chmod_target.txt"
     target_file.write_text("data", encoding="utf-8")
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\nimport stat\n\n"
@@ -8244,7 +8244,7 @@ def test_execute_generated_tests_allows_os_spawn_calls_when_sandbox_disabled(tmp
     )
     sandbox_policy = config.execution_sandbox_policy()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\nimport sys\n\n"
@@ -8264,7 +8264,7 @@ def test_execute_generated_tests_uses_sandbox_home_and_xdg_dirs(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     sandbox_policy = config.execution_sandbox_policy()
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_under_test.py",
         "import os\nimport tempfile\nfrom pathlib import Path\n\n"
@@ -8728,7 +8728,7 @@ def test_execute_generated_tests_uses_isolated_runner_when_sandbox_enabled(tmp_p
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_implementation.py",
         "def run():\n    return 1\n",
@@ -9243,7 +9243,7 @@ def test_generated_test_subprocess_strips_inherited_coverage_env(tmp_path, monke
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    result = orchestrator_module.execute_generated_tests_runtime(
+    result = sandbox_execution_module.execute_generated_tests_runtime(
         sandbox_policy,
         "code_implementation.py",
         "def run():\n    return 1\n",

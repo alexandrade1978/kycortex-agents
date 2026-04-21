@@ -16,9 +16,6 @@ from kycortex_agents.orchestration.output_helpers import (
     normalize_agent_result,
     unredacted_agent_result,
 )
-from kycortex_agents.orchestration.sandbox_execution import (
-    execute_generated_tests_runtime as _execute_generated_tests_runtime,
-)
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     sanitize_output_provider_call_metadata,
@@ -75,7 +72,6 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 
 active_repair_cycle = _active_repair_cycle
 has_repair_task_for_cycle = _has_repair_task_for_cycle
-execute_generated_tests_runtime = _execute_generated_tests_runtime
 
 
 class Orchestrator:

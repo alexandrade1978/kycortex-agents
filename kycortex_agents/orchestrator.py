@@ -113,6 +113,8 @@ from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     redact_validation_execution_result,
     sanitize_output_provider_call_metadata,
+    should_validate_code_content,
+    should_validate_test_content,
     summarize_pytest_output,
     validate_code_output_runtime,
     validate_task_output,
@@ -187,24 +189,6 @@ _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VI
 def _example_from_default(node: ast.expr) -> str | None:
     """Return an example literal string for a .get() default AST node."""
     return example_from_default(node)
-
-
-def should_validate_code_content(content: str, has_typed_artifact: bool) -> bool:
-    if has_typed_artifact:
-        return True
-    stripped = content.strip()
-    if not stripped:
-        return False
-    return any(token in stripped for token in ("def ", "class ", "import ", "from ", "if __name__"))
-
-
-def should_validate_test_content(content: str, has_typed_artifact: bool) -> bool:
-    if has_typed_artifact:
-        return True
-    stripped = content.strip()
-    if not stripped:
-        return False
-    return any(token in stripped for token in ("def test_", "assert ", "import pytest", "pytest."))
 
 
 def agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent_name: str) -> Dict[str, Any]:

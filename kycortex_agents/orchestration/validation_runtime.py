@@ -42,6 +42,24 @@ class ValidationRuntimeInput:
     code_behavior_contract: str
 
 
+def should_validate_code_content(content: str, has_typed_artifact: bool) -> bool:
+    if has_typed_artifact:
+        return True
+    stripped = content.strip()
+    if not stripped:
+        return False
+    return any(token in stripped for token in ("def ", "class ", "import ", "from ", "if __name__"))
+
+
+def should_validate_test_content(content: str, has_typed_artifact: bool) -> bool:
+    if has_typed_artifact:
+        return True
+    stripped = content.strip()
+    if not stripped:
+        return False
+    return any(token in stripped for token in ("def test_", "assert ", "import pytest", "pytest."))
+
+
 def summarize_pytest_output(stdout: str, stderr: str, returncode: int) -> str:
     combined_lines = [line.strip() for line in f"{stdout}\n{stderr}".splitlines() if line.strip()]
     if not combined_lines:

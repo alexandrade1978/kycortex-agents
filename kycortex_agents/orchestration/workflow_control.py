@@ -8,6 +8,10 @@ from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientErr
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.providers.base import redact_sensitive_data
 from kycortex_agents.orchestration.sandbox_execution import sandbox_security_violation
+from kycortex_agents.orchestration.task_constraints import (
+    build_budget_decomposition_task_context,
+    repair_requires_budget_decomposition,
+)
 from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus, WorkflowOutcome
 
 
@@ -215,6 +219,24 @@ def ensure_budget_decomposition_task(
     if decomposition_task is not None:
         repair_context["budget_decomposition_plan_task_id"] = decomposition_task.id
     return decomposition_task
+
+
+def ensure_budget_decomposition_task_runtime(
+    project: ProjectState,
+    task: Task,
+    repair_context: dict[str, Any],
+) -> Optional[Task]:
+    return ensure_budget_decomposition_task(
+        project,
+        task,
+        repair_context,
+        requires_budget_decomposition=repair_requires_budget_decomposition,
+        build_budget_decomposition_task_context=lambda current_task, current_repair_context: build_budget_decomposition_task_context(
+            current_task,
+            current_repair_context,
+            execution_agent_name(current_task),
+        ),
+    )
 
 
 def active_repair_cycle(project: ProjectState) -> dict[str, Any] | None:

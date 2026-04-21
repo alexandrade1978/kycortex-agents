@@ -86,10 +86,8 @@ from kycortex_agents.orchestration.sandbox_execution import (
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.task_constraints import (
-    build_budget_decomposition_task_context,
     compact_architecture_context,
     is_budget_decomposition_planner,
-    repair_requires_budget_decomposition,
     should_compact_architecture_context,
     task_public_contract_anchor as extract_task_public_contract_anchor,
     task_public_contract_preflight,
@@ -134,7 +132,7 @@ from kycortex_agents.orchestration.workflow_control import (
     dispatch_task_failure,
     build_repair_context,
     ensure_workflow_running,
-    ensure_budget_decomposition_task,
+    ensure_budget_decomposition_task_runtime,
     execute_runnable_frontier,
     execute_workflow_runtime,
     execute_workflow_loop,
@@ -280,24 +278,6 @@ def configure_repair_attempts_runtime(
         build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure,
         ensure_budget_decomposition_task=ensure_budget_decomposition_task,
         build_repair_context=build_repair_context,
-    )
-
-
-def ensure_budget_decomposition_task_runtime(
-    project: ProjectState,
-    task: Task,
-    repair_context: Dict[str, Any],
-) -> Optional[Task]:
-    return ensure_budget_decomposition_task(
-        project,
-        task,
-        repair_context,
-        requires_budget_decomposition=repair_requires_budget_decomposition,
-        build_budget_decomposition_task_context=lambda current_task, current_repair_context: build_budget_decomposition_task_context(
-            current_task,
-            current_repair_context,
-            execution_agent_name(current_task),
-        ),
     )
 
 

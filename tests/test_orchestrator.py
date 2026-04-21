@@ -1503,8 +1503,8 @@ def test_validate_code_output_skips_import_validation_for_third_party_imports(tm
         },
     )
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_module_import",
+        orchestrator_module,
+        "execute_generated_module_import_runtime",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not run import validation")),
     )
 
@@ -1703,9 +1703,9 @@ def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
 
 def test_execute_generated_module_import_reports_import_time_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_module_import(
+    result = orchestrator_module.execute_generated_module_import_runtime(
+        config.execution_sandbox_policy(),
         "generated_module.py",
         "from dataclasses import dataclass\n\n"
         "@dataclass\n"
@@ -1721,7 +1721,6 @@ def test_execute_generated_module_import_reports_import_time_errors(tmp_path):
 
 def test_execute_generated_module_import_redacts_sensitive_subprocess_output(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
     monkeypatch.setattr(
         orchestrator_module.subprocess,
@@ -1733,7 +1732,8 @@ def test_execute_generated_module_import_redacts_sensitive_subprocess_output(tmp
         ),
     )
 
-    result = orchestrator._execute_generated_module_import(
+    result = orchestrator_module.execute_generated_module_import_runtime(
+        config.execution_sandbox_policy(),
         "generated_module.py",
         "def ok():\n    return 1\n",
     )

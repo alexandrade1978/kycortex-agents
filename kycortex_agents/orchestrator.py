@@ -18,6 +18,7 @@ from kycortex_agents.agents.registry import AgentRegistry, build_default_registr
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.types import ExecutionSandboxPolicy
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
 from kycortex_agents.orchestration.ast_tools import (
     python_import_roots,
@@ -548,6 +549,34 @@ def build_code_repair_context_from_test_failure_runtime(
     )
 
 
+def execute_generated_module_import_runtime(
+    sandbox_policy: ExecutionSandboxPolicy,
+    module_filename: str,
+    code_content: str,
+) -> Dict[str, Any]:
+    return execute_generated_module_import(
+        module_filename,
+        code_content,
+        sandbox_policy,
+        python_executable=sys.executable,
+        host_env=os.environ,
+        subprocess_run=subprocess.run,
+        sanitize_filename=sanitize_generated_filename,
+        write_import_runner_fn=write_generated_import_runner,
+        build_env_fn=lambda tmp_path, current_sandbox_policy: build_generated_test_env(
+            tmp_path,
+            current_sandbox_policy,
+            host_env=os.environ,
+        ),
+        build_preexec_fn=lambda current_sandbox_policy: build_sandbox_preexec_fn(
+            current_sandbox_policy,
+            os_module=os,
+            resource_module=resource,
+        ),
+        redact_result=redact_validation_execution_result,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -701,34 +730,15 @@ class Orchestrator:
                 ),
                 default_filename,
             ),
-            self._execute_generated_module_import,
+            lambda module_filename, code_content: execute_generated_module_import_runtime(
+                self.config.execution_sandbox_policy(),
+                module_filename,
+                code_content,
+            ),
             lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
             if isinstance(current_output.metadata.setdefault("validation", {}), dict)
             else None,
             completion_validation_issue,
-        )
-
-    def _execute_generated_module_import(self, module_filename: str, code_content: str) -> Dict[str, Any]:
-        return execute_generated_module_import(
-            module_filename,
-            code_content,
-            self.config.execution_sandbox_policy(),
-            python_executable=sys.executable,
-            host_env=os.environ,
-            subprocess_run=subprocess.run,
-            sanitize_filename=sanitize_generated_filename,
-            write_import_runner_fn=write_generated_import_runner,
-            build_env_fn=lambda tmp_path, sandbox_policy: build_generated_test_env(
-                tmp_path,
-                sandbox_policy,
-                host_env=os.environ,
-            ),
-            build_preexec_fn=lambda sandbox_policy: build_sandbox_preexec_fn(
-                sandbox_policy,
-                os_module=os,
-                resource_module=resource,
-            ),
-            redact_result=redact_validation_execution_result,
         )
 
     def _validate_test_output(self, context: Dict[str, Any], output: AgentOutput, task: Optional[Task] = None) -> None:

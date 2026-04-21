@@ -444,6 +444,48 @@ def configure_repair_attempts(
         planned_task_ids.add(task.id)
 
 
+def configure_repair_attempts_runtime(
+    project: ProjectState,
+    failed_task_ids: list[str],
+    cycle: dict[str, Any],
+    *,
+    build_code_repair_context_from_test_failure: Callable[..., dict[str, Any]],
+    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
+    build_repair_context: Callable[..., dict[str, Any]],
+) -> None:
+    configure_repair_attempts(
+        project,
+        failed_task_ids,
+        cycle,
+        test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
+            task,
+            validation_payload=validation_payload,
+            pytest_failure_origin=pytest_failure_origin,
+            pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+            test_validation_has_blocking_issues=validation_has_blocking_issues,
+            pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+        ),
+        upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
+            current_project,
+            current_task,
+            imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
+                imported_project,
+                imported_task,
+                failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
+                    artifact_task.output,
+                    artifact_task.output_payload,
+                    artifact_type,
+                ),
+                python_import_roots=python_import_roots,
+                default_module_name_for_task=default_module_name_for_task,
+            ),
+        ),
+        build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure,
+        ensure_budget_decomposition_task=ensure_budget_decomposition_task,
+        build_repair_context=build_repair_context,
+    )
+
+
 def queue_active_cycle_repair(
     project: ProjectState,
     task: Task,

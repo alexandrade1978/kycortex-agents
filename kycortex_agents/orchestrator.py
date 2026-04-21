@@ -18,18 +18,13 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import ExecutionSandboxPolicy
 from kycortex_agents.orchestration.agent_runtime import build_agent_input, execute_agent
-from kycortex_agents.orchestration.ast_tools import (
-    python_import_roots,
-)
 from kycortex_agents.orchestration.artifacts import ArtifactPersistenceSupport
-from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.orchestration.context_building import (
     TaskContextRuntimeCallbacks,
     agent_visible_repair_context,
     build_agent_view_runtime,
     build_task_context_runtime,
     code_artifact_context_runtime,
-    default_module_name_for_task,
     dependency_artifact_context_runtime,
     direct_dependency_ids,
     planned_module_context_runtime,
@@ -42,18 +37,11 @@ from kycortex_agents.orchestration.output_helpers import (
     summarize_output,
     task_context_output,
     unredacted_agent_result,
-    validation_payload,
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
 )
-from kycortex_agents.orchestration.repair_test_analysis import (
-    imported_code_task_for_failed_test,
-    normalized_helper_surface_symbols,
-    qa_repair_should_reuse_failed_test_artifact,
-    failed_test_requires_code_repair_runtime,
-    upstream_code_task_for_test_failure,
-)
+from kycortex_agents.orchestration.repair_test_analysis import normalized_helper_surface_symbols, qa_repair_should_reuse_failed_test_artifact
 from kycortex_agents.orchestration.repair_focus import (
     build_repair_focus_lines,
 )
@@ -95,16 +83,11 @@ from kycortex_agents.orchestration.validation_runtime import (
     validate_task_output,
     validate_test_output_runtime,
 )
-from kycortex_agents.orchestration.validation_analysis import (
-    pytest_contract_overreach_signals,
-    pytest_failure_is_semantic_assertion_mismatch,
-    pytest_failure_origin,
-    validation_has_blocking_issues,
-)
+from kycortex_agents.orchestration.validation_analysis import pytest_failure_origin
 from kycortex_agents.orchestration.workflow_control import (
     build_code_repair_context_from_test_failure_runtime,
     classify_task_failure,
-    configure_repair_attempts,
+    configure_repair_attempts_runtime,
     dispatch_task_failure,
     build_repair_context_runtime,
     ensure_workflow_running,
@@ -176,48 +159,6 @@ def queue_active_cycle_repair_runtime(
         has_repair_task_for_cycle_cb=has_repair_task_for_cycle,
         plan_repair_task_ids_for_cycle_cb=plan_repair_task_ids_for_cycle,
     )
-
-def configure_repair_attempts_runtime(
-    project: ProjectState,
-    failed_task_ids: list[str],
-    cycle: Dict[str, Any],
-    *,
-    build_code_repair_context_from_test_failure: Callable[..., Dict[str, Any]],
-    ensure_budget_decomposition_task: Callable[..., Optional[Task]],
-    build_repair_context: Callable[..., Dict[str, Any]],
-) -> None:
-    configure_repair_attempts(
-        project,
-        failed_task_ids,
-        cycle,
-        test_failure_requires_code_repair=lambda task: failed_test_requires_code_repair_runtime(
-            task,
-            validation_payload=validation_payload,
-            pytest_failure_origin=pytest_failure_origin,
-            pytest_contract_overreach_signals=pytest_contract_overreach_signals,
-            test_validation_has_blocking_issues=validation_has_blocking_issues,
-            pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
-        ),
-        upstream_code_task_for_test_failure=lambda current_project, current_task: upstream_code_task_for_test_failure(
-            current_project,
-            current_task,
-            imported_code_task_for_failed_test=lambda imported_project, imported_task: imported_code_task_for_failed_test(
-                imported_project,
-                imported_task,
-                failed_artifact_content=lambda artifact_task, artifact_type=None: failed_artifact_content(
-                    artifact_task.output,
-                    artifact_task.output_payload,
-                    artifact_type,
-                ),
-                python_import_roots=python_import_roots,
-                default_module_name_for_task=default_module_name_for_task,
-            ),
-        ),
-        build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure,
-        ensure_budget_decomposition_task=ensure_budget_decomposition_task,
-        build_repair_context=build_repair_context,
-    )
-
 
 def execute_generated_module_import_runtime(
     sandbox_policy: ExecutionSandboxPolicy,

@@ -910,6 +910,55 @@ def code_artifact_context_runtime(
     }
 
 
+def build_agent_input_runtime(orchestrator: "Orchestrator", task: Task, project: ProjectState) -> AgentInput:
+    context = build_task_context_runtime(
+        task,
+        project,
+        provider_max_tokens=orchestrator.config.max_tokens,
+        build_agent_view=lambda current_task, current_project, snapshot: build_agent_view_runtime(
+            current_task,
+            current_project,
+            snapshot,
+            task_dependency_closure_ids=task_dependency_closure_ids,
+            direct_dependency_ids=direct_dependency_ids,
+        ),
+        task_dependency_closure_ids=task_dependency_closure_ids,
+        execution_agent_name=execution_agent_name,
+        planned_module_context=lambda current_project, visible_task_ids, current_task: planned_module_context_runtime(
+            current_project,
+            visible_task_ids,
+            current_task=current_task,
+        ),
+        task_public_contract_anchor=extract_task_public_contract_anchor,
+        should_compact_architecture_context=lambda current_task, task_public_contract_anchor: should_compact_architecture_context(
+            current_task,
+            task_public_contract_anchor,
+            execution_agent_name(current_task) if current_task is not None else None,
+            orchestrator.config.max_tokens,
+        ),
+        compact_architecture_context=compact_architecture_context,
+        task_context_output=task_context_output,
+        is_budget_decomposition_planner=is_budget_decomposition_planner,
+        semantic_output_key=semantic_output_key,
+        normalize_assigned_to=AgentRegistry.normalize_key,
+        code_artifact_context=code_artifact_context_runtime,
+        dependency_artifact_context=dependency_artifact_context_runtime,
+        test_artifact_context=test_artifact_context_runtime,
+        agent_visible_repair_context=agent_visible_repair_context,
+        normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+        qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
+        redact_sensitive_data=redact_sensitive_data,
+    )
+    repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
+    repair_focus_lines = build_repair_focus_lines(repair_context, context) if repair_context else []
+    return build_agent_input(
+        task,
+        project,
+        context,
+        repair_focus_lines=repair_focus_lines,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -967,7 +1016,7 @@ class Orchestrator:
             attempt=task.attempts + 1,
         )
         agent = self.registry.get(current_execution_agent_name)
-        agent_input = self._build_agent_input(task, project)
+        agent_input = build_agent_input_runtime(self, task, project)
         project.start_task(task.id)
         normalized_output: Optional[AgentOutput] = None
         try:
@@ -1049,54 +1098,6 @@ class Orchestrator:
             total_tokens=(provider_call.get("usage") or {}).get("total_tokens") if provider_call else None,
         )
         return normalized_output.raw_content
-
-    def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
-        context = build_task_context_runtime(
-            task,
-            project,
-            provider_max_tokens=self.config.max_tokens,
-            build_agent_view=lambda current_task, current_project, snapshot: build_agent_view_runtime(
-                current_task,
-                current_project,
-                snapshot,
-                task_dependency_closure_ids=task_dependency_closure_ids,
-                direct_dependency_ids=direct_dependency_ids,
-            ),
-            task_dependency_closure_ids=task_dependency_closure_ids,
-            execution_agent_name=execution_agent_name,
-            planned_module_context=lambda current_project, visible_task_ids, current_task: planned_module_context_runtime(
-                current_project,
-                visible_task_ids,
-                current_task=current_task,
-            ),
-            task_public_contract_anchor=extract_task_public_contract_anchor,
-            should_compact_architecture_context=lambda task, task_public_contract_anchor: should_compact_architecture_context(
-                task,
-                task_public_contract_anchor,
-                execution_agent_name(task) if task is not None else None,
-                self.config.max_tokens,
-            ),
-            compact_architecture_context=compact_architecture_context,
-            task_context_output=task_context_output,
-            is_budget_decomposition_planner=is_budget_decomposition_planner,
-            semantic_output_key=semantic_output_key,
-            normalize_assigned_to=AgentRegistry.normalize_key,
-            code_artifact_context=code_artifact_context_runtime,
-            dependency_artifact_context=dependency_artifact_context_runtime,
-            test_artifact_context=test_artifact_context_runtime,
-            agent_visible_repair_context=agent_visible_repair_context,
-            normalized_helper_surface_symbols=normalized_helper_surface_symbols,
-            qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
-            redact_sensitive_data=redact_sensitive_data,
-        )
-        repair_context = task.repair_context if isinstance(task.repair_context, dict) else {}
-        repair_focus_lines = build_repair_focus_lines(repair_context, context) if repair_context else []
-        return build_agent_input(
-            task,
-            project,
-            context,
-            repair_focus_lines=repair_focus_lines,
-        )
 
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""

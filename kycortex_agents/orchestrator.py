@@ -29,6 +29,7 @@ from kycortex_agents.orchestration.dependency_analysis import (
     analyze_dependency_manifest,
 )
 from kycortex_agents.orchestration.context_building import (
+    TaskContextRuntimeCallbacks,
     build_agent_view_runtime,
     build_task_context_runtime,
     direct_dependency_ids,
@@ -915,10 +916,7 @@ def build_task_context_for_agent_runtime(
     task: Task,
     project: ProjectState,
 ) -> Dict[str, Any]:
-    return build_task_context_runtime(
-        task,
-        project,
-        provider_max_tokens=orchestrator.config.max_tokens,
+    callbacks = TaskContextRuntimeCallbacks(
         build_agent_view=lambda current_task, current_project, snapshot: build_agent_view_runtime(
             current_task,
             current_project,
@@ -952,6 +950,12 @@ def build_task_context_for_agent_runtime(
         normalized_helper_surface_symbols=normalized_helper_surface_symbols,
         qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
         redact_sensitive_data=redact_sensitive_data,
+    )
+    return build_task_context_runtime(
+        task,
+        project,
+        provider_max_tokens=orchestrator.config.max_tokens,
+        callbacks=callbacks,
     )
 
 

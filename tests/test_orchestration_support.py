@@ -37,6 +37,7 @@ from kycortex_agents.orchestration.context_building import (
 	build_agent_view_decisions,
 	build_agent_view_runtime,
 	build_agent_view_task_results,
+	TaskContextRuntimeCallbacks,
 	build_task_context_runtime,
 	build_task_context_base,
 	direct_dependency_ids,
@@ -399,7 +400,11 @@ def test_apply_repair_context_to_context_populates_code_repair_fields():
 			"summary": current_repair_context["validation_summary"],
 		},
 		normalized_execution_agent="code_engineer",
-		normalized_helper_surface_symbols=lambda raw_values: [str(item).strip() for item in raw_values if str(item).strip()],
+		normalized_helper_surface_symbols=lambda raw_values: [
+			str(item).strip()
+			for item in raw_values
+			if str(item).strip()
+		] if isinstance(raw_values, (list, tuple, set)) else [],
 		qa_repair_should_reuse_failed_test_artifact=lambda *_args: False,
 	)
 
@@ -434,32 +439,38 @@ def test_build_task_context_runtime_builds_redacted_context_directly():
 		task,
 		project,
 		provider_max_tokens=4096,
-		build_agent_view=lambda current_task, current_project, snapshot: AgentView(
-			project_name="demo",
-			goal="ship",
-			decisions=["d1"],
-			artifacts=["a1"],
+		callbacks=TaskContextRuntimeCallbacks(
+			build_agent_view=lambda current_task, current_project, snapshot: AgentView(
+				project_name="demo",
+				goal="ship",
+				decisions=[
+					AgentViewDecisionRecord(topic="decision", decision="d1", rationale="because")
+				],
+				artifacts=[
+					AgentViewArtifactRecord(name="artifact.py", artifact_type=ArtifactType.CODE, content="print('ok')")
+				],
+			),
+			task_dependency_closure_ids=lambda current_task, current_project: {"done_task"},
+			execution_agent_name=lambda current_task: "code_engineer",
+			planned_module_context=lambda current_project, visible_task_ids, current_task: {
+				"planned_module_name": "code_implementation",
+				"planned_module_filename": "code_implementation.py",
+			},
+			task_public_contract_anchor=lambda description: "anchor",
+			should_compact_architecture_context=lambda current_task, anchor: False,
+			compact_architecture_context=lambda current_task, anchor: "compact architecture",
+			task_context_output=lambda current_task: "existing output",
+			is_budget_decomposition_planner=lambda current_task: False,
+			semantic_output_key=lambda assigned_to, title: "code" if assigned_to == "code_engineer" else None,
+			normalize_assigned_to=lambda assigned_to: assigned_to,
+			code_artifact_context=lambda current_task, current_project: {"code_artifact": current_task.id},
+			dependency_artifact_context=lambda current_task, current_ctx: {"dependency_artifact": current_task.id},
+			test_artifact_context=lambda current_task, current_ctx: {"test_artifact": current_task.id},
+			agent_visible_repair_context=lambda repair_context, execution_agent_name: {"owner": execution_agent_name},
+			normalized_helper_surface_symbols=lambda value: [],
+			qa_repair_should_reuse_failed_test_artifact=lambda *_args: False,
+			redact_sensitive_data=lambda value: {**value, "redacted": True},
 		),
-		task_dependency_closure_ids=lambda current_task, current_project: {"done_task"},
-		execution_agent_name=lambda current_task: "code_engineer",
-		planned_module_context=lambda current_project, visible_task_ids, current_task: {
-			"planned_module_name": "code_implementation",
-			"planned_module_filename": "code_implementation.py",
-		},
-		task_public_contract_anchor=lambda description: "anchor",
-		should_compact_architecture_context=lambda current_task, anchor: False,
-		compact_architecture_context=lambda current_task, anchor: "compact architecture",
-		task_context_output=lambda current_task: "existing output",
-		is_budget_decomposition_planner=lambda current_task: False,
-		semantic_output_key=lambda assigned_to, title: "code" if assigned_to == "code_engineer" else None,
-		normalize_assigned_to=lambda assigned_to: assigned_to,
-		code_artifact_context=lambda current_task, current_project: {"code_artifact": current_task.id},
-		dependency_artifact_context=lambda current_task, current_ctx: {"dependency_artifact": current_task.id},
-		test_artifact_context=lambda current_task, current_ctx: {"test_artifact": current_task.id},
-		agent_visible_repair_context=lambda repair_context, execution_agent_name: {"owner": execution_agent_name},
-		normalized_helper_surface_symbols=lambda value: [],
-		qa_repair_should_reuse_failed_test_artifact=lambda *_args: False,
-		redact_sensitive_data=lambda value: {**value, "redacted": True},
 	)
 
 	assert ctx["goal"] == "ship"
@@ -1148,7 +1159,11 @@ def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():
 		None,
 		agent_visible_repair_context=lambda current_repair_context, _execution_agent_name: dict(current_repair_context),
 		normalized_execution_agent="qa_tester",
-		normalized_helper_surface_symbols=lambda raw_values: [str(item).strip() for item in raw_values if str(item).strip()],
+		normalized_helper_surface_symbols=lambda raw_values: [
+			str(item).strip()
+			for item in raw_values
+			if str(item).strip()
+		] if isinstance(raw_values, (list, tuple, set)) else [],
 		qa_repair_should_reuse_failed_test_artifact=lambda validation_summary, code_content, repair_content: bool(validation_summary and code_content and repair_content),
 	)
 
@@ -1170,7 +1185,11 @@ def test_apply_repair_context_to_context_populates_qa_and_dependency_fields():
 		None,
 		agent_visible_repair_context=lambda current_repair_context, _execution_agent_name: dict(current_repair_context),
 		normalized_execution_agent="dependency_manager",
-		normalized_helper_surface_symbols=lambda raw_values: [str(item).strip() for item in raw_values if str(item).strip()],
+		normalized_helper_surface_symbols=lambda raw_values: [
+			str(item).strip()
+			for item in raw_values
+			if str(item).strip()
+		] if isinstance(raw_values, (list, tuple, set)) else [],
 		qa_repair_should_reuse_failed_test_artifact=lambda *_args: False,
 	)
 

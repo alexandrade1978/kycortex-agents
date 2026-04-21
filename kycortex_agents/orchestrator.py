@@ -725,6 +725,33 @@ def validate_test_output_for_task_runtime(
     )
 
 
+def dependency_artifact_context_runtime(task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(task.output_payload, dict):
+        return {}
+    artifacts = task.output_payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        return {}
+    raw_code_analysis = context.get("code_analysis")
+    code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        artifact_path = artifact.get("path")
+        if not isinstance(artifact_path, str) or not artifact_path.strip():
+            continue
+        path_obj = Path(artifact_path)
+        if path_obj.name != "requirements.txt":
+            continue
+        dependency_analysis = analyze_dependency_manifest(task.output or "", code_analysis)
+        return {
+            "dependency_manifest": task.output or "",
+            "dependency_manifest_path": artifact_path,
+            "dependency_analysis": dependency_analysis,
+            "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
+        }
+    return {}
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -1022,32 +1049,6 @@ class Orchestrator:
             }
         return {}
 
-    def _dependency_artifact_context(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
-        if not isinstance(task.output_payload, dict):
-            return {}
-        artifacts = task.output_payload.get("artifacts")
-        if not isinstance(artifacts, list):
-            return {}
-        raw_code_analysis = context.get("code_analysis")
-        code_analysis = cast(Dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
-        for artifact in artifacts:
-            if not isinstance(artifact, dict):
-                continue
-            artifact_path = artifact.get("path")
-            if not isinstance(artifact_path, str) or not artifact_path.strip():
-                continue
-            path_obj = Path(artifact_path)
-            if path_obj.name != "requirements.txt":
-                continue
-            dependency_analysis = analyze_dependency_manifest(task.output or "", code_analysis)
-            return {
-                "dependency_manifest": task.output or "",
-                "dependency_manifest_path": artifact_path,
-                "dependency_analysis": dependency_analysis,
-                "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
-            }
-        return {}
-
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
         context = build_task_context_runtime(
             task,
@@ -1080,7 +1081,7 @@ class Orchestrator:
             semantic_output_key=semantic_output_key,
             normalize_assigned_to=AgentRegistry.normalize_key,
             code_artifact_context=self._code_artifact_context,
-            dependency_artifact_context=self._dependency_artifact_context,
+            dependency_artifact_context=dependency_artifact_context_runtime,
             test_artifact_context=self._test_artifact_context,
             agent_visible_repair_context=agent_visible_repair_context,
             normalized_helper_surface_symbols=normalized_helper_surface_symbols,

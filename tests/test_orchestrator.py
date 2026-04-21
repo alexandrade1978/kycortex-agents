@@ -231,7 +231,7 @@ def build_context_for_test(orchestrator: Orchestrator, task: Task, project: Proj
         semantic_output_key=semantic_output_key,
         normalize_assigned_to=AgentRegistry.normalize_key,
         code_artifact_context=orchestrator._code_artifact_context,
-        dependency_artifact_context=orchestrator._dependency_artifact_context,
+        dependency_artifact_context=orchestrator_module.dependency_artifact_context_runtime,
         test_artifact_context=orchestrator._test_artifact_context,
         agent_visible_repair_context=orchestrator_module.agent_visible_repair_context,
         normalized_helper_surface_symbols=normalized_helper_surface_symbols,
@@ -2703,12 +2703,12 @@ def test_artifact_context_helpers_return_empty_for_invalid_payload_shapes(tmp_pa
 
     assert orchestrator._code_artifact_context(task) == {}
     assert orchestrator._test_artifact_context(task, {}) == {}
-    assert orchestrator._dependency_artifact_context(task, {}) == {}
+    assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
 
     task.output_payload = {"artifacts": "invalid"}
     assert orchestrator._code_artifact_context(task) == {}
     assert orchestrator._test_artifact_context(task, {}) == {}
-    assert orchestrator._dependency_artifact_context(task, {}) == {}
+    assert orchestrator_module.dependency_artifact_context_runtime(task, {}) == {}
 
 
 def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_context(tmp_path):
@@ -2762,7 +2762,7 @@ def test_artifact_context_helpers_skip_non_matching_artifacts_and_missing_contex
     assert code_ctx.get("module_name") == "code_implementation"
     assert orchestrator._test_artifact_context(test_task, {}) == {}
     assert orchestrator._test_artifact_context(test_task, {"module_name": "code_implementation", "code_analysis": {}}) == {}
-    assert orchestrator._dependency_artifact_context(dep_task, {}) == {}
+    assert orchestrator_module.dependency_artifact_context_runtime(dep_task, {}) == {}
 
 
 def test_analyze_dependency_manifest_skips_blank_requirement_names(tmp_path):

@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import AbstractSet, Literal, Optional
+from typing import AbstractSet, Any, Literal, Optional
 
 try:
     import resource
@@ -152,21 +152,32 @@ class Orchestrator:
             normalized_output = unredacted_agent_result(agent, normalized_output)
             normalized_output = sanitize_output_provider_call_metadata(normalized_output)
             sandbox_policy = self.config.execution_sandbox_policy()
-            validate_task_output(
-                task,
-                agent_input.context,
-                normalized_output,
-                validate_code_output=lambda output, task=None: _validate_code_output_for_task_runtime(
+
+            def validate_code_output_for_task(output: AgentOutput, task: Task | None = None) -> None:
+                _validate_code_output_for_task_runtime(
                     sandbox_policy,
                     output,
                     task,
-                ),
-                validate_test_output=lambda context, output, task=None: _validate_test_output_for_task_runtime(
+                )
+
+            def validate_test_output_for_task(
+                context: dict[str, Any],
+                output: AgentOutput,
+                task: Task | None = None,
+            ) -> None:
+                _validate_test_output_for_task_runtime(
                     sandbox_policy,
                     context,
                     output,
                     task,
-                ),
+                )
+
+            validate_task_output(
+                task,
+                agent_input.context,
+                normalized_output,
+                validate_code_output=validate_code_output_for_task,
+                validate_test_output=validate_test_output_for_task,
             )
             ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:

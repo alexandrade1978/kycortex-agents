@@ -151,17 +151,18 @@ class Orchestrator:
             normalized_output = normalize_agent_result(output)
             normalized_output = unredacted_agent_result(agent, normalized_output)
             normalized_output = sanitize_output_provider_call_metadata(normalized_output)
+            sandbox_policy = self.config.execution_sandbox_policy()
             validate_task_output(
                 task,
                 agent_input.context,
                 normalized_output,
                 validate_code_output=lambda output, task=None: _validate_code_output_for_task_runtime(
-                    self.config.execution_sandbox_policy(),
+                    sandbox_policy,
                     output,
                     task,
                 ),
                 validate_test_output=lambda context, output, task=None: _validate_test_output_for_task_runtime(
-                    self.config.execution_sandbox_policy(),
+                    sandbox_policy,
                     context,
                     output,
                     task,

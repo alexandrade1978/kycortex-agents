@@ -765,9 +765,6 @@ class Orchestrator:
         self.registry = registry or build_default_registry(self.config)
         self.logger = logging.getLogger("Orchestrator")
 
-    def _log_event(self, level: str, event: str, **fields: Any) -> None:
-        log_event(self.logger, level, event, **fields)
-
     def pause_workflow(self, project: ProjectState, *, reason: str) -> bool:
         """Pause a workflow so the orchestrator stops dispatching new runnable tasks."""
 
@@ -801,7 +798,8 @@ class Orchestrator:
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""
         current_execution_agent_name = execution_agent_name(task)
-        self._log_event(
+        log_event(
+            self.logger,
             "info",
             "task_started",
             project_name=project.project_name,
@@ -852,7 +850,8 @@ class Orchestrator:
                 error_category=failure_category,
             )
             if project.should_retry_task(task.id):
-                self._log_event(
+                log_event(
+                    self.logger,
                     "warning",
                     "task_retry_scheduled",
                     project_name=project.project_name,
@@ -864,7 +863,8 @@ class Orchestrator:
                 )
             else:
                 provider_call = provider_call_metadata(agent, normalized_output)
-                self._log_event(
+                log_event(
+                    self.logger,
                     "error",
                     "task_failed",
                     project_name=project.project_name,
@@ -877,7 +877,8 @@ class Orchestrator:
                     model=provider_call.get("model") if provider_call else None,
                 )
             raise
-        self._log_event(
+        log_event(
+            self.logger,
             "info",
             "task_completed",
             project_name=project.project_name,
@@ -1142,11 +1143,11 @@ class Orchestrator:
                             failed_task_ids,
                             ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
                         ),
-                        log_event=self._log_event,
+                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
                         **kwargs,
                     ),
                 ),
-                log_event=self._log_event,
+                log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
             ),
             run_active_workflow=lambda current_project: run_active_workflow(
                 current_project,
@@ -1156,7 +1157,7 @@ class Orchestrator:
                     active_project,
                     workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                     workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
-                    log_event=self._log_event,
+                    log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
                 ),
                 execute_workflow_loop=lambda active_project: execute_workflow_loop(
                     active_project,
@@ -1169,7 +1170,7 @@ class Orchestrator:
                         workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                        log_event=self._log_event,
+                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
                     ),
                     execute_runnable_frontier=lambda loop_project: execute_runnable_frontier(
                         loop_project,
@@ -1213,7 +1214,7 @@ class Orchestrator:
                                             build_repair_context=build_repair_context_runtime,
                                         ),
                                         ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-                                        log_event=self._log_event,
+                                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
                                     ),
                                     emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
                                         self.logger,
@@ -1221,7 +1222,7 @@ class Orchestrator:
                                         task=task,
                                     ),
                                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                                    log_event=self._log_event,
+                                    log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
                                 ),
                                 emit_workflow_progress=lambda progress_project, *, task=None: emit_workflow_progress(
                                     self.logger,
@@ -1233,9 +1234,9 @@ class Orchestrator:
                         workflow_acceptance_policy=self.config.workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                        log_event=self._log_event,
+                        log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
                     ),
                 ),
-                log_event=self._log_event,
+                log_event=lambda level, event, **fields: log_event(self.logger, level, event, **fields),
             ),
         )

@@ -2585,7 +2585,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-        log_event=orchestrator._log_event,
+        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
     project.repair_history[-1] = {"cycle": 1}
@@ -2603,7 +2603,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-        log_event=orchestrator._log_event,
+        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
     monkeypatch.setattr(orchestrator_module, "has_repair_task_for_cycle", lambda *args, **kwargs: False)
@@ -2622,7 +2622,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-        log_event=orchestrator._log_event,
+        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
 
@@ -11303,34 +11303,39 @@ def test_orchestrator_log_event_minimizes_task_id_lists(tmp_path, caplog):
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))
 
     with caplog.at_level("INFO", logger="Orchestrator"):
-        orchestrator._log_event("info", "workflow_resumed", project_name="Demo", task_ids=["arch", "code"])
-        orchestrator._log_event(
+        orchestrator_module.log_event(orchestrator.logger, "info", "workflow_resumed", project_name="Demo", task_ids=["arch", "code"])
+        orchestrator_module.log_event(
+            orchestrator.logger,
             "warning",
             "workflow_replayed",
             project_name="Demo",
             replayed_task_ids=["arch"],
             removed_task_ids=["code__repair_1", "code__repair_2"],
         )
-        orchestrator._log_event(
+        orchestrator_module.log_event(
+            orchestrator.logger,
             "error",
             "workflow_repair_budget_exhausted",
             project_name="Demo",
             failed_task_ids=["arch", "code"],
         )
-        orchestrator._log_event(
+        orchestrator_module.log_event(
+            orchestrator.logger,
             "warning",
             "workflow_blocked",
             project_name="Demo",
             blocked_task_ids=["docs"],
         )
-        orchestrator._log_event(
+        orchestrator_module.log_event(
+            orchestrator.logger,
             "warning",
             "dependent_tasks_skipped",
             project_name="Demo",
             task_id="arch",
             skipped_task_ids=["docs", "legal"],
         )
-        orchestrator._log_event(
+        orchestrator_module.log_event(
+            orchestrator.logger,
             "info",
             "task_repair_chained",
             project_name="Demo",
@@ -12687,7 +12692,7 @@ def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_f
             build_repair_context=orchestrator_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-        log_event=orchestrator._log_event,
+        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is True
 
     tests_task = require_task(project, "tests")

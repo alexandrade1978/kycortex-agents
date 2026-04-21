@@ -3383,10 +3383,10 @@ def test_extract_batch_rule_ignores_non_matching_calls_and_empty_required_fields
 
 def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_input(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
 
-    blank_analysis = orchestrator._analyze_test_module("   ", "module_under_test", {})
-    syntax_error_analysis = orchestrator._analyze_test_module("def broken(:\n    pass", "module_under_test", {})
+    blank_analysis = orchestrator_module.analyze_test_module_runtime("   ", "module_under_test", {})
+    syntax_error_analysis = orchestrator_module.analyze_test_module_runtime("def broken(:\n    pass", "module_under_test", {})
 
     assert blank_analysis == {
         "syntax_ok": True,
@@ -3419,7 +3419,7 @@ def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_
 
 def test_analyze_test_module_tracks_invalid_member_references_for_non_enum_class_fields(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -3446,14 +3446,14 @@ def test_analyze_test_module_tracks_invalid_member_references_for_non_enum_class
         "    assert Payload.missing == 'oops'\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["invalid_member_references"] == ["Payload.missing (line 5)"]
 
 
 def test_analyze_test_module_allows_existing_class_methods(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -3488,14 +3488,14 @@ def test_analyze_test_module_allows_existing_class_methods(tmp_path):
         "    assert Validator.validate({'ok': True}) is not None\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["invalid_member_references"] == []
 
 
 def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = analyze_python_module(
         "audit_logs: list[str] = []\n\n"
         "def log_audit():\n"
@@ -3508,7 +3508,7 @@ def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path)
         "    assert audit_logs == ['ok']\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["imported_module_symbols"] == ["audit_logs", "log_audit"]
     assert analysis["unknown_module_symbols"] == []
@@ -3516,7 +3516,7 @@ def test_analyze_test_module_allows_importing_defined_module_variables(tmp_path)
 
 def test_analyze_test_module_tracks_assertion_strength(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = analyze_python_module(
         "def add(a, b):\n"
         "    return a + b\n"
@@ -3533,7 +3533,7 @@ def test_analyze_test_module_tracks_assertion_strength(tmp_path):
         "    add(2, 3)\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["assertion_like_count"] == 2
     assert len(analysis["tests_without_assertions"]) == 1
@@ -3542,7 +3542,7 @@ def test_analyze_test_module_tracks_assertion_strength(tmp_path):
 
 def test_analyze_test_module_flags_batch_audit_length_contract_overreach(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = analyze_python_module(
         "class ComplianceRequest:\n"
         "    pass\n\n"
@@ -3562,7 +3562,7 @@ def test_analyze_test_module_flags_batch_audit_length_contract_overreach(tmp_pat
         "    assert len(service.audit_log) == 3\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["contract_overreach_signals"] == [
         "exact batch audit length 3 exceeds visible batch size 2 in test_batch_processing (line 8)"
@@ -3571,7 +3571,7 @@ def test_analyze_test_module_flags_batch_audit_length_contract_overreach(tmp_pat
 
 def test_analyze_test_module_flags_validation_failure_score_state_emptiness_contract_overreach(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = analyze_python_module(
         "class ComplianceRequest:\n"
         "    pass\n\n"
@@ -3592,7 +3592,7 @@ def test_analyze_test_module_flags_validation_failure_score_state_emptiness_cont
         "    assert len(service.get_risk_scores()) == 0\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["contract_overreach_signals"] == [
         "exact validation-failure score-state emptiness assertion on 'service.get_risk_scores()' in test_validation_failure (line 7) assumes rejected input leaves internal score state empty"
@@ -3601,7 +3601,7 @@ def test_analyze_test_module_flags_validation_failure_score_state_emptiness_cont
 
 def test_analyze_test_module_allows_validation_failure_score_state_assertion_when_behavior_contract_defines_it(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = analyze_python_module(
         "class ComplianceRequest:\n"
         "    pass\n\n"
@@ -3622,7 +3622,7 @@ def test_analyze_test_module_allows_validation_failure_score_state_assertion_whe
         "    assert len(service.get_risk_scores()) == 0\n"
     )
 
-    analysis = orchestrator._analyze_test_module(
+    analysis = orchestrator_module.analyze_test_module_runtime(
         test_content,
         "module_under_test",
         module_analysis,
@@ -3634,7 +3634,7 @@ def test_analyze_test_module_allows_validation_failure_score_state_assertion_whe
 
 def test_analyze_test_module_flags_helper_surface_usages_when_workflow_class_exists(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -3694,14 +3694,14 @@ def test_analyze_test_module_flags_helper_surface_usages_when_workflow_class_exi
         "    assert service is not None\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["helper_surface_usages"] == ["ComplianceRepository", "RiskScoringService"]
 
 
 def test_analyze_test_module_allows_required_constructor_helper_for_preferred_workflow_class(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -3746,14 +3746,14 @@ def test_analyze_test_module_allows_required_constructor_helper_for_preferred_wo
         "    assert service is not None\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["helper_surface_usages"] == []
 
 
 def test_analyze_test_module_allows_multi_token_constructor_helpers_for_preferred_workflow_class(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -3832,14 +3832,14 @@ def test_analyze_test_module_allows_multi_token_constructor_helpers_for_preferre
         "    assert service is not None\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["helper_surface_usages"] == []
 
 
 def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -3888,7 +3888,7 @@ def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs
         "    assert request.id == 'req-1'\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["call_arity_mismatches"] == [
         "ComplianceIntakeService.intake_request expects 1 args but test uses 2 at line 5"
@@ -3898,7 +3898,7 @@ def test_analyze_test_module_tracks_instance_call_arity_and_returned_member_refs
 
 def test_analyze_test_module_tracks_inline_constructor_member_refs_and_returned_types(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -3969,7 +3969,7 @@ def test_analyze_test_module_tracks_inline_constructor_member_refs_and_returned_
         "    assert result.invalid is True\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["call_arity_mismatches"] == [
         "ComplianceIntakeService.batch_submit_intakes expects 1 args but test uses 2 at line 6"
@@ -3982,7 +3982,7 @@ def test_analyze_test_module_tracks_inline_constructor_member_refs_and_returned_
 
 def test_analyze_test_module_flags_mock_style_assertions_without_mock_setup(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [{"name": "log_audit"}],
@@ -3999,7 +3999,7 @@ def test_analyze_test_module_flags_mock_style_assertions_without_mock_setup(tmp_
         "    assert logging.getLogger().info.call_count == 1\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["unsupported_mock_assertions"] == [
         "logging.getLogger().info.call_count (line 6)"
@@ -4008,7 +4008,7 @@ def test_analyze_test_module_flags_mock_style_assertions_without_mock_setup(tmp_
 
 def test_analyze_test_module_allows_mock_style_assertions_with_explicit_mock_setup(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     test_content = (
         "from unittest.mock import MagicMock\n\n"
         "def test_logger_calls():\n"
@@ -4017,14 +4017,14 @@ def test_analyze_test_module_allows_mock_style_assertions_with_explicit_mock_set
         "    assert mock_logger.info.call_count == 1\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", {})
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", {})
 
     assert analysis["unsupported_mock_assertions"] == []
 
 
 def test_analyze_test_module_flags_reserved_request_fixture_and_missing_fixture_imports(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [{"name": "validate_request"}],
@@ -4056,7 +4056,7 @@ def test_analyze_test_module_flags_reserved_request_fixture_and_missing_fixture_
         "    assert validate_request(request)\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["reserved_fixture_names"] == ["request (line 5)"]
     assert analysis["undefined_local_names"] == ["ComplianceRequest (line 6)"]
@@ -4207,7 +4207,7 @@ def test_analyze_test_behavior_contracts_allows_partial_invalid_batch_when_resul
 
 def test_analyze_test_module_allows_optional_constructor_arguments(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -4235,7 +4235,7 @@ def test_analyze_test_module_allows_optional_constructor_arguments(tmp_path):
         "    assert request is not None\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["constructor_arity_mismatches"] == []
 
@@ -4269,7 +4269,7 @@ def test_analyze_python_module_tracks_optional_dataclass_constructor_fields(tmp_
 
 def test_analyze_test_module_allows_omitted_defaulted_dataclass_field_from_module_analysis(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = analyze_python_module(
         "from dataclasses import dataclass, field\n"
         "from datetime import datetime\n\n"
@@ -4287,7 +4287,7 @@ def test_analyze_test_module_allows_omitted_defaulted_dataclass_field_from_modul
         "    assert request.request_id == 'req-1'\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["constructor_arity_mismatches"] == []
 
@@ -5588,7 +5588,7 @@ def test_analyze_typed_test_member_usage_treats_enum_fields_as_invalid_members(t
 
 def test_analyze_test_module_reports_constructor_arity_when_limits_fall_back_or_span_range(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     module_analysis = {
         "syntax_ok": True,
         "functions": [],
@@ -5627,7 +5627,7 @@ def test_analyze_test_module_reports_constructor_arity_when_limits_fall_back_or_
         "    Envelope(1, 2, 3)\n"
     )
 
-    analysis = orchestrator._analyze_test_module(test_content, "module_under_test", module_analysis)
+    analysis = orchestrator_module.analyze_test_module_runtime(test_content, "module_under_test", module_analysis)
 
     assert analysis["constructor_arity_mismatches"] == [
         "Envelope expects 1-2 args but test uses 3 at line 5",
@@ -9353,8 +9353,8 @@ def test_run_task_fails_qa_tester_when_generated_tests_use_undefined_fixtures(tm
 
 def test_analyze_test_module_treats_parametrize_arguments_as_bound_names(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
-    analysis = orchestrator._analyze_test_module(
+    Orchestrator(config)
+    analysis = orchestrator_module.analyze_test_module_runtime(
         "import pytest\n"
         "from module_under_test import batch_process\n\n"
         "@pytest.mark.parametrize(\"requests, expected\", [([1], [1])])\n"

@@ -1009,7 +1009,7 @@ class Orchestrator:
                 continue
             test_analysis = validation.get("test_analysis") if isinstance(validation, dict) else None
             if not isinstance(test_analysis, dict):
-                test_analysis = self._analyze_test_module(task.output or "", module_name, code_analysis)
+                test_analysis = analyze_test_module_runtime(task.output or "", module_name, code_analysis)
             test_execution = validation.get("test_execution") if isinstance(validation, dict) else None
             return {
                 "tests_artifact_path": artifact_path,
@@ -1047,20 +1047,6 @@ class Orchestrator:
                 "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
             }
         return {}
-
-    def _analyze_test_module(
-        self,
-        raw_content: str,
-        module_name: str,
-        code_analysis: Dict[str, Any],
-        code_behavior_contract: str = "",
-    ) -> Dict[str, Any]:
-        return analyze_test_module_runtime(
-            raw_content,
-            module_name,
-            code_analysis,
-            code_behavior_contract,
-        )
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
         context = build_task_context_runtime(

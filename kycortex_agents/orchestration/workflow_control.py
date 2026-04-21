@@ -12,12 +12,24 @@ from kycortex_agents.orchestration.output_helpers import validation_payload
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
     failed_artifact_content_for_category,
+    internal_constructor_strictness_details,
+    invalid_outcome_missing_audit_trail_details,
     missing_import_nameerror_details,
     plain_class_field_default_factory_details,
 )
 from kycortex_agents.orchestration.repair_instructions import (
+    build_code_repair_instruction_from_test_failure_runtime,
     build_repair_instruction_runtime,
     repair_owner_for_category,
+)
+from kycortex_agents.orchestration.repair_analysis import (
+    duplicate_constructor_argument_call_hint,
+    duplicate_constructor_argument_details,
+    duplicate_constructor_explicit_rewrite_hint,
+    missing_object_attribute_details,
+    nested_payload_wrapper_field_validation_details,
+    render_name_list,
+    suggest_declared_attribute_replacement,
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
     helper_surface_usages_for_test_repair_runtime,
@@ -1115,6 +1127,59 @@ def build_code_repair_context_from_test_failure(
     }
     merge_prior_repair_context(code_task, repair_context)
     return repair_context
+
+
+def build_code_repair_context_from_test_failure_runtime(
+    code_task: Task,
+    test_task: Task,
+    cycle: dict[str, Any],
+) -> dict[str, Any]:
+    def current_failed_artifact_content(current_task: Task, artifact_type: Any) -> str:
+        return failed_artifact_content(
+            current_task.output,
+            current_task.output_payload,
+            artifact_type,
+        )
+
+    def current_repair_validation_summary(current_task: Task, failure_category: str) -> str:
+        return build_repair_validation_summary(
+            current_task,
+            failure_category,
+            validation_payload(current_task),
+        )
+
+    def current_code_repair_instruction(
+        current_code_task: Task,
+        validation_summary: str,
+        existing_tests: object,
+    ) -> str:
+        return build_code_repair_instruction_from_test_failure_runtime(
+            current_code_task,
+            validation_summary,
+            failed_artifact_content=current_failed_artifact_content,
+            artifact_type=AgentOutputArtifactType.CODE,
+            duplicate_constructor_argument_details=duplicate_constructor_argument_details,
+            duplicate_constructor_argument_call_hint=duplicate_constructor_argument_call_hint,
+            duplicate_constructor_explicit_rewrite_hint=duplicate_constructor_explicit_rewrite_hint,
+            plain_class_field_default_factory_details=plain_class_field_default_factory_details,
+            missing_object_attribute_details=missing_object_attribute_details,
+            suggest_declared_attribute_replacement=suggest_declared_attribute_replacement,
+            render_name_list=render_name_list,
+            nested_payload_wrapper_field_validation_details=nested_payload_wrapper_field_validation_details,
+            invalid_outcome_missing_audit_trail_details=invalid_outcome_missing_audit_trail_details,
+            internal_constructor_strictness_details=internal_constructor_strictness_details,
+            existing_tests=existing_tests,
+        )
+
+    return build_code_repair_context_from_test_failure(
+        code_task,
+        test_task,
+        cycle,
+        failed_artifact_content=current_failed_artifact_content,
+        build_repair_validation_summary=current_repair_validation_summary,
+        build_code_repair_instruction_from_test_failure=current_code_repair_instruction,
+        merge_prior_repair_context=merge_prior_repair_context,
+    )
 
 
 def merge_prior_repair_context(task: Task, repair_context: dict[str, Any]) -> None:

@@ -47,18 +47,6 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
 )
-from kycortex_agents.orchestration.repair_analysis import (
-    duplicate_constructor_argument_call_hint,
-    duplicate_constructor_argument_details,
-    duplicate_constructor_explicit_rewrite_hint,
-    internal_constructor_strictness_details,
-    invalid_outcome_missing_audit_trail_details,
-    missing_object_attribute_details,
-    nested_payload_wrapper_field_validation_details,
-    plain_class_field_default_factory_details,
-    render_name_list,
-    suggest_declared_attribute_replacement,
-)
 from kycortex_agents.orchestration.repair_test_analysis import (
     imported_code_task_for_failed_test,
     normalized_helper_surface_symbols,
@@ -68,9 +56,6 @@ from kycortex_agents.orchestration.repair_test_analysis import (
 )
 from kycortex_agents.orchestration.repair_focus import (
     build_repair_focus_lines,
-)
-from kycortex_agents.orchestration.repair_instructions import (
-    build_code_repair_instruction_from_test_failure_runtime,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
     execute_generated_module_import,
@@ -96,7 +81,6 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     auto_fix_test_type_mismatches,
 )
 from kycortex_agents.orchestration.validation_reporting import (
-    build_repair_validation_summary,
     completion_diagnostics_from_provider_call,
     completion_validation_issue,
 )
@@ -119,7 +103,7 @@ from kycortex_agents.orchestration.validation_analysis import (
 )
 from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
-    build_code_repair_context_from_test_failure,
+    build_code_repair_context_from_test_failure_runtime,
     classify_task_failure,
     configure_repair_attempts,
     dispatch_task_failure,
@@ -141,7 +125,6 @@ from kycortex_agents.orchestration.workflow_control import (
     exit_if_workflow_cancelled,
     exit_if_workflow_paused,
     log_event,
-    merge_prior_repair_context,
     override_task,
     pause_workflow,
     repair_task_ids_for_cycle,
@@ -161,7 +144,6 @@ from kycortex_agents.providers.base import (
 from kycortex_agents.types import (
     AgentInput,
     AgentOutput,
-    ArtifactType,
     FailureCategory,
 )
 
@@ -271,59 +253,6 @@ def configure_repair_attempts_runtime(
         build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure,
         ensure_budget_decomposition_task=ensure_budget_decomposition_task,
         build_repair_context=build_repair_context,
-    )
-
-
-def build_code_repair_context_from_test_failure_runtime(
-    code_task: Task,
-    test_task: Task,
-    cycle: Dict[str, Any],
-) -> Dict[str, Any]:
-    def current_failed_artifact_content(current_task: Task, artifact_type: Any) -> str:
-        return failed_artifact_content(
-            current_task.output,
-            current_task.output_payload,
-            artifact_type,
-        )
-
-    def current_repair_validation_summary(current_task: Task, failure_category: str) -> str:
-        return build_repair_validation_summary(
-            current_task,
-            failure_category,
-            validation_payload(current_task),
-        )
-
-    def current_code_repair_instruction(
-        current_code_task: Task,
-        validation_summary: str,
-        existing_tests: object,
-    ) -> str:
-        return build_code_repair_instruction_from_test_failure_runtime(
-            current_code_task,
-            validation_summary,
-            failed_artifact_content=current_failed_artifact_content,
-            artifact_type=ArtifactType.CODE,
-            duplicate_constructor_argument_details=duplicate_constructor_argument_details,
-            duplicate_constructor_argument_call_hint=duplicate_constructor_argument_call_hint,
-            duplicate_constructor_explicit_rewrite_hint=duplicate_constructor_explicit_rewrite_hint,
-            plain_class_field_default_factory_details=plain_class_field_default_factory_details,
-            missing_object_attribute_details=missing_object_attribute_details,
-            suggest_declared_attribute_replacement=suggest_declared_attribute_replacement,
-            render_name_list=render_name_list,
-            nested_payload_wrapper_field_validation_details=nested_payload_wrapper_field_validation_details,
-            invalid_outcome_missing_audit_trail_details=invalid_outcome_missing_audit_trail_details,
-            internal_constructor_strictness_details=internal_constructor_strictness_details,
-            existing_tests=existing_tests,
-        )
-
-    return build_code_repair_context_from_test_failure(
-        code_task,
-        test_task,
-        cycle,
-        failed_artifact_content=current_failed_artifact_content,
-        build_repair_validation_summary=current_repair_validation_summary,
-        build_code_repair_instruction_from_test_failure=current_code_repair_instruction,
-        merge_prior_repair_context=merge_prior_repair_context,
     )
 
 

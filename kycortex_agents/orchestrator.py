@@ -229,6 +229,11 @@ class Orchestrator:
 
     def execute_workflow(self, project: ProjectState):
         """Execute the full workflow until completion or an unrecoverable failure."""
+        workflow_acceptance_policy = self.config.workflow_acceptance_policy
+        workflow_max_repair_cycles = self.config.workflow_max_repair_cycles
+        workflow_resume_policy = self.config.workflow_resume_policy
+        workflow_failure_policy = self.config.workflow_failure_policy
+
         def workflow_exit_if_cancelled(current_project: ProjectState) -> bool:
             return exit_if_workflow_cancelled(self.logger, current_project)
 
@@ -251,17 +256,17 @@ class Orchestrator:
             execution_plan=project.execution_plan,
             validate_agent_resolution=validate_agent_resolution,
             registry=self.registry,
-            workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
+            workflow_max_repair_cycles=workflow_max_repair_cycles,
             resume_workflow_tasks=lambda current_project: resume_workflow_tasks(
                 current_project,
-                workflow_resume_policy=self.config.workflow_resume_policy,
+                workflow_resume_policy=workflow_resume_policy,
                 failed_task_ids_for_repair=failed_task_ids_for_repair,
                 resume_failed_workflow_tasks=lambda resume_project, current_failed_task_ids, current_failure_categories: resume_failed_workflow_tasks(
                     resume_project,
                     current_failed_task_ids,
                     current_failure_categories,
                     is_repairable_failure=_is_repairable_failure_category,
-                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                    workflow_acceptance_policy=workflow_acceptance_policy,
                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                     evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                     resume_failed_tasks_with_repair_cycle=lambda repair_project, resume_failed_task_ids, resume_failure_categories, **kwargs: resume_failed_tasks_with_repair_cycle(
@@ -293,8 +298,8 @@ class Orchestrator:
                 exit_if_workflow_paused=workflow_exit_if_paused,
                 ensure_workflow_running=lambda active_project: ensure_workflow_running(
                     active_project,
-                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
-                    workflow_max_repair_cycles=self.config.workflow_max_repair_cycles,
+                    workflow_acceptance_policy=workflow_acceptance_policy,
+                    workflow_max_repair_cycles=workflow_max_repair_cycles,
                     log_event=workflow_log_event,
                 ),
                 execute_workflow_loop=lambda active_project: execute_workflow_loop(
@@ -305,7 +310,7 @@ class Orchestrator:
                     finish_workflow_if_no_pending_tasks=lambda loop_project, pending: finish_workflow_if_no_pending_tasks(
                         loop_project,
                         pending,
-                        workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                        workflow_acceptance_policy=workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                         log_event=workflow_log_event,
@@ -328,14 +333,14 @@ class Orchestrator:
                                     dispatch_project,
                                     task=task,
                                     failure_category=failure_category,
-                                    workflow_failure_policy=self.config.workflow_failure_policy,
-                                    workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                                    workflow_failure_policy=workflow_failure_policy,
+                                    workflow_acceptance_policy=workflow_acceptance_policy,
                                     zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                                     is_repairable_failure=_is_repairable_failure_category,
                                     queue_active_cycle_repair=lambda current_project, current_task: _queue_active_cycle_repair_runtime(
                                         current_project,
                                         current_task,
-                                        workflow_resume_policy=self.config.workflow_resume_policy,
+                                        workflow_resume_policy=workflow_resume_policy,
                                         configure_repair_attempts=lambda repair_project, failed_task_ids, cycle: configure_repair_attempts_runtime(
                                             repair_project,
                                             failed_task_ids,
@@ -354,7 +359,7 @@ class Orchestrator:
                                 emit_workflow_progress=workflow_emit_progress,
                             ),
                         ),
-                        workflow_acceptance_policy=self.config.workflow_acceptance_policy,
+                        workflow_acceptance_policy=workflow_acceptance_policy,
                         zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
                         evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                         log_event=workflow_log_event,

@@ -46,6 +46,7 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     qa_repair_should_reuse_failed_test_artifact,
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
+    analyze_test_behavior_contracts,
     analyze_test_type_mismatches,
     analyze_typed_test_member_usage,
     assert_expects_false,
@@ -4022,7 +4023,7 @@ def test_binding_and_call_helpers_cover_annotation_attribute_and_keyword_paths(t
 
 def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     tree = ast.parse(
         "def test_case():\n"
         "    validate_request({'name': 'Ada'})\n"
@@ -4031,7 +4032,7 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
         "    (factory())()\n"
     )
 
-    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
         tree,
         {"validate_request": ["name", "email"]},
         {"score_request": {"status": ["approved"]}},
@@ -4050,7 +4051,7 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
 
 def test_analyze_test_behavior_contracts_ignores_negative_validation_expectations(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     tree = ast.parse(
         "import pytest\n\n"
         "def test_case():\n"
@@ -4060,7 +4061,7 @@ def test_analyze_test_behavior_contracts_ignores_negative_validation_expectation
         "    assert not validate_request({'name': 'Ada'})\n"
     )
 
-    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
         tree,
         {"intake_request": ["name", "email"], "validate_request": ["name", "email"]},
         {},
@@ -4076,7 +4077,7 @@ def test_analyze_test_behavior_contracts_ignores_negative_validation_expectation
 
 def test_analyze_test_behavior_contracts_ignores_validation_result_invalid_state_assertions(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     tree = ast.parse(
         "def test_case():\n"
         "    result = validate_submission({'name': 'Ada'})\n"
@@ -4084,7 +4085,7 @@ def test_analyze_test_behavior_contracts_ignores_validation_result_invalid_state
         "    assert result.errors\n"
     )
 
-    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
         tree,
         {"validate_submission": ["name", "email"]},
         {},
@@ -4100,7 +4101,7 @@ def test_analyze_test_behavior_contracts_ignores_validation_result_invalid_state
 
 def test_analyze_test_behavior_contracts_allows_partial_invalid_batch_when_result_count_is_explicit(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     tree = ast.parse(
         "def test_case():\n"
         "    requests = [\n"
@@ -4111,7 +4112,7 @@ def test_analyze_test_behavior_contracts_allows_partial_invalid_batch_when_resul
         "    assert len(results) == 1\n"
     )
 
-    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
         tree,
         {},
         {},
@@ -4220,14 +4221,14 @@ def test_analyze_test_module_allows_omitted_defaulted_dataclass_field_from_modul
 
 def test_analyze_test_behavior_contracts_ignores_unresolved_payloads_and_supported_values(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     tree = ast.parse(
         "def test_case():\n"
         "    validate_request(payload)\n"
         "    score_request({'status': 'approved'})\n"
     )
 
-    payload_violations, non_batch_calls = orchestrator._analyze_test_behavior_contracts(
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
         tree,
         {"validate_request": ["name"]},
         {"score_request": {"status": ["approved"]}},

@@ -109,7 +109,6 @@ from kycortex_agents.orchestration.task_constraints import (
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
     analyze_test_module,
-    analyze_test_behavior_contracts,
     auto_fix_test_type_mismatches,
 )
 from kycortex_agents.orchestration.validation_reporting import (
@@ -985,26 +984,6 @@ class Orchestrator:
             _RESERVED_FIXTURE_NAMES,
             _PYTEST_BUILTIN_FIXTURES,
             code_behavior_contract,
-        )
-
-    def _analyze_test_behavior_contracts(
-        self,
-        tree: ast.AST,
-        validation_rules: Dict[str, list[str]],
-        field_value_rules: Dict[str, Dict[str, list[str]]],
-        batch_rules: Dict[str, Dict[str, Any]],
-        sequence_input_functions: set[str],
-        function_names: set[str],
-        class_map: Dict[str, Any],
-    ) -> tuple[list[str], list[str]]:
-        return analyze_test_behavior_contracts(
-            tree,
-            validation_rules,
-            field_value_rules,
-            batch_rules,
-            sequence_input_functions,
-            function_names,
-            class_map,
         )
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:

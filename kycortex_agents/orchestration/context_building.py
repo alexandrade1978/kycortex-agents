@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import cast
 from typing import Any, Callable, Optional
 
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration.module_ast_analysis import (
+    analyze_python_module,
+    build_code_behavior_contract,
+    build_code_exact_test_contract,
+    build_code_outline,
+    build_code_public_api,
+    build_code_test_targets,
+    build_module_run_command,
+)
+from kycortex_agents.orchestration.output_helpers import summarize_output
 from kycortex_agents.types import (
     AgentView,
     AgentViewArtifactRecord,
@@ -100,6 +111,73 @@ def planned_module_context_runtime(
                 "planned_module_filename": f"{module_name}.py",
             }
     return {}
+
+
+def code_artifact_context_runtime(
+    task: Task,
+    project: ProjectState | None = None,
+) -> dict[str, Any]:
+    if project is None:
+        module_name = default_module_name_for_task(task)
+    else:
+        current_task = task
+        visited_task_ids: set[str] = set()
+        while current_task.repair_origin_task_id:
+            origin_task = project.get_task(current_task.repair_origin_task_id)
+            if (
+                origin_task is None
+                or origin_task.id in visited_task_ids
+                or (origin_task.assigned_to or "").strip().lower() != "code_engineer"
+            ):
+                break
+            visited_task_ids.add(origin_task.id)
+            current_task = origin_task
+        module_name = default_module_name_for_task(current_task)
+    if not module_name:
+        return {}
+
+    artifact_path = f"artifacts/{module_name}.py"
+    code_content = task.output or ""
+    task_module_name = default_module_name_for_task(task)
+    allow_artifact_path_override = task_module_name == module_name
+
+    if isinstance(task.output_payload, dict):
+        artifacts = task.output_payload.get("artifacts")
+        if isinstance(artifacts, list):
+            for artifact in artifacts:
+                if not isinstance(artifact, dict):
+                    continue
+                if artifact.get("artifact_type") != "code":
+                    continue
+                candidate_path = artifact.get("path")
+                if allow_artifact_path_override and isinstance(candidate_path, str) and candidate_path.strip():
+                    artifact_path = candidate_path
+                candidate_content = artifact.get("content")
+                if isinstance(candidate_content, str) and candidate_content.strip():
+                    code_content = candidate_content
+                break
+        raw_content = task.output_payload.get("raw_content")
+        if (not isinstance(code_content, str) or not code_content.strip()) and isinstance(raw_content, str):
+            code_content = raw_content
+
+    if not isinstance(code_content, str) or not code_content.strip():
+        return {}
+
+    path_obj = Path(artifact_path)
+    code_analysis = analyze_python_module(code_content)
+    return {
+        "code_artifact_path": artifact_path,
+        "module_name": path_obj.stem,
+        "module_filename": path_obj.name,
+        "code_summary": summarize_output(code_content),
+        "code_outline": build_code_outline(code_content),
+        "code_analysis": code_analysis,
+        "code_public_api": build_code_public_api(code_analysis),
+        "code_exact_test_contract": build_code_exact_test_contract(code_analysis),
+        "code_test_targets": build_code_test_targets(code_analysis),
+        "code_behavior_contract": build_code_behavior_contract(code_content),
+        "module_run_command": build_module_run_command(path_obj.name, code_analysis),
+    }
 
 
 def build_task_context_base(

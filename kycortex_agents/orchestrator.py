@@ -1,4 +1,3 @@
-import ast
 import importlib.util
 import logging
 import os
@@ -47,7 +46,6 @@ from kycortex_agents.orchestration.output_helpers import (
 )
 from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
-    example_from_default,
 )
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
@@ -180,17 +178,6 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
 _ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
-
-# ---------------------------------------------------------------------------
-# Test issue severity classification — Phase 3 (Model Adaptation Layer)
-# BLOCKING issues prevent test execution or indicate security risks.
-# WARNING issues may be false positives for models that generate structurally
-# different but functionally correct code; the pytest arbiter decides.
-# ---------------------------------------------------------------------------
-def _example_from_default(node: ast.expr) -> str | None:
-    """Return an example literal string for a .get() default AST node."""
-    return example_from_default(node)
-
 
 def plan_repair_task_ids_for_cycle(
     project: ProjectState,

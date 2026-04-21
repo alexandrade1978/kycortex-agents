@@ -11,6 +11,7 @@ import pytest
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_behavior_contract,
+    example_from_default as _example_from_default,
     extract_type_constraints,
     infer_dict_key_value_examples,
     isinstance_subject_name,
@@ -36,7 +37,7 @@ from kycortex_agents.orchestration import (
     validation_has_only_warnings,
     validation_has_static_issues,
 )
-from kycortex_agents.orchestrator import Orchestrator, _example_from_default
+from kycortex_agents.orchestrator import Orchestrator
 
 
 @pytest.fixture()

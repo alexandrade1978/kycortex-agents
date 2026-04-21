@@ -6,12 +6,32 @@ from typing import AbstractSet, Any, Callable, Literal, Optional, cast
 
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.orchestration.artifacts import failed_artifact_content
 from kycortex_agents.providers.base import redact_sensitive_data
+from kycortex_agents.orchestration.output_helpers import validation_payload
+from kycortex_agents.orchestration.repair_analysis import (
+    dataclass_default_order_repair_examples,
+    failed_artifact_content_for_category,
+    missing_import_nameerror_details,
+    plain_class_field_default_factory_details,
+)
+from kycortex_agents.orchestration.repair_instructions import (
+    build_repair_instruction_runtime,
+    repair_owner_for_category,
+)
+from kycortex_agents.orchestration.repair_test_analysis import (
+    helper_surface_usages_for_test_repair_runtime,
+    normalized_helper_surface_symbols,
+)
 from kycortex_agents.orchestration.sandbox_execution import sandbox_security_violation
 from kycortex_agents.orchestration.task_constraints import (
     build_budget_decomposition_task_context,
     repair_requires_budget_decomposition,
 )
+from kycortex_agents.orchestration.validation_analysis import (
+    validation_has_only_warnings,
+)
+from kycortex_agents.orchestration.validation_reporting import build_repair_validation_summary
 from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus, WorkflowOutcome
 
 
@@ -1002,6 +1022,60 @@ def build_repair_context(
         )
     merge_prior_repair_context(task, repair_context)
     return repair_context
+
+
+def build_repair_context_runtime(task: Task, cycle: dict[str, Any]) -> dict[str, Any]:
+    def current_repair_owner_for_category(current_task: Task, failure_category: str) -> str:
+        return repair_owner_for_category(
+            current_task.assigned_to,
+            failure_category,
+        )
+
+    def current_repair_instruction(current_task: Task, failure_category: str) -> str:
+        return build_repair_instruction_runtime(
+            current_task,
+            failure_category,
+            failed_artifact_content=failed_artifact_content,
+            artifact_type=AgentOutputArtifactType.CODE,
+            validation_payload=validation_payload,
+            dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
+            missing_import_nameerror_details=missing_import_nameerror_details,
+            plain_class_field_default_factory_details=plain_class_field_default_factory_details,
+            test_validation_has_only_warnings=validation_has_only_warnings,
+        )
+
+    def current_repair_validation_summary(current_task: Task, failure_category: str) -> str:
+        return build_repair_validation_summary(
+            current_task,
+            failure_category,
+            validation_payload(current_task),
+        )
+
+    def current_failed_artifact_content_for_category(current_task: Task, failure_category: str) -> str:
+        return failed_artifact_content_for_category(
+            current_task.output,
+            current_task.output_payload,
+            failure_category,
+        )
+
+    def current_test_repair_helper_surface_usages(current_task: Task, failure_category: str) -> list[str]:
+        return helper_surface_usages_for_test_repair_runtime(
+            current_task,
+            failure_category,
+            validation_payload=validation_payload,
+        )
+
+    return build_repair_context(
+        task,
+        cycle,
+        repair_owner_for_category=current_repair_owner_for_category,
+        build_repair_instruction=current_repair_instruction,
+        build_repair_validation_summary=current_repair_validation_summary,
+        failed_artifact_content_for_category=current_failed_artifact_content_for_category,
+        test_repair_helper_surface_usages=current_test_repair_helper_surface_usages,
+        normalized_helper_surface_symbols=normalized_helper_surface_symbols,
+        merge_prior_repair_context=merge_prior_repair_context,
+    )
 
 
 def build_code_repair_context_from_test_failure(

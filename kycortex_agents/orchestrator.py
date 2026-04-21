@@ -48,14 +48,11 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     analyze_python_module,
 )
 from kycortex_agents.orchestration.repair_analysis import (
-    dataclass_default_order_repair_examples,
     duplicate_constructor_argument_call_hint,
     duplicate_constructor_argument_details,
     duplicate_constructor_explicit_rewrite_hint,
-    failed_artifact_content_for_category,
     internal_constructor_strictness_details,
     invalid_outcome_missing_audit_trail_details,
-    missing_import_nameerror_details,
     missing_object_attribute_details,
     nested_payload_wrapper_field_validation_details,
     plain_class_field_default_factory_details,
@@ -66,7 +63,6 @@ from kycortex_agents.orchestration.repair_test_analysis import (
     imported_code_task_for_failed_test,
     normalized_helper_surface_symbols,
     qa_repair_should_reuse_failed_test_artifact,
-    helper_surface_usages_for_test_repair_runtime,
     failed_test_requires_code_repair_runtime,
     upstream_code_task_for_test_failure,
 )
@@ -75,8 +71,6 @@ from kycortex_agents.orchestration.repair_focus import (
 )
 from kycortex_agents.orchestration.repair_instructions import (
     build_code_repair_instruction_from_test_failure_runtime,
-    build_repair_instruction_runtime,
-    repair_owner_for_category,
 )
 from kycortex_agents.orchestration.sandbox_execution import (
     execute_generated_module_import,
@@ -122,7 +116,6 @@ from kycortex_agents.orchestration.validation_analysis import (
     pytest_failure_is_semantic_assertion_mismatch,
     pytest_failure_origin,
     validation_has_blocking_issues,
-    validation_has_only_warnings,
 )
 from kycortex_agents.orchestration.workflow_control import (
     active_repair_cycle,
@@ -130,7 +123,7 @@ from kycortex_agents.orchestration.workflow_control import (
     classify_task_failure,
     configure_repair_attempts,
     dispatch_task_failure,
-    build_repair_context,
+    build_repair_context_runtime,
     ensure_workflow_running,
     ensure_budget_decomposition_task_runtime,
     execute_runnable_frontier,
@@ -278,67 +271,6 @@ def configure_repair_attempts_runtime(
         build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure,
         ensure_budget_decomposition_task=ensure_budget_decomposition_task,
         build_repair_context=build_repair_context,
-    )
-
-
-def build_repair_context_runtime(task: Task, cycle: Dict[str, Any]) -> Dict[str, Any]:
-    def current_repair_owner_for_category(current_task: Task, failure_category: str) -> str:
-        return repair_owner_for_category(
-            current_task.assigned_to,
-            failure_category,
-        )
-
-    def current_failed_artifact_content(current_task: Task, artifact_type: Any) -> str:
-        return failed_artifact_content(
-            current_task.output,
-            current_task.output_payload,
-            artifact_type,
-        )
-
-    def current_repair_instruction(current_task: Task, failure_category: str) -> str:
-        return build_repair_instruction_runtime(
-            current_task,
-            failure_category,
-            failed_artifact_content=current_failed_artifact_content,
-            artifact_type=ArtifactType.CODE,
-            validation_payload=validation_payload,
-            dataclass_default_order_repair_examples=dataclass_default_order_repair_examples,
-            missing_import_nameerror_details=missing_import_nameerror_details,
-            plain_class_field_default_factory_details=plain_class_field_default_factory_details,
-            test_validation_has_only_warnings=validation_has_only_warnings,
-        )
-
-    def current_repair_validation_summary(current_task: Task, failure_category: str) -> str:
-        return build_repair_validation_summary(
-            current_task,
-            failure_category,
-            validation_payload(current_task),
-        )
-
-    def current_failed_artifact_content_for_category(current_task: Task, failure_category: str) -> str:
-        return failed_artifact_content_for_category(
-            current_task.output,
-            current_task.output_payload,
-            failure_category,
-        )
-
-    def current_test_repair_helper_surface_usages(current_task: Task, failure_category: str) -> list[str]:
-        return helper_surface_usages_for_test_repair_runtime(
-            current_task,
-            failure_category,
-            validation_payload=validation_payload,
-        )
-
-    return build_repair_context(
-        task,
-        cycle,
-        repair_owner_for_category=current_repair_owner_for_category,
-        build_repair_instruction=current_repair_instruction,
-        build_repair_validation_summary=current_repair_validation_summary,
-        failed_artifact_content_for_category=current_failed_artifact_content_for_category,
-        test_repair_helper_surface_usages=current_test_repair_helper_surface_usages,
-        normalized_helper_surface_symbols=normalized_helper_surface_symbols,
-        merge_prior_repair_context=merge_prior_repair_context,
     )
 
 

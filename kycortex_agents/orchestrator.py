@@ -32,7 +32,9 @@ from kycortex_agents.orchestration.context_building import (
     TaskContextRuntimeCallbacks,
     build_agent_view_runtime,
     build_task_context_runtime,
+    default_module_name_for_task,
     direct_dependency_ids,
+    planned_module_context_runtime,
     task_dependency_closure_ids,
 )
 from kycortex_agents.orchestration.output_helpers import (
@@ -281,11 +283,6 @@ def classify_task_failure(task: Task, exc: Exception) -> str:
             return FailureCategory.DEPENDENCY_VALIDATION.value
     return FailureCategory.TASK_EXECUTION.value
 
-
-def default_module_name_for_task(task: Task) -> Optional[str]:
-    if AgentRegistry.normalize_key(task.assigned_to) != "code_engineer":
-        return None
-    return f"{task.id}_implementation"
 
 def validate_task_output(
     task: Task,
@@ -750,61 +747,6 @@ def dependency_artifact_context_runtime(task: Task, context: Dict[str, Any]) -> 
             "dependency_analysis": dependency_analysis,
             "dependency_validation_summary": build_dependency_validation_summary(dependency_analysis),
         }
-    return {}
-
-
-def context_module_task_runtime(
-    project: ProjectState,
-    current_task: Optional[Task],
-    visible_task_ids: Optional[set[str]] = None,
-) -> Optional[Task]:
-    if current_task is not None and current_task.repair_origin_task_id:
-        origin_task = project.get_task(current_task.repair_origin_task_id)
-        if (
-            origin_task is not None
-            and AgentRegistry.normalize_key(origin_task.assigned_to) == "code_engineer"
-            and (visible_task_ids is None or origin_task.id in visible_task_ids)
-            and default_module_name_for_task(origin_task)
-        ):
-            return origin_task
-
-    for existing_task in project.tasks:
-        if visible_task_ids is not None and existing_task.id not in visible_task_ids:
-            continue
-        if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
-            continue
-        if existing_task.repair_origin_task_id:
-            continue
-        if default_module_name_for_task(existing_task):
-            return existing_task
-
-    if current_task is not None and default_module_name_for_task(current_task):
-        return current_task
-
-    for existing_task in project.tasks:
-        if visible_task_ids is not None and existing_task.id not in visible_task_ids:
-            continue
-        if AgentRegistry.normalize_key(existing_task.assigned_to) != "code_engineer":
-            continue
-        if default_module_name_for_task(existing_task):
-            return existing_task
-
-    return None
-
-
-def planned_module_context_runtime(
-    project: ProjectState,
-    visible_task_ids: Optional[set[str]] = None,
-    current_task: Optional[Task] = None,
-) -> Dict[str, Any]:
-    module_task = context_module_task_runtime(project, current_task, visible_task_ids)
-    if module_task is not None:
-        module_name = default_module_name_for_task(module_task)
-        if module_name:
-            return {
-                "planned_module_name": module_name,
-                "planned_module_filename": f"{module_name}.py",
-            }
     return {}
 
 

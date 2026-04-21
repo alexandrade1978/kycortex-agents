@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import pytest
 import kycortex_agents.orchestrator as orchestrator_module
+import kycortex_agents.orchestration.context_building as context_building_module
 import kycortex_agents.orchestration.test_ast_analysis as test_ast_analysis_module
 
 from kycortex_agents.agents.base_agent import BaseAgent
@@ -2644,7 +2645,7 @@ def test_planned_module_context_skips_code_tasks_without_module_name(tmp_path, m
             assigned_to="code_engineer",
         )
     )
-    monkeypatch.setattr(orchestrator_module, "default_module_name_for_task", lambda task: None)
+    monkeypatch.setattr(context_building_module, "default_module_name_for_task", lambda task: None)
 
     assert orchestrator_module.planned_module_context_runtime(project) == {}
 

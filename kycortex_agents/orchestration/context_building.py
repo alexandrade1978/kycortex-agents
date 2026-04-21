@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from typing import cast
 from typing import Any, Callable, Optional
 
+from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.types import (
     AgentView,
     AgentViewArtifactRecord,
@@ -37,6 +38,68 @@ class TaskContextRuntimeCallbacks:
     normalized_helper_surface_symbols: Callable[[object], list[str]]
     qa_repair_should_reuse_failed_test_artifact: Callable[[object, object, object], bool]
     redact_sensitive_data: Callable[[Any], Any]
+
+
+def default_module_name_for_task(task: Task) -> str | None:
+    assigned_to = (task.assigned_to or "").strip().lower()
+    if assigned_to != "code_engineer":
+        return None
+    return f"{task.id}_implementation"
+
+
+def context_module_task_runtime(
+    project: ProjectState,
+    current_task: Task | None,
+    visible_task_ids: set[str] | None = None,
+) -> Task | None:
+    if current_task is not None and current_task.repair_origin_task_id:
+        origin_task = project.get_task(current_task.repair_origin_task_id)
+        if (
+            origin_task is not None
+            and (origin_task.assigned_to or "").strip().lower() == "code_engineer"
+            and (visible_task_ids is None or origin_task.id in visible_task_ids)
+            and default_module_name_for_task(origin_task)
+        ):
+            return origin_task
+
+    for existing_task in project.tasks:
+        if visible_task_ids is not None and existing_task.id not in visible_task_ids:
+            continue
+        if (existing_task.assigned_to or "").strip().lower() != "code_engineer":
+            continue
+        if existing_task.repair_origin_task_id:
+            continue
+        if default_module_name_for_task(existing_task):
+            return existing_task
+
+    if current_task is not None and default_module_name_for_task(current_task):
+        return current_task
+
+    for existing_task in project.tasks:
+        if visible_task_ids is not None and existing_task.id not in visible_task_ids:
+            continue
+        if (existing_task.assigned_to or "").strip().lower() != "code_engineer":
+            continue
+        if default_module_name_for_task(existing_task):
+            return existing_task
+
+    return None
+
+
+def planned_module_context_runtime(
+    project: ProjectState,
+    visible_task_ids: set[str] | None = None,
+    current_task: Task | None = None,
+) -> dict[str, Any]:
+    module_task = context_module_task_runtime(project, current_task, visible_task_ids)
+    if module_task is not None:
+        module_name = default_module_name_for_task(module_task)
+        if module_name:
+            return {
+                "planned_module_name": module_name,
+                "planned_module_filename": f"{module_name}.py",
+            }
+    return {}
 
 
 def build_task_context_base(

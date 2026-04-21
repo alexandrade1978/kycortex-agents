@@ -577,6 +577,40 @@ def execute_generated_module_import_runtime(
     )
 
 
+def execute_generated_tests_runtime(
+    sandbox_policy: ExecutionSandboxPolicy,
+    module_filename: str,
+    code_content: str,
+    test_filename: str,
+    test_content: str,
+) -> Dict[str, Any]:
+    return execute_generated_tests(
+        module_filename,
+        code_content,
+        test_filename,
+        test_content,
+        sandbox_policy,
+        python_executable=sys.executable,
+        host_env=os.environ,
+        pytest_spec_finder=importlib.util.find_spec,
+        subprocess_run=subprocess.run,
+        sanitize_filename=sanitize_generated_filename,
+        write_test_runner_fn=write_generated_test_runner,
+        build_env_fn=lambda tmp_path, current_sandbox_policy: build_generated_test_env(
+            tmp_path,
+            current_sandbox_policy,
+            host_env=os.environ,
+        ),
+        build_preexec_fn=lambda current_sandbox_policy: build_sandbox_preexec_fn(
+            current_sandbox_policy,
+            os_module=os,
+            resource_module=resource,
+        ),
+        summarize_output=summarize_pytest_output,
+        redact_result=redact_validation_execution_result,
+    )
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -754,7 +788,13 @@ class Orchestrator:
             self._analyze_test_module,
             auto_fix_test_type_mismatches,
             lambda raw_content: len(raw_content.splitlines()) if raw_content else 0,
-            self._execute_generated_tests,
+            lambda module_filename, code_content, test_filename, test_content: execute_generated_tests_runtime(
+                self.config.execution_sandbox_policy(),
+                module_filename,
+                code_content,
+                test_filename,
+                test_content,
+            ),
             lambda current_output, **kwargs: completion_diagnostics_from_provider_call(
                 current_output.metadata.get("provider_call") if isinstance(current_output.metadata, dict) else None,
                 raw_content=kwargs.get("raw_content", ""),
@@ -777,30 +817,12 @@ class Orchestrator:
         test_filename: str,
         test_content: str,
     ) -> Dict[str, Any]:
-        return execute_generated_tests(
+        return execute_generated_tests_runtime(
+            self.config.execution_sandbox_policy(),
             module_filename,
             code_content,
             test_filename,
             test_content,
-            self.config.execution_sandbox_policy(),
-            python_executable=sys.executable,
-            host_env=os.environ,
-            pytest_spec_finder=importlib.util.find_spec,
-            subprocess_run=subprocess.run,
-            sanitize_filename=sanitize_generated_filename,
-            write_test_runner_fn=write_generated_test_runner,
-            build_env_fn=lambda tmp_path, sandbox_policy: build_generated_test_env(
-                tmp_path,
-                sandbox_policy,
-                host_env=os.environ,
-            ),
-            build_preexec_fn=lambda sandbox_policy: build_sandbox_preexec_fn(
-                sandbox_policy,
-                os_module=os,
-                resource_module=resource,
-            ),
-            summarize_output=summarize_pytest_output,
-            redact_result=redact_validation_execution_result,
         )
 
     def _planned_module_context(

@@ -1265,7 +1265,7 @@ def test_validate_test_output_uses_default_module_filename_when_missing(tmp_path
         captured["test_filename"] = test_filename
         return {"ran": False, "returncode": None, "summary": "skipped"}
 
-    monkeypatch.setattr(orchestrator, "_execute_generated_tests", fake_execute_generated_tests)
+    monkeypatch.setattr(orchestrator_module, "execute_generated_tests_runtime", lambda *args, **kwargs: fake_execute_generated_tests(*args[1:], **kwargs))
 
     orchestrator._validate_test_output(
         {
@@ -1285,8 +1285,8 @@ def test_validate_test_output_returns_early_when_context_is_incomplete(tmp_path,
     output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True")
 
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_tests",
+        orchestrator_module,
+        "execute_generated_tests_runtime",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not execute generated tests")),
     )
 
@@ -1309,8 +1309,8 @@ def test_validate_test_output_surfaces_syntax_analysis_and_pytest_failures(tmp_p
         },
     )
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_tests",
+        orchestrator_module,
+        "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": ""},
     )
 
@@ -1361,8 +1361,8 @@ def test_validate_test_output_rejects_line_budget_overrun(tmp_path, monkeypatch)
 
     monkeypatch.setattr(orchestrator, "_analyze_test_module", lambda *args, **kwargs: {"syntax_ok": True})
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_tests",
+        orchestrator_module,
+        "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
 
@@ -1664,10 +1664,10 @@ def test_should_validate_content_helpers_cover_typed_and_blank_cases(tmp_path):
 
 def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     monkeypatch.setattr(orchestrator_module.importlib.util, "find_spec", lambda name: None)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "generated_module.py",
         "def ok():\n    return 1",
         "generated_tests.py",
@@ -1684,9 +1684,9 @@ def test_execute_generated_tests_returns_unavailable_when_pytest_missing(tmp_pat
 
 def test_execute_generated_tests_returns_early_for_blank_inputs(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "generated_module.py",
         "   ",
         "generated_tests.py",
@@ -1754,7 +1754,6 @@ def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monke
         timeout_seconds=2,
         execution_sandbox_max_wall_clock_seconds=7,
     )
-    orchestrator = Orchestrator(config)
     captured_timeout: dict[str, float] = {}
 
     def raise_timeout(*args, **kwargs):
@@ -1763,7 +1762,8 @@ def test_execute_generated_tests_uses_explicit_wall_clock_budget(tmp_path, monke
 
     monkeypatch.setattr(orchestrator_module.subprocess, "run", raise_timeout)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "generated_module.py",
         "def ok():\n    return 1",
         "generated_tests.py",
@@ -4509,8 +4509,8 @@ def test_validate_test_output_rejects_top_level_test_count_mismatch(tmp_path, mo
     )
 
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_tests",
+        orchestrator_module,
+        "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
 
@@ -4540,8 +4540,8 @@ def test_validate_test_output_rejects_top_level_test_count_maximum(tmp_path, mon
     )
 
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_tests",
+        orchestrator_module,
+        "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
 
@@ -4573,8 +4573,8 @@ def test_validate_test_output_rejects_fixture_budget_and_truncation(tmp_path, mo
         lambda *args, **kwargs: {"syntax_ok": True, "top_level_test_count": 1, "fixture_count": 2},
     )
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_tests",
+        orchestrator_module,
+        "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
     monkeypatch.setattr(
@@ -4614,8 +4614,8 @@ def test_validate_test_output_rejects_hollow_test_suites(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        orchestrator,
-        "_execute_generated_tests",
+        orchestrator_module,
+        "execute_generated_tests_runtime",
         lambda *args, **kwargs: {"available": True, "ran": False, "returncode": None, "summary": "not-run"},
     )
     monkeypatch.setattr(
@@ -6094,9 +6094,9 @@ def test_execute_workflow_marks_blocked_when_no_runnable_tasks_exist(tmp_path, m
 
 def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import subprocess\n\n"
         "def spawn_child():\n"
@@ -6114,9 +6114,9 @@ def test_execute_generated_tests_blocks_subprocess_calls_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_os_spawn_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\nimport sys\n\n"
         "def spawn_child():\n"
@@ -6134,9 +6134,9 @@ def test_execute_generated_tests_blocks_os_spawn_calls_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_network_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import socket\n\n"
         "def open_socket():\n"
@@ -6154,9 +6154,9 @@ def test_execute_generated_tests_blocks_network_calls_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_getaddrinfo_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import socket\n\n"
         "def resolve_host():\n"
@@ -6174,9 +6174,9 @@ def test_execute_generated_tests_blocks_getaddrinfo_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_gethostbyname_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import socket\n\n"
         "def resolve_host():\n"
@@ -6194,9 +6194,9 @@ def test_execute_generated_tests_blocks_gethostbyname_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_ctypes_loading_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import ctypes\nimport ctypes.util\n\n"
         "def load_native_library():\n"
@@ -6214,9 +6214,9 @@ def test_execute_generated_tests_blocks_ctypes_loading_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_mmap_calls_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import mmap\n\n"
         "def allocate_memory_map():\n"
@@ -6234,11 +6234,11 @@ def test_execute_generated_tests_blocks_mmap_calls_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_chdir_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     escaped_dir = (tmp_path / "escaped_chdir").resolve()
     escaped_dir.mkdir()
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
         "def leave_sandbox(target_path):\n"
@@ -6255,9 +6255,9 @@ def test_execute_generated_tests_blocks_chdir_outside_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_fd_duplication_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
         "def duplicate_stdout():\n"
@@ -6274,9 +6274,9 @@ def test_execute_generated_tests_blocks_fd_duplication_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_fd_wrapping_in_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import io\nimport os\n\n"
         "def wrap_stdout():\n"
@@ -6297,7 +6297,6 @@ def test_execute_generated_tests_blocks_fd_wrapping_in_sandbox(tmp_path):
 
 def test_execute_generated_tests_blocks_xattr_reads_outside_sandbox_when_supported(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     escaped_file = (tmp_path / "escaped_xattr_read.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
     attribute_name = "user.kycortex_read"
@@ -6308,7 +6307,8 @@ def test_execute_generated_tests_blocks_xattr_reads_outside_sandbox_when_support
 
     os.setxattr(escaped_file, attribute_name, attribute_value)
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
         "def read_xattrs(target_path, attribute_name):\n"
@@ -6325,7 +6325,6 @@ def test_execute_generated_tests_blocks_xattr_reads_outside_sandbox_when_support
 
 def test_execute_generated_tests_blocks_xattr_mutation_outside_sandbox_when_supported(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     escaped_file = (tmp_path / "escaped_xattr_write.txt").resolve()
     escaped_file.write_text("secret", encoding="utf-8")
     attribute_name = "user.kycortex_write"
@@ -6334,7 +6333,8 @@ def test_execute_generated_tests_blocks_xattr_mutation_outside_sandbox_when_supp
     if not supports_user_xattrs(escaped_file):
         pytest.skip("user xattrs unsupported")
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "import os\n\n"
         "def write_xattr(target_path, attribute_name, attribute_value):\n"
@@ -6351,10 +6351,10 @@ def test_execute_generated_tests_blocks_xattr_mutation_outside_sandbox_when_supp
 
 def test_execute_generated_tests_blocks_filesystem_writes_outside_sandbox(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     escaped_path = (tmp_path / "escaped.txt").resolve()
 
-    result = orchestrator._execute_generated_tests(
+    result = orchestrator_module.execute_generated_tests_runtime(
+        config.execution_sandbox_policy(),
         "code_under_test.py",
         "def write_outside_sandbox(target_path):\n"
         "    with open(target_path, 'w', encoding='utf-8') as handle:\n"
@@ -17795,8 +17795,8 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orch,
-            "_execute_generated_tests",
+            orchestrator_module,
+            "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 0, "summary": "1 passed"},
         )
 
@@ -17820,8 +17820,8 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orch,
-            "_execute_generated_tests",
+            orchestrator_module,
+            "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": "1 failed"},
         )
 
@@ -17845,8 +17845,8 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orch,
-            "_execute_generated_tests",
+            orchestrator_module,
+            "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": False, "returncode": None, "summary": ""},
         )
 
@@ -17871,8 +17871,8 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orch,
-            "_execute_generated_tests",
+            orchestrator_module,
+            "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 0, "summary": "1 passed"},
         )
 
@@ -17897,8 +17897,8 @@ class TestValidateTestOutputPytestArbiter:
             },
         )
         monkeypatch.setattr(
-            orch,
-            "_execute_generated_tests",
+            orchestrator_module,
+            "execute_generated_tests_runtime",
             lambda *args, **kwargs: {"ran": True, "returncode": 1, "summary": "1 failed"},
         )
 

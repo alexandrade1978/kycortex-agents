@@ -49,8 +49,6 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_public_api,
     build_code_test_targets,
     build_code_outline,
-    call_signature_details,
-    dict_accessed_keys_from_tree,
     entrypoint_symbol_names,
     example_from_default,
     helper_classes_to_avoid,
@@ -982,10 +980,6 @@ class Orchestrator:
             }
         return {}
 
-    @staticmethod
-    def _dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
-        return dict_accessed_keys_from_tree(tree)
-
     def _analyze_test_module(
         self,
         raw_content: str,
@@ -1046,14 +1040,6 @@ class Orchestrator:
             function_names,
             class_map,
         )
-
-    def _call_signature_details(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        *,
-        skip_first_param: bool = False,
-    ) -> Dict[str, Any]:
-        return call_signature_details(node, skip_first_param=skip_first_param)
 
     def _build_agent_input(self, task: Task, project: ProjectState) -> AgentInput:
         context = build_task_context_runtime(

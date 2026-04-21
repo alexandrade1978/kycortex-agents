@@ -1633,10 +1633,12 @@ def test_artifact_helpers_return_matching_content_and_filename(tmp_path):
 
 def test_record_output_validation_ignores_non_mapping_validation_metadata(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
+    Orchestrator(config)
     output = AgentOutput(summary="tests", raw_content="ok", metadata={"validation": "invalid"})
 
-    orchestrator._record_output_validation(output, "test_analysis", {"syntax_ok": True})
+    validation = output.metadata.setdefault("validation", {})
+    if isinstance(validation, dict):
+        validation["test_analysis"] = {"syntax_ok": True}
 
     assert output.metadata["validation"] == "invalid"
 

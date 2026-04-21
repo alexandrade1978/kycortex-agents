@@ -355,7 +355,9 @@ class Orchestrator:
             context,
             output,
             analyze_dependency_manifest,
-            self._record_output_validation,
+            lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+            if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+            else None,
         )
 
     def _validate_code_output(self, output: AgentOutput, task: Optional[Task] = None) -> None:
@@ -375,7 +377,9 @@ class Orchestrator:
             ),
             self._artifact_filename,
             self._execute_generated_module_import,
-            self._record_output_validation,
+            lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+            if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+            else None,
             completion_validation_issue,
         )
 
@@ -423,7 +427,9 @@ class Orchestrator:
                 syntax_error=kwargs.get("syntax_error"),
             ),
             pytest_failure_origin,
-            self._record_output_validation,
+            lambda current_output, key, value: current_output.metadata.setdefault("validation", {}).__setitem__(key, value)
+            if isinstance(current_output.metadata.setdefault("validation", {}), dict)
+            else None,
             completion_validation_issue,
             summarize_output,
         )
@@ -464,11 +470,6 @@ class Orchestrator:
             if artifact.path:
                 return Path(artifact.path).name
         return default_filename
-
-    def _record_output_validation(self, output: AgentOutput, key: str, value: Any) -> None:
-        validation = output.metadata.setdefault("validation", {})
-        if isinstance(validation, dict):
-            validation[key] = value
 
     def _should_validate_code_content(self, content: str, has_typed_artifact: bool) -> bool:
         if has_typed_artifact:

@@ -1115,8 +1115,6 @@ def test_run_task_uses_repair_owner_and_failure_context_for_code_validation(tmp_
 
 
 def test_classify_task_failure_returns_provider_transient_for_provider_errors(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     task = Task(
         id="arch",
         title="Architecture",
@@ -1124,14 +1122,12 @@ def test_classify_task_failure_returns_provider_transient_for_provider_errors(tm
         assigned_to="architect",
     )
 
-    category = orchestrator._classify_task_failure(task, ProviderTransientError("provider temporarily unavailable"))
+    category = orchestrator_module.classify_task_failure(task, ProviderTransientError("provider temporarily unavailable"))
 
     assert category == FailureCategory.PROVIDER_TRANSIENT.value
 
 
 def test_classify_task_failure_returns_sandbox_violation_for_blocked_operations(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     task = Task(
         id="tests",
         title="Tests",
@@ -1139,7 +1135,7 @@ def test_classify_task_failure_returns_sandbox_violation_for_blocked_operations(
         assigned_to="qa_tester",
     )
 
-    category = orchestrator._classify_task_failure(
+    category = orchestrator_module.classify_task_failure(
         task,
         RuntimeError("sandbox policy blocked filesystem write outside sandbox root"),
     )
@@ -1148,8 +1144,6 @@ def test_classify_task_failure_returns_sandbox_violation_for_blocked_operations(
 
 
 def test_classify_task_failure_falls_back_to_task_execution_for_unmapped_agent_errors(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     task = Task(
         id="arch",
         title="Architecture",
@@ -1157,7 +1151,7 @@ def test_classify_task_failure_falls_back_to_task_execution_for_unmapped_agent_e
         assigned_to="architect",
     )
 
-    category = orchestrator._classify_task_failure(task, AgentExecutionError("unexpected validation failure"))
+    category = orchestrator_module.classify_task_failure(task, AgentExecutionError("unexpected validation failure"))
 
     assert category == FailureCategory.TASK_EXECUTION.value
 
@@ -1590,8 +1584,6 @@ def test_validate_code_output_accepts_matching_task_public_contract_with_optiona
 
 
 def test_classify_task_failure_returns_workflow_definition_for_definition_errors(tmp_path):
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    orchestrator = Orchestrator(config)
     task = Task(
         id="arch",
         title="Architecture",
@@ -1599,7 +1591,7 @@ def test_classify_task_failure_returns_workflow_definition_for_definition_errors
         assigned_to="architect",
     )
 
-    category = orchestrator._classify_task_failure(task, WorkflowDefinitionError("invalid workflow"))
+    category = orchestrator_module.classify_task_failure(task, WorkflowDefinitionError("invalid workflow"))
 
     assert category == FailureCategory.WORKFLOW_DEFINITION.value
 

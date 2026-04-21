@@ -262,6 +262,24 @@ def agent_visible_repair_context(repair_context: Dict[str, Any], execution_agent
     }
 
 
+def classify_task_failure(task: Task, exc: Exception) -> str:
+    normalized_role = (task.assigned_to or "").strip().lower()
+    if isinstance(exc, WorkflowDefinitionError):
+        return FailureCategory.WORKFLOW_DEFINITION.value
+    if isinstance(exc, ProviderTransientError):
+        return FailureCategory.PROVIDER_TRANSIENT.value
+    if sandbox_security_violation(exc):
+        return FailureCategory.SANDBOX_SECURITY_VIOLATION.value
+    if isinstance(exc, AgentExecutionError):
+        if normalized_role == "code_engineer":
+            return FailureCategory.CODE_VALIDATION.value
+        if normalized_role == "qa_tester":
+            return FailureCategory.TEST_VALIDATION.value
+        if normalized_role == "dependency_manager":
+            return FailureCategory.DEPENDENCY_VALIDATION.value
+    return FailureCategory.TASK_EXECUTION.value
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -338,7 +356,7 @@ class Orchestrator:
             provider_call = provider_call_metadata(agent, normalized_output)
             project.complete_task(task.id, normalized_output, provider_call=provider_call)
         except Exception as exc:
-            failure_category = self._classify_task_failure(task, exc)
+            failure_category = classify_task_failure(task, exc)
             project.fail_task(
                 task.id,
                 exc,
@@ -486,23 +504,6 @@ class Orchestrator:
             summarize_output,
         )
         # If only warnings and pytest passed → accept (warnings are false positives)
-
-    def _classify_task_failure(self, task: Task, exc: Exception) -> str:
-        normalized_role = (task.assigned_to or "").strip().lower()
-        if isinstance(exc, WorkflowDefinitionError):
-            return FailureCategory.WORKFLOW_DEFINITION.value
-        if isinstance(exc, ProviderTransientError):
-            return FailureCategory.PROVIDER_TRANSIENT.value
-        if sandbox_security_violation(exc):
-            return FailureCategory.SANDBOX_SECURITY_VIOLATION.value
-        if isinstance(exc, AgentExecutionError):
-            if normalized_role == "code_engineer":
-                return FailureCategory.CODE_VALIDATION.value
-            if normalized_role == "qa_tester":
-                return FailureCategory.TEST_VALIDATION.value
-            if normalized_role == "dependency_manager":
-                return FailureCategory.DEPENDENCY_VALIDATION.value
-        return FailureCategory.TASK_EXECUTION.value
 
     def _execute_generated_tests(
         self,
@@ -810,30 +811,27 @@ class Orchestrator:
             return None
         return f"{task.id}_implementation"
 
-    def _context_code_module_name(self, task: Task, project: Optional[ProjectState] = None) -> Optional[str]:
-        if project is None:
-            return self._default_module_name_for_task(task)
-
-        current_task = task
-        visited_task_ids: set[str] = set()
-        while current_task.repair_origin_task_id:
-            origin_task = project.get_task(current_task.repair_origin_task_id)
-            if (
-                origin_task is None
-                or origin_task.id in visited_task_ids
-                or AgentRegistry.normalize_key(origin_task.assigned_to) != "code_engineer"
-            ):
-                break
-            visited_task_ids.add(origin_task.id)
-            current_task = origin_task
-        return self._default_module_name_for_task(current_task)
-
     def _code_artifact_context(
         self,
         task: Task,
         project: Optional[ProjectState] = None,
     ) -> Dict[str, Any]:
-        module_name = self._context_code_module_name(task, project)
+        if project is None:
+            module_name = self._default_module_name_for_task(task)
+        else:
+            current_task = task
+            visited_task_ids: set[str] = set()
+            while current_task.repair_origin_task_id:
+                origin_task = project.get_task(current_task.repair_origin_task_id)
+                if (
+                    origin_task is None
+                    or origin_task.id in visited_task_ids
+                    or AgentRegistry.normalize_key(origin_task.assigned_to) != "code_engineer"
+                ):
+                    break
+                visited_task_ids.add(origin_task.id)
+                current_task = origin_task
+            module_name = self._default_module_name_for_task(current_task)
         if not module_name:
             return {}
 
@@ -1101,7 +1099,7 @@ class Orchestrator:
                                 run_task=self.run_task,
                                 exit_if_workflow_cancelled=lambda current_task_project: exit_if_workflow_cancelled(self.logger, current_task_project),
                                 exit_if_workflow_paused=lambda current_task_project: exit_if_workflow_paused(self.logger, current_task_project),
-                                classify_task_failure=self._classify_task_failure,
+                                classify_task_failure=classify_task_failure,
                                 dispatch_task_failure=lambda dispatch_project, *, task, failure_category: dispatch_task_failure(
                                     dispatch_project,
                                     task=task,

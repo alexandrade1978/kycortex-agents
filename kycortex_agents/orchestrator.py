@@ -246,21 +246,10 @@ class Orchestrator:
         workflow_resume_policy = self.config.workflow_resume_policy
         workflow_failure_policy = self.config.workflow_failure_policy
 
-        def workflow_exit_if_cancelled(current_project: ProjectState) -> bool:
-            return exit_if_workflow_cancelled(self.logger, current_project)
-
-        def workflow_exit_if_paused(current_project: ProjectState) -> bool:
-            return exit_if_workflow_paused(self.logger, current_project)
-
-        def workflow_log_event(level: str, event: str, **fields: object) -> None:
-            log_event(self.logger, level, event, **fields)
-
-        def workflow_emit_progress(progress_project: ProjectState, *, task: Task | None = None) -> None:
-            emit_workflow_progress(
-                self.logger,
-                progress_project,
-                task=task,
-            )
+        workflow_exit_if_cancelled = partial(exit_if_workflow_cancelled, self.logger)
+        workflow_exit_if_paused = partial(exit_if_workflow_paused, self.logger)
+        workflow_log_event = partial(log_event, self.logger)
+        workflow_emit_progress = partial(emit_workflow_progress, self.logger)
 
         def configure_repair_attempts_for_cycle(
             current_project: ProjectState,

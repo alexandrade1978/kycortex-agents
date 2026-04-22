@@ -117,8 +117,11 @@ Use the Ollama provider when `llm_provider="ollama"`.
 - Default base URL: `http://localhost:11434`
 - Required runtime fields: model name plus a valid base URL when the default is overridden
 - Optional runtime field: `ollama_num_ctx` to request an explicit `num_ctx` value for larger-context local workflows
+- Optional runtime field: `ollama_think` to explicitly control Ollama thinking mode (`true` or `false`)
 - Repository-local empirical baseline: `qwen2.5-coder:7b` with `ollama_num_ctx=16384`
 - API style: HTTP POST to the Ollama `/api/generate` endpoint
+- Runtime token budget behavior: `max_tokens` is forwarded as Ollama `options.num_predict`
+- Reasoning-model default: when `ollama_think` is unset, runtime requests disable implicit thinking (`think=false`) for reasoning-capable Qwen3-family models to keep bounded completion behavior under workflow timeouts
 - Metadata captured: requested token budget, prompt/output token counts, `done_reason`, and timing information derived from Ollama duration fields
 - Health probe behavior: queries `/api/tags`, validates the local endpoint is reachable, and confirms the configured model name is installed before generation begins
 

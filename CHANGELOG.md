@@ -26,12 +26,15 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 ### Changed
 
 - `OpenAIProvider._build_create_kwargs()` now applies `_effective_max_tokens()` instead of the raw config value, ensuring reasoning models receive a sufficient token budget.
+- `OllamaProvider._build_payload()` now forwards runtime token budgets as `options.num_predict`, so `KYCortexConfig.max_tokens` actively bounds completions on Ollama runs.
+- `OllamaProvider` now defaults `think=false` for reasoning-capable Ollama models (Qwen3 family) when `ollama_think` is unset, while preserving explicit user overrides (`ollama_think=True/False`).
 - Contract anchor validation now rejects non-dict `details` arguments and includes explicit type-constraint instructions in scenario prompts.
 - QA tester system prompt now includes a type-constraint instruction block derived from the behavior contract, reducing fixture type mismatches across models.
 - Behavior contract parser now strips dict key hints from type names for cleaner extraction.
 
 ### Fixed
 
+- Local Ollama qwen3 remediation (Option B): architect-path timeouts caused by unbounded reasoning output are mitigated in runtime-path workflows by disabling implicit think mode and applying completion token caps through `num_predict`.
 - Fix 3–3c: Enriched behavior contract with dict key hints and concrete dict examples to reduce type-mismatch failures.
 - Fix 4: Added programmatic auto-fix for str→dict type mismatches in generated test files.
 - Fix 5: Made auto-fix line-specific and fixed parser for key hints.

@@ -12,6 +12,8 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Multi-model runtime routing is now implemented on the current head: primary-provider model candidates (`llm_model_candidates`) and ordered fallback-provider model sequences (`provider_fallback_models`) are both supported by runtime provider/model execution planning.
 - Live multi-model smoke evidence now exists on the current head: a same-provider Ollama run with primary `qwen3.5:9b` and candidate `qwen2.5-coder:7b` completed successfully, with provider metadata showing transient failure on the first model and successful completion on the fallback model.
 - Remote CI for the multi-model commit `270ad03` is green: GitHub Actions run `24781026643` completed with `success`.
+- Option B remediation update on current head: Ollama runtime now applies `max_tokens` as `num_predict` and disables `think` by default for reasoning-capable Qwen3 family models unless `ollama_think` is explicitly set.
+- New empirical evidence on current head: `examples/example_release_user_smoke.py` completed successfully with local Ollama `qwen3.5:9b` after the runtime payload fix (`output/release_user_smoke_ollama_qwen35_9b_postfix_2026_04_22`).
 - Current empirical requalification subset on `main`: `examples/example_release_user_smoke.py` passed on `openai`, `anthropic`, and local `ollama` with `qwen2.5-coder:7b` on 2026-04-22; `examples/example_provider_matrix_validation.py` also completed on all three providers (`openai`, `anthropic`, `ollama`) with `phase=completed` and `terminal_outcome=completed` for each provider workflow
 
 ## Refactor Engineering Suspension
@@ -20,7 +22,7 @@ This file tracks the current repository-owned release state for KYCortex after p
 - The last published and trusted release baseline remains `v1.0.13a6` on commit `f99a38d`.
 - Historical canary evidence for the published `v1.0.13a6` line remains retained in the repository, but the branch is not currently advancing that canary window.
 - A fresh release or canary claim is blocked until the refactor branch requalifies itself with deterministic validation gates and a new empirical baseline.
-- The 2026-04-22 empirical subset is materially stronger after the matrix run but still not sufficient for a blanket new claim: the current head clears live smoke and matrix workflows on OpenAI, Anthropic, and Ollama with the maintained smaller local model, but the heavier local Ollama model `qwen3.5:9b` remains degraded (timeouts reproduced at 90s and 240s) and keeps the branch below full model-agnostic requalification.
+- The 2026-04-22 empirical subset is materially stronger after the matrix run and qwen3 remediation fix, but still not sufficient for a blanket new claim: the current head now clears live smoke on OpenAI, Anthropic, Ollama `qwen2.5-coder:7b`, and Ollama `qwen3.5:9b` in runtime-path workflows; full model-agnostic requalification still requires a fresh deterministic matrix checkpoint that includes the repaired qwen3 lane under controlled retry and timeout policy.
 
 ## Repository Release Gates
 

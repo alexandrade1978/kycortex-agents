@@ -251,6 +251,40 @@ MODEL_REGISTRY: dict[str, ModelCapabilities] = {
         temperature_range=(0.0, 1.0),
         context_window=200_000,
     ),
+    # --- Ollama: qwen2.5 family (standard instruction-tuned models) ---
+    "ollama:qwen2.5-coder:7b": ModelCapabilities(
+        provider="ollama",
+        max_tokens_param="num_predict",
+        supports_temperature=True,
+        context_window=32_768,
+    ),
+    "ollama:qwen2.5-coder:14b": ModelCapabilities(
+        provider="ollama",
+        max_tokens_param="num_predict",
+        supports_temperature=True,
+        context_window=32_768,
+    ),
+    "ollama:qwen2.5*": ModelCapabilities(
+        provider="ollama",
+        max_tokens_param="num_predict",
+        supports_temperature=True,
+        context_window=32_768,
+    ),
+    # --- Ollama: qwen3 family (hybrid reasoning models — think mode support) ---
+    "ollama:qwen3.5:9b": ModelCapabilities(
+        provider="ollama",
+        max_tokens_param="num_predict",
+        supports_temperature=True,
+        context_window=32_768,
+        is_reasoning_model=True,
+    ),
+    "ollama:qwen3*": ModelCapabilities(
+        provider="ollama",
+        max_tokens_param="num_predict",
+        supports_temperature=True,
+        context_window=32_768,
+        is_reasoning_model=True,
+    ),
 }
 
 

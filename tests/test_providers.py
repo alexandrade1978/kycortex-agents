@@ -1336,9 +1336,59 @@ def test_ollama_provider_includes_num_ctx_when_configured(tmp_path):
             "options": {
                 "temperature": 0.2,
                 "num_ctx": 16384,
+                "num_predict": 4096,
             },
         }
     ]
+
+
+def test_ollama_provider_disables_think_by_default_for_reasoning_models(tmp_path):
+    captured_payloads: list[dict[str, object]] = []
+
+    def open_request(request, timeout=None):
+        url = getattr(request, "full_url", None)
+        if isinstance(url, str) and url.endswith("/api/tags"):
+            return FakeHTTPResponse('{"models": [{"name": "qwen3.5:9b"}]}')
+        captured_payloads.append(json.loads(request.data.decode("utf-8")))
+        return FakeHTTPResponse('{"response": "ok"}')
+
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="qwen3.5:9b",
+        max_tokens=700,
+    )
+    provider = OllamaProvider(config, request_opener=open_request)
+
+    provider.generate("system", "message")
+
+    assert captured_payloads[0].get("think") is False
+    options = captured_payloads[0].get("options")
+    assert isinstance(options, dict)
+    assert options.get("num_predict") == 700
+
+
+def test_ollama_provider_respects_explicit_think_override(tmp_path):
+    captured_payloads: list[dict[str, object]] = []
+
+    def open_request(request, timeout=None):
+        url = getattr(request, "full_url", None)
+        if isinstance(url, str) and url.endswith("/api/tags"):
+            return FakeHTTPResponse('{"models": [{"name": "qwen3.5:9b"}]}')
+        captured_payloads.append(json.loads(request.data.decode("utf-8")))
+        return FakeHTTPResponse('{"response": "ok"}')
+
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="ollama",
+        llm_model="qwen3.5:9b",
+        ollama_think=True,
+    )
+    provider = OllamaProvider(config, request_opener=open_request)
+
+    provider.generate("system", "message")
+
+    assert captured_payloads[0].get("think") is True
 
 
 def test_ollama_provider_captures_usage_metadata(tmp_path):

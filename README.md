@@ -153,8 +153,9 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | `api_key` | `None` | Optional explicit API key. When omitted, OpenAI and Anthropic fall back to `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`. |
 | `base_url` | `None` or Ollama default | Optional provider base URL. Ollama defaults to `http://localhost:11434`. |
 | `ollama_num_ctx` | `None` | Optional Ollama-specific context window override passed as `num_ctx` in generate requests. Useful for local repair-heavy workflows that need more than the runtime default context. |
+| `ollama_think` | `None` | Optional Ollama reasoning/thinking mode override. When unset, reasoning-capable Ollama models default to `think=false` in runtime requests; set explicitly to force `true` or `false`. |
 | `temperature` | `0.2` | Sampling temperature validated between `0` and `2`. |
-| `max_tokens` | `4096` | Maximum number of output tokens requested from the provider. |
+| `max_tokens` | `4096` | Maximum number of output tokens requested from the provider. For Ollama, this is forwarded as `options.num_predict`. |
 | `timeout_seconds` | `60.0` | Provider request timeout in seconds. |
 | `provider_timeout_seconds` | `{}` | Optional per-provider timeout overrides keyed by provider name, used for primary and fallback provider runtime configs. |
 | `provider_fallback_order` | `()` | Optional ordered list of fallback providers to use when the primary provider/model path fails or is unavailable. |

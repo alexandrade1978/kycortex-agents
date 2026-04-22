@@ -134,6 +134,8 @@ class OllamaProvider(BaseLLMProvider):
             options["num_ctx"] = self.config.ollama_num_ctx
         elif self._capabilities.context_window is not None:
             options["num_ctx"] = self._capabilities.context_window
+        if self.config.max_tokens is not None and self.config.max_tokens > 0:
+            options["num_predict"] = self.config.max_tokens
         payload: dict[str, Any] = {
             "model": self.config.llm_model,
             "system": system_prompt,
@@ -143,6 +145,11 @@ class OllamaProvider(BaseLLMProvider):
         }
         if self.config.ollama_think is not None:
             payload["think"] = self.config.ollama_think
+        elif self._capabilities.is_reasoning_model:
+            # Disable think mode by default for reasoning models in production to
+            # avoid unbounded chain-of-thought that can exceed request timeouts.
+            # Users can opt in explicitly via ollama_think=True in KYCortexConfig.
+            payload["think"] = False
         return payload
 
     def _extract_content(self, payload: dict[str, Any]) -> str:

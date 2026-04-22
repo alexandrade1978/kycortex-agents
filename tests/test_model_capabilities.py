@@ -193,3 +193,44 @@ class TestGetCapabilitiesNormalization:
     def test_provider_name_strips_whitespace(self):
         caps = get_capabilities("  openai  ", "gpt-4o-mini")
         assert caps.provider == "openai"
+
+
+# ---------------------------------------------------------------------------
+# Ollama model registry entries
+# ---------------------------------------------------------------------------
+
+
+class TestOllamaModelCapabilities:
+    def test_qwen25_coder_7b_exact_match(self):
+        caps = get_capabilities("ollama", "qwen2.5-coder:7b")
+        assert caps.provider == "ollama"
+        assert caps.max_tokens_param == "num_predict"
+        assert caps.supports_temperature is True
+        assert caps.is_reasoning_model is False
+
+    def test_qwen25_coder_14b_exact_match(self):
+        caps = get_capabilities("ollama", "qwen2.5-coder:14b")
+        assert caps.provider == "ollama"
+        assert caps.max_tokens_param == "num_predict"
+        assert caps.is_reasoning_model is False
+
+    def test_qwen25_glob_matches_unknown_qwen25_variant(self):
+        caps = get_capabilities("ollama", "qwen2.5:72b")
+        assert caps.provider == "ollama"
+        assert caps.max_tokens_param == "num_predict"
+        assert caps.is_reasoning_model is False
+
+    def test_qwen35_9b_exact_match_is_reasoning_model(self):
+        caps = get_capabilities("ollama", "qwen3.5:9b")
+        assert caps.provider == "ollama"
+        assert caps.max_tokens_param == "num_predict"
+        assert caps.is_reasoning_model is True
+
+    def test_qwen3_glob_matches_unknown_qwen3_variant(self):
+        caps = get_capabilities("ollama", "qwen3:32b")
+        assert caps.provider == "ollama"
+        assert caps.is_reasoning_model is True
+
+    def test_unknown_ollama_model_not_marked_as_reasoning(self):
+        caps = get_capabilities("ollama", "llama3.1:8b")
+        assert caps.is_reasoning_model is False

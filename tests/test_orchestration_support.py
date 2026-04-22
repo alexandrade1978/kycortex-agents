@@ -345,7 +345,9 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 	task_acceptance_lists,
 )
 from kycortex_agents.memory.project_state import ProjectState, Task
-from kycortex_agents.types import AgentInput, AgentOutput, AgentView, AgentViewArtifactRecord, AgentViewDecisionRecord, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, TaskResult, TaskStatus, WorkflowOutcome
+from typing import cast
+
+from kycortex_agents.types import AgentInput, AgentOutput, AgentView, AgentViewArtifactRecord, AgentViewDecisionRecord, ArtifactRecord, ArtifactType, ExecutionSandboxPolicy, FailureCategory, FailureRecord, ProjectSnapshot, TaskResult, TaskStatus, WorkflowOutcome
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics required")
@@ -485,9 +487,9 @@ def test_build_task_context_runtime_builds_redacted_context_directly():
 
 
 def test_build_agent_view_task_results_filters_visible_tasks_directly():
-	visible_task = TaskResult(task_id="code", status="done", agent_name="code_engineer")
-	visible_task.failure = SimpleNamespace(category="VALIDATION")
-	hidden_task = TaskResult(task_id="hidden", status="done", agent_name="qa_tester")
+	visible_task = TaskResult(task_id="code", status=TaskStatus.DONE, agent_name="code_engineer")
+	visible_task.failure = FailureRecord(message="", category="VALIDATION")
+	hidden_task = TaskResult(task_id="hidden", status=TaskStatus.DONE, agent_name="qa_tester")
 
 	filtered = build_agent_view_task_results(
 		{"code": visible_task, "hidden": hidden_task},
@@ -549,7 +551,7 @@ def test_build_agent_view_runtime_builds_filtered_agent_view_directly():
 			"failure_category": "VALIDATION",
 			"accepted": True,
 		},
-		task_results={"code": TaskResult(task_id="code", status="done", agent_name="code_engineer")},
+		task_results={"code": TaskResult(task_id="code", status=TaskStatus.DONE, agent_name="code_engineer")},
 		decisions=[{"topic": "api", "decision": "keep", "rationale": "stable", "created_at": "2026-04-20"}],
 		artifacts=[{"name": "visible.py", "artifact_type": ArtifactType.CODE.value, "content": "x", "metadata": {"task_id": "code"}}],
 	)
@@ -557,7 +559,7 @@ def test_build_agent_view_runtime_builds_filtered_agent_view_directly():
 	agent_view = build_agent_view_runtime(
 		SimpleNamespace(id="code"),
 		SimpleNamespace(),
-		snapshot,
+		cast(ProjectSnapshot, snapshot),
 		task_dependency_closure_ids=lambda task, project: {"code"},
 		direct_dependency_ids=lambda task: {"code"},
 	)
@@ -3818,8 +3820,12 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		ensure_budget_decomposition_task=lambda _project, _task, _repair_context: None,
 		build_repair_context=lambda task, cycle: {"cycle": cycle.get("cycle"), "failure_category": FailureCategory.UNKNOWN.value},
 	)
-	assert configure_project.get_task("code").repair_context == {"cycle": 2, "source_failure_task_id": "tests"}
-	assert configure_project.get_task("tests").repair_context == {"cycle": 2, "failure_category": FailureCategory.UNKNOWN.value}
+	_code_task = configure_project.get_task("code")
+	assert _code_task is not None
+	assert _code_task.repair_context == {"cycle": 2, "source_failure_task_id": "tests"}
+	_tests_task = configure_project.get_task("tests")
+	assert _tests_task is not None
+	assert _tests_task.repair_context == {"cycle": 2, "failure_category": FailureCategory.UNKNOWN.value}
 	queued_project = ProjectState(project_name="Demo", goal="Build demo")
 	queued_task = Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", status=TaskStatus.FAILED)
 	queued_project.add_task(queued_task)
@@ -4476,7 +4482,7 @@ def test_repair_instruction_owner_mapping_directly():
 	) == ["RiskScoringService (line 33)", "ComplianceRepository"]
 	assert helper_surface_usages_for_test_repair({}, FailureCategory.CODE_VALIDATION.value) == []
 	assert helper_surface_usages_for_test_repair_runtime(
-		SimpleNamespace(),
+		cast(Task, SimpleNamespace()),
 		FailureCategory.TEST_VALIDATION.value,
 		validation_payload=lambda task: {
 			"test_analysis": {

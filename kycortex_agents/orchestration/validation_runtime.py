@@ -294,9 +294,12 @@ def validate_code_output_for_task_runtime(
         line_budget = task_line_budget(task) if line_budget is None else line_budget
         requires_cli_entrypoint = task_requires_cli_entrypoint(task) if requires_cli_entrypoint is None else requires_cli_entrypoint
         if task_public_contract_preflight is None:
-            def task_public_contract_preflight(code_analysis: Any) -> Any:
+            def _default_task_public_contract_preflight(code_analysis: Any) -> Any:
                 return default_task_public_contract_preflight(task, code_analysis)
 
+            task_public_contract_preflight = _default_task_public_contract_preflight
+
+    assert completion_diagnostics_from_provider_call is not None
     validate_code_output_runtime(
         output,
         line_budget,
@@ -623,6 +626,7 @@ def validate_test_output_for_task_runtime(
         max_test_count = task_max_top_level_test_count(task) if max_test_count is None else max_test_count
         fixture_budget = task_fixture_budget(task) if fixture_budget is None else fixture_budget
 
+    assert completion_diagnostics_from_provider_call is not None
     validate_test_output_runtime(
         context,
         output,

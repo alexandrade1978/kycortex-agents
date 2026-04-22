@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import AbstractSet, Any, Callable, Literal, Optional, cast
+from functools import partial
+from typing import AbstractSet, Any, Callable, Literal, Optional, TypedDict, cast
 
 from kycortex_agents.exceptions import AgentExecutionError, ProviderTransientError, WorkflowDefinitionError
 from kycortex_agents.memory.project_state import ProjectState, Task
@@ -54,6 +55,28 @@ from kycortex_agents.orchestration.validation_analysis import (
 )
 from kycortex_agents.orchestration.validation_reporting import build_repair_validation_summary
 from kycortex_agents.types import AgentOutput, ArtifactType as AgentOutputArtifactType, FailureCategory, TaskStatus, WorkflowOutcome
+
+
+class WorkflowAcceptanceKwargs(TypedDict):
+    workflow_acceptance_policy: str
+    zero_budget_failure_categories: AbstractSet[str]
+    evaluate_workflow_acceptance: Any
+
+
+class WorkflowAcceptanceRuntimeKwargs(WorkflowAcceptanceKwargs):
+    log_event: Any
+
+
+class WorkflowControlKwargs(TypedDict):
+    exit_if_workflow_cancelled: Any
+    exit_if_workflow_paused: Any
+
+
+class WorkflowRuntimeCallbacks(TypedDict):
+    exit_if_workflow_cancelled: Any
+    workflow_max_repair_cycles: int
+    resume_workflow_tasks: Any
+    run_active_workflow: Any
 
 
 def log_event(logger: Any, level: str, event: str, **fields: Any) -> None:
@@ -1076,6 +1099,138 @@ def run_active_workflow(
         workflow_telemetry=project.internal_runtime_telemetry()["workflow"],
     )
     return False
+
+
+def build_workflow_runtime_callbacks(
+    *,
+    logger: Any,
+    run_task: Callable[[Task, ProjectState], str],
+    workflow_acceptance_policy: str,
+    workflow_max_repair_cycles: int,
+    workflow_resume_policy: str,
+    workflow_failure_policy: str,
+    evaluate_workflow_acceptance,
+) -> WorkflowRuntimeCallbacks:
+    """Build workflow runtime callback graph using owner-side workflow control helpers."""
+
+    workflow_control_kwargs: WorkflowControlKwargs = {
+        "exit_if_workflow_cancelled": partial(exit_if_workflow_cancelled, logger),
+        "exit_if_workflow_paused": partial(exit_if_workflow_paused, logger),
+    }
+    workflow_log_event = partial(log_event, logger)
+    workflow_emit_progress = partial(emit_workflow_progress, logger)
+    workflow_acceptance_kwargs: WorkflowAcceptanceKwargs = {
+        "workflow_acceptance_policy": workflow_acceptance_policy,
+        "zero_budget_failure_categories": ZERO_BUDGET_FAILURE_CATEGORIES,
+        "evaluate_workflow_acceptance": evaluate_workflow_acceptance,
+    }
+    workflow_acceptance_runtime_kwargs: WorkflowAcceptanceRuntimeKwargs = {
+        **workflow_acceptance_kwargs,
+        "log_event": workflow_log_event,
+    }
+
+    configure_repair_attempts_for_cycle = partial(
+        configure_repair_attempts_runtime,
+        build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure_runtime,
+        ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+        build_repair_context=build_repair_context_runtime,
+    )
+
+    queue_active_cycle_repair_for_failure = partial(
+        queue_active_cycle_repair_runtime,
+        workflow_resume_policy=workflow_resume_policy,
+        configure_repair_attempts=configure_repair_attempts_for_cycle,
+        ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+        log_event=workflow_log_event,
+    )
+
+    dispatch_task_failure_for_workflow = partial(
+        dispatch_task_failure,
+        workflow_failure_policy=workflow_failure_policy,
+        is_repairable_failure=is_repairable_failure_category,
+        queue_active_cycle_repair=queue_active_cycle_repair_for_failure,
+        emit_workflow_progress=workflow_emit_progress,
+        **workflow_acceptance_runtime_kwargs,
+    )
+
+    resume_failed_tasks_with_repair_cycle_for_resume = partial(
+        resume_failed_tasks_with_repair_cycle,
+        configure_repair_attempts=configure_repair_attempts_for_cycle,
+        repair_task_ids_for_cycle=partial(
+            plan_repair_task_ids_for_cycle,
+            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+        ),
+        log_event=workflow_log_event,
+    )
+
+    resume_failed_workflow_tasks_for_resume = partial(
+        resume_failed_workflow_tasks,
+        is_repairable_failure=is_repairable_failure_category,
+        **workflow_acceptance_kwargs,
+        resume_failed_tasks_with_repair_cycle=resume_failed_tasks_with_repair_cycle_for_resume,
+    )
+
+    resume_workflow_tasks_for_execution = partial(
+        resume_workflow_tasks,
+        workflow_resume_policy=workflow_resume_policy,
+        failed_task_ids_for_repair=failed_task_ids_for_repair,
+        resume_failed_workflow_tasks=resume_failed_workflow_tasks_for_resume,
+        log_event=workflow_log_event,
+    )
+
+    ensure_workflow_running_for_active = partial(
+        ensure_workflow_running,
+        workflow_acceptance_policy=workflow_acceptance_policy,
+        workflow_max_repair_cycles=workflow_max_repair_cycles,
+        log_event=workflow_log_event,
+    )
+
+    finish_workflow_if_no_pending_tasks_for_loop = partial(
+        finish_workflow_if_no_pending_tasks,
+        **workflow_acceptance_runtime_kwargs,
+    )
+
+    execute_workflow_task_for_task = partial(
+        execute_workflow_task,
+        run_task=run_task,
+        classify_task_failure=classify_task_failure,
+        dispatch_task_failure=dispatch_task_failure_for_workflow,
+        emit_workflow_progress=workflow_emit_progress,
+        **workflow_control_kwargs,
+    )
+
+    execute_runnable_tasks_for_frontier = partial(
+        execute_runnable_tasks,
+        execute_workflow_task=execute_workflow_task_for_task,
+    )
+
+    execute_runnable_frontier_for_loop = partial(
+        execute_runnable_frontier,
+        execute_runnable_tasks=execute_runnable_tasks_for_frontier,
+        **workflow_acceptance_runtime_kwargs,
+    )
+
+    execute_workflow_loop_for_active = partial(
+        execute_workflow_loop,
+        finish_workflow_if_no_pending_tasks=finish_workflow_if_no_pending_tasks_for_loop,
+        execute_runnable_frontier=execute_runnable_frontier_for_loop,
+        **workflow_control_kwargs,
+    )
+
+    run_active_workflow_for_execution = partial(
+        run_active_workflow,
+        ensure_workflow_running=ensure_workflow_running_for_active,
+        execute_workflow_loop=execute_workflow_loop_for_active,
+        log_event=workflow_log_event,
+        **workflow_control_kwargs,
+    )
+
+    return {
+        "exit_if_workflow_cancelled": workflow_control_kwargs["exit_if_workflow_cancelled"],
+        "workflow_max_repair_cycles": workflow_max_repair_cycles,
+        "resume_workflow_tasks": resume_workflow_tasks_for_execution,
+        "run_active_workflow": run_active_workflow_for_execution,
+    }
 
 
 def prepare_workflow_execution(

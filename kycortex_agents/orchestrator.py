@@ -1,7 +1,7 @@
 import logging
 import re
 from functools import partial
-from typing import AbstractSet, Optional
+from typing import Optional
 
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
@@ -246,26 +246,12 @@ class Orchestrator:
             log_event=workflow_log_event,
         )
 
-        def resume_failed_tasks_with_repair_cycle_for_resume(
-            repair_project: ProjectState,
-            resume_failed_task_ids: list[str],
-            resume_failure_categories: AbstractSet[str],
-            *,
-            workflow_acceptance_policy: str,
-            zero_budget_failure_categories: AbstractSet[str],
-            evaluate_workflow_acceptance,
-        ) -> list[str]:
-            return resume_failed_tasks_with_repair_cycle(
-                repair_project,
-                resume_failed_task_ids,
-                resume_failure_categories,
-                workflow_acceptance_policy=workflow_acceptance_policy,
-                zero_budget_failure_categories=zero_budget_failure_categories,
-                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                configure_repair_attempts=configure_repair_attempts_for_cycle,
-                repair_task_ids_for_cycle=plan_repair_task_ids_for_cycle_for_resume,
-                log_event=workflow_log_event,
-            )
+        resume_failed_tasks_with_repair_cycle_for_resume = partial(
+            resume_failed_tasks_with_repair_cycle,
+            configure_repair_attempts=configure_repair_attempts_for_cycle,
+            repair_task_ids_for_cycle=plan_repair_task_ids_for_cycle_for_resume,
+            log_event=workflow_log_event,
+        )
 
         resume_failed_workflow_tasks_for_resume = partial(
             resume_failed_workflow_tasks,

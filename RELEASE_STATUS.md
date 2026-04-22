@@ -14,6 +14,7 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Remote CI for the multi-model commit `270ad03` is green: GitHub Actions run `24781026643` completed with `success`.
 - Option B remediation update on current head: Ollama runtime now applies `max_tokens` as `num_predict` and disables `think` by default for reasoning-capable Qwen3 family models unless `ollama_think` is explicitly set.
 - New empirical evidence on current head: `examples/example_release_user_smoke.py` completed successfully with local Ollama `qwen3.5:9b` after the runtime payload fix (`output/release_user_smoke_ollama_qwen35_9b_postfix_2026_04_22`).
+- Remediation commit publication checkpoint: commit `beee6cb` (`fix: stabilize ollama qwen3 runtime budgeting`) is published on `origin/main`; GitHub Actions run `24783625109` completed with `success`.
 - Current empirical requalification subset on `main`: `examples/example_release_user_smoke.py` passed on `openai`, `anthropic`, and local `ollama` with `qwen2.5-coder:7b` on 2026-04-22; `examples/example_provider_matrix_validation.py` also completed on all three providers (`openai`, `anthropic`, `ollama`) with `phase=completed` and `terminal_outcome=completed` for each provider workflow
 
 ## Refactor Engineering Suspension

@@ -73,6 +73,11 @@ class _WorkflowAcceptanceRuntimeKwargs(_WorkflowAcceptanceKwargs):
     log_event: Any
 
 
+class _WorkflowControlKwargs(TypedDict):
+    exit_if_workflow_cancelled: Any
+    exit_if_workflow_paused: Any
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -219,8 +224,10 @@ class Orchestrator:
         workflow_resume_policy = self.config.workflow_resume_policy
         workflow_failure_policy = self.config.workflow_failure_policy
 
-        workflow_exit_if_cancelled = partial(exit_if_workflow_cancelled, self.logger)
-        workflow_exit_if_paused = partial(exit_if_workflow_paused, self.logger)
+        workflow_control_kwargs: _WorkflowControlKwargs = {
+            "exit_if_workflow_cancelled": partial(exit_if_workflow_cancelled, self.logger),
+            "exit_if_workflow_paused": partial(exit_if_workflow_paused, self.logger),
+        }
         workflow_log_event = partial(log_event, self.logger)
         workflow_emit_progress = partial(emit_workflow_progress, self.logger)
         workflow_acceptance_kwargs: _WorkflowAcceptanceKwargs = {
@@ -297,11 +304,10 @@ class Orchestrator:
         execute_workflow_task_for_task = partial(
             execute_workflow_task,
             run_task=self.run_task,
-            exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-            exit_if_workflow_paused=workflow_exit_if_paused,
             classify_task_failure=classify_task_failure,
             dispatch_task_failure=dispatch_task_failure_for_workflow,
             emit_workflow_progress=workflow_emit_progress,
+            **workflow_control_kwargs,
         )
 
         execute_runnable_tasks_for_frontier = partial(
@@ -317,24 +323,22 @@ class Orchestrator:
 
         execute_workflow_loop_for_active = partial(
             execute_workflow_loop,
-            exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-            exit_if_workflow_paused=workflow_exit_if_paused,
             finish_workflow_if_no_pending_tasks=finish_workflow_if_no_pending_tasks_for_loop,
             execute_runnable_frontier=execute_runnable_frontier_for_loop,
+            **workflow_control_kwargs,
         )
 
         run_active_workflow_for_execution = partial(
             run_active_workflow,
-            exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-            exit_if_workflow_paused=workflow_exit_if_paused,
             ensure_workflow_running=ensure_workflow_running_for_active,
             execute_workflow_loop=execute_workflow_loop_for_active,
             log_event=workflow_log_event,
+            **workflow_control_kwargs,
         )
 
         execute_workflow_runtime(
             project,
-            exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+            exit_if_workflow_cancelled=workflow_control_kwargs["exit_if_workflow_cancelled"],
             execution_plan=project.execution_plan,
             validate_agent_resolution=validate_agent_resolution,
             registry=self.registry,

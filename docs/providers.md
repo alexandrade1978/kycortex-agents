@@ -50,11 +50,14 @@ The provider layer is consumed by `BaseAgent`, which applies the production-faci
 - Per-agent and per-provider call budgets through `provider_max_calls_per_agent` and `provider_max_calls_per_provider`
 - Aggregate elapsed-time limits through `provider_max_elapsed_seconds_per_call`
 - Provider fallback routing through `provider_fallback_order` and `provider_fallback_models`
+- Multi-model provider routing through `llm_model_candidates` (primary provider) and ordered `provider_fallback_models` values (fallback providers)
 - Circuit breaking through `provider_circuit_breaker_threshold` and `provider_circuit_breaker_cooldown_seconds`
 - Health-probe cooldown caching through `provider_health_check_cooldown_seconds`
 - Cooperative cancellation through `provider_cancellation_check_interval_seconds`
 
 In practice, this means provider selection is not just a direct SDK call. The runtime can preflight provider health, skip providers whose circuit is open, reroute around exhausted quotas, and fall back to secondary providers before or after a failed generation attempt.
+
+When multi-model routing is configured, the runtime evaluates ordered provider/model pairs. The primary provider is attempted as `llm_model` followed by `llm_model_candidates`, and each fallback provider is attempted in `provider_fallback_order` using the ordered model list declared in `provider_fallback_models`.
 
 ## OpenAI Configuration
 

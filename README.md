@@ -149,6 +149,7 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | --- | --- | --- |
 | `llm_provider` | `"openai"` | Selects the built-in provider backend. Supported values are `openai`, `anthropic`, and `ollama`. |
 | `llm_model` | `"gpt-4o"` | Provider-specific model name used for agent execution. |
+| `llm_model_candidates` | `()` | Optional ordered additional models for the primary provider. The runtime attempts `llm_model` first, then each candidate. |
 | `api_key` | `None` | Optional explicit API key. When omitted, OpenAI and Anthropic fall back to `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`. |
 | `base_url` | `None` or Ollama default | Optional provider base URL. Ollama defaults to `http://localhost:11434`. |
 | `ollama_num_ctx` | `None` | Optional Ollama-specific context window override passed as `num_ctx` in generate requests. Useful for local repair-heavy workflows that need more than the runtime default context. |
@@ -156,6 +157,8 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | `max_tokens` | `4096` | Maximum number of output tokens requested from the provider. |
 | `timeout_seconds` | `60.0` | Provider request timeout in seconds. |
 | `provider_timeout_seconds` | `{}` | Optional per-provider timeout overrides keyed by provider name, used for primary and fallback provider runtime configs. |
+| `provider_fallback_order` | `()` | Optional ordered list of fallback providers to use when the primary provider/model path fails or is unavailable. |
+| `provider_fallback_models` | `{}` | Provider-to-model mapping for fallback routing. Each value may be a single model string or an ordered model sequence for multi-model fallback per provider. |
 | `workflow_failure_policy` | `"fail_fast"` | Controls whether workflow execution stops immediately or continues while skipping blocked descendants. |
 | `workflow_resume_policy` | `"interrupted_only"` | Controls whether resume only re-queues interrupted tasks or also re-queues failed and dependency-skipped tasks. |
 | `workflow_max_repair_cycles` | `1` | Maximum bounded repair cycles allowed when failed tasks are resumed with corrective context. |

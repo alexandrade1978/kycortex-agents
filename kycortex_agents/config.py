@@ -61,6 +61,7 @@ class KYCortexConfig:
     """Public runtime configuration for providers, workflow behavior, and outputs."""
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o"
+    llm_model_candidates: tuple[str, ...] = ()
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     ollama_num_ctx: Optional[int] = None
@@ -81,7 +82,7 @@ class KYCortexConfig:
     provider_max_calls_per_provider: dict[str, int] = field(default_factory=dict)
     provider_max_elapsed_seconds_per_call: float = 0.0
     provider_fallback_order: tuple[str, ...] = ()
-    provider_fallback_models: dict[str, str] = field(default_factory=dict)
+    provider_fallback_models: dict[str, str | tuple[str, ...] | list[str]] = field(default_factory=dict)
     provider_cancellation_check_interval_seconds: float = 0.1
     provider_circuit_breaker_threshold: int = 0
     provider_circuit_breaker_cooldown_seconds: float = 0.0
@@ -114,14 +115,20 @@ class KYCortexConfig:
         """Normalize defaults, resolve provider settings, validate config, and create output storage."""
 
         self.llm_provider = self.llm_provider.strip().lower()
+        self.llm_model = self.llm_model.strip()
+        self.llm_model_candidates = tuple(
+            model_name
+            for model_name in self._normalize_model_sequence(self.llm_model_candidates)
+            if model_name != self.llm_model
+        )
         self.provider_fallback_order = tuple(
             provider_name.strip().lower()
             for provider_name in self.provider_fallback_order
             if provider_name.strip()
         )
         self.provider_fallback_models = {
-            provider_name.strip().lower(): model_name.strip()
-            for provider_name, model_name in self.provider_fallback_models.items()
+            provider_name.strip().lower(): self._normalize_model_sequence(model_names)
+            for provider_name, model_names in self.provider_fallback_models.items()
             if provider_name.strip()
         }
         self.provider_timeout_seconds = {
@@ -139,6 +146,25 @@ class KYCortexConfig:
         if self.base_url is None:
             self.base_url = resolve_provider_base_url(self.llm_provider)
         self._validate_static_config()
+
+    @staticmethod
+    def _normalize_model_sequence(model_names: object) -> tuple[str, ...]:
+        """Return normalized model names preserving order and removing duplicates."""
+
+        raw_names: list[str]
+        if isinstance(model_names, str):
+            raw_names = [model_names]
+        elif isinstance(model_names, (tuple, list)):
+            raw_names = [name for name in model_names if isinstance(name, str)]
+        else:
+            return ()
+
+        normalized_names: list[str] = []
+        for model_name in raw_names:
+            stripped_model_name = model_name.strip()
+            if stripped_model_name and stripped_model_name not in normalized_names:
+                normalized_names.append(stripped_model_name)
+        return tuple(normalized_names)
 
     def _resolve_api_key(self) -> str:
         """Resolve the configured provider API key from the matching environment variable."""
@@ -314,21 +340,65 @@ class KYCortexConfig:
         normalized_provider_name = provider_name.strip().lower()
         return self.provider_timeout_seconds.get(normalized_provider_name, self.timeout_seconds)
 
-    def provider_runtime_config(self, provider_name: str) -> "KYCortexConfig":
+    def models_for_provider(self, provider_name: str) -> tuple[str, ...]:
+        """Return ordered model candidates for a provider."""
+
+        normalized_provider_name = provider_name.strip().lower()
+        if normalized_provider_name == self.llm_provider:
+            return self._normalize_model_sequence((self.llm_model, *self.llm_model_candidates))
+        return self._normalize_model_sequence(
+            self.provider_fallback_models.get(normalized_provider_name, ())
+        )
+
+    def provider_model_execution_plan(self) -> list[tuple[str, str]]:
+        """Return ordered provider/model pairs for retries and fallbacks."""
+
+        plan: list[tuple[str, str]] = []
+        seen_pairs: set[tuple[str, str]] = set()
+
+        for model_name in self.models_for_provider(self.llm_provider):
+            pair = (self.llm_provider, model_name)
+            if pair not in seen_pairs:
+                plan.append(pair)
+                seen_pairs.add(pair)
+
+        for provider_name in self.provider_fallback_order:
+            for model_name in self.models_for_provider(provider_name):
+                pair = (provider_name, model_name)
+                if pair not in seen_pairs:
+                    plan.append(pair)
+                    seen_pairs.add(pair)
+
+        return plan
+
+    def provider_runtime_config(
+        self,
+        provider_name: str,
+        model_name: Optional[str] = None,
+    ) -> "KYCortexConfig":
         """Return a provider-specific runtime config derived from the current policy surface."""
 
         normalized_provider_name = provider_name.strip().lower()
+        resolved_model_name = model_name.strip() if isinstance(model_name, str) else ""
+        if not resolved_model_name:
+            provider_models = self.models_for_provider(normalized_provider_name)
+            if not provider_models:
+                raise ConfigValidationError(
+                    f"No configured models found for provider: {normalized_provider_name}"
+                )
+            resolved_model_name = provider_models[0]
         provider_timeout_seconds = self.provider_timeout_seconds_for(normalized_provider_name)
-        if normalized_provider_name == self.llm_provider and provider_timeout_seconds == self.timeout_seconds:
+        if (
+            normalized_provider_name == self.llm_provider
+            and resolved_model_name == self.llm_model
+            and provider_timeout_seconds == self.timeout_seconds
+        ):
             return self
         return replace(
             self,
             llm_provider=normalized_provider_name,
-            llm_model=(
-                self.llm_model
-                if normalized_provider_name == self.llm_provider
-                else self.provider_fallback_models[normalized_provider_name]
-            ),
+            llm_model=resolved_model_name,
+            llm_model_candidates=(),
             api_key=(self.api_key if normalized_provider_name == self.llm_provider else None),
             base_url=(self.base_url if normalized_provider_name == self.llm_provider else None),
             timeout_seconds=provider_timeout_seconds,

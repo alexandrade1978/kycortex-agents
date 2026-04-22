@@ -253,6 +253,52 @@ def test_get_provider_for_reuses_cached_fallback_provider(monkeypatch):
     assert resolved is cached_fallback
 
 
+def test_provider_execution_plan_supports_multiple_models_per_provider():
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        llm_model="gpt-4o",
+        llm_model_candidates=("gpt-4o-mini",),
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": ("claude-3-5-sonnet", "claude-3-5-haiku")},
+    )
+    agent = DummyAgent(DummyProvider(response="ok"), config)
+
+    assert agent._provider_execution_plan() == [
+        ("openai", "gpt-4o"),
+        ("openai", "gpt-4o-mini"),
+        ("anthropic", "claude-3-5-sonnet"),
+        ("anthropic", "claude-3-5-haiku"),
+    ]
+
+
+def test_chat_falls_back_to_secondary_model_on_same_provider(monkeypatch):
+    config = KYCortexConfig(
+        output_dir="./output_test",
+        llm_provider="openai",
+        llm_model="gpt-4o",
+        llm_model_candidates=("gpt-4o-mini",),
+        provider_max_attempts=1,
+    )
+    agent = DummyAgent(None, config)
+
+    created_by_model: dict[str, DummyProvider] = {
+        "gpt-4o": DummyProvider(error=ProviderTransientError("primary model timeout")),
+        "gpt-4o-mini": DummyProvider(response="ok-from-secondary-model"),
+    }
+
+    def create_provider_for_model(runtime_config: KYCortexConfig):
+        return created_by_model[runtime_config.llm_model]
+
+    monkeypatch.setattr("kycortex_agents.agents.base_agent.create_provider", create_provider_for_model)
+
+    result = agent.chat("system", "message")
+
+    assert result == "ok-from-secondary-model"
+    assert created_by_model["gpt-4o"].calls == [("system", "message")]
+    assert created_by_model["gpt-4o-mini"].calls == [("system", "message")]
+
+
 def test_chat_raises_on_provider_error():
     agent = DummyAgent(DummyProvider(error=RuntimeError("provider down")))
 

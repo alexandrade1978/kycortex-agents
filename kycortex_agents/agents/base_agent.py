@@ -62,7 +62,7 @@ class BaseAgent(ABC):
 
     def _get_provider_for(self, provider_name: str, model_name: str) -> BaseLLMProvider:
         provider_key = (provider_name, model_name)
-        runtime_config = self.config.provider_runtime_config(provider_name)
+        runtime_config = self.config.provider_runtime_config(provider_name, model_name)
         if provider_name == self.config.llm_provider and model_name == self.config.llm_model:
             if self._provider is not None:
                 self._provider_cache[provider_key] = self._provider
@@ -496,13 +496,7 @@ class BaseAgent(ABC):
         raise AgentExecutionError(f"{self.name} failed to call the model provider")
 
     def _provider_execution_plan(self) -> list[tuple[str, str]]:
-        return [
-            (self.config.llm_provider, self.config.llm_model),
-            *[
-                (provider_name, self.config.provider_fallback_models[provider_name])
-                for provider_name in self.config.provider_fallback_order
-            ],
-        ]
+        return self.config.provider_model_execution_plan()
 
     def _is_provider_circuit_open(self, provider_name: str, current_time: float) -> bool:
         if self.config.provider_circuit_breaker_threshold <= 0:

@@ -9,6 +9,8 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Release tag for this version: `not tagged (development head)`
 - Most recent published release tag: `v1.0.13a6`
 - Branch expected for release preparation: `main`
+- Multi-model runtime routing is now implemented on the current head: primary-provider model candidates (`llm_model_candidates`) and ordered fallback-provider model sequences (`provider_fallback_models`) are both supported by runtime provider/model execution planning.
+- Live multi-model smoke evidence now exists on the current head: a same-provider Ollama run with primary `qwen3.5:9b` and candidate `qwen2.5-coder:7b` completed successfully, with provider metadata showing transient failure on the first model and successful completion on the fallback model.
 - Current empirical requalification subset on `main`: `examples/example_release_user_smoke.py` passed on `openai`, `anthropic`, and local `ollama` with `qwen2.5-coder:7b` on 2026-04-22; `examples/example_provider_matrix_validation.py` also completed on all three providers (`openai`, `anthropic`, `ollama`) with `phase=completed` and `terminal_outcome=completed` for each provider workflow
 
 ## Refactor Engineering Suspension
@@ -36,6 +38,8 @@ This file tracks the current repository-owned release state for KYCortex after p
 
 - `ruff`: passing
 - `mypy`: passing
+- multi-model targeted regressions: passing (`tests/test_config.py` + `tests/test_base_agent.py`, including same-provider model fallback coverage)
+- provider-focused integration regressions: passing (`tests/test_provider_agent_integration.py`, `tests/test_provider_metadata_accumulation.py`, `tests/test_provider_matrix.py`)
 - focused public and metadata regressions: passing
 - package validation: passing
 - release metadata check: passing

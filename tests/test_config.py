@@ -180,6 +180,61 @@ def test_provider_runtime_config_uses_provider_specific_timeout_for_primary_and_
     assert config.provider_timeout_seconds_for("ollama") == 60.0
 
 
+def test_config_normalizes_primary_and_fallback_model_sequences(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        llm_model=" gpt-4o ",
+        llm_model_candidates=(" gpt-4o-mini ", "gpt-4o", " "),
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": [" claude-3-5-sonnet ", "claude-3-5-sonnet", "claude-haiku"]},
+    )
+
+    assert config.llm_model == "gpt-4o"
+    assert config.llm_model_candidates == ("gpt-4o-mini",)
+    assert config.provider_fallback_models["anthropic"] == ("claude-3-5-sonnet", "claude-haiku")
+
+
+def test_provider_model_execution_plan_supports_multi_models_per_provider(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        llm_model="gpt-4o",
+        llm_model_candidates=("gpt-4o-mini",),
+        provider_fallback_order=("anthropic", "ollama"),
+        provider_fallback_models={
+            "anthropic": ("claude-sonnet", "claude-haiku"),
+            "ollama": "qwen2.5-coder:7b",
+        },
+    )
+
+    assert config.provider_model_execution_plan() == [
+        ("openai", "gpt-4o"),
+        ("openai", "gpt-4o-mini"),
+        ("anthropic", "claude-sonnet"),
+        ("anthropic", "claude-haiku"),
+        ("ollama", "qwen2.5-coder:7b"),
+    ]
+
+
+def test_provider_runtime_config_can_target_specific_provider_model(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        llm_model="gpt-4o",
+        llm_model_candidates=("gpt-4o-mini",),
+        timeout_seconds=60.0,
+        provider_timeout_seconds={"openai": 30.0},
+    )
+
+    runtime = config.provider_runtime_config("openai", "gpt-4o-mini")
+
+    assert runtime.llm_provider == "openai"
+    assert runtime.llm_model == "gpt-4o-mini"
+    assert runtime.llm_model_candidates == ()
+    assert runtime.timeout_seconds == 30.0
+
+
 def test_config_rejects_invalid_temperature(tmp_path):
     with pytest.raises(ConfigValidationError, match="temperature must be between 0 and 2"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), temperature=2.5)

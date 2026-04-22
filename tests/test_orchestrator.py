@@ -2,13 +2,13 @@ import ast
 import os
 import pathlib
 import stat
+import re
 import subprocess
 import sys
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-import kycortex_agents.orchestrator as orchestrator_module
 import kycortex_agents.orchestration.agent_runtime as agent_runtime_module
 import kycortex_agents.orchestration.context_building as context_building_module
 import kycortex_agents.orchestration.module_ast_analysis as module_ast_analysis_module
@@ -1869,7 +1869,7 @@ def test_provider_call_metadata_redacts_sensitive_output_metadata(tmp_path):
 
 def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
     artifacts = [
         ArtifactRecord(name="blank", artifact_type=ArtifactType.TEXT, content="   ", path="ignored.txt"),
         ArtifactRecord(name="Report Draft", artifact_type=ArtifactType.DOCUMENT, content="hello", path="reports/final draft.md"),
@@ -1885,7 +1885,7 @@ def test_persist_artifacts_writes_content_and_updates_relative_path(tmp_path):
 
 def test_persist_artifacts_redacts_sensitive_content_before_disk_write(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
     artifacts = [
         ArtifactRecord(
             name="credentials",
@@ -1909,7 +1909,7 @@ def test_persist_artifacts_redacts_sensitive_content_before_disk_write(tmp_path)
 @pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
 def test_persist_artifacts_use_private_file_permissions(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
     artifacts = [
         ArtifactRecord(
             name="report",
@@ -1929,7 +1929,7 @@ def test_persist_artifacts_use_private_file_permissions(tmp_path):
 @pytest.mark.skipif(os.name != "posix", reason="POSIX-only permission hardening")
 def test_persist_artifacts_use_private_directory_permissions(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
     artifacts = [
         ArtifactRecord(
             name="report",
@@ -1948,7 +1948,7 @@ def test_persist_artifacts_use_private_directory_permissions(tmp_path):
 
 def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
     escaped_root = tmp_path / "escaped"
     escaped_root.mkdir()
     (tmp_path / "output").mkdir()
@@ -1972,7 +1972,7 @@ def test_persist_artifacts_rejects_symlinked_output_path_escape(tmp_path):
 
 def test_sanitize_artifact_relative_path_rejects_invalid_segments_and_empty_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
 
     assert support.sanitize_artifact_relative_path("reports/./summary.md") == pathlib.Path("reports/summary.md")
 
@@ -1982,15 +1982,15 @@ def test_sanitize_artifact_relative_path_rejects_invalid_segments_and_empty_path
 
 def test_sanitize_artifact_relative_path_rejects_defensive_invalid_segment(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    real_sub = orchestrator_module.re.sub
+    real_sub = re.sub
 
     def fake_sub(pattern, replacement, value):
         if value == "unsafe":
             return "."
         return real_sub(pattern, replacement, value)
 
-    monkeypatch.setattr(orchestrator_module.re, "sub", fake_sub)
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    monkeypatch.setattr(re, "sub", fake_sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
 
     with pytest.raises(AgentExecutionError, match="artifact path contains an invalid segment"):
         support.sanitize_artifact_relative_path("reports/unsafe/summary.md")
@@ -1998,7 +1998,7 @@ def test_sanitize_artifact_relative_path_rejects_defensive_invalid_segment(tmp_p
 
 def test_artifact_record_path_returns_absolute_path_outside_output_root(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
     external_path = tmp_path / "external" / "report.txt"
     external_path.parent.mkdir()
     external_path.write_text("hello", encoding="utf-8")
@@ -2008,7 +2008,7 @@ def test_artifact_record_path_returns_absolute_path_outside_output_root(tmp_path
 
 def test_default_artifact_path_sanitizes_blank_names_and_other_suffix(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=orchestrator_module.re.sub)
+    support = ArtifactPersistenceSupport(config.output_dir, sanitize_sub=re.sub)
     artifact = ArtifactRecord(name="...", artifact_type=ArtifactType.OTHER)
 
     assert support.default_artifact_path(artifact) == "artifacts/artifact.artifact"

@@ -1,5 +1,6 @@
 import logging
 import re
+from functools import partial
 from typing import AbstractSet, Any, Literal, Optional
 
 try:
@@ -355,14 +356,13 @@ class Orchestrator:
                 resume_failed_tasks_with_repair_cycle=resume_failed_tasks_with_repair_cycle_for_resume,
             )
 
-        def resume_workflow_tasks_for_execution(current_project: ProjectState) -> list[str]:
-            return resume_workflow_tasks(
-                current_project,
-                workflow_resume_policy=workflow_resume_policy,
-                failed_task_ids_for_repair=failed_task_ids_for_repair,
-                resume_failed_workflow_tasks=resume_failed_workflow_tasks_for_resume,
-                log_event=workflow_log_event,
-            )
+        resume_workflow_tasks_for_execution = partial(
+            resume_workflow_tasks,
+            workflow_resume_policy=workflow_resume_policy,
+            failed_task_ids_for_repair=failed_task_ids_for_repair,
+            resume_failed_workflow_tasks=resume_failed_workflow_tasks_for_resume,
+            log_event=workflow_log_event,
+        )
 
         def ensure_workflow_running_for_active(active_project: ProjectState) -> bool:
             return ensure_workflow_running(
@@ -433,15 +433,14 @@ class Orchestrator:
                 execute_runnable_frontier=execute_runnable_frontier_for_loop,
             )
 
-        def run_active_workflow_for_execution(current_project: ProjectState) -> bool:
-            return run_active_workflow(
-                current_project,
-                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-                exit_if_workflow_paused=workflow_exit_if_paused,
-                ensure_workflow_running=ensure_workflow_running_for_active,
-                execute_workflow_loop=execute_workflow_loop_for_active,
-                log_event=workflow_log_event,
-            )
+        run_active_workflow_for_execution = partial(
+            run_active_workflow,
+            exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+            exit_if_workflow_paused=workflow_exit_if_paused,
+            ensure_workflow_running=ensure_workflow_running_for_active,
+            execute_workflow_loop=execute_workflow_loop_for_active,
+            log_event=workflow_log_event,
+        )
 
         execute_workflow_runtime(
             project,

@@ -1,7 +1,7 @@
 import logging
 import re
 from functools import partial
-from typing import AbstractSet, Any, Literal, Optional
+from typing import AbstractSet, Literal, Optional
 
 try:
     import resource
@@ -154,24 +154,8 @@ class Orchestrator:
             normalized_output = sanitize_output_provider_call_metadata(normalized_output)
             sandbox_policy = self.config.execution_sandbox_policy()
 
-            def validate_code_output_for_task(output: AgentOutput, task: Task | None = None) -> None:
-                _validate_code_output_for_task_runtime(
-                    sandbox_policy,
-                    output,
-                    task,
-                )
-
-            def validate_test_output_for_task(
-                context: dict[str, Any],
-                output: AgentOutput,
-                task: Task | None = None,
-            ) -> None:
-                _validate_test_output_for_task_runtime(
-                    sandbox_policy,
-                    context,
-                    output,
-                    task,
-                )
+            validate_code_output_for_task = partial(_validate_code_output_for_task_runtime, sandbox_policy)
+            validate_test_output_for_task = partial(_validate_test_output_for_task_runtime, sandbox_policy)
 
             validate_task_output(
                 task,
@@ -251,29 +235,17 @@ class Orchestrator:
         workflow_log_event = partial(log_event, self.logger)
         workflow_emit_progress = partial(emit_workflow_progress, self.logger)
 
-        def configure_repair_attempts_for_cycle(
-            current_project: ProjectState,
-            failed_task_ids: list[str],
-            cycle: dict[str, object],
-        ) -> None:
-            configure_repair_attempts_runtime(
-                current_project,
-                failed_task_ids,
-                cycle,
-                build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure_runtime,
-                ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-                build_repair_context=build_repair_context_runtime,
-            )
+        configure_repair_attempts_for_cycle = partial(
+            configure_repair_attempts_runtime,
+            build_code_repair_context_from_test_failure=build_code_repair_context_from_test_failure_runtime,
+            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+            build_repair_context=build_repair_context_runtime,
+        )
 
-        def plan_repair_task_ids_for_cycle_for_resume(
-            current_project: ProjectState,
-            failed_task_ids: list[str],
-        ) -> list[str]:
-            return plan_repair_task_ids_for_cycle(
-                current_project,
-                failed_task_ids,
-                ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-            )
+        plan_repair_task_ids_for_cycle_for_resume = partial(
+            plan_repair_task_ids_for_cycle,
+            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+        )
 
         def queue_active_cycle_repair_for_failure(
             current_project: ProjectState,
@@ -353,26 +325,20 @@ class Orchestrator:
             log_event=workflow_log_event,
         )
 
-        def ensure_workflow_running_for_active(active_project: ProjectState) -> bool:
-            return ensure_workflow_running(
-                active_project,
-                workflow_acceptance_policy=workflow_acceptance_policy,
-                workflow_max_repair_cycles=workflow_max_repair_cycles,
-                log_event=workflow_log_event,
-            )
+        ensure_workflow_running_for_active = partial(
+            ensure_workflow_running,
+            workflow_acceptance_policy=workflow_acceptance_policy,
+            workflow_max_repair_cycles=workflow_max_repair_cycles,
+            log_event=workflow_log_event,
+        )
 
-        def finish_workflow_if_no_pending_tasks_for_loop(
-            loop_project: ProjectState,
-            pending: list[Task],
-        ) -> bool:
-            return finish_workflow_if_no_pending_tasks(
-                loop_project,
-                pending,
-                workflow_acceptance_policy=workflow_acceptance_policy,
-                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                log_event=workflow_log_event,
-            )
+        finish_workflow_if_no_pending_tasks_for_loop = partial(
+            finish_workflow_if_no_pending_tasks,
+            workflow_acceptance_policy=workflow_acceptance_policy,
+            zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+            log_event=workflow_log_event,
+        )
 
         def execute_workflow_task_for_task(
             task_project: ProjectState,

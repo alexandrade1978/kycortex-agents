@@ -78,6 +78,13 @@ class _WorkflowControlKwargs(TypedDict):
     exit_if_workflow_paused: Any
 
 
+class _WorkflowRuntimeCallbacks(TypedDict):
+    exit_if_workflow_cancelled: Any
+    workflow_max_repair_cycles: int
+    resume_workflow_tasks: Any
+    run_active_workflow: Any
+
+
 class Orchestrator:
     """Public workflow runtime for executing tasks with a configured or custom registry.
 
@@ -217,8 +224,8 @@ class Orchestrator:
         )
         return normalized_output.raw_content
 
-    def execute_workflow(self, project: ProjectState):
-        """Execute the full workflow until completion or an unrecoverable failure."""
+    def _build_workflow_runtime_callbacks(self) -> _WorkflowRuntimeCallbacks:
+        """Build the workflow runtime callback graph bound to the current orchestrator config."""
         workflow_acceptance_policy = self.config.workflow_acceptance_policy
         workflow_max_repair_cycles = self.config.workflow_max_repair_cycles
         workflow_resume_policy = self.config.workflow_resume_policy
@@ -336,13 +343,24 @@ class Orchestrator:
             **workflow_control_kwargs,
         )
 
+        return {
+            "exit_if_workflow_cancelled": workflow_control_kwargs["exit_if_workflow_cancelled"],
+            "workflow_max_repair_cycles": workflow_max_repair_cycles,
+            "resume_workflow_tasks": resume_workflow_tasks_for_execution,
+            "run_active_workflow": run_active_workflow_for_execution,
+        }
+
+    def execute_workflow(self, project: ProjectState):
+        """Execute the full workflow until completion or an unrecoverable failure."""
+
+        workflow_runtime_callbacks = self._build_workflow_runtime_callbacks()
         execute_workflow_runtime(
             project,
-            exit_if_workflow_cancelled=workflow_control_kwargs["exit_if_workflow_cancelled"],
+            exit_if_workflow_cancelled=workflow_runtime_callbacks["exit_if_workflow_cancelled"],
             execution_plan=project.execution_plan,
             validate_agent_resolution=validate_agent_resolution,
             registry=self.registry,
-            workflow_max_repair_cycles=workflow_max_repair_cycles,
-            resume_workflow_tasks=resume_workflow_tasks_for_execution,
-            run_active_workflow=run_active_workflow_for_execution,
+            workflow_max_repair_cycles=workflow_runtime_callbacks["workflow_max_repair_cycles"],
+            resume_workflow_tasks=workflow_runtime_callbacks["resume_workflow_tasks"],
+            run_active_workflow=workflow_runtime_callbacks["run_active_workflow"],
         )

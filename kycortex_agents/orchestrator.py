@@ -3,11 +3,6 @@ import re
 from functools import partial
 from typing import AbstractSet, Optional
 
-try:
-    import resource
-except ImportError:  # pragma: no cover - non-POSIX fallback
-    resource = None  # type: ignore[assignment]
-
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.memory.project_state import ProjectState, Task
@@ -39,6 +34,7 @@ from kycortex_agents.orchestration.workflow_control import (
     execute_workflow_task,
     failed_task_ids_for_repair,
     finish_workflow_if_no_pending_tasks,
+    is_repairable_failure_category,
     plan_repair_task_ids_for_cycle,
     queue_active_cycle_repair_runtime as _queue_active_cycle_repair_runtime,
     run_active_workflow,
@@ -57,31 +53,14 @@ from kycortex_agents.orchestration.workflow_control import (
     resume_workflow,
     skip_task,
     validate_agent_resolution,
+    ZERO_BUDGET_FAILURE_CATEGORIES,
 )
 from kycortex_agents.orchestration.workflow_acceptance import evaluate_workflow_acceptance
 from kycortex_agents.types import (
     AgentOutput,
-    FailureCategory,
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
-
-
-_ZERO_BUDGET_FAILURE_CATEGORIES = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
-_REPAIRABLE_FAILURE_CATEGORIES = frozenset(
-    {
-        FailureCategory.UNKNOWN.value,
-        FailureCategory.TASK_EXECUTION.value,
-        FailureCategory.CODE_VALIDATION.value,
-        FailureCategory.TEST_VALIDATION.value,
-        FailureCategory.DEPENDENCY_VALIDATION.value,
-        FailureCategory.PROVIDER_TRANSIENT.value,
-    }
-)
-
-
-def _is_repairable_failure_category(failure_category: str) -> bool:
-    return failure_category in _REPAIRABLE_FAILURE_CATEGORIES
 
 
 class Orchestrator:
@@ -259,8 +238,8 @@ class Orchestrator:
             dispatch_task_failure,
             workflow_failure_policy=workflow_failure_policy,
             workflow_acceptance_policy=workflow_acceptance_policy,
-            zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
-            is_repairable_failure=_is_repairable_failure_category,
+            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
+            is_repairable_failure=is_repairable_failure_category,
             queue_active_cycle_repair=queue_active_cycle_repair_for_failure,
             emit_workflow_progress=workflow_emit_progress,
             evaluate_workflow_acceptance=evaluate_workflow_acceptance,
@@ -290,9 +269,9 @@ class Orchestrator:
 
         resume_failed_workflow_tasks_for_resume = partial(
             resume_failed_workflow_tasks,
-            is_repairable_failure=_is_repairable_failure_category,
+            is_repairable_failure=is_repairable_failure_category,
             workflow_acceptance_policy=workflow_acceptance_policy,
-            zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
             evaluate_workflow_acceptance=evaluate_workflow_acceptance,
             resume_failed_tasks_with_repair_cycle=resume_failed_tasks_with_repair_cycle_for_resume,
         )
@@ -315,7 +294,7 @@ class Orchestrator:
         finish_workflow_if_no_pending_tasks_for_loop = partial(
             finish_workflow_if_no_pending_tasks,
             workflow_acceptance_policy=workflow_acceptance_policy,
-            zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
             evaluate_workflow_acceptance=evaluate_workflow_acceptance,
             log_event=workflow_log_event,
         )
@@ -342,7 +321,7 @@ class Orchestrator:
                 blocked_tasks=loop_project.blocked_tasks,
                 execute_runnable_tasks=execute_runnable_tasks_for_frontier,
                 workflow_acceptance_policy=workflow_acceptance_policy,
-                zero_budget_failure_categories=_ZERO_BUDGET_FAILURE_CATEGORIES,
+                zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
                 evaluate_workflow_acceptance=evaluate_workflow_acceptance,
                 log_event=workflow_log_event,
             )

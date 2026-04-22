@@ -1374,3 +1374,21 @@ def validate_agent_resolution(registry: Any, project: ProjectState) -> None:
             raise AgentExecutionError(
                 f"Task '{task.id}' is assigned to unknown agent '{task.assigned_to}'"
             )
+
+
+ZERO_BUDGET_FAILURE_CATEGORIES: frozenset[str] = frozenset({FailureCategory.SANDBOX_SECURITY_VIOLATION.value})
+REPAIRABLE_FAILURE_CATEGORIES: frozenset[str] = frozenset(
+    {
+        FailureCategory.UNKNOWN.value,
+        FailureCategory.TASK_EXECUTION.value,
+        FailureCategory.CODE_VALIDATION.value,
+        FailureCategory.TEST_VALIDATION.value,
+        FailureCategory.DEPENDENCY_VALIDATION.value,
+        FailureCategory.PROVIDER_TRANSIENT.value,
+    }
+)
+
+
+def is_repairable_failure_category(failure_category: str) -> bool:
+    """Return True if the failure category is eligible for automatic repair cycles."""
+    return failure_category in REPAIRABLE_FAILURE_CATEGORIES

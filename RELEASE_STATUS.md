@@ -11,6 +11,7 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Branch expected for release preparation: `main`
 - Multi-model runtime routing is now implemented on the current head: primary-provider model candidates (`llm_model_candidates`) and ordered fallback-provider model sequences (`provider_fallback_models`) are both supported by runtime provider/model execution planning.
 - Live multi-model smoke evidence now exists on the current head: a same-provider Ollama run with primary `qwen3.5:9b` and candidate `qwen2.5-coder:7b` completed successfully, with provider metadata showing transient failure on the first model and successful completion on the fallback model.
+- Remote CI for the multi-model commit `270ad03` is green: GitHub Actions run `24781026643` completed with `success`.
 - Current empirical requalification subset on `main`: `examples/example_release_user_smoke.py` passed on `openai`, `anthropic`, and local `ollama` with `qwen2.5-coder:7b` on 2026-04-22; `examples/example_provider_matrix_validation.py` also completed on all three providers (`openai`, `anthropic`, `ollama`) with `phase=completed` and `terminal_outcome=completed` for each provider workflow
 
 ## Refactor Engineering Suspension

@@ -15,6 +15,16 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Option B remediation update on current head: Ollama runtime now applies `max_tokens` as `num_predict` and disables `think` by default for reasoning-capable Qwen3 family models unless `ollama_think` is explicitly set.
 - New empirical evidence on current head: `examples/example_release_user_smoke.py` completed successfully with local Ollama `qwen3.5:9b` after the runtime payload fix (`output/release_user_smoke_ollama_qwen35_9b_postfix_2026_04_22`).
 - Remediation commit publication checkpoint: commit `beee6cb` (`fix: stabilize ollama qwen3 runtime budgeting`) is published on `origin/main`; GitHub Actions run `24783625109` completed with `success`.
+- Deterministic cross-provider checkpoint after remediation is now green on the release-user-smoke surface under fixed policy (`failure_policy=continue`, `max_repair_cycles=1`):
+	- OpenAI: `output/release_user_smoke_openai_matrix_checkpoint_2026_04_22`
+	- Anthropic: `output/release_user_smoke_anthropic_matrix_checkpoint_2026_04_22`
+	- Ollama qwen2.5: `output/release_user_smoke_ollama_qwen25_matrix_checkpoint_2026_04_22`
+	- Ollama qwen3.5: `output/release_user_smoke_ollama_qwen35_matrix_checkpoint_2026_04_22`
+- Additional note for the same session: `examples/example_provider_matrix_validation.py` with aggressive low budget (`max_tokens=1200`) remains unstable on the heavier full-workflow surface and returned `execution_error` across all providers in `output/provider_matrix_validation_2026_04_22_qwen3_remediation`.
+- Tuned full-workflow Ollama checkpoint is now green at `max_tokens=3200`, `ollama_num_ctx=16384`, `max_repair_cycles=3`:
+	- default Ollama lane (`qwen2.5-coder:7b`): `output/provider_matrix_validation_2026_04_22_ollama_ctx16384_live`
+	- explicit qwen3 lane (`qwen3.5:9b`): `output/provider_matrix_validation_2026_04_22_ollama_qwen35_cli`
+- `examples/example_provider_matrix_validation.py` now supports `--ollama-model` for deterministic explicit-model empirical runs (avoids resolver-default ambiguity when qualifying qwen3 lanes).
 - Current empirical requalification subset on `main`: `examples/example_release_user_smoke.py` passed on `openai`, `anthropic`, and local `ollama` with `qwen2.5-coder:7b` on 2026-04-22; `examples/example_provider_matrix_validation.py` also completed on all three providers (`openai`, `anthropic`, `ollama`) with `phase=completed` and `terminal_outcome=completed` for each provider workflow
 
 ## Refactor Engineering Suspension
@@ -23,7 +33,7 @@ This file tracks the current repository-owned release state for KYCortex after p
 - The last published and trusted release baseline remains `v1.0.13a6` on commit `f99a38d`.
 - Historical canary evidence for the published `v1.0.13a6` line remains retained in the repository, but the branch is not currently advancing that canary window.
 - A fresh release or canary claim is blocked until the refactor branch requalifies itself with deterministic validation gates and a new empirical baseline.
-- The 2026-04-22 empirical subset is materially stronger after the matrix run and qwen3 remediation fix, but still not sufficient for a blanket new claim: the current head now clears live smoke on OpenAI, Anthropic, Ollama `qwen2.5-coder:7b`, and Ollama `qwen3.5:9b` in runtime-path workflows; full model-agnostic requalification still requires a fresh deterministic matrix checkpoint that includes the repaired qwen3 lane under controlled retry and timeout policy.
+- The 2026-04-22 empirical subset is materially stronger after the matrix run and qwen3 remediation fix: the current head now clears deterministic release-user-smoke checkpoints on OpenAI, Anthropic, Ollama `qwen2.5-coder:7b`, and Ollama `qwen3.5:9b` in runtime-path workflows, and also clears tuned full-workflow Ollama lanes for both qwen2.5 and qwen3.5 (`max_tokens=3200`, `ollama_num_ctx=16384`, `max_repair_cycles=3`). Full model-agnostic requalification still requires one fresh consolidated full-workflow checkpoint run that includes OpenAI + Anthropic + explicit-qwen3 Ollama under the same fixed policy envelope.
 
 ## Repository Release Gates
 

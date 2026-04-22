@@ -89,6 +89,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit Ollama num_ctx to request during empirical Ollama runs.",
     )
     parser.add_argument(
+        "--ollama-model",
+        default=None,
+        help=(
+            "Optional explicit Ollama model override for this matrix run. "
+            "When omitted, the runner uses resolve_model(...) defaults."
+        ),
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
         default=3200,
@@ -117,6 +125,7 @@ def run_provider(
     max_repair_cycles: int,
     ollama_base_url: str | None = None,
     ollama_num_ctx: int | None = 16384,
+    ollama_model: str | None = None,
     max_tokens: int = 3200,
 ) -> dict:
     if provider == "ollama":
@@ -133,7 +142,7 @@ def run_provider(
         return result
 
     if provider == "ollama":
-        model = resolve_model(provider, None, ollama_base_url=ollama_base_url)
+        model = resolve_model(provider, ollama_model, ollama_base_url=ollama_base_url)
     else:
         model = resolve_model(provider, None)
     output_dir = str(Path(output_root) / provider)
@@ -183,6 +192,7 @@ def main() -> None:
     args = build_parser().parse_args()
     output_root = args.output_root
     providers = resolve_requested_providers(args.providers)
+    ollama_model = getattr(args, "ollama_model", None)
 
     results = [
         run_provider(
@@ -193,6 +203,7 @@ def main() -> None:
             max_repair_cycles=args.max_repair_cycles,
             ollama_base_url=args.ollama_base_url,
             ollama_num_ctx=args.ollama_num_ctx,
+            ollama_model=ollama_model,
             max_tokens=args.max_tokens,
         )
         for provider in providers
@@ -204,6 +215,7 @@ def main() -> None:
         "resume_policy": args.resume_policy,
         "max_repair_cycles": args.max_repair_cycles,
         "ollama_base_url": _public_ollama_base_url_label(args.ollama_base_url),
+        "ollama_model": ollama_model,
         "ollama_num_ctx": args.ollama_num_ctx,
         "max_tokens": args.max_tokens,
         "output_root": _public_path_label(output_root),

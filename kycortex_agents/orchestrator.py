@@ -15,9 +15,8 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     sanitize_output_provider_call_metadata,
-    validate_code_output_for_task_runtime,
+    build_task_output_validator_callbacks,
     validate_task_output,
-    validate_test_output_for_task_runtime,
 )
 from kycortex_agents.orchestration.workflow_control import (
     build_code_repair_context_from_test_failure_runtime,
@@ -58,7 +57,6 @@ from kycortex_agents.orchestration.workflow_control import (
 from kycortex_agents.orchestration.workflow_acceptance import evaluate_workflow_acceptance
 from kycortex_agents.types import (
     AgentOutput,
-    ExecutionSandboxPolicy,
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -84,11 +82,6 @@ class _WorkflowRuntimeCallbacks(TypedDict):
     workflow_max_repair_cycles: int
     resume_workflow_tasks: Any
     run_active_workflow: Any
-
-
-class _TaskOutputValidatorCallbacks(TypedDict):
-    validate_code_output: Any
-    validate_test_output: Any
 
 
 class Orchestrator:
@@ -137,16 +130,6 @@ class Orchestrator:
 
         return replay_workflow(self.logger, project, reason=reason)
 
-    def _build_task_output_validator_callbacks(
-        self, sandbox_policy: ExecutionSandboxPolicy
-    ) -> _TaskOutputValidatorCallbacks:
-        """Build task-output validator callbacks bound to the configured sandbox policy."""
-
-        return {
-            "validate_code_output": partial(validate_code_output_for_task_runtime, sandbox_policy),
-            "validate_test_output": partial(validate_test_output_for_task_runtime, sandbox_policy),
-        }
-
     def run_task(self, task: Task, project: ProjectState) -> str:
         """Execute one task through the public orchestrator runtime contract."""
         current_execution_agent_name = execution_agent_name(task)
@@ -169,7 +152,7 @@ class Orchestrator:
             normalized_output = normalize_agent_result(output)
             normalized_output = unredacted_agent_result(agent, normalized_output)
             normalized_output = sanitize_output_provider_call_metadata(normalized_output)
-            task_output_validator_callbacks = self._build_task_output_validator_callbacks(
+            task_output_validator_callbacks = build_task_output_validator_callbacks(
                 self.config.execution_sandbox_policy()
             )
 

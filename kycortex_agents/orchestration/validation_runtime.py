@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Optional, TypedDict, cast
 
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.exceptions import AgentExecutionError
@@ -42,6 +43,20 @@ class ValidationRuntimeInput:
     test_filename: str
     code_exact_test_contract: str
     code_behavior_contract: str
+
+
+class TaskOutputValidatorCallbacks(TypedDict):
+    validate_code_output: Any
+    validate_test_output: Any
+
+
+def build_task_output_validator_callbacks(
+    sandbox_policy: ExecutionSandboxPolicy,
+) -> TaskOutputValidatorCallbacks:
+    return {
+        "validate_code_output": partial(validate_code_output_for_task_runtime, sandbox_policy),
+        "validate_test_output": partial(validate_test_output_for_task_runtime, sandbox_policy),
+    }
 
 
 def should_validate_code_content(content: str, has_typed_artifact: bool) -> bool:

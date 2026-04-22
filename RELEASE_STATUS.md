@@ -9,6 +9,7 @@ This file tracks the current repository-owned release state for KYCortex after p
 - Release tag for this version: `not tagged (development head)`
 - Most recent published release tag: `v1.0.13a6`
 - Branch expected for release preparation: `main`
+- Current empirical requalification subset on `main`: `examples/example_release_user_smoke.py` passed on `openai`, `anthropic`, and local `ollama` with `qwen2.5-coder:7b` on 2026-04-22; `examples/example_provider_matrix_validation.py` also completed on all three providers (`openai`, `anthropic`, `ollama`) with `phase=completed` and `terminal_outcome=completed` for each provider workflow
 
 ## Refactor Engineering Suspension
 
@@ -16,6 +17,7 @@ This file tracks the current repository-owned release state for KYCortex after p
 - The last published and trusted release baseline remains `v1.0.13a6` on commit `f99a38d`.
 - Historical canary evidence for the published `v1.0.13a6` line remains retained in the repository, but the branch is not currently advancing that canary window.
 - A fresh release or canary claim is blocked until the refactor branch requalifies itself with deterministic validation gates and a new empirical baseline.
+- The 2026-04-22 empirical subset is materially stronger after the matrix run but still not sufficient for a blanket new claim: the current head clears live smoke and matrix workflows on OpenAI, Anthropic, and Ollama with the maintained smaller local model, but the heavier local Ollama model `qwen3.5:9b` remains degraded (timeouts reproduced at 90s and 240s) and keeps the branch below full model-agnostic requalification.
 
 ## Repository Release Gates
 

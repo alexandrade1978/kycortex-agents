@@ -7,10 +7,13 @@ This guide describes the current 1.0-oriented runtime architecture for `kycortex
 The package is organized into a small set of runtime layers with explicit responsibilities:
 
 1. Public API surface: `kycortex_agents`, `config`, `types`, `exceptions`, `memory`, `providers`, and `workflows` expose the supported import paths for consumers.
-2. Workflow orchestration: `kycortex_agents.orchestrator.Orchestrator` validates agent resolution, builds execution context, runs dependency-aware workflows, and records workflow/task events.
-3. Agent runtime: `kycortex_agents.agents.base_agent.BaseAgent` normalizes the agent execution contract around `AgentInput` and `AgentOutput`, while concrete agents implement role-specific behavior.
-4. Provider abstraction: `kycortex_agents.providers` decouples agent execution from provider backends through `BaseLLMProvider` and the built-in OpenAI, Anthropic, and Ollama implementations.
-5. State and persistence: `kycortex_agents.memory.project_state.ProjectState` owns task, decision, artifact, and execution-event state, while `kycortex_agents.memory.state_store` persists that state to JSON or SQLite.
+2. Workflow orchestration: `kycortex_agents.orchestrator.Orchestrator` is the supported public control surface and thin runtime dispatcher for workflow execution.
+3. Internal orchestration support: `kycortex_agents.orchestration.*` owns deterministic runtime behavior such as context building, validation, sandbox execution, workflow control, repair planning, AST analysis, and output normalization.
+4. Agent runtime: `kycortex_agents.agents.base_agent.BaseAgent` normalizes the agent execution contract around `AgentInput` and `AgentOutput`, while concrete agents implement role-specific behavior.
+5. Provider abstraction: `kycortex_agents.providers` decouples agent execution from provider backends through `BaseLLMProvider` and the built-in OpenAI, Anthropic, and Ollama implementations.
+6. State and persistence: `kycortex_agents.memory.project_state.ProjectState` owns task, decision, artifact, and execution-event state, while `kycortex_agents.memory.state_store` persists that state to JSON or SQLite.
+
+The current head completes the orchestrator-thinning pass: `Orchestrator` no longer owns private deterministic helper methods, and direct regression anchors now target the owner modules when they need to lock internal behavior.
 
 ## Core Domain Contracts
 
@@ -29,7 +32,7 @@ The active boundary split now treats four views explicitly: internal persisted w
 
 ## Workflow Execution Model
 
-`ProjectState` stores the workflow graph as a list of tasks with explicit dependency ids. The orchestrator executes that graph using the following model:
+`ProjectState` stores the workflow graph as a list of tasks with explicit dependency ids. The public orchestrator executes that graph using the following model:
 
 1. Validate the dependency graph and agent assignments before execution starts.
 2. Resume interrupted tasks and, when configured, re-queue failed tasks plus dependency-skipped descendants.
@@ -39,6 +42,12 @@ The active boundary split now treats four views explicitly: internal persisted w
 6. Record structured execution events and workflow lifecycle transitions for later inspection.
 
 Failure behavior is controlled by `workflow_failure_policy` and `workflow_resume_policy` in `KYCortexConfig`.
+
+In the current architecture, the public method boundary is intentionally small:
+
+- `Orchestrator.run_task(...)` resolves the agent, assembles the public runtime callbacks, delegates input construction and output validation to owner modules, and persists the normalized result
+- `Orchestrator.execute_workflow(...)` assembles workflow runtime callbacks and delegates the dependency-aware workflow loop to `kycortex_agents.orchestration.workflow_control.execute_workflow_runtime(...)`
+- workflow pause/resume/cancel/skip/override/replay operations remain on `Orchestrator` as the supported control surface, but each delegates directly to `workflow_control.py`
 
 ## Context Assembly
 
@@ -104,6 +113,7 @@ The package intentionally separates public contracts from internal helper behavi
 
 - consumers should prefer top-level imports from `kycortex_agents`
 - workflow execution should flow through `Orchestrator`
+- internal deterministic helper behavior should flow through `kycortex_agents.orchestration.*` owner modules rather than back into `Orchestrator`
 - state should be inspected through `ProjectState` or `ProjectSnapshot`
 - agent prompts should consume `AgentView`, not raw `ProjectSnapshot`
 - provider and persistence customization should use the exported interfaces instead of internal helper functions

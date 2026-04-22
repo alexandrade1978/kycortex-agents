@@ -36,7 +36,7 @@ from kycortex_agents.orchestration.workflow_control import (
     finish_workflow_if_no_pending_tasks,
     is_repairable_failure_category,
     plan_repair_task_ids_for_cycle,
-    queue_active_cycle_repair_runtime as _queue_active_cycle_repair_runtime,
+    queue_active_cycle_repair_runtime,
     run_active_workflow,
     cancel_workflow,
     emit_workflow_progress,
@@ -221,13 +221,8 @@ class Orchestrator:
             build_repair_context=build_repair_context_runtime,
         )
 
-        plan_repair_task_ids_for_cycle_for_resume = partial(
-            plan_repair_task_ids_for_cycle,
-            ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
-        )
-
         queue_active_cycle_repair_for_failure = partial(
-            _queue_active_cycle_repair_runtime,
+            queue_active_cycle_repair_runtime,
             workflow_resume_policy=workflow_resume_policy,
             configure_repair_attempts=configure_repair_attempts_for_cycle,
             ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
@@ -249,7 +244,10 @@ class Orchestrator:
         resume_failed_tasks_with_repair_cycle_for_resume = partial(
             resume_failed_tasks_with_repair_cycle,
             configure_repair_attempts=configure_repair_attempts_for_cycle,
-            repair_task_ids_for_cycle=plan_repair_task_ids_for_cycle_for_resume,
+            repair_task_ids_for_cycle=partial(
+                plan_repair_task_ids_for_cycle,
+                ensure_budget_decomposition_task=ensure_budget_decomposition_task_runtime,
+            ),
             log_event=workflow_log_event,
         )
 

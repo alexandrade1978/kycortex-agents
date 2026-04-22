@@ -1,7 +1,7 @@
 import logging
 import re
 from functools import partial
-from typing import Optional
+from typing import AbstractSet, Any, Optional, TypedDict
 
 from kycortex_agents.agents.registry import AgentRegistry, build_default_registry
 from kycortex_agents.config import KYCortexConfig
@@ -61,6 +61,16 @@ from kycortex_agents.types import (
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+
+
+class _WorkflowAcceptanceKwargs(TypedDict):
+    workflow_acceptance_policy: str
+    zero_budget_failure_categories: AbstractSet[str]
+    evaluate_workflow_acceptance: Any
+
+
+class _WorkflowAcceptanceRuntimeKwargs(_WorkflowAcceptanceKwargs):
+    log_event: Any
 
 
 class Orchestrator:
@@ -213,6 +223,15 @@ class Orchestrator:
         workflow_exit_if_paused = partial(exit_if_workflow_paused, self.logger)
         workflow_log_event = partial(log_event, self.logger)
         workflow_emit_progress = partial(emit_workflow_progress, self.logger)
+        workflow_acceptance_kwargs: _WorkflowAcceptanceKwargs = {
+            "workflow_acceptance_policy": workflow_acceptance_policy,
+            "zero_budget_failure_categories": ZERO_BUDGET_FAILURE_CATEGORIES,
+            "evaluate_workflow_acceptance": evaluate_workflow_acceptance,
+        }
+        workflow_acceptance_runtime_kwargs: _WorkflowAcceptanceRuntimeKwargs = {
+            **workflow_acceptance_kwargs,
+            "log_event": workflow_log_event,
+        }
 
         configure_repair_attempts_for_cycle = partial(
             configure_repair_attempts_runtime,
@@ -232,13 +251,10 @@ class Orchestrator:
         dispatch_task_failure_for_workflow = partial(
             dispatch_task_failure,
             workflow_failure_policy=workflow_failure_policy,
-            workflow_acceptance_policy=workflow_acceptance_policy,
-            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
             is_repairable_failure=is_repairable_failure_category,
             queue_active_cycle_repair=queue_active_cycle_repair_for_failure,
             emit_workflow_progress=workflow_emit_progress,
-            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-            log_event=workflow_log_event,
+            **workflow_acceptance_runtime_kwargs,
         )
 
         resume_failed_tasks_with_repair_cycle_for_resume = partial(
@@ -254,9 +270,7 @@ class Orchestrator:
         resume_failed_workflow_tasks_for_resume = partial(
             resume_failed_workflow_tasks,
             is_repairable_failure=is_repairable_failure_category,
-            workflow_acceptance_policy=workflow_acceptance_policy,
-            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
-            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+            **workflow_acceptance_kwargs,
             resume_failed_tasks_with_repair_cycle=resume_failed_tasks_with_repair_cycle_for_resume,
         )
 
@@ -277,10 +291,7 @@ class Orchestrator:
 
         finish_workflow_if_no_pending_tasks_for_loop = partial(
             finish_workflow_if_no_pending_tasks,
-            workflow_acceptance_policy=workflow_acceptance_policy,
-            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
-            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-            log_event=workflow_log_event,
+            **workflow_acceptance_runtime_kwargs,
         )
 
         execute_workflow_task_for_task = partial(
@@ -301,10 +312,7 @@ class Orchestrator:
         execute_runnable_frontier_for_loop = partial(
             execute_runnable_frontier,
             execute_runnable_tasks=execute_runnable_tasks_for_frontier,
-            workflow_acceptance_policy=workflow_acceptance_policy,
-            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
-            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-            log_event=workflow_log_event,
+            **workflow_acceptance_runtime_kwargs,
         )
 
         execute_workflow_loop_for_active = partial(

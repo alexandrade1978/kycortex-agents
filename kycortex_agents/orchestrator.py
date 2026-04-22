@@ -15,9 +15,9 @@ from kycortex_agents.orchestration.output_helpers import (
 from kycortex_agents.orchestration.validation_runtime import (
     provider_call_metadata,
     sanitize_output_provider_call_metadata,
-    validate_code_output_for_task_runtime as _validate_code_output_for_task_runtime,
+    validate_code_output_for_task_runtime,
     validate_task_output,
-    validate_test_output_for_task_runtime as _validate_test_output_for_task_runtime,
+    validate_test_output_for_task_runtime,
 )
 from kycortex_agents.orchestration.workflow_control import (
     build_code_repair_context_from_test_failure_runtime,
@@ -133,15 +133,15 @@ class Orchestrator:
             normalized_output = sanitize_output_provider_call_metadata(normalized_output)
             sandbox_policy = self.config.execution_sandbox_policy()
 
-            validate_code_output_for_task = partial(_validate_code_output_for_task_runtime, sandbox_policy)
-            validate_test_output_for_task = partial(_validate_test_output_for_task_runtime, sandbox_policy)
+            validate_code_output_callback = partial(validate_code_output_for_task_runtime, sandbox_policy)
+            validate_test_output_callback = partial(validate_test_output_for_task_runtime, sandbox_policy)
 
             validate_task_output(
                 task,
                 agent_input.context,
                 normalized_output,
-                validate_code_output=validate_code_output_for_task,
-                validate_test_output=validate_test_output_for_task,
+                validate_code_output=validate_code_output_callback,
+                validate_test_output=validate_test_output_callback,
             )
             ArtifactPersistenceSupport(self.config.output_dir, sanitize_sub=re.sub).persist_artifacts(normalized_output.artifacts)
             for decision in normalized_output.decisions:

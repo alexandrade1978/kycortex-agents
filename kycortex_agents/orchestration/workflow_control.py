@@ -994,14 +994,16 @@ def execute_runnable_tasks(
 def execute_runnable_frontier(
     project: ProjectState,
     *,
-    runnable_tasks,
-    blocked_tasks,
+    runnable_tasks: Callable[[], list[Task]] | None = None,
+    blocked_tasks: Callable[[], list[Task]] | None = None,
     execute_runnable_tasks,
     workflow_acceptance_policy: str,
     zero_budget_failure_categories: AbstractSet[str],
     evaluate_workflow_acceptance,
     log_event,
 ) -> bool:
+    runnable_tasks = project.runnable_tasks if runnable_tasks is None else runnable_tasks
+    blocked_tasks = project.blocked_tasks if blocked_tasks is None else blocked_tasks
     try:
         runnable = runnable_tasks()
     except WorkflowDefinitionError:
@@ -1030,10 +1032,11 @@ def execute_workflow_loop(
     *,
     exit_if_workflow_cancelled,
     exit_if_workflow_paused,
-    pending_tasks,
+    pending_tasks: Callable[[], list[Task]] | None = None,
     finish_workflow_if_no_pending_tasks,
     execute_runnable_frontier,
 ) -> bool:
+    pending_tasks = project.pending_tasks if pending_tasks is None else pending_tasks
     while True:
         if exit_if_workflow_cancelled(project):
             return True

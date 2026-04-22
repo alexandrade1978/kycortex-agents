@@ -4310,6 +4310,20 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		log_event=lambda level, event, **details: frontier_logs.append((level, event, details)),
 	) is True
 	assert frontier_logs == []
+	default_frontier_project = ProjectState(project_name="Demo", goal="Build demo")
+	default_frontier_project.add_task(
+		Task(id="default_frontier", title="Default Frontier", description="Run", assigned_to="architect")
+	)
+	default_frontier_calls: list[list[str]] = []
+	assert execute_runnable_frontier(
+		default_frontier_project,
+		execute_runnable_tasks=lambda _project, current_runnable: default_frontier_calls.append([task.id for task in current_runnable]) or False,
+		workflow_acceptance_policy="strict",
+		zero_budget_failure_categories=set(),
+		evaluate_workflow_acceptance=lambda _project, _policy, _categories: {"accepted": False},
+		log_event=lambda *_args, **_kwargs: None,
+	) is False
+	assert default_frontier_calls == [["default_frontier"]]
 	definition_frontier_project = ProjectState(project_name="Demo", goal="Build demo")
 	definition_frontier_logs: list[tuple[str, str, dict[str, object]]] = []
 	with pytest.raises(WorkflowDefinitionError, match="cycle"):
@@ -4373,6 +4387,19 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 		execute_runnable_frontier=lambda _project: loop_return_calls.append("frontier") or True,
 	) is True
 	assert loop_return_calls == ["frontier"]
+	default_loop_project = ProjectState(project_name="Demo", goal="Build demo")
+	default_loop_project.add_task(
+		Task(id="default_pending", title="Default Pending", description="Pending", assigned_to="architect")
+	)
+	default_loop_frontier_calls: list[str] = []
+	assert execute_workflow_loop(
+		default_loop_project,
+		exit_if_workflow_cancelled=lambda _project: False,
+		exit_if_workflow_paused=lambda _project: False,
+		finish_workflow_if_no_pending_tasks=lambda _project, pending: pending == [],
+		execute_runnable_frontier=lambda _project: default_loop_frontier_calls.append("frontier") or True,
+	) is True
+	assert default_loop_frontier_calls == ["frontier"]
 	active_project = ProjectState(project_name="Demo", goal="Build demo")
 	active_project.repair_max_cycles = 1
 	active_project.mark_workflow_finished("completed", acceptance_policy="strict", terminal_outcome=WorkflowOutcome.COMPLETED.value)

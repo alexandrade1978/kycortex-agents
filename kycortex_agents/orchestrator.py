@@ -314,27 +314,22 @@ class Orchestrator:
             execute_workflow_task=execute_workflow_task_for_task,
         )
 
-        def execute_runnable_frontier_for_loop(loop_project: ProjectState) -> bool:
-            return execute_runnable_frontier(
-                loop_project,
-                runnable_tasks=loop_project.runnable_tasks,
-                blocked_tasks=loop_project.blocked_tasks,
-                execute_runnable_tasks=execute_runnable_tasks_for_frontier,
-                workflow_acceptance_policy=workflow_acceptance_policy,
-                zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
-                evaluate_workflow_acceptance=evaluate_workflow_acceptance,
-                log_event=workflow_log_event,
-            )
+        execute_runnable_frontier_for_loop = partial(
+            execute_runnable_frontier,
+            execute_runnable_tasks=execute_runnable_tasks_for_frontier,
+            workflow_acceptance_policy=workflow_acceptance_policy,
+            zero_budget_failure_categories=ZERO_BUDGET_FAILURE_CATEGORIES,
+            evaluate_workflow_acceptance=evaluate_workflow_acceptance,
+            log_event=workflow_log_event,
+        )
 
-        def execute_workflow_loop_for_active(active_project: ProjectState) -> bool:
-            return execute_workflow_loop(
-                active_project,
-                exit_if_workflow_cancelled=workflow_exit_if_cancelled,
-                exit_if_workflow_paused=workflow_exit_if_paused,
-                pending_tasks=active_project.pending_tasks,
-                finish_workflow_if_no_pending_tasks=finish_workflow_if_no_pending_tasks_for_loop,
-                execute_runnable_frontier=execute_runnable_frontier_for_loop,
-            )
+        execute_workflow_loop_for_active = partial(
+            execute_workflow_loop,
+            exit_if_workflow_cancelled=workflow_exit_if_cancelled,
+            exit_if_workflow_paused=workflow_exit_if_paused,
+            finish_workflow_if_no_pending_tasks=finish_workflow_if_no_pending_tasks_for_loop,
+            execute_runnable_frontier=execute_runnable_frontier_for_loop,
+        )
 
         run_active_workflow_for_execution = partial(
             run_active_workflow,

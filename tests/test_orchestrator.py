@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import pytest
 import kycortex_agents.orchestrator as orchestrator_module
+import kycortex_agents.orchestration.agent_runtime as agent_runtime_module
 import kycortex_agents.orchestration.context_building as context_building_module
 import kycortex_agents.orchestration.module_ast_analysis as module_ast_analysis_module
 import kycortex_agents.orchestration.sandbox_execution as sandbox_execution_module
@@ -5711,7 +5712,7 @@ def test_build_agent_input_uses_repair_defaults_when_optional_fields_are_blank(t
     )
     project.add_task(task)
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, task, project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, task, project)
 
     assert "Repair objective:" in agent_input.task_description
     assert "Repair the previous failure." in agent_input.task_description
@@ -5746,7 +5747,7 @@ def test_build_agent_input_includes_source_failure_metadata_for_code_repair(tmp_
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "Previous failure category: code_validation" in agent_input.task_description
     assert "Source failure task: tests" in agent_input.task_description
@@ -12764,7 +12765,7 @@ def test_build_agent_input_includes_test_repair_context(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Repair objective:" in agent_input.task_description
     assert "Previous failure category: test_validation" in agent_input.task_description
@@ -12841,7 +12842,7 @@ def test_build_agent_input_adds_targeted_test_repair_priorities(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
@@ -12926,7 +12927,7 @@ def test_build_agent_input_adds_assertionless_test_repair_priority_with_named_te
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Every top-level test must contain at least one explicit assertion-like check" in agent_input.task_description
     assert "The validation summary already flagged these hollow top-level tests: test_happy_path (line 5), test_batch_processing (line 16)." in agent_input.task_description
@@ -12993,7 +12994,7 @@ def test_build_agent_input_adds_runtime_only_test_repair_priorities(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "treat the current implementation artifact and api contract as fixed ground truth" in agent_input.task_description.lower()
@@ -13144,7 +13145,7 @@ def test_build_agent_input_adds_contract_overreach_repair_priorities(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "The previous suite overreached by asserting a batch audit length larger than the visible number of processed items" in agent_input.task_description
     assert "The previous runtime failure came from a brittle exact status or action label guess" in agent_input.task_description
@@ -13218,7 +13219,7 @@ def test_build_agent_input_adds_validation_failure_score_state_overreach_priorit
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "The previous runtime failure came from assuming a rejected or invalid request leaves internal score state empty." in agent_input.task_description
     assert "Do not assert len(service.get_risk_scores()) == 0" in agent_input.task_description
@@ -13305,7 +13306,7 @@ def test_build_agent_input_adds_return_shape_and_did_not_raise_repair_priorities
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "The previous runtime failure came from assuming a wrapped object return shape that the current runtime did not provide." in agent_input.task_description
     assert "Delete `.request_id`, `.outcome`, and similar attribute reads on the workflow return value" in agent_input.task_description
@@ -13389,7 +13390,7 @@ def test_build_agent_input_adds_action_map_key_overreach_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "The previous runtime failure came from assuming an internal action or review map used request identity as its key." in agent_input.task_description
     assert "Do not assert request.request_id in service.review_actions or a similar membership check unless the contract explicitly defines that storage key." in agent_input.task_description
@@ -13461,7 +13462,7 @@ def test_build_agent_input_adds_placeholder_boolean_assertion_repair_priority(tm
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Do not leave placeholder assertions such as assert True, assert False, or comments like 'Assuming ...' in the rewritten suite." in agent_input.task_description
     assert "For validation-failure coverage, prefer an explicit validation result, a documented raised exception, or another observable side effect over a placeholder boolean assertion." in agent_input.task_description
@@ -13562,7 +13563,7 @@ def test_build_agent_input_adds_required_evidence_and_nonzero_score_repair_prior
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "every happy-path or valid batch item must include the full required set named by that validator" in agent_input.task_description
     assert "copy that full list verbatim into every valid happy-path or valid batch payload instead of shrinking it to a representative subset" in agent_input.task_description
@@ -13660,7 +13661,7 @@ def test_build_agent_input_adds_audit_log_runtime_repair_priorities(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "standalone audit or logging helper test" in agent_input.task_description
     assert "Do not compare full audit or log file contents by exact string equality" in agent_input.task_description
@@ -13796,7 +13797,7 @@ def test_build_agent_input_adds_batch_audit_runtime_repair_priorities(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Add logs from both inner failing operations and outer batch error handlers" in agent_input.task_description
     assert "one invalid item can emit two failure-related audit records" in agent_input.task_description
@@ -13905,7 +13906,7 @@ def test_build_agent_input_adds_weighted_score_and_guarded_nested_field_repair_p
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "risk_factor=2 and compliance_history=0.1 yield 1.45, not 1.25" in agent_input.task_description
     assert "a wrong nested field type is ignored rather than raising" in agent_input.task_description
@@ -14021,7 +14022,7 @@ def test_build_agent_input_adds_required_string_modulo_repair_priorities(tmp_pat
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "do not preserve that empty string just to force a zero score" in agent_input.task_description
     assert 'use "xxxxxxxxxx" rather than ""' in agent_input.task_description
@@ -14145,7 +14146,7 @@ def test_build_agent_input_preserves_valid_import_surface_on_pytest_only_repair(
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "The previous suite already used a statically valid production import surface: AuditLog, ComplianceIntakeService, ComplianceRequest." in agent_input.task_description
     assert "If the valid suite imported ComplianceIntakeService, do not replace it with ComplianceService" in agent_input.task_description
@@ -14270,7 +14271,7 @@ def test_build_agent_input_moves_invalid_required_field_case_off_scoring_surface
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "do not keep a separate invalid-scoring test that first calls intake_request" in agent_input.task_description
     assert "Move that failure case to intake_request or validate_request" in agent_input.task_description
@@ -14345,7 +14346,7 @@ def test_build_agent_input_removes_copied_implementation_from_tests(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Delete any copied implementation blocks from the pytest module" in agent_input.task_description
     assert "`test_main`, `test_all_tests`" in agent_input.task_description
@@ -14391,7 +14392,7 @@ def test_build_agent_input_adds_did_not_raise_and_numeric_type_repair_priorities
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "do not use empty-string ids or still-valid dict payloads as the failure input" in agent_input.task_description
     assert "ComplianceData(id=\"1\", data={\"key\": \"wrong_value\"}) is still valid input and should be asserted as a non-compliant result" in agent_input.task_description
@@ -14439,7 +14440,7 @@ def test_build_agent_input_adds_assert_not_true_validation_repair_priorities(tmp
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "If pytest reports `assert not True` or another failed falsy expectation" in agent_input.task_description
     assert "Replace it with a clearly wrong top-level type or a truly missing required field" in agent_input.task_description
@@ -14483,7 +14484,7 @@ def test_build_agent_input_adds_assert_true_is_false_validation_repair_prioritie
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "If pytest reports `assert not True` or another failed falsy expectation" in agent_input.task_description
     assert "Apply the same rule to `assert True is False`." in agent_input.task_description
@@ -14525,7 +14526,7 @@ def test_build_agent_input_adds_exact_numeric_mismatch_repair_priority(tmp_path)
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "do not preserve the stale guessed literal from the earlier suite" in agent_input.task_description
     assert "Either recompute the expected value from the current implementation formula" in agent_input.task_description
@@ -14566,7 +14567,7 @@ def test_build_agent_input_adds_batch_same_shape_score_repair_priority(tmp_path)
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Recompute each batch item's expected score independently" in agent_input.task_description
     assert "if the formula counts top-level keys or container size, same-shape inputs produce the same score" in agent_input.task_description
@@ -14606,7 +14607,7 @@ def test_build_agent_input_adds_string_length_sample_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "do not keep word-like sample strings such as data, valid_data, or data1 together with exact score equality" in agent_input.task_description
     assert "Replace them with repeated-character literals whose length is obvious" in agent_input.task_description
@@ -14646,7 +14647,7 @@ def test_build_agent_input_adds_boundary_label_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Do not keep boundary-like inputs for exact categorical labels" in agent_input.task_description
     assert "do not use amount=100 to assert an exact level" in agent_input.task_description
@@ -14688,7 +14689,7 @@ def test_build_agent_input_adds_payload_shape_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "If a returned request object's `.data` field stores the full input payload" in agent_input.task_description
     assert "Assert the full stored payload shape or direct nested keys instead" in agent_input.task_description
@@ -14728,7 +14729,7 @@ def test_build_agent_input_adds_self_referential_constructor_repair_priority(tmp
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Do not satisfy explicit constructor fields by reading attributes from the object you are still constructing" in agent_input.task_description
     assert "timestamp=fixed_time instead of timestamp=request.timestamp" in agent_input.task_description
@@ -14786,7 +14787,7 @@ def test_build_agent_input_adds_pytest_import_test_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "add `import pytest` explicitly at the top of the file" in agent_input.task_description
     assert "Do not leave `pytest.raises`, `pytest.mark`, or similar helpers unimported" in agent_input.task_description
@@ -14844,7 +14845,7 @@ def test_build_agent_input_adds_payload_contract_test_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "provide every required field or omit that optional payload entirely" in agent_input.task_description
 
@@ -14912,7 +14913,7 @@ def test_build_agent_input_adds_datetime_import_test_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "If the rewritten suite keeps any `datetime.now()` call or other bare `datetime` reference" in agent_input.task_description
     assert "add `from datetime import datetime` or `import datetime` explicitly at the top of the file before finalizing" in agent_input.task_description
@@ -14994,7 +14995,7 @@ def test_build_agent_input_does_not_reuse_suite_with_bare_datetime_without_impor
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
     tests_task = require_task(project, "tests")
 
     assert "existing_tests" not in agent_input.context
@@ -15111,7 +15112,7 @@ def test_build_agent_input_does_not_reuse_suite_with_incomplete_required_evidenc
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
     tests_task = require_task(project, "tests")
 
     assert "existing_tests" not in agent_input.context
@@ -15228,7 +15229,7 @@ def test_build_agent_input_does_not_reuse_suite_with_invalid_batch_missing_docum
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
     tests_task = require_task(project, "tests")
 
     assert "existing_tests" not in agent_input.context
@@ -15320,7 +15321,7 @@ def test_build_agent_input_does_not_reuse_helper_alias_suite_and_adds_alias_drif
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "existing_tests" not in agent_input.context
     assert "undefined helper or collaborator aliases outside the documented import surface: AuditLogger" in agent_input.task_description
@@ -15486,7 +15487,7 @@ def test_build_agent_input_adds_truncation_test_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "If completion diagnostics say the previous pytest output was likely truncated" in agent_input.task_description
     assert "discard the partial tail and rewrite the complete pytest module from the top" in agent_input.task_description
@@ -16182,7 +16183,7 @@ def test_build_agent_input_adds_targeted_code_repair_priorities_for_pytest_asser
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
@@ -16220,7 +16221,7 @@ def test_build_agent_input_adds_object_semantics_code_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "Treat the listed pytest failures as exact behavior requirements" in agent_input.task_description
@@ -16259,7 +16260,7 @@ def test_build_agent_input_adds_dataclass_field_order_code_repair_priority(tmp_p
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "reorder the fields so every required non-default field appears before any field with a default" in agent_input.task_description
     assert "while preserving the documented constructor contract" in agent_input.task_description
@@ -16313,7 +16314,7 @@ def test_build_agent_input_adds_internal_constructor_strictness_code_repair_prio
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "If valid happy-path or batch pytest cases fail with TypeError from VendorProfile.__init__(), the implementation is stricter than the documented contract." in agent_input.task_description
     assert "Align that internal model with validate_request(...) and the cited valid inputs instead of pushing new required payload keys onto the tests." in agent_input.task_description
@@ -16368,7 +16369,7 @@ def test_build_agent_input_adds_duplicate_constructor_binding_code_repair_priori
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "If pytest reports TypeError from VendorProfile.__init__() saying it got multiple values for argument 'vendor_id'" in agent_input.task_description
     assert "do not pass vendor_id both positionally and through **request.details, **request.data, **payload, or a duplicated keyword" in agent_input.task_description
@@ -16423,7 +16424,7 @@ def test_build_agent_input_adds_missing_object_attribute_code_repair_priority(tm
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "If pytest reports AttributeError that 'VendorProfile' has no attribute 'expired_certifications'" in agent_input.task_description
     assert "align the model fields and member accesses so every referenced attribute is actually declared or derived on that object" in agent_input.task_description
@@ -16480,7 +16481,7 @@ def test_build_agent_input_adds_specific_dataclass_field_order_example_from_fail
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "The current failed artifact still has this ordering bug in ReviewAction" in agent_input.task_description
     assert "ReviewAction(action_id, action_type, details, timestamp=field(default_factory=datetime.now))" in agent_input.task_description
@@ -16514,7 +16515,7 @@ def test_build_agent_input_adds_dataclass_field_import_code_repair_priority(tmp_
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "import field explicitly from dataclasses" in agent_input.task_description
     assert "Do not leave field referenced without that import" in agent_input.task_description
@@ -16548,7 +16549,7 @@ def test_build_agent_input_adds_datetime_import_consistency_code_repair_priority
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "If the module calls datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime" in agent_input.task_description
     assert "call datetime.now(), timedelta(...), or timezone.utc instead of datetime.datetime.now()" in agent_input.task_description
@@ -16582,7 +16583,7 @@ def test_build_agent_input_adds_datetime_helper_import_consistency_code_repair_p
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc" in agent_input.task_description
     assert "call datetime.now(), timedelta(...), or timezone.utc" in agent_input.task_description
@@ -16616,7 +16617,7 @@ def test_build_agent_input_adds_wrong_type_validation_code_repair_priority(tmp_p
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "If pytest reports `assert not True` or `assert True is False` for validate_request or another validator" in agent_input.task_description
     assert "Do not leave the validator as a presence-only required-key check" in agent_input.task_description
@@ -16651,7 +16652,7 @@ def test_build_agent_input_adds_nested_payload_wrapper_field_code_repair_priorit
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "If happy-path or batch pytest cases now raise `ValueError(...)` after a validator repair" in agent_input.task_description
     assert "Keep top-level request fields such as request_id and request_type on the request object" in agent_input.task_description
@@ -16687,7 +16688,7 @@ def test_build_agent_input_adds_code_truncation_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "If completion diagnostics say the module output was likely truncated" in agent_input.task_description
     assert "rewrite the full module from the top instead of patching a partial tail or appending a continuation" in agent_input.task_description
@@ -16722,7 +16723,7 @@ def test_build_agent_input_adds_code_line_budget_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "Repair priorities:" in agent_input.task_description
     assert "Rewrite the full module smaller and leave clear headroom below the reported line ceiling" in agent_input.task_description
@@ -16757,7 +16758,7 @@ def test_build_agent_input_adds_datetime_timezone_repair_priority(tmp_path):
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "code"), project)
 
     assert "Normalize every datetime comparison to one timezone convention before comparing timestamps." in agent_input.task_description
     assert "Do not mix parsed timezone-aware datetimes with naive datetime.now() values" in agent_input.task_description
@@ -16824,7 +16825,7 @@ def test_build_agent_input_includes_budget_decomposition_brief_without_overridin
     )
 
     repair_task = require_task(project, "code__repair_1")
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, repair_task, project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, repair_task, project)
 
     assert agent_input.context["architecture"] == "ARCHITECTURE DOC"
     assert agent_input.context["budget_decomposition_brief"].startswith("- Keep the public facade")
@@ -16859,7 +16860,7 @@ def test_build_agent_input_preserves_public_method_names_for_pytest_only_repairs
         )
     )
 
-    agent_input = orchestrator_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
+    agent_input = agent_runtime_module.build_agent_input_runtime(orchestrator, require_task(project, "tests"), project)
 
     assert "Do not rename submit_intake(...) to submit(...) or batch_submit_intakes(...) to submit_batch(...)" in agent_input.task_description
 

@@ -1081,7 +1081,7 @@ def test_classify_task_failure_returns_provider_transient_for_provider_errors(tm
         assigned_to="architect",
     )
 
-    category = orchestrator_module.classify_task_failure(task, ProviderTransientError("provider temporarily unavailable"))
+    category = workflow_control_module.classify_task_failure(task, ProviderTransientError("provider temporarily unavailable"))
 
     assert category == FailureCategory.PROVIDER_TRANSIENT.value
 
@@ -1094,7 +1094,7 @@ def test_classify_task_failure_returns_sandbox_violation_for_blocked_operations(
         assigned_to="qa_tester",
     )
 
-    category = orchestrator_module.classify_task_failure(
+    category = workflow_control_module.classify_task_failure(
         task,
         RuntimeError("sandbox policy blocked filesystem write outside sandbox root"),
     )
@@ -1110,7 +1110,7 @@ def test_classify_task_failure_falls_back_to_task_execution_for_unmapped_agent_e
         assigned_to="architect",
     )
 
-    category = orchestrator_module.classify_task_failure(task, AgentExecutionError("unexpected validation failure"))
+    category = workflow_control_module.classify_task_failure(task, AgentExecutionError("unexpected validation failure"))
 
     assert category == FailureCategory.TASK_EXECUTION.value
 
@@ -1354,7 +1354,7 @@ def test_validate_task_output_uses_repair_owner_role_for_validation(tmp_path):
     output = AgentOutput(summary="code", raw_content="def run() -> int:\n    return 1\n")
 
     with pytest.raises(AgentExecutionError, match="missing required CLI entrypoint"):
-        orchestrator_module.validate_task_output(
+        validation_runtime_module.validate_task_output(
             task,
             {},
             output,
@@ -1570,7 +1570,7 @@ def test_classify_task_failure_returns_workflow_definition_for_definition_errors
         assigned_to="architect",
     )
 
-    category = orchestrator_module.classify_task_failure(task, WorkflowDefinitionError("invalid workflow"))
+    category = workflow_control_module.classify_task_failure(task, WorkflowDefinitionError("invalid workflow"))
 
     assert category == FailureCategory.WORKFLOW_DEFINITION.value
 
@@ -2544,7 +2544,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
-        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
+        log_event=lambda level, event, **fields: workflow_control_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
     project.repair_history[-1] = {"cycle": 1}
@@ -2562,7 +2562,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
-        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
+        log_event=lambda level, event, **fields: workflow_control_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
     monkeypatch.setattr(workflow_control_module, "has_repair_task_for_cycle", lambda *args, **kwargs: False)
@@ -2581,7 +2581,7 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
             build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
-        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
+        log_event=lambda level, event, **fields: workflow_control_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
 
@@ -11266,8 +11266,8 @@ def test_orchestrator_log_event_minimizes_task_id_lists(tmp_path, caplog):
     orchestrator = Orchestrator(config, registry=AgentRegistry({}))
 
     with caplog.at_level("INFO", logger="Orchestrator"):
-        orchestrator_module.log_event(orchestrator.logger, "info", "workflow_resumed", project_name="Demo", task_ids=["arch", "code"])
-        orchestrator_module.log_event(
+        workflow_control_module.log_event(orchestrator.logger, "info", "workflow_resumed", project_name="Demo", task_ids=["arch", "code"])
+        workflow_control_module.log_event(
             orchestrator.logger,
             "warning",
             "workflow_replayed",
@@ -11275,21 +11275,21 @@ def test_orchestrator_log_event_minimizes_task_id_lists(tmp_path, caplog):
             replayed_task_ids=["arch"],
             removed_task_ids=["code__repair_1", "code__repair_2"],
         )
-        orchestrator_module.log_event(
+        workflow_control_module.log_event(
             orchestrator.logger,
             "error",
             "workflow_repair_budget_exhausted",
             project_name="Demo",
             failed_task_ids=["arch", "code"],
         )
-        orchestrator_module.log_event(
+        workflow_control_module.log_event(
             orchestrator.logger,
             "warning",
             "workflow_blocked",
             project_name="Demo",
             blocked_task_ids=["docs"],
         )
-        orchestrator_module.log_event(
+        workflow_control_module.log_event(
             orchestrator.logger,
             "warning",
             "dependent_tasks_skipped",
@@ -11297,7 +11297,7 @@ def test_orchestrator_log_event_minimizes_task_id_lists(tmp_path, caplog):
             task_id="arch",
             skipped_task_ids=["docs", "legal"],
         )
-        orchestrator_module.log_event(
+        workflow_control_module.log_event(
             orchestrator.logger,
             "info",
             "task_repair_chained",
@@ -12655,7 +12655,7 @@ def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_f
             build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
         ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
-        log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
+        log_event=lambda level, event, **fields: workflow_control_module.log_event(orchestrator.logger, level, event, **fields),
     ) is True
 
     tests_task = require_task(project, "tests")

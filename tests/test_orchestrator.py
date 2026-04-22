@@ -2535,15 +2535,15 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
         project,
         task,
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,
-        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: workflow_control_module.configure_repair_attempts_runtime(
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
-            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-            build_repair_context=orchestrator_module.build_repair_context_runtime,
+            build_code_repair_context_from_test_failure=workflow_control_module.build_code_repair_context_from_test_failure_runtime,
+            ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
         log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
@@ -2553,15 +2553,15 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
         project,
         task,
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,
-        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: workflow_control_module.configure_repair_attempts_runtime(
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
-            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-            build_repair_context=orchestrator_module.build_repair_context_runtime,
+            build_code_repair_context_from_test_failure=workflow_control_module.build_code_repair_context_from_test_failure_runtime,
+            ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
         log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
@@ -2572,15 +2572,15 @@ def test_queue_active_cycle_repair_returns_false_for_guard_conditions(tmp_path, 
         project,
         task,
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,
-        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: workflow_control_module.configure_repair_attempts_runtime(
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
-            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-            build_repair_context=orchestrator_module.build_repair_context_runtime,
+            build_code_repair_context_from_test_failure=workflow_control_module.build_code_repair_context_from_test_failure_runtime,
+            ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
         log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is False
 
@@ -2611,10 +2611,10 @@ def test_failed_artifact_content_for_dependency_validation_uses_config_artifact(
 def test_repair_task_ids_for_cycle_skips_missing_tasks(tmp_path):
     project = ProjectState(project_name="Demo", goal="Build demo")
 
-    assert orchestrator_module.plan_repair_task_ids_for_cycle(
+    assert workflow_control_module.plan_repair_task_ids_for_cycle(
         project,
         ["missing-task"],
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
     ) == []
 
 
@@ -2631,10 +2631,10 @@ def test_repair_task_ids_for_cycle_skips_none_repair_tasks(tmp_path, monkeypatch
 
     monkeypatch.setattr(project, "_create_repair_task", lambda *args, **kwargs: None)
 
-    assert orchestrator_module.plan_repair_task_ids_for_cycle(
+    assert workflow_control_module.plan_repair_task_ids_for_cycle(
         project,
         ["code"],
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
     ) == []
 
 
@@ -5854,7 +5854,7 @@ def test_build_code_repair_context_from_test_failure_specializes_internal_constr
         },
     )
 
-    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
+    repair_context = workflow_control_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -5927,7 +5927,7 @@ def test_build_code_repair_context_from_test_failure_specializes_duplicate_const
         },
     )
 
-    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
+    repair_context = workflow_control_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -6011,7 +6011,7 @@ def test_build_code_repair_context_from_test_failure_specializes_missing_object_
         },
     )
 
-    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
+    repair_context = workflow_control_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -12646,15 +12646,15 @@ def test_queue_active_cycle_repair_requeues_completed_code_repair_for_new_test_f
         project,
         require_task(project, "tests"),
         workflow_resume_policy=orchestrator.config.workflow_resume_policy,
-        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: orchestrator_module.configure_repair_attempts_runtime(
+        configure_repair_attempts=lambda current_project, failed_task_ids, cycle: workflow_control_module.configure_repair_attempts_runtime(
             current_project,
             failed_task_ids,
             cycle,
-            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
-            ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-            build_repair_context=orchestrator_module.build_repair_context_runtime,
+            build_code_repair_context_from_test_failure=workflow_control_module.build_code_repair_context_from_test_failure_runtime,
+            ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
+            build_repair_context=workflow_control_module.build_repair_context_runtime,
         ),
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
         log_event=lambda level, event, **fields: orchestrator_module.log_event(orchestrator.logger, level, event, **fields),
     ) is True
 
@@ -15520,7 +15520,7 @@ def test_build_repair_context_extracts_helper_surface_names_from_test_validation
         },
     )
 
-    repair_context = orchestrator_module.build_repair_context_runtime(task, {"cycle": 1})
+    repair_context = workflow_control_module.build_repair_context_runtime(task, {"cycle": 1})
 
     assert repair_context["helper_surface_usages"] == [
         "RiskScoringService (line 33)",
@@ -15593,7 +15593,7 @@ def test_build_repair_context_preserves_prior_repair_objective_for_repair_tasks(
         },
     )
 
-    repair_context = orchestrator_module.build_repair_context_runtime(task, {"cycle": 2})
+    repair_context = workflow_control_module.build_repair_context_runtime(task, {"cycle": 2})
 
     assert "Repair the generated Python module by reordering any dataclass fields" in repair_context["instruction"]
     assert "Also preserve and fully satisfy the prior unresolved repair objective from code" in repair_context["instruction"]
@@ -15683,7 +15683,7 @@ def test_build_code_repair_context_from_test_failure_preserves_prior_repair_obje
         },
     )
 
-    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
+    repair_context = workflow_control_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 2},
@@ -15765,7 +15765,7 @@ def test_build_code_repair_context_from_test_failure_specializes_nested_payload_
         },
     )
 
-    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
+    repair_context = workflow_control_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -15826,7 +15826,7 @@ def test_build_code_repair_context_from_test_failure_specializes_plain_class_fie
         output="Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
     )
 
-    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
+    repair_context = workflow_control_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -15907,7 +15907,7 @@ def test_build_code_repair_context_from_test_failure_specializes_invalid_path_au
         },
     )
 
-    repair_context = orchestrator_module.build_code_repair_context_from_test_failure_runtime(
+    repair_context = workflow_control_module.build_code_repair_context_from_test_failure_runtime(
         code_task,
         test_task,
         {"cycle": 1},
@@ -16018,13 +16018,13 @@ def test_configure_repair_attempts_prefers_repaired_code_dependency_for_failed_t
         )
     )
 
-    orchestrator_module.configure_repair_attempts_runtime(
+    workflow_control_module.configure_repair_attempts_runtime(
         project,
         ["tests__repair_1"],
         {"cycle": 2},
-            build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-        build_repair_context=orchestrator_module.build_repair_context_runtime,
+            build_code_repair_context_from_test_failure=workflow_control_module.build_code_repair_context_from_test_failure_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
+        build_repair_context=workflow_control_module.build_repair_context_runtime,
     )
 
     code_task = require_task(project, "code")
@@ -16136,13 +16136,13 @@ def test_configure_repair_attempts_prefers_imported_repaired_code_module_for_ori
         )
     )
 
-    orchestrator_module.configure_repair_attempts_runtime(
+    workflow_control_module.configure_repair_attempts_runtime(
         project,
         ["tests"],
         {"cycle": 2},
-        build_code_repair_context_from_test_failure=orchestrator_module.build_code_repair_context_from_test_failure_runtime,
-        ensure_budget_decomposition_task=orchestrator_module.ensure_budget_decomposition_task_runtime,
-        build_repair_context=orchestrator_module.build_repair_context_runtime,
+        build_code_repair_context_from_test_failure=workflow_control_module.build_code_repair_context_from_test_failure_runtime,
+        ensure_budget_decomposition_task=workflow_control_module.ensure_budget_decomposition_task_runtime,
+        build_repair_context=workflow_control_module.build_repair_context_runtime,
     )
 
     code_task = require_task(project, "code")

@@ -9,7 +9,7 @@ This file is the short repository-owned snapshot of the current release posture 
 - Latest published release: `1.0.13a6`
 - Latest published tag: `v1.0.13a6`
 - Current branch for release preparation: `main`
-- Current HEAD: `e87e3b2` (docs: update release status with current coverage improvements)
+- Current branch head is actively maintained on `main`; use repository history for the exact commit lineage.
 
 ## Coverage Status
 

@@ -317,19 +317,19 @@ def test_local_tooling_files_exist_and_cover_expected_commands():
     precommit_config = (project_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
 
     assert ".PHONY: setup install-hooks precommit prepush lint typecheck coverage package-check release-metadata-check release-check test-public test-metadata test" in makefile
-    assert 'python -m pip install -e ".[test]"' in makefile
-    assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile
-    assert "python -m pre_commit run --all-files" in makefile
-    assert "python -m pre_commit run --all-files --hook-stage pre-push" in makefile
-    assert "python -m ruff check ." in makefile
-    assert "python -m mypy" in makefile
-    assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in makefile
-    assert "python scripts/package_check.py" in makefile
-    assert "python scripts/release_metadata_check.py" in makefile
-    assert "python scripts/release_check.py" in makefile
-    assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
-    assert "python -m pytest tests/test_package_metadata.py -q" in makefile
-    assert "python -m pytest -q" in makefile
+    assert 'python -m pip install -e ".[test]"' in makefile or '$(PYTHON) -m pip install -e ".[test]"' in makefile
+    assert "python -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile or "$(PYTHON) -m pre_commit install --install-hooks --hook-type pre-commit --hook-type pre-push" in makefile
+    assert "python -m pre_commit run --all-files" in makefile or "$(PYTHON) -m pre_commit run --all-files" in makefile
+    assert "python -m pre_commit run --all-files --hook-stage pre-push" in makefile or "$(PYTHON) -m pre_commit run --all-files --hook-stage pre-push" in makefile
+    assert "python -m ruff check ." in makefile or "$(PYTHON) -m ruff check ." in makefile
+    assert "python -m mypy" in makefile or "$(PYTHON) -m mypy" in makefile
+    assert "python -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in makefile or "$(PYTHON) -m pytest --cov=kycortex_agents --cov-report=term-missing --cov-report=xml -q" in makefile
+    assert "python scripts/package_check.py" in makefile or "$(PYTHON) scripts/package_check.py" in makefile
+    assert "python scripts/release_metadata_check.py" in makefile or "$(PYTHON) scripts/release_metadata_check.py" in makefile
+    assert "python scripts/release_check.py" in makefile or "$(PYTHON) scripts/release_check.py" in makefile
+    assert "python -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile or "$(PYTHON) -m pytest tests/test_public_api.py tests/test_public_smoke.py -q" in makefile
+    assert "python -m pytest tests/test_package_metadata.py -q" in makefile or "$(PYTHON) -m pytest tests/test_package_metadata.py -q" in makefile
+    assert "python -m pytest -q" in makefile or "$(PYTHON) -m pytest -q" in makefile
     assert "root = true" in editorconfig
     assert "[*.py]" in editorconfig
     assert "indent_size = 4" in editorconfig

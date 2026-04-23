@@ -1,9 +1,7 @@
 """Tests for architect module standalone functions."""
 
-import pytest
 from kycortex_agents.agents.architect import _low_budget_architecture_section, _architecture_request_block, ArchitectAgent
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.types import AgentInput
 
 
 class TestArchitectFunctions:

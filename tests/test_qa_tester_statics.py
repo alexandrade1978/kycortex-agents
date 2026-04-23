@@ -1,6 +1,5 @@
 """Direct coverage tests for QATesterAgent static methods."""
 
-import pytest
 from kycortex_agents.agents.qa_tester import QATesterAgent
 
 

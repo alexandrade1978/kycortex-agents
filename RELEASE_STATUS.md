@@ -5,10 +5,11 @@ This file is the short repository-owned snapshot of the current release posture 
 ## Current Snapshot
 
 - Package version in `pyproject.toml`: `1.0.13a10.dev0`
+- Latest released version: `1.0.13a6`
 - Latest published release: `1.0.13a6`
 - Latest published tag: `v1.0.13a6`
 - Current branch for release preparation: `main`
-- Current HEAD: `8c7bc80` (test: add 13 tests for architect module functions and agent methods)
+- Current HEAD: `e87e3b2` (docs: update release status with current coverage improvements)
 
 ## Coverage Status
 

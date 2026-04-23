@@ -1,0 +1,124 @@
+"""Direct coverage tests for QATesterAgent static methods."""
+
+import pytest
+from kycortex_agents.agents.qa_tester import QATesterAgent
+
+
+class TestQATesterStaticMethods:
+    """Test QATesterAgent static utility methods."""
+
+    def test_summary_has_active_issue_with_valid_summary(self):
+        """Test detecting active issues in summary strings."""
+        # Test with active issue marker - search is case-insensitive
+        summary = "details: some error message"
+        result = QATesterAgent._summary_has_active_issue(summary, "Details")
+        assert result is True
+
+    def test_summary_has_active_issue_with_none_value(self):
+        """Test that 'none' values are treated as no active issue."""
+        summary = "Details: none"
+        result = QATesterAgent._summary_has_active_issue(summary, "Details")
+        assert result is False
+
+    def test_summary_has_active_issue_case_insensitive(self):
+        """Test case-insensitive label matching."""
+        summary = "details: error message"
+        result = QATesterAgent._summary_has_active_issue(summary, "Details")
+        assert result is True
+
+    def test_summary_has_active_issue_no_marker(self):
+        """Test when label is not in summary."""
+        summary = "Some text without the marker"
+        result = QATesterAgent._summary_has_active_issue(summary, "Details")
+        assert result is False
+
+    def test_summary_has_active_issue_non_string_input(self):
+        """Test non-string input returns False."""
+        result = QATesterAgent._summary_has_active_issue(123, "Details")
+        assert result is False
+
+    def test_summary_issue_value_extracts_value(self):
+        """Test extracting issue value from summary."""
+        summary = "- Details: error message text"
+        result = QATesterAgent._summary_issue_value(summary, "Details")
+        assert result == "error message text"
+
+    def test_summary_issue_value_multiline(self):
+        """Test extracting from multiline summary."""
+        summary = "Some header\n- Constraint: maximum 100 tokens\nOther info"
+        result = QATesterAgent._summary_issue_value(summary, "Constraint")
+        assert result == "maximum 100 tokens"
+
+    def test_summary_issue_value_none_value(self):
+        """Test that 'none' is converted to empty string."""
+        summary = "- Details: none"
+        result = QATesterAgent._summary_issue_value(summary, "Details")
+        assert result == ""
+
+    def test_summary_issue_value_case_insensitive(self):
+        """Test case-insensitive prefix matching."""
+        summary = "- CONSTRAINT: some value"
+        result = QATesterAgent._summary_issue_value(summary, "constraint")
+        assert result == "some value"
+
+    def test_summary_issue_value_no_match(self):
+        """Test when label not found returns empty string."""
+        summary = "- Other: value"
+        result = QATesterAgent._summary_issue_value(summary, "Details")
+        assert result == ""
+
+    def test_summary_issue_value_non_string_input(self):
+        """Test non-string input returns empty string."""
+        result = QATesterAgent._summary_issue_value(None, "Details")
+        assert result == ""
+
+    def test_extract_failed_test_names_valid_summary(self):
+        """Test extracting failed test names from validation summary."""
+        summary = "FAILED test_module::test_function1\nFAILED test_module::test_function2"
+        result = QATesterAgent._pytest_failed_test_names(summary)
+        assert result == ["test_function1", "test_function2"]
+
+    def test_extract_failed_test_names_deduplicates(self):
+        """Test that duplicate test names are deduplicated."""
+        summary = "FAILED test_module::test_func\nFAILED other::test_func"
+        result = QATesterAgent._pytest_failed_test_names(summary)
+        assert result == ["test_func"]
+
+    def test_extract_failed_test_names_empty_summary(self):
+        """Test empty or whitespace-only summary returns empty list."""
+        assert QATesterAgent._pytest_failed_test_names("") == []
+        assert QATesterAgent._pytest_failed_test_names("   ") == []
+
+    def test_extract_failed_test_names_no_failures(self):
+        """Test summary without failures returns empty list."""
+        summary = "All tests passed"
+        result = QATesterAgent._pytest_failed_test_names(summary)
+        assert result == []
+
+    def test_extract_failed_test_names_non_string_input(self):
+        """Test non-string input returns empty list."""
+        result = QATesterAgent._pytest_failed_test_names(123)
+        assert result == []
+
+    def test_is_validation_failure_test_name_valid_names(self):
+        """Test detection of validation failure test names."""
+        assert QATesterAgent._is_validation_failure_test_name("test_validation") is True
+        assert QATesterAgent._is_validation_failure_test_name("test_invalid") is True
+        assert QATesterAgent._is_validation_failure_test_name("test_reject") is True
+        assert QATesterAgent._is_validation_failure_test_name("test_error") is True
+        assert QATesterAgent._is_validation_failure_test_name("test_failure") is True
+
+    def test_is_validation_failure_test_name_case_insensitive(self):
+        """Test case-insensitive matching."""
+        assert QATesterAgent._is_validation_failure_test_name("TEST_VALIDATION") is True
+        assert QATesterAgent._is_validation_failure_test_name("Test_Invalid") is True
+
+    def test_is_validation_failure_test_name_non_matching(self):
+        """Test names that don't match validation failure patterns."""
+        assert QATesterAgent._is_validation_failure_test_name("test_success") is False
+        assert QATesterAgent._is_validation_failure_test_name("test_basic") is False
+
+    def test_is_validation_failure_test_name_empty_input(self):
+        """Test empty string returns False."""
+        assert QATesterAgent._is_validation_failure_test_name("") is False
+        assert QATesterAgent._is_validation_failure_test_name("   ") is False

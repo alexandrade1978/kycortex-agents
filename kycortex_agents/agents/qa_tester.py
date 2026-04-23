@@ -693,7 +693,7 @@ class QATesterAgent(BaseAgent):
         if not isinstance(summary, str):
             return False
         summary_lower = summary.lower()
-        marker = f"{label}:"
+        marker = f"{label.lower()}:"
         return marker in summary_lower and f"{marker} none" not in summary_lower
 
     @staticmethod

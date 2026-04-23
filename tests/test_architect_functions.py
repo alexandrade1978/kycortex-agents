@@ -46,6 +46,11 @@ class TestArchitectFunctions:
         result = _low_budget_architecture_section(50.5)
         assert result == ""
 
+    def test_low_budget_architecture_section_respects_adaptive_non_compact_mode(self):
+        """Test low budget section is suppressed when adaptive mode is not compact."""
+        result = _low_budget_architecture_section(500, prompt_mode="rich")
+        assert result == ""
+
     def test_architecture_request_block_empty_context(self):
         """Test request block with empty context."""
         result = _architecture_request_block({})

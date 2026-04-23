@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
+import inspect
+import math
 from pathlib import Path
 from typing import Any, Callable, Optional, TypedDict, cast
 
@@ -50,6 +52,13 @@ class TaskOutputValidatorCallbacks(TypedDict):
     validate_test_output: Any
 
 
+ADAPTIVE_LINE_BUDGET_TOLERANCE_RATIO: dict[str, float] = {
+    "compact": 0.0,
+    "balanced": 0.05,
+    "rich": 0.15,
+}
+
+
 def build_task_output_validator_callbacks(
     sandbox_policy: ExecutionSandboxPolicy,
 ) -> TaskOutputValidatorCallbacks:
@@ -57,6 +66,39 @@ def build_task_output_validator_callbacks(
         "validate_code_output": partial(validate_code_output_for_task_runtime, sandbox_policy),
         "validate_test_output": partial(validate_test_output_for_task_runtime, sandbox_policy),
     }
+
+
+def _adaptive_prompt_mode(context: object) -> str | None:
+    if not isinstance(context, dict):
+        return None
+    policy = context.get("adaptive_prompt_policy")
+    if not isinstance(policy, dict):
+        return None
+    mode = policy.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        return mode.strip().lower()
+    return None
+
+
+def _effective_line_budget(line_budget: Optional[int], context: object) -> Optional[int]:
+    if not isinstance(line_budget, int) or line_budget <= 0:
+        return line_budget
+    mode = _adaptive_prompt_mode(context)
+    tolerance_ratio = ADAPTIVE_LINE_BUDGET_TOLERANCE_RATIO.get(mode or "", 0.0)
+    if tolerance_ratio <= 0:
+        return line_budget
+    return max(line_budget, math.ceil(line_budget * (1.0 + tolerance_ratio)))
+
+
+def _callable_accepts_context_argument(callback: Callable[..., Any]) -> bool:
+    try:
+        signature = inspect.signature(callback)
+    except (TypeError, ValueError):
+        return False
+    for parameter in signature.parameters.values():
+        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
+            return True
+    return "context" in signature.parameters
 
 
 def should_validate_code_content(content: str, has_typed_artifact: bool) -> bool:
@@ -205,6 +247,7 @@ def record_code_validation_metadata(
 def validate_code_output_runtime(
     output: AgentOutput,
     line_budget: Optional[int],
+    line_budget_for_validation: Optional[int],
     requires_cli_entrypoint: bool,
     should_validate_code_content: Any,
     analyze_python_module: Any,
@@ -231,6 +274,8 @@ def validate_code_output_runtime(
     code_analysis["line_count"] = output_line_count(code_content)
     if line_budget is not None:
         code_analysis["line_budget"] = line_budget
+    if isinstance(line_budget_for_validation, int) and line_budget_for_validation != line_budget:
+        code_analysis["effective_line_budget"] = line_budget_for_validation
     if requires_cli_entrypoint:
         code_analysis["main_guard_required"] = True
     task_public_contract_preflight_result = task_public_contract_preflight(code_analysis)
@@ -256,7 +301,7 @@ def validate_code_output_runtime(
     )
     validation_issues = collect_code_validation_issues(
         code_analysis,
-        line_budget,
+        line_budget_for_validation if isinstance(line_budget_for_validation, int) else line_budget,
         task_public_contract_preflight_result,
         import_validation,
         completion_diagnostics,
@@ -270,6 +315,7 @@ def validate_code_output_for_task_runtime(
     sandbox_policy: ExecutionSandboxPolicy,
     output: AgentOutput,
     task: Task | None = None,
+    context: Optional[dict[str, Any]] = None,
     *,
     line_budget: Optional[int] | None = None,
     requires_cli_entrypoint: bool | None = None,
@@ -315,9 +361,11 @@ def validate_code_output_for_task_runtime(
             task_public_contract_preflight = _default_task_public_contract_preflight
 
     assert completion_diagnostics_from_provider_call is not None
+    effective_line_budget = _effective_line_budget(line_budget, context)
     validate_code_output_runtime(
         output,
         line_budget,
+        effective_line_budget,
         requires_cli_entrypoint,
         should_validate_code_content,
         analyze_python_module,
@@ -386,7 +434,10 @@ def validate_task_output(
 
     normalized_role = AgentRegistry.normalize_key(execution_agent_name(task))
     if normalized_role == "code_engineer":
-        validate_code_output(output, task=task)
+        if _callable_accepts_context_argument(validate_code_output):
+            validate_code_output(output, task=task, context=context)
+        else:
+            validate_code_output(output, task=task)
         return
     if normalized_role == "qa_tester":
         validate_test_output(context, output, task=task)
@@ -500,6 +551,7 @@ def validate_test_output_runtime(
     context: dict[str, Any],
     output: AgentOutput,
     line_budget: Optional[int],
+    line_budget_for_validation: Optional[int],
     exact_test_count: Optional[int],
     max_test_count: Optional[int],
     fixture_budget: Optional[int],
@@ -536,7 +588,7 @@ def validate_test_output_runtime(
         runtime_input.code_exact_test_contract,
         runtime_input.code_behavior_contract,
         runtime_input.test_filename,
-        line_budget,
+        line_budget_for_validation,
         exact_test_count,
         max_test_count,
         fixture_budget,
@@ -642,10 +694,12 @@ def validate_test_output_for_task_runtime(
         fixture_budget = task_fixture_budget(task) if fixture_budget is None else fixture_budget
 
     assert completion_diagnostics_from_provider_call is not None
+    effective_line_budget = _effective_line_budget(line_budget, context)
     validate_test_output_runtime(
         context,
         output,
         line_budget,
+        effective_line_budget,
         exact_test_count,
         max_test_count,
         fixture_budget,

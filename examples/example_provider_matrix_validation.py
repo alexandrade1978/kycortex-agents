@@ -6,7 +6,7 @@ from kycortex_agents.provider_matrix import (
     DEFAULT_PROVIDER_MODELS,
     _public_path_label,
     build_full_workflow_config,
-    build_full_workflow_project,
+    build_full_workflow_project_with_budgets,
     execute_empirical_validation_workflow,
     get_provider_availability,
     resolve_model,
@@ -102,6 +102,36 @@ def build_parser() -> argparse.ArgumentParser:
         default=3200,
         help="Completion-token budget to request for each provider call during the empirical run.",
     )
+    parser.add_argument(
+        "--request-timeout-seconds",
+        type=float,
+        default=180.0,
+        help="Provider request timeout in seconds used for non-Ollama providers in this empirical run.",
+    )
+    parser.add_argument(
+        "--ollama-timeout-seconds",
+        type=float,
+        default=300.0,
+        help="Ollama provider request timeout in seconds for this empirical run.",
+    )
+    parser.add_argument(
+        "--code-line-budget",
+        type=int,
+        default=300,
+        help="Maximum implementation-module line budget encoded into the code task prompt.",
+    )
+    parser.add_argument(
+        "--test-line-budget",
+        type=int,
+        default=150,
+        help="Maximum pytest-module line budget encoded into the tests task prompt.",
+    )
+    parser.add_argument(
+        "--test-max-top-level-tests",
+        type=int,
+        default=7,
+        help="Maximum top-level pytest test functions encoded into the tests task prompt.",
+    )
     return parser
 
 
@@ -127,6 +157,11 @@ def run_provider(
     ollama_num_ctx: int | None = 16384,
     ollama_model: str | None = None,
     max_tokens: int = 3200,
+    request_timeout_seconds: float = 180.0,
+    ollama_timeout_seconds: float = 300.0,
+    code_line_budget: int = 300,
+    test_line_budget: int = 150,
+    test_max_top_level_tests: int = 7,
 ) -> dict:
     if provider == "ollama":
         availability = get_provider_availability(provider, ollama_base_url=ollama_base_url)
@@ -154,6 +189,8 @@ def run_provider(
             ollama_base_url=ollama_base_url,
             ollama_num_ctx=ollama_num_ctx,
             max_tokens=max_tokens,
+            request_timeout_seconds=request_timeout_seconds,
+            ollama_timeout_seconds=ollama_timeout_seconds,
             workflow_failure_policy=failure_policy,
             workflow_resume_policy=resume_policy,
             workflow_max_repair_cycles=max_repair_cycles,
@@ -164,11 +201,18 @@ def run_provider(
             model,
             output_dir,
             max_tokens=max_tokens,
+            request_timeout_seconds=request_timeout_seconds,
             workflow_failure_policy=failure_policy,
             workflow_resume_policy=resume_policy,
             workflow_max_repair_cycles=max_repair_cycles,
         )
-    project = build_full_workflow_project(output_dir, provider)
+    project = build_full_workflow_project_with_budgets(
+        output_dir,
+        provider,
+        code_line_budget=code_line_budget,
+        test_line_budget=test_line_budget,
+        test_max_top_level_tests=test_max_top_level_tests,
+    )
 
     try:
         execute_empirical_validation_workflow(config, project)
@@ -204,7 +248,12 @@ def main() -> None:
             ollama_base_url=args.ollama_base_url,
             ollama_num_ctx=args.ollama_num_ctx,
             ollama_model=ollama_model,
-            max_tokens=args.max_tokens,
+            max_tokens=getattr(args, "max_tokens", 3200),
+            request_timeout_seconds=getattr(args, "request_timeout_seconds", 180.0),
+            ollama_timeout_seconds=getattr(args, "ollama_timeout_seconds", 300.0),
+            code_line_budget=getattr(args, "code_line_budget", 300),
+            test_line_budget=getattr(args, "test_line_budget", 150),
+            test_max_top_level_tests=getattr(args, "test_max_top_level_tests", 7),
         )
         for provider in providers
     ]
@@ -217,7 +266,12 @@ def main() -> None:
         "ollama_base_url": _public_ollama_base_url_label(args.ollama_base_url),
         "ollama_model": ollama_model,
         "ollama_num_ctx": args.ollama_num_ctx,
-        "max_tokens": args.max_tokens,
+        "max_tokens": getattr(args, "max_tokens", 3200),
+        "request_timeout_seconds": getattr(args, "request_timeout_seconds", 180.0),
+        "ollama_timeout_seconds": getattr(args, "ollama_timeout_seconds", 300.0),
+        "code_line_budget": getattr(args, "code_line_budget", 300),
+        "test_line_budget": getattr(args, "test_line_budget", 150),
+        "test_max_top_level_tests": getattr(args, "test_max_top_level_tests", 7),
         "output_root": _public_path_label(output_root),
     }
     summary_path = args.summary_json or str(Path(output_root) / "provider_matrix_summary.json")

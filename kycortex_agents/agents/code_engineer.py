@@ -5,11 +5,31 @@ from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.types import AgentInput, ArtifactType
 
 
-def _low_budget_code_section(max_tokens: object) -> str:
-    if not isinstance(max_tokens, int) or max_tokens <= 0 or max_tokens > 1200:
+def _adaptive_prompt_mode(context: object) -> str | None:
+    if not isinstance(context, dict):
+        return None
+    policy = context.get("adaptive_prompt_policy")
+    if not isinstance(policy, dict):
+        return None
+    mode = policy.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        return mode.strip().lower()
+    return None
+
+
+def _low_budget_code_section(max_tokens: object, prompt_mode: object = None) -> str:
+    resolved_mode = prompt_mode.strip().lower() if isinstance(prompt_mode, str) else None
+    if resolved_mode is not None and resolved_mode != "compact":
         return ""
-    return (
+    if resolved_mode is None and (not isinstance(max_tokens, int) or max_tokens <= 0 or max_tokens > 1200):
+        return ""
+    budget_line = (
         f"Provider completion budget: {max_tokens} tokens.\n"
+        if isinstance(max_tokens, int) and max_tokens > 0
+        else "Provider completion budget: adaptive compact mode.\n"
+    )
+    return (
+        budget_line +
         "This is a tight completion budget. Compress more aggressively than usual: implement only the minimum contract-required surface, prefer one main facade plus the anchored request model, and omit optional response wrappers, validation-result dataclasses, internal audit-record dataclasses, long constant tables, and non-essential prose unless the task explicitly requires them.\n"
         "Prefer built-in containers for optional return details instead of extra named types when the public contract does not require those named types. Do not introduce any extra dataclass beyond the anchored request model unless the task explicitly requires it. Under this budget, keep the required CLI or demo path minimal but mandatory: preserve a working main() plus a literal if __name__ == \"__main__\": block before spending tokens on optional helper types or richer return models.\n"
         "If you must trade optional structure for required surfaces, keep the anchored facade, validate_request(...), handle_request(...), and the minimal CLI entrypoint, and collapse audit or scoring detail into the smallest valid implementation that still satisfies the task.\n"
@@ -347,7 +367,10 @@ class CodeEngineerAgent(BaseAgent):
         )
         module_name = agent_input.context.get("module_name", f"{agent_input.task_id}_implementation")
         module_filename = agent_input.context.get("module_filename", f"{module_name}.py")
-        low_budget_section = _low_budget_code_section(agent_input.context.get("provider_max_tokens"))
+        low_budget_section = _low_budget_code_section(
+            agent_input.context.get("provider_max_tokens"),
+            prompt_mode=_adaptive_prompt_mode(agent_input.context),
+        )
         task_public_contract_anchor = agent_input.context.get("task_public_contract_anchor", "")
         public_contract_section = ""
         if isinstance(task_public_contract_anchor, str) and task_public_contract_anchor.strip():
@@ -490,7 +513,10 @@ Before you finalize, verify this checklist against your own output:
         )
         module_name = context.get("module_name", "module")
         module_filename = context.get("module_filename", f"{module_name}.py")
-        low_budget_section = _low_budget_code_section(context.get("provider_max_tokens"))
+        low_budget_section = _low_budget_code_section(
+            context.get("provider_max_tokens"),
+            prompt_mode=_adaptive_prompt_mode(context),
+        )
         task_public_contract_anchor = context.get("task_public_contract_anchor", "")
         public_contract_section = ""
         if isinstance(task_public_contract_anchor, str) and task_public_contract_anchor.strip():

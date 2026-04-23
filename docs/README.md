@@ -17,7 +17,7 @@ This index points to the stable public documentation surface for KYCortex.
 
 - [architecture.md](architecture.md): stable runtime architecture, boundaries, and supported extension seams.
 - [providers.md](providers.md): provider configuration, routing, health checks, and backend differences.
-- [workflows.md](workflows.md): workflow model, dependency scheduling, failure policies, and resume semantics.
+- [workflows.md](workflows.md): workflow model, dependency scheduling, failure policies, resume semantics, and adaptive prompt-policy behavior.
 - [persistence.md](persistence.md): state persistence backends, resume behavior, and snapshot inspection.
 - [extensions.md](extensions.md): supported customization seams for agents, providers, registries, and persistence backends.
 - [troubleshooting.md](troubleshooting.md): public failure classes, diagnosis, and recovery patterns.

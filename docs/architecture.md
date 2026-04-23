@@ -25,6 +25,8 @@ The package is organized into a small set of runtime layers with explicit respon
 
 `Orchestrator` now acts as a thin public control surface and runtime dispatcher, while deterministic internal behavior is owned by modules under `kycortex_agents.orchestration`.
 
+Adaptive prompt-policy resolution is part of this internal orchestration layer. The context-building runtime resolves a per-execution policy profile and exposes it to built-in generation agents, allowing prompt behavior to adapt by model capability and budget without changing the public workflow contract.
+
 ## Core Domain Contracts
 
 The typed runtime revolves around the public contracts in `kycortex_agents.types`:

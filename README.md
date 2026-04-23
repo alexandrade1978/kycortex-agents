@@ -74,6 +74,8 @@ orch.execute_workflow(project)
 
 See `examples/` for complete examples, including `example_provider_matrix_validation.py` for resume-enabled empirical provider validation across the supported runtimes.
 
+The provider-matrix validation example now supports configurable empirical envelopes for timeout and task-budget prompts (`--request-timeout-seconds`, `--ollama-timeout-seconds`, `--code-line-budget`, `--test-line-budget`, and `--test-max-top-level-tests`) so local or stronger-model runs can be tuned without changing workflow contracts.
+
 For a real user-style local creation smoke against a live provider, run `examples/example_release_user_smoke.py`. It exercises the public package API, generates a small project, and validates the generated Python artifact with a sample call before reporting success.
 
 Provider preflight validation now distinguishes backend reachability from model readiness. In practice, this means cloud providers must expose the configured model through their model-listing API before generation starts, and Ollama must expose both a reachable `/api/tags` endpoint and the configured local model.
@@ -167,6 +169,10 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 | `temperature` | `0.2` | Sampling temperature validated between `0` and `2`. |
 | `max_tokens` | `4096` | Maximum number of output tokens requested from the provider. For Ollama, this is forwarded as `options.num_predict`. |
 | `timeout_seconds` | `60.0` | Provider request timeout in seconds. |
+| `adaptive_prompt_policy_enabled` | `False` | Enables model-adaptive prompt policy resolution for built-in agents. When disabled, legacy token-threshold prompt compaction behavior is preserved. |
+| `adaptive_prompt_compact_threshold_tokens` | `1200` | Token threshold used by the adaptive prompt policy to force `compact` mode for tight completion budgets. |
+| `adaptive_prompt_default_mode` | `"balanced"` | Default adaptive prompt mode when heuristics do not force `compact` or `rich`. Allowed values: `compact`, `balanced`, `rich`. |
+| `adaptive_prompt_mode_overrides` | `{}` | Optional exact `provider:model -> mode` overrides for adaptive prompt policy routing. |
 | `provider_timeout_seconds` | `{}` | Optional per-provider timeout overrides keyed by provider name, used for primary and fallback provider runtime configs. |
 | `provider_fallback_order` | `()` | Optional ordered list of fallback providers to use when the primary provider/model path fails or is unavailable. |
 | `provider_fallback_models` | `{}` | Provider-to-model mapping for fallback routing. Each value may be a single model string or an ordered model sequence for multi-model fallback per provider. |
@@ -184,6 +190,7 @@ Tasks can also declare `dependencies=[...]` to build a dependency-aware workflow
 ### Runtime Hardening Notes
 
 - Built-in providers now expose model-readiness health snapshots that distinguish `backend_reachable` from `model_ready`.
+- Built-in architect and code-engineer prompt compaction can now run in adaptive policy modes (`compact`, `balanced`, `rich`) instead of assuming low-budget compression for every model.
 - Provider metadata now preserves requested token budgets plus backend-specific stop reasons such as OpenAI `finish_reason`, Anthropic `stop_reason`, and Ollama `done_reason` when available.
 - Generated code and tests are validated against task-level budgets derived from task text, including optional line limits, CLI entrypoint requirements, test-count limits, fixture budgets, and completion diagnostics for likely truncated outputs.
 - Artifact persistence rejects relative-path escapes, including writes that would leave `output_dir` through symlinked directories.

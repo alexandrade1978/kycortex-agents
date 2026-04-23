@@ -5,11 +5,33 @@ from kycortex_agents.types import AgentInput, ArtifactType
 DEFAULT_CONSTRAINTS = "Python 3.10+, production-ready dependencies, licensing suitable for open-source or commercial distribution"
 
 
-def _low_budget_architecture_section(max_tokens: object) -> str:
-    if not isinstance(max_tokens, int) or max_tokens <= 0 or max_tokens > 1200:
+def _adaptive_prompt_mode(context: object) -> str | None:
+    if not isinstance(context, dict):
+        return None
+    policy = context.get("adaptive_prompt_policy")
+    if not isinstance(policy, dict):
+        return None
+    mode = policy.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        return mode.strip().lower()
+    return None
+
+
+def _low_budget_architecture_section(max_tokens: object, prompt_mode: object = None) -> str:
+    resolved_mode = prompt_mode.strip().lower() if isinstance(prompt_mode, str) else None
+    if resolved_mode is not None and resolved_mode != "compact":
         return ""
-    return (
+    if resolved_mode is None and (
+        not isinstance(max_tokens, int) or max_tokens <= 0 or max_tokens > 1200
+    ):
+        return ""
+    budget_line = (
         f"Provider completion budget: {max_tokens} tokens.\n"
+        if isinstance(max_tokens, int) and max_tokens > 0
+        else "Provider completion budget: adaptive compact mode.\n"
+    )
+    return (
+        budget_line +
         "This is a tight completion budget. Keep the architecture under roughly 200 words, list only the minimum required public surface, and omit optional helper types, response wrappers, validation-result types, internal audit-record types, future extensions, and long operational-risk prose unless the task explicitly requires them.\n"
         "Do not introduce extra named result, scoring, or audit dataclasses unless the public contract explicitly requires them. Under this budget, prefer the smallest facade-centered shape that still leaves room for the required CLI entrypoint in the eventual implementation.\n"
         "Prefer one facade, one request model, and only the smallest supporting surface needed for correct code generation under this budget.\n"
@@ -61,7 +83,10 @@ class ArchitectAgent(BaseAgent):
     def run_with_input(self, agent_input: AgentInput) -> str:
         constraints = ", ".join(agent_input.constraints) if agent_input.constraints else DEFAULT_CONSTRAINTS
         planned_module_filename = agent_input.context.get("planned_module_filename", "")
-        low_budget_section = _low_budget_architecture_section(agent_input.context.get("provider_max_tokens"))
+        low_budget_section = _low_budget_architecture_section(
+            agent_input.context.get("provider_max_tokens"),
+            prompt_mode=_adaptive_prompt_mode(agent_input.context),
+        )
         task_public_contract_anchor = agent_input.context.get("task_public_contract_anchor", "")
         repair_context = agent_input.context.get("repair_context", {})
         public_contract_section = ""
@@ -81,7 +106,10 @@ Constraints: {constraints}
         goal = context.get("goal", "")
         constraints = context.get("constraints", DEFAULT_CONSTRAINTS)
         planned_module_filename = context.get("planned_module_filename", "")
-        low_budget_section = _low_budget_architecture_section(context.get("provider_max_tokens"))
+        low_budget_section = _low_budget_architecture_section(
+            context.get("provider_max_tokens"),
+            prompt_mode=_adaptive_prompt_mode(context),
+        )
         task_public_contract_anchor = context.get("task_public_contract_anchor", "")
         repair_context = context.get("repair_context", {})
         public_contract_section = ""

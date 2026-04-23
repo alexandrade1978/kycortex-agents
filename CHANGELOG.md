@@ -14,6 +14,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Added
 
+- Adaptive prompt-policy core (`orchestration/model_adaptive_policy.py`) with feature-flagged mode routing (`compact`, `balanced`, `rich`) based on budget and model-capability signals.
+- Configurable empirical matrix prompt budgets and timeout controls for provider-validation examples, including `code_line_budget`, `test_line_budget`, `test_max_top_level_tests`, `request_timeout_seconds`, and `ollama_timeout_seconds`.
 - Model Capabilities Registry (`model_capabilities.py`): centralized capability metadata per provider and model, including context window sizes, temperature support, and reasoning-model flags.
 - Reasoning model token multiplier (Fix 9): `is_reasoning_model` flag in `ModelCapabilities` with a 4× `max_completion_tokens` multiplier in `OpenAIProvider` for gpt-5-mini, o1, o3, o4, and other reasoning-family models that share the token budget between reasoning and visible output.
 - `ollama_think` parameter support for explicit Ollama thinking-mode control in `config.py`, `provider_matrix.py`, `ollama_provider.py`, and `run_real_world_complex_matrix.py`.
@@ -25,6 +27,9 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Changed
 
+- Built-in Architect and Code Engineer low-budget prompt compaction now supports adaptive mode gating via context policy, instead of always relying on a fixed token-threshold assumption.
+- Runtime output validation now applies adaptive-policy-aware line-budget tolerance for secondary budget checks (`compact=0%`, `balanced=5%`, `rich=15%`) while keeping contract mismatch, syntax/import errors, CLI-entrypoint requirements, and truncation checks blocking.
+- Provider-matrix workflow builders now support configurable code/test prompt-budget constraints and configurable request timeout envelopes while preserving the previous defaults.
 - `OpenAIProvider._build_create_kwargs()` now applies `_effective_max_tokens()` instead of the raw config value, ensuring reasoning models receive a sufficient token budget.
 - `OllamaProvider._build_payload()` now forwards runtime token budgets as `options.num_predict`, so `KYCortexConfig.max_tokens` actively bounds completions on Ollama runs.
 - `OllamaProvider` now defaults `think=false` for reasoning-capable Ollama models (Qwen3 family) when `ollama_think` is unset, while preserving explicit user overrides (`ollama_think=True/False`).
@@ -36,6 +41,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Fixed
 
+- `examples/example_full_provider_workflow.py` now keeps backward-compatible execution when parser/project builders are monkeypatched with legacy signatures in tests, using safe argument fallbacks and signature-aware budget-kwargs routing.
 - Local Ollama qwen3 remediation (Option B): architect-path timeouts caused by unbounded reasoning output are mitigated in runtime-path workflows by disabling implicit think mode and applying completion token caps through `num_predict`.
 - Fix 3–3c: Enriched behavior contract with dict key hints and concrete dict examples to reduce type-mismatch failures.
 - Fix 4: Added programmatic auto-fix for str→dict type mismatches in generated test files.

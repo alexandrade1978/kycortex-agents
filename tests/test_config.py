@@ -245,6 +245,50 @@ def test_config_rejects_invalid_max_tokens(tmp_path):
         KYCortexConfig(output_dir=str(tmp_path / "output"), max_tokens=0)
 
 
+def test_config_rejects_invalid_adaptive_prompt_threshold(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="adaptive_prompt_compact_threshold_tokens must be greater than zero",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            adaptive_prompt_compact_threshold_tokens=0,
+        )
+
+
+def test_config_rejects_invalid_adaptive_prompt_default_mode(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="adaptive_prompt_default_mode must be 'compact', 'balanced', or 'rich'",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            adaptive_prompt_default_mode="dynamic",
+        )
+
+
+def test_config_rejects_invalid_adaptive_prompt_override_key(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="adaptive_prompt_mode_overrides keys must use 'provider:model' format",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            adaptive_prompt_mode_overrides={"openai": "rich"},
+        )
+
+
+def test_config_rejects_invalid_adaptive_prompt_override_mode(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="adaptive_prompt_mode_overrides values must be 'compact', 'balanced', or 'rich'",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            adaptive_prompt_mode_overrides={"openai:gpt-5": "fast"},
+        )
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [

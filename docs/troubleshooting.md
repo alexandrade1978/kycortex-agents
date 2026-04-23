@@ -22,12 +22,24 @@ Common configuration failures include:
 - unsupported `llm_provider` values
 - missing `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
 - invalid `workflow_failure_policy` or `workflow_resume_policy`
+- invalid adaptive prompt-policy settings such as unsupported mode names or malformed `provider:model` override keys
 - invalid `temperature`, `max_tokens`, `timeout_seconds`, or execution-sandbox limits such as `execution_sandbox_max_wall_clock_seconds`
 - empty required fields such as `project_name`, `llm_model`, or `output_dir`
 
 If configuration is created successfully but provider-specific credentials are still missing, call `validate_runtime()` to surface the failure immediately.
 
 An absent `output_dir` on disk immediately after configuration creation is normal. The runtime now creates that directory lazily when artifacts or generated validation files are first written.
+
+Adaptive prompt-policy misconfiguration fails fast through `ConfigValidationError`.
+
+Validate these first when adaptive mode is enabled:
+
+- `adaptive_prompt_default_mode` must be one of `compact`, `balanced`, `rich`
+- `adaptive_prompt_compact_threshold_tokens` must be greater than zero
+- `adaptive_prompt_mode_overrides` keys must use exact `provider:model` format
+- `adaptive_prompt_mode_overrides` values must use supported mode names
+
+If adaptive mode is enabled but generation still appears overly compressed, inspect whether an exact mode override is forcing `compact` for the active provider/model pair.
 
 ## Provider And Agent Failures
 

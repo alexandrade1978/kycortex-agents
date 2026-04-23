@@ -111,6 +111,14 @@ Code validation can enforce:
 - required CLI entrypoints when the task explicitly asks for a CLI or `__main__` path
 - completion diagnostics that combine provider token-limit metadata with structural end-of-file heuristics to detect likely truncated outputs
 
+When adaptive prompt policy is enabled, line-budget validation remains strict in `compact` mode and can apply bounded tolerance in richer modes for secondary budget constraints:
+
+- `compact`: no line-budget tolerance
+- `balanced`: up to 5% line-budget tolerance
+- `rich`: up to 15% line-budget tolerance
+
+This tolerance only applies to line-budget checks. Public contract mismatches, syntax/import failures, required CLI entrypoint violations, and truncation diagnostics remain blocking.
+
 Test validation can additionally enforce:
 
 - exact or maximum top-level test counts parsed from task text
@@ -181,6 +189,42 @@ The broader public `ProjectSnapshot` still exists for inspection and compatibili
 
 Raw completed-task outputs, semantic aliases, and planned-module hints now follow the same dependency-closure rule, so finished tasks outside the active closure do not leak into downstream prompt context.
 
+## Adaptive Prompt Policy
+
+The workflow runtime now supports feature-flagged adaptive prompt-policy routing for built-in generation agents.
+
+When `adaptive_prompt_policy_enabled=True`, the context builder resolves an adaptive prompt-policy object per task execution and exposes it to agents as `context["adaptive_prompt_policy"]`.
+
+Supported modes:
+
+- `compact`: enables aggressive prompt compaction for tight token budgets.
+- `balanced`: keeps contract and validation guidance without forcing compact-mode compression.
+- `rich`: allows broader structure guidance for higher-capability or higher-budget runs.
+
+Resolution order:
+
+1. exact `provider:model` override from `adaptive_prompt_mode_overrides`
+2. adaptive heuristics based on token budget plus model-capability signals
+3. default fallback mode from `adaptive_prompt_default_mode`
+
+Compatibility behavior:
+
+- when adaptive policy is disabled, the legacy prompt compaction gate remains active
+- existing workflows continue to behave as before unless adaptive mode is explicitly enabled
+
+Example:
+
+```python
+config = KYCortexConfig(
+    llm_provider="openai",
+    llm_model="gpt-5",
+    max_tokens=4096,
+    adaptive_prompt_policy_enabled=True,
+    adaptive_prompt_default_mode="balanced",
+    adaptive_prompt_mode_overrides={"openai:gpt-5": "rich"},
+)
+```
+
 ## Inspecting Workflow State
 
 Useful public inspection methods on `ProjectState` include:
@@ -234,6 +278,21 @@ When a workflow does not progress as expected, inspect these areas first:
 5. downstream tasks were intentionally skipped by the `continue` failure policy
 
 The persisted `ProjectState`, execution events, and workflow summary usually provide enough information to diagnose the cause.
+
+## Empirical Matrix Budget Controls
+
+The provider-matrix examples support configurable task-budget prompt envelopes so empirical validation can be tuned per host and model tier without changing core workflow semantics.
+
+`examples/example_provider_matrix_validation.py` and `examples/example_full_provider_workflow.py` now expose:
+
+- `--max-tokens`: completion-token budget per provider call
+- `--request-timeout-seconds`: base provider request timeout for non-Ollama providers
+- `--ollama-timeout-seconds`: Ollama provider request timeout
+- `--code-line-budget`: code task line-cap prompt budget
+- `--test-line-budget`: tests task line-cap prompt budget
+- `--test-max-top-level-tests`: tests task top-level test-count prompt budget
+
+These controls tune empirical scenario prompts and runtime timeouts, not the workflow contract model itself. Public contract anchors and behavior-validation checks remain deterministic.
 
 ## Production Service Objectives
 

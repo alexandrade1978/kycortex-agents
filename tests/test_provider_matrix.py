@@ -809,6 +809,21 @@ def test_build_full_workflow_config_accepts_completion_budget_override(monkeypat
     assert config.max_tokens == 900
 
 
+def test_build_full_workflow_config_accepts_request_timeout_override(monkeypatch, tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_config
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+
+    config = build_full_workflow_config(
+        "openai",
+        "gpt-4o-mini",
+        str(tmp_path / "output"),
+        request_timeout_seconds=240.0,
+    )
+
+    assert config.timeout_seconds == 240.0
+
+
 def test_build_full_workflow_config_applies_ollama_runtime_overrides(tmp_path):
     from kycortex_agents.provider_matrix import build_full_workflow_config
 
@@ -966,6 +981,54 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "either omit the optional filter dict or provide every documented required filter key" in tests_task.description
     assert "If you use isinstance or another exact type assertion against a returned production class, import that class explicitly" in tests_task.description
     assert "use repeated-character or similarly obvious inputs rather than natural-language sample text" in tests_task.description
+
+
+def test_build_full_workflow_project_accepts_budget_overrides(tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_project_with_budgets
+
+    project = build_full_workflow_project_with_budgets(
+        str(tmp_path / "output"),
+        "openai",
+        code_line_budget=420,
+        test_line_budget=210,
+        test_max_top_level_tests=9,
+    )
+
+    code_task = project.get_task("code")
+    tests_task = project.get_task("tests")
+
+    assert code_task is not None
+    assert tests_task is not None
+    assert "under 420 lines" in code_task.description
+    assert "hard 420-line cap" in code_task.description
+    assert "under 210 lines" in tests_task.description
+    assert "at most 9 top-level test functions" in tests_task.description
+    assert "If you draft more than 8 for this task" in tests_task.description
+
+
+def test_build_full_workflow_project_rejects_invalid_budget_overrides(tmp_path):
+    from kycortex_agents.provider_matrix import build_full_workflow_project_with_budgets
+
+    with pytest.raises(ValueError, match="code_line_budget must be greater than zero"):
+        build_full_workflow_project_with_budgets(
+            str(tmp_path / "output"),
+            "openai",
+            code_line_budget=0,
+        )
+
+    with pytest.raises(ValueError, match="test_line_budget must be greater than zero"):
+        build_full_workflow_project_with_budgets(
+            str(tmp_path / "output"),
+            "openai",
+            test_line_budget=0,
+        )
+
+    with pytest.raises(ValueError, match="test_max_top_level_tests must be greater than zero"):
+        build_full_workflow_project_with_budgets(
+            str(tmp_path / "output"),
+            "openai",
+            test_max_top_level_tests=0,
+        )
 
 
 def test_provider_matrix_summary_reports_failed_non_repair_tasks(tmp_path):
@@ -2093,7 +2156,11 @@ def test_provider_matrix_example_passes_completion_budget_override(tmp_path, mon
         repair_cycle_count = 0
 
     monkeypatch.setattr(module, "build_full_workflow_config", fake_build_full_workflow_config)
-    monkeypatch.setattr(module, "build_full_workflow_project", lambda output_dir, provider: FakeProject())
+    monkeypatch.setattr(
+        module,
+        "build_full_workflow_project_with_budgets",
+        lambda output_dir, provider, **kwargs: FakeProject(),
+    )
     monkeypatch.setattr(module, "execute_empirical_validation_workflow", lambda config, project: None)
     monkeypatch.setattr(
         module,
@@ -2133,7 +2200,11 @@ def test_provider_matrix_example_limits_public_execution_error_message(tmp_path,
     )
     monkeypatch.setattr(module, "resolve_model", lambda provider, model_override=None: "gpt-4o-mini")
     monkeypatch.setattr(module, "build_full_workflow_config", lambda *args, **kwargs: object())
-    monkeypatch.setattr(module, "build_full_workflow_project", lambda output_dir, provider: object())
+    monkeypatch.setattr(
+        module,
+        "build_full_workflow_project_with_budgets",
+        lambda output_dir, provider, **kwargs: object(),
+    )
 
     def fake_execute_empirical_validation_workflow(config, project):
         raise RuntimeError("api_key=sk-secret-123456")

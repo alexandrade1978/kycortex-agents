@@ -19,6 +19,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_test_targets,
     build_module_run_command,
 )
+from kycortex_agents.orchestration.model_adaptive_policy import resolve_adaptive_prompt_policy
 from kycortex_agents.orchestration.output_helpers import semantic_output_key, summarize_output, task_context_output
 from kycortex_agents.orchestration.repair_test_analysis import (
     normalized_helper_surface_symbols,
@@ -34,6 +35,7 @@ from kycortex_agents.orchestration.test_ast_analysis import analyze_test_module_
 from kycortex_agents.orchestration.validation_reporting import build_dependency_validation_summary
 from kycortex_agents.orchestration.validation_reporting import build_test_validation_summary
 from kycortex_agents.providers.base import redact_sensitive_data
+from kycortex_agents.providers.model_capabilities import get_capabilities
 from kycortex_agents.types import (
     AgentView,
     AgentViewArtifactRecord,
@@ -583,12 +585,26 @@ def build_task_context_for_agent_runtime(
         qa_repair_should_reuse_failed_test_artifact=qa_repair_should_reuse_failed_test_artifact,
         redact_sensitive_data=redact_sensitive_data,
     )
-    return build_task_context_runtime(
+    context = build_task_context_runtime(
         task,
         project,
         provider_max_tokens=orchestrator.config.max_tokens,
         callbacks=callbacks,
     )
+    if orchestrator.config.adaptive_prompt_policy_enabled:
+        provider_name = orchestrator.config.llm_provider
+        model_name = orchestrator.config.llm_model
+        capabilities = get_capabilities(provider_name, model_name)
+        adaptive_policy = resolve_adaptive_prompt_policy(
+            orchestrator.config,
+            provider_name=provider_name,
+            model_name=model_name,
+            capabilities=capabilities,
+            max_tokens=orchestrator.config.max_tokens,
+            timeout_seconds=orchestrator.config.provider_timeout_seconds_for(provider_name),
+        )
+        context["adaptive_prompt_policy"] = adaptive_policy.to_context_dict()
+    return context
 
 
 def build_agent_view_runtime(

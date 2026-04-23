@@ -35,6 +35,12 @@ REPAIRABLE_FAILURE_CATEGORIES = {
     FailureCategory.PROVIDER_TRANSIENT.value,
 }
 
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 180.0
+DEFAULT_OLLAMA_TIMEOUT_SECONDS = 300.0
+DEFAULT_CODE_LINE_BUDGET = 300
+DEFAULT_TEST_LINE_BUDGET = 150
+DEFAULT_TEST_MAX_TOP_LEVEL_TESTS = 7
+
 
 def _public_path_label(path: str) -> str:
     normalized = path.replace("\\", "/").rstrip("/")
@@ -138,7 +144,8 @@ def build_full_workflow_config(
     ollama_base_url: str | None = None,
     ollama_num_ctx: int | None = 16384,
     ollama_think: bool | None = None,
-    ollama_timeout_seconds: float = 300.0,
+    ollama_timeout_seconds: float = DEFAULT_OLLAMA_TIMEOUT_SECONDS,
+    request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
     max_tokens: int = 3200,
     workflow_failure_policy: str = "continue",
     workflow_resume_policy: str = "resume_failed",
@@ -154,7 +161,7 @@ def build_full_workflow_config(
         ollama_think=ollama_think if provider == "ollama" else None,
         temperature=0.0,
         max_tokens=max_tokens,
-        timeout_seconds=180.0,
+        timeout_seconds=request_timeout_seconds,
         provider_timeout_seconds={"ollama": ollama_timeout_seconds} if provider == "ollama" else {},
         workflow_failure_policy=workflow_failure_policy,
         workflow_resume_policy=workflow_resume_policy,
@@ -168,6 +175,46 @@ def build_full_workflow_config(
 
 def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
     """Build the canonical empirical full workflow used for provider comparison."""
+
+    return build_full_workflow_project_with_budgets(
+        output_dir,
+        provider,
+        code_line_budget=DEFAULT_CODE_LINE_BUDGET,
+        test_line_budget=DEFAULT_TEST_LINE_BUDGET,
+        test_max_top_level_tests=DEFAULT_TEST_MAX_TOP_LEVEL_TESTS,
+    )
+
+
+def build_full_workflow_project_with_budgets(
+    output_dir: str,
+    provider: str,
+    *,
+    code_line_budget: int = DEFAULT_CODE_LINE_BUDGET,
+    test_line_budget: int = DEFAULT_TEST_LINE_BUDGET,
+    test_max_top_level_tests: int = DEFAULT_TEST_MAX_TOP_LEVEL_TESTS,
+) -> ProjectState:
+    """Build the canonical empirical full workflow with configurable test and code budgets."""
+
+    if code_line_budget <= 0:
+        raise ValueError("code_line_budget must be greater than zero")
+    if test_line_budget <= 0:
+        raise ValueError("test_line_budget must be greater than zero")
+    if test_max_top_level_tests <= 0:
+        raise ValueError("test_max_top_level_tests must be greater than zero")
+
+    if code_line_budget == DEFAULT_CODE_LINE_BUDGET:
+        code_target_low = 240
+        code_target_high = 280
+        code_headroom = 15
+    else:
+        code_target_low = max(120, int(code_line_budget * 0.8))
+        code_target_high = max(code_target_low + 10, int(code_line_budget * 0.93))
+        code_headroom = max(10, int(code_line_budget * 0.05))
+
+    if test_max_top_level_tests == DEFAULT_TEST_MAX_TOP_LEVEL_TESTS:
+        test_draft_upper_bound = 6
+    else:
+        test_draft_upper_bound = max(1, test_max_top_level_tests - 1)
 
     project = ProjectState(
         project_name="ComplianceIntake",
@@ -206,11 +253,11 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
             id="code",
             title="Implementation",
             description=(
-                "Write one Python module under 300 lines that implements only the planned compliance intake service. "
+                f"Write one Python module under {code_line_budget} lines that implements only the planned compliance intake service. "
                 "Use only the standard library. Include typed models, validation, risk scoring, batch processing, "
                 "audit logging, and a CLI demo entrypoint. Prefer the smallest complete design that satisfies those requirements. "
-                "Target roughly 240 to 280 lines when the requested behavior fits there so the hard 300-line cap keeps repair headroom. "
-                "Leave at least 15 lines of headroom under the hard cap when the required behavior fits there. "
+                f"Target roughly {code_target_low} to {code_target_high} lines when the requested behavior fits there so the hard {code_line_budget}-line cap keeps repair headroom. "
+                f"Leave at least {code_headroom} lines of headroom under the hard cap when the required behavior fits there. "
                 "Implement only the minimal core flow rather than mirroring every optional architecture layer or future extension point. "
                 "Avoid extra helper layers, exhaustive docstrings, and optional abstractions. "
                 "Prefer one cohesive public service surface or a very small set of top-level functions for validation, scoring, audit logging, and batch handling. "
@@ -256,12 +303,12 @@ def build_full_workflow_project(output_dir: str, provider: str) -> ProjectState:
             id="tests",
             title="Tests",
             description=(
-                "Write one compact raw pytest module under 150 lines for the generated compliance intake service. "
-                "Use at most 3 fixtures and at most 7 top-level test functions. Include at least one happy path, one validation failure, and one batch-processing scenario. "
+                f"Write one compact raw pytest module under {test_line_budget} lines for the generated compliance intake service. "
+                f"Use at most 3 fixtures and at most {test_max_top_level_tests} top-level test functions. Include at least one happy path, one validation failure, and one batch-processing scenario. "
                 "Prefer 3 to 5 top-level tests when those requested scenarios fit within that budget, and merge overlapping checks instead of adding helper-specific extras. "
                 "Leave at least one full test of headroom below the stated maximum when those scenarios fit there, and delete helper-level coverage before dropping any required scenario. "
-                "Count top-level tests before finalizing. If you draft more than 6 for this task, merge or delete the lowest-value extra case before returning because the validator rejects any suite above the hard cap even when pytest passes. "
-                "Target clear headroom below the 150-line ceiling instead of landing on the boundary. Remove docstrings, comments, extra blank lines, and optional helper scaffolding before dropping any required scenario. "
+                f"Count top-level tests before finalizing. If you draft more than {test_draft_upper_bound} for this task, merge or delete the lowest-value extra case before returning because the validator rejects any suite above the hard cap even when pytest passes. "
+                f"Target clear headroom below the {test_line_budget}-line ceiling instead of landing on the boundary. Remove docstrings, comments, extra blank lines, and optional helper scaffolding before dropping any required scenario. "
                 "Stay comfortably under the fixture limit; target 0 to 2 fixtures by default and inline one-off setup instead of adding a borderline extra fixture. "
                 "Use the direct intake or validation surface for the validation-failure scenario and keep the batch-processing scenario fully valid unless the implementation contract explicitly requires partially invalid batch items. "
                 "If the validation-failure scenario is a missing-required-field case, omit only the field under test and keep the rest of that payload valid for the same surface. "

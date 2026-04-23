@@ -1402,6 +1402,37 @@ def test_validate_code_output_rejects_line_budget_overrun_and_truncation(tmp_pat
         validation_runtime_module.validate_code_output_for_task_runtime(sandbox_policy, output, task)
 
 
+def test_validate_code_output_allows_rich_mode_soft_line_budget_overrun(tmp_path, monkeypatch):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    sandbox_policy = config.execution_sandbox_policy()
+    output = AgentOutput(summary="code", raw_content="def run():\n    value = 1\n    return value\n")
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Write one module under 2 lines.",
+        assigned_to="code_engineer",
+    )
+
+    monkeypatch.setattr(
+        module_ast_analysis_module,
+        "analyze_python_module",
+        lambda *args, **kwargs: {"syntax_ok": True, "has_main_guard": True, "third_party_imports": []},
+    )
+    monkeypatch.setattr(
+        validation_reporting_module,
+        "completion_diagnostics_from_provider_call",
+        lambda *args, **kwargs: {"likely_truncated": False, "hit_token_limit": False},
+    )
+
+    # rich mode gets a 15% tolerance, so 2-line budget becomes an effective 3-line gate.
+    validation_runtime_module.validate_code_output_for_task_runtime(
+        sandbox_policy,
+        output,
+        task,
+        context={"adaptive_prompt_policy": {"mode": "rich"}},
+    )
+
+
 def test_validate_code_output_rejects_import_time_errors(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     sandbox_policy = config.execution_sandbox_policy()

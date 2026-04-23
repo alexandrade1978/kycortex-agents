@@ -124,6 +124,26 @@ def test_orchestrator_context_for_first_task_exposes_snapshot_without_completed_
     assert context["task"]["id"] == "inspect"
 
 
+def test_orchestrator_context_includes_adaptive_prompt_policy_when_enabled(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        api_key="token",
+        llm_provider="openai",
+        llm_model="gpt-5",
+        adaptive_prompt_policy_enabled=True,
+    )
+    project = build_inspector_project("architect", "ARCHITECTURE DOC")
+
+    inspector = RecordingAgent()
+    context = run_inspector_task(config, project, inspector)
+
+    policy = context.get("adaptive_prompt_policy")
+    assert isinstance(policy, dict)
+    assert policy["provider"] == "openai"
+    assert policy["model"] == "gpt-5"
+    assert policy["mode"] == "rich"
+
+
 def test_orchestrator_context_includes_snapshot_decisions_and_artifacts_for_downstream_tasks(tmp_path):
     config = build_config(tmp_path)
     project = build_inspector_project("architect", "ARCHITECTURE DOC")

@@ -24,6 +24,9 @@ This file is the short repository-owned snapshot of the current release posture 
 ## Current Posture
 
 - The current development head is stable with comprehensive test coverage and passing CI.
+- The current development head includes a feature-flagged adaptive prompt-policy core for model-aware compaction behavior (`compact`, `balanced`, `rich`) while preserving legacy defaults.
+- The provider-matrix empirical workflow helpers now support configurable timeout and prompt-budget envelopes for code/test task constraints while preserving previous defaults.
+- Runtime validation now applies adaptive-policy-aware secondary line-budget tolerance (`compact=0%`, `balanced=5%`, `rich=15%`) while keeping contract mismatch, syntax/import, CLI-entrypoint, and truncation failures as strict blockers.
 - Documentation governance has been applied; all public/internal boundaries are respected.
 - Release-candidate review is now open for the current `main` head.
 - No canary claim or production-readiness claim is attached to the current head.

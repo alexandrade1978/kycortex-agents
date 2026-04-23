@@ -69,6 +69,10 @@ class KYCortexConfig:
     temperature: float = 0.2
     max_tokens: int = 4096
     timeout_seconds: float = 60.0
+    adaptive_prompt_policy_enabled: bool = False
+    adaptive_prompt_compact_threshold_tokens: int = 1200
+    adaptive_prompt_default_mode: str = "balanced"
+    adaptive_prompt_mode_overrides: dict[str, str] = field(default_factory=dict)
     provider_timeout_seconds: dict[str, float] = field(default_factory=dict)
     workflow_failure_policy: str = "fail_fast"
     workflow_resume_policy: str = "interrupted_only"
@@ -136,6 +140,12 @@ class KYCortexConfig:
             for provider_name, timeout_seconds in self.provider_timeout_seconds.items()
             if provider_name.strip()
         }
+        self.adaptive_prompt_default_mode = self.adaptive_prompt_default_mode.strip().lower()
+        self.adaptive_prompt_mode_overrides = {
+            provider_model_key.strip().lower(): mode_name.strip().lower()
+            for provider_model_key, mode_name in self.adaptive_prompt_mode_overrides.items()
+            if provider_model_key.strip() and mode_name.strip()
+        }
         self.provider_max_calls_per_provider = {
             provider_name.strip().lower(): max_calls
             for provider_name, max_calls in self.provider_max_calls_per_provider.items()
@@ -191,6 +201,30 @@ class KYCortexConfig:
             raise ConfigValidationError("max_tokens must be greater than zero")
         if self.timeout_seconds <= 0:
             raise ConfigValidationError("timeout_seconds must be greater than zero")
+        if self.adaptive_prompt_compact_threshold_tokens <= 0:
+            raise ConfigValidationError(
+                "adaptive_prompt_compact_threshold_tokens must be greater than zero"
+            )
+        if self.adaptive_prompt_default_mode not in {"compact", "balanced", "rich"}:
+            raise ConfigValidationError(
+                "adaptive_prompt_default_mode must be 'compact', 'balanced', or 'rich'"
+            )
+        for provider_model_key, mode_name in self.adaptive_prompt_mode_overrides.items():
+            if ":" not in provider_model_key:
+                raise ConfigValidationError(
+                    "adaptive_prompt_mode_overrides keys must use 'provider:model' format"
+                )
+            provider_name, model_name = provider_model_key.split(":", 1)
+            normalized_provider_name = provider_name.strip().lower()
+            normalized_model_name = model_name.strip()
+            if normalized_provider_name not in PROVIDER_ENV_VARS or not normalized_model_name:
+                raise ConfigValidationError(
+                    f"adaptive_prompt_mode_overrides contains invalid key: {provider_model_key}"
+                )
+            if mode_name not in {"compact", "balanced", "rich"}:
+                raise ConfigValidationError(
+                    "adaptive_prompt_mode_overrides values must be 'compact', 'balanced', or 'rich'"
+                )
         for provider_name, timeout_seconds in self.provider_timeout_seconds.items():
             if provider_name not in PROVIDER_ENV_VARS:
                 raise ConfigValidationError(

@@ -6,6 +6,7 @@ import pytest
 from kycortex_agents.agents.architect import ArchitectAgent
 from kycortex_agents.agents.code_engineer import (
     CodeEngineerAgent,
+    _low_budget_code_section,
     _budget_compaction_line_target,
     _compact_task_constraints_block,
     _repair_literal_replacement_hint,
@@ -220,6 +221,11 @@ def test_code_engineer_helper_functions_cover_empty_and_mid_budget_edges():
     assert _split_repair_task_description("") == ("", "")
     assert _repair_literal_replacement_hint(cast(str, None)) is None
     assert _repair_quoted_broken_line_hint(cast(str, None)) == ""
+
+
+def test_code_engineer_low_budget_section_respects_adaptive_mode():
+    assert _low_budget_code_section(900, prompt_mode="rich") == ""
+    assert "tight completion budget" in _low_budget_code_section(900, prompt_mode="compact").lower()
 
 
 def test_code_reviewer_uses_typed_code_context(tmp_path):

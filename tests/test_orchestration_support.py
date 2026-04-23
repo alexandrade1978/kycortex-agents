@@ -335,6 +335,7 @@ from kycortex_agents.orchestration.workflow_control import (
 	resume_failed_workflow_tasks,
 	resume_failed_tasks_with_repair_cycle,
 	resume_workflow_tasks,
+	skip_task,
 	task_id_collection_count,
 	task_id_count_log_field_name,
 	validate_agent_resolution,
@@ -4965,3 +4966,426 @@ def test_execute_generated_module_import_handles_timeout_expired(tmp_path):
 	assert result["ran"] is True
 	assert result["returncode"] == -1
 	assert "timed out after" in result["summary"]
+
+
+def test_parse_task_public_contract_surface_skips_empty_arg_parts_directly():
+	owner, name, args = parse_task_public_contract_surface("process(a, , b)")
+	assert owner is None
+	assert name == "process"
+	assert args == ["a", "b"]
+
+
+def test_task_public_contract_anchor_returns_empty_for_non_string_input_directly():
+	assert task_public_contract_anchor(None) == ""  # type: ignore[arg-type]
+	assert task_public_contract_anchor(42) == ""  # type: ignore[arg-type]
+
+
+def test_task_public_contract_anchor_breaks_on_non_indented_non_bullet_line_directly():
+	description = (
+		"Build service.\n\n"
+		"Public contract anchor:\n"
+		"- Required workflow: process(data)\n"
+		"NotAnIndentedLine\n"
+		"More text.\n"
+	)
+	anchor = task_public_contract_anchor(description)
+	assert anchor == "- Required workflow: process(data)"
+
+
+def test_task_public_contract_preflight_handles_edge_case_anchor_lines_directly():
+	task = Task(
+		id="code",
+		title="Implementation",
+		description=(
+			"Build the service.\n\n"
+			"Public contract anchor:\n"
+			"- Required workflow: process(data)\n"
+			"  Continuation line.\n"
+			"- no colon here\n"
+			"- empty surface: \n"
+		),
+		assigned_to="code_engineer",
+	)
+	code_analysis = {
+		"syntax_ok": True,
+		"classes": {},
+		"functions": [{"name": "process", "params": ["data"]}],
+		"has_main_guard": False,
+	}
+	preflight = task_public_contract_preflight(task, code_analysis)
+	assert preflight is not None
+	assert preflight["issues"] == []
+	assert preflight["passed"] is True
+
+
+def test_task_public_contract_preflight_detects_primary_request_model_field_mismatches_directly():
+	task = Task(
+		id="code",
+		title="Implementation",
+		description=(
+			"Build the service.\n\n"
+			"Public contract anchor:\n"
+			"- Primary request model: ComplianceRequest(id, type)\n"
+		),
+		assigned_to="code_engineer",
+	)
+	code_analysis = {
+		"syntax_ok": True,
+		"classes": {
+			"ComplianceRequest": {
+				"constructor_params": ["name", "value"],
+				"constructor_min_args": 3,
+			},
+		},
+		"functions": [],
+		"has_main_guard": False,
+	}
+	preflight = task_public_contract_preflight(task, code_analysis)
+	assert preflight is not None
+	assert any("must start with constructor fields" in issue for issue in preflight["issues"])
+
+
+def test_task_public_contract_preflight_detects_primary_request_model_min_args_mismatch_directly():
+	task = Task(
+		id="code",
+		title="Implementation",
+		description=(
+			"Build the service.\n\n"
+			"Public contract anchor:\n"
+			"- Primary request model: ComplianceRequest(id)\n"
+		),
+		assigned_to="code_engineer",
+	)
+	code_analysis = {
+		"syntax_ok": True,
+		"classes": {
+			"ComplianceRequest": {
+				"constructor_params": ["id", "type", "extra"],
+				"constructor_min_args": 3,
+			},
+		},
+		"functions": [],
+		"has_main_guard": False,
+	}
+	preflight = task_public_contract_preflight(task, code_analysis)
+	assert preflight is not None
+	assert any("requires additional constructor fields" in issue for issue in preflight["issues"])
+
+
+def test_task_public_contract_preflight_detects_missing_and_mismatched_function_surfaces_directly():
+	task = Task(
+		id="code",
+		title="Implementation",
+		description=(
+			"Build the service.\n\n"
+			"Public contract anchor:\n"
+			"- Required workflow: missing_fn(data)\n"
+			"- Required CLI: process(x, y)\n"
+			"- Required CLI entrypoint: main() with __main__ guard\n"
+		),
+		assigned_to="code_engineer",
+	)
+	code_analysis = {
+		"syntax_ok": True,
+		"classes": {},
+		"functions": [
+			{"name": "process", "params": ["a", "b"]},
+			{"name": "main", "params": []},
+		],
+		"has_main_guard": False,
+	}
+	preflight = task_public_contract_preflight(task, code_analysis)
+	assert preflight is not None
+	issues = preflight["issues"]
+	assert any("missing required surface missing_fn" in i for i in issues)
+	assert any("must expose parameters" in i for i in issues)
+	assert any("main guard" in i for i in issues)
+
+
+def test_repair_requires_budget_decomposition_returns_false_for_missing_validation_summary_directly():
+	assert repair_requires_budget_decomposition({
+		"failure_category": "code_validation",
+		"validation_summary": None,
+	}) is False
+	assert repair_requires_budget_decomposition({
+		"failure_category": "code_validation",
+		"validation_summary": "   ",
+	}) is False
+
+
+def test_validation_analysis_helpers_handle_edge_case_failure_output_patterns_directly():
+	# Lines 88->91 (False branch): E-line with + prefix or empty detail; line 93: FAILED in failure section
+	output_with_plus_detail = {
+		"stdout": (
+			"FAILED tests.py::test_foo - AssertionError\n"
+			"________________________ test_foo ________________________\n"
+			"E   +added line\n"
+			"E   \n"
+			"FAILED tests.py::test_foo - AssertionError\n"
+		),
+		"stderr": "",
+	}
+	details = pytest_failure_details(output_with_plus_detail)
+	assert isinstance(details, list)
+
+	# Line 126: non-dict test_execution returns "unknown"
+	assert pytest_failure_origin(None, "code.py", "tests.py") == "unknown"
+
+	# Line 147: empty failure_details returns False
+	assert pytest_failure_is_semantic_assertion_mismatch({"stdout": "", "stderr": ""}) is False
+
+
+def test_validation_analysis_blocking_issues_cover_test_count_and_fixture_budget_limits_directly():
+	# Line 373: top_level_test_count > max_top_level_test_count
+	assert validation_has_blocking_issues({
+		"test_analysis": {
+			"syntax_ok": True,
+			"top_level_test_count": 5,
+			"max_top_level_test_count": 3,
+		},
+	}) is True
+
+	# Line 378: fixture_count > fixture_budget
+	assert validation_has_blocking_issues({
+		"test_analysis": {
+			"syntax_ok": True,
+			"fixture_count": 4,
+			"fixture_budget": 2,
+		},
+	}) is True
+
+
+def test_collect_test_validation_issues_includes_contract_overreach_warning_directly():
+	# Line 447: contract_overreach_signals in warning_issues
+	validation_issues, warning_issues, pytest_passed = collect_test_validation_issues(
+		{
+			"syntax_ok": True,
+			"contract_overreach_signals": ["threshold assumption detected"],
+		},
+		{"ran": True, "returncode": 0, "summary": "1 passed"},
+		{},
+		lambda diagnostics: "",
+	)
+	assert any("contract overreach signals" in w for w in warning_issues)
+
+
+def test_pytest_contract_overreach_signals_handles_ambiguous_status_labels_directly():
+	# Line 231: extract_status_like_label returns None when 2+ unique status words
+	# Line 245: continue when left is None or left == right
+	test_execution = {
+		"stdout": (
+			"FAILED t.py::test_x - AssertionError: "
+			"assert \'approved or rejected\' == \'blocked\'\n"
+		),
+		"stderr": "",
+	}
+	signals = pytest_contract_overreach_signals(test_execution)
+	assert isinstance(signals, list)
+
+	# left == right: same status on both sides → continue (line 245)
+	test_execution_same = {
+		"stdout": (
+			"FAILED t.py::test_x - AssertionError: "
+			"assert \'approved\' == \'approved\'\n"
+		),
+		"stderr": "",
+	}
+	signals_same = pytest_contract_overreach_signals(test_execution_same)
+	assert signals_same == []
+
+
+def test_skip_task_returns_false_when_task_not_found_directly():
+	# Line 210: task is None → return False
+	import logging
+	skip_project = ProjectState(project_name="Demo", goal="Build demo")
+	result = skip_task(logging.getLogger("test"), skip_project, "nonexistent_task", reason="no longer needed")
+	assert result is False
+
+
+def test_repair_task_ids_for_cycle_covers_decomposition_and_code_dependencies_directly():
+	# Lines 363, 370-373, 385-390: code_decomp and main_decomp not None, code_repair not None
+	dep_project = ProjectState(project_name="Demo", goal="Build demo")
+	code_task = Task(id="code_impl", title="Code", description="Implement", assigned_to="developer")
+	test_task = Task(id="test_impl", title="Test", description="Test", assigned_to="qa_tester")
+	dep_project.tasks.append(code_task)
+	dep_project.tasks.append(test_task)
+	code_decomp = Task(id="code_decomp_1", title="Code Decomp", description="Budget decomp", assigned_to="architect")
+	main_decomp = Task(id="test_decomp_1", title="Test Decomp", description="Budget decomp", assigned_to="architect")
+	dep_project.tasks.append(code_decomp)
+	dep_project.tasks.append(main_decomp)
+
+	def mock_ensure_decomp(proj, task, ctx):
+		if task.id == "code_impl":
+			return code_decomp
+		if task.id == "test_impl":
+			return main_decomp
+		return None
+
+	result = repair_task_ids_for_cycle(
+		dep_project,
+		["test_impl"],
+		test_failure_requires_code_repair=lambda t: True,
+		upstream_code_task_for_test_failure=lambda proj, t: proj.get_task("code_impl"),
+		ensure_budget_decomposition_task=mock_ensure_decomp,
+		execution_agent_name=lambda t: "architect",
+	)
+	assert "code_decomp_1" in result
+	assert any("code_impl__repair" in tid for tid in result)
+	assert any("test_impl__repair" in tid for tid in result)
+	# code_repair_task should have code_decomp in its dependencies (line 371)
+	code_repair = dep_project.get_task("code_impl__repair_0")
+	assert code_repair is not None
+	assert "code_decomp_1" in code_repair.dependencies
+	assert code_repair.repair_context.get("budget_decomposition_plan_task_id") == "code_decomp_1"
+	# main repair task should have code_repair and main_decomp in its dependencies (lines 386, 390)
+	main_repair = dep_project.get_task("test_impl__repair_0")
+	assert main_repair is not None
+	assert "code_impl__repair_0" in main_repair.dependencies
+
+
+def test_configure_repair_attempts_skips_none_tasks_and_covers_decomp_and_planned_ids_directly():
+	# Line 447: task is None → continue
+	# Line 455: decomposition_task is not None → set budget_decomposition_plan_task_id
+	# Line 460: task.id in planned_task_ids → continue
+	conf_project = ProjectState(project_name="Demo", goal="Build demo")
+	code_task2 = Task(id="code_work", title="Code", description="Implement", assigned_to="developer")
+	test_task2 = Task(id="test_work", title="Test", description="Test", assigned_to="qa_tester")
+	conf_project.add_task(code_task2)
+	conf_project.add_task(test_task2)
+	decomp_task = Task(id="code_work_decomp", title="Decomp", description="Budget decomp", assigned_to="architect")
+	conf_project.tasks.append(decomp_task)
+
+	def mock_ensure_decomp2(proj, task, ctx):
+		if task.id == "code_work":
+			return decomp_task
+		return None
+
+	configure_repair_attempts(
+		conf_project,
+		["missing_task", "test_work", "code_work"],
+		{"cycle": 1},
+		test_failure_requires_code_repair=lambda task: task.id == "test_work",
+		upstream_code_task_for_test_failure=lambda proj, task: proj.get_task("code_work"),
+		build_code_repair_context_from_test_failure=lambda code_t, test_t, cycle: {"cycle": cycle.get("cycle"), "source_failure_task_id": test_t.id},
+		ensure_budget_decomposition_task=mock_ensure_decomp2,
+		build_repair_context=lambda task, cycle: {"cycle": cycle.get("cycle")},
+	)
+	# code_work should have been repaired (line 455 covered by decomp return)
+	code_planned = conf_project.get_task("code_work")
+	assert code_planned is not None
+	assert code_planned.repair_context is not None
+	assert code_planned.repair_context.get("budget_decomposition_plan_task_id") == "code_work_decomp"
+	# code_work should NOT have a separate repair (line 460: was added to planned_task_ids)
+	# test_work should have been repaired
+	test_planned = conf_project.get_task("test_work")
+	assert test_planned is not None
+
+
+def test_execute_workflow_task_returns_return_when_cancelled_during_exception_directly():
+	# Line 985: run_task raises, then exit_if_workflow_cancelled returns True
+	cancelled_project = ProjectState(project_name="Demo", goal="Build demo")
+	cancelled_task = Task(id="failing_task", title="Task", description="Task", assigned_to="developer")
+	cancelled_project.add_task(cancelled_task)
+	call_count = [0]
+
+	def cancel_after_exception(proj):
+		call_count[0] += 1
+		return call_count[0] >= 2  # False on first call, True on second
+
+	result = execute_workflow_task(
+		cancelled_project,
+		task=cancelled_task,
+		run_task=lambda task, proj: (_ for _ in ()).throw(RuntimeError("task failed")),
+		exit_if_workflow_cancelled=cancel_after_exception,
+		exit_if_workflow_paused=lambda proj: False,
+		classify_task_failure=lambda task, exc: "unknown",
+		dispatch_task_failure=lambda proj, task, failure_category: "return",
+		emit_workflow_progress=lambda proj, task: None,
+	)
+	assert result == "return"
+	assert call_count[0] == 2
+
+
+def test_execute_workflow_loop_returns_true_on_early_cancel_and_pause_branches_directly():
+	loop_project = ProjectState(project_name="Demo", goal="Build demo")
+
+	# Line 1065: first exit_if_workflow_cancelled returns True immediately
+	assert execute_workflow_loop(
+		loop_project,
+		exit_if_workflow_cancelled=lambda proj: True,
+		exit_if_workflow_paused=lambda proj: False,
+		pending_tasks=lambda: [],
+		finish_workflow_if_no_pending_tasks=lambda proj, pending: False,
+		execute_runnable_frontier=lambda proj: False,
+	) is True
+
+	# Line 1070: first check False, finish returns False, second check True
+	second_cancel_calls = [0]
+	def cancel_on_second(proj):
+		second_cancel_calls[0] += 1
+		return second_cancel_calls[0] >= 2
+	assert execute_workflow_loop(
+		loop_project,
+		exit_if_workflow_cancelled=cancel_on_second,
+		exit_if_workflow_paused=lambda proj: False,
+		pending_tasks=lambda: [Task(id="p", title="P", description="P", assigned_to="architect")],
+		finish_workflow_if_no_pending_tasks=lambda proj, pending: False,
+		execute_runnable_frontier=lambda proj: False,
+	) is True
+	assert second_cancel_calls[0] == 2
+
+	# Line 1072: cancelled=False, paused=True after pending check
+	assert execute_workflow_loop(
+		loop_project,
+		exit_if_workflow_cancelled=lambda proj: False,
+		exit_if_workflow_paused=lambda proj: True,
+		pending_tasks=lambda: [Task(id="p2", title="P2", description="P2", assigned_to="architect")],
+		finish_workflow_if_no_pending_tasks=lambda proj, pending: False,
+		execute_runnable_frontier=lambda proj: False,
+	) is True
+
+
+def test_merge_prior_repair_context_skips_blocks_when_prior_already_in_current_directly():
+	# Branch 1472->1479: prior_instruction already in current → skip instruction merge
+	task_a = Task(
+		id="ta__repair_0",
+		title="Repair A",
+		description="Repair",
+		assigned_to="developer",
+		repair_origin_task_id="ta",
+		repair_context={"instruction": "fix it", "validation_summary": "val_a"},
+	)
+	ctx_a = {"instruction": "fix it and more steps", "validation_summary": "val_a plus extra"}
+	merge_prior_repair_context(task_a, ctx_a)
+	assert "Also preserve" not in ctx_a["instruction"]
+	assert "Prior unresolved repair context:" not in ctx_a.get("validation_summary", "")
+
+	# Branch 1481->exit: prior_validation_summary already in current → skip validation merge
+	task_b = Task(
+		id="tb__repair_0",
+		title="Repair B",
+		description="Repair",
+		assigned_to="developer",
+		repair_origin_task_id="tb",
+		repair_context={"instruction": "prior fix", "validation_summary": "val_b"},
+	)
+	ctx_b = {"instruction": "totally different", "validation_summary": "val_b already included"}
+	merge_prior_repair_context(task_b, ctx_b)
+	# instruction merges (prior not in current)
+	assert "Also preserve" in ctx_b["instruction"]
+	# validation does NOT merge (prior already in current)
+	assert "Prior unresolved repair context:" not in ctx_b["validation_summary"]
+
+	# Branch 1490->1492: prior_instruction empty, prior_validation_summary different
+	task_c = Task(
+		id="tc__repair_0",
+		title="Repair C",
+		description="Repair",
+		assigned_to="developer",
+		repair_origin_task_id="tc",
+		repair_context={"instruction": "", "validation_summary": "different_val"},
+	)
+	ctx_c = {"instruction": "", "validation_summary": "current_summary"}
+	merge_prior_repair_context(task_c, ctx_c)
+	assert "Prior unresolved repair context:" in ctx_c["validation_summary"]
+	assert "Prior repair objective:" not in ctx_c["validation_summary"]

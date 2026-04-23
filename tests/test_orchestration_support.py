@@ -5554,3 +5554,322 @@ def test_quick_win_config_normalize_model_sequence_invalid_type_directly():
 	assert result == ()
 	result2 = KYCortexConfig._normalize_model_sequence({})
 	assert result2 == ()
+
+
+def test_test_ast_analysis_mock_helpers_cover_empty_callable_name_and_keyword_patch_directly():
+	import ast as _ast
+	from kycortex_agents.orchestration.test_ast_analysis import (
+		is_mock_factory_call,
+		is_patch_call,
+		patched_target_name_from_call,
+		supports_mock_assertion_target,
+	)
+
+	# Line 267: callable_name is "" (subscript func)
+	subscript_call = _ast.parse("funcs[\'key\']()", mode="eval").body
+	assert is_mock_factory_call(subscript_call) is False
+
+	# Line 284: is_patch_call with subscript func
+	assert is_patch_call(subscript_call) is False
+
+	# Line 296: patched_target_name_from_call with subscript func → callable_name is ""
+	assert patched_target_name_from_call(subscript_call) is None  # type: ignore[arg-type]
+
+	# Lines 301-305: patch.object with keyword args only
+	kw_patch_call = _ast.parse("patch.object(target=Foo, attribute=\'method\')", mode="eval").body
+	# Sets target_node and attribute_node via keywords; result depends on attribute_chain(Foo)
+	result = patched_target_name_from_call(kw_patch_call)  # type: ignore[arg-type]
+	# "Foo" has a valid attribute_chain; attribute_node is ast.Constant("method")
+	assert result == "Foo.method"
+
+	# Line 313: patch.object with target that has empty attribute_chain
+	# e.g. patch.object(target=funcs[\'key\'], attribute=\'method\')
+	kw_patch_subscript = _ast.parse("patch.object(target=funcs[\'x\'], attribute=\'m\')", mode="eval").body
+	assert patched_target_name_from_call(kw_patch_subscript) is None  # type: ignore[arg-type]
+
+	# Line 373: supports_mock_assertion_target via patched_targets
+	attribute_node = _ast.parse("MyClass.method", mode="eval").body
+	assert supports_mock_assertion_target(attribute_node, set(), {"MyClass.method"}) is True
+
+
+def test_test_ast_analysis_infer_type_covers_empty_and_non_name_func_directly():
+	import ast as _ast
+	from kycortex_agents.orchestration.test_ast_analysis import (
+		infer_call_result_type,
+	)
+	# Line 608: node.func is not Name or Attribute → return None
+	# e.g., func is a subscript: funcs["key"](args)
+	call_node = _ast.parse("funcs[\'key\'](args)", mode="eval").body
+	result = infer_call_result_type(call_node, {}, {}, {})
+	assert result is None
+
+
+def test_test_ast_analysis_invalid_outcome_and_call_negation_directly():
+	import ast as _ast
+	from kycortex_agents.orchestration.test_ast_analysis import (
+		assert_expects_invalid_outcome,
+		invalid_outcome_subject_matches,
+	)
+	# Line 820: ast.UnaryOp(Not, ...) → calls invalid_outcome_subject_matches on operand
+	not_node = _ast.parse("not result", mode="eval").body
+	result = assert_expects_invalid_outcome(not_node, "result", None)
+	assert result is True  # result.id == "result"
+
+	# Line 823: not a Compare → return False
+	name_node = _ast.parse("result", mode="eval").body
+	assert assert_expects_invalid_outcome(name_node, "result", None) is False
+
+
+def test_test_ast_analysis_is_internal_score_state_target_covers_early_returns_directly():
+	from kycortex_agents.orchestration.test_ast_analysis import (
+		is_internal_score_state_target,
+		behavior_contract_explicitly_limits_score_state_to_valid_requests,
+	)
+	# Line 1404: no "score" in target → return False
+	assert is_internal_score_state_target("result.status") is False
+
+	# Line 1406: "score" in target but no "." or "get_" → return False
+	assert is_internal_score_state_target("myscore") is False
+
+	# Line 1427: "risk_score" not in target → return False
+	assert behavior_contract_explicitly_limits_score_state_to_valid_requests(
+		"risk scores are only appended for valid requests",
+		"result.status",
+	) is False
+
+
+def test_test_ast_analysis_exact_len_assertion_covers_right_len_call_directly():
+	import ast as _ast
+	from kycortex_agents.orchestration.test_ast_analysis import exact_len_assertion
+	# Lines 1466-1470: len is on the right side, int constant on left
+	# e.g., "5 == len(results)"
+	compare_node = _ast.parse("5 == len(results)", mode="eval").body
+	result = exact_len_assertion(compare_node)
+	assert result == ("results", 5)
+
+	# Lines 1466-1467: left is not int constant with len on right → return None
+	compare_non_int = _ast.parse("x == len(results)", mode="eval").body
+	assert exact_len_assertion(compare_non_int) is None
+
+
+def test_test_ast_analysis_loop_and_batch_size_covers_continue_and_false_directly():
+	import ast as _ast
+	from kycortex_agents.orchestration.test_ast_analysis import (
+		loop_contains_non_batch_call,
+		visible_repeated_single_call_batch_sizes,
+	)
+	# Line 1480: callable_name is "" or "len" → continue
+	# A simple for loop with only `len(items)` → no non-batch call → return False (1484)
+	loop_node = _ast.parse("for x in items:\n    len(items)", mode="exec").body[0]
+	assert loop_contains_non_batch_call(loop_node) is False  # line 1484
+
+	# Line 1482: callable "batch_validate" has "batch" in name → continue
+	batch_loop_node = _ast.parse("for x in items:\n    batch_validate(x)", mode="exec").body[0]
+	assert loop_contains_non_batch_call(batch_loop_node) is False
+
+	# Lines 1497, 1499: visible_repeated_single_call_batch_sizes
+	# Line 1497: batch_items is None or <= 1 → continue
+	# Use a function with a for loop over a single-item list → skip
+	func_single = _ast.parse(
+		"def test_foo():\n    for x in [1]:\n        process(x)",
+		mode="exec",
+	).body[0]
+	result_single = visible_repeated_single_call_batch_sizes(func_single, {})
+	assert result_single == []
+
+	# Line 1499: batch_items > 1 but loop_contains_non_batch_call is False → continue
+	# A for loop over [1, 2, 3] with only "len" call
+	func_no_noncall = _ast.parse(
+		"def test_foo():\n    for x in [1, 2, 3]:\n        len(x)",
+		mode="exec",
+	).body[0]
+	result_no_noncall = visible_repeated_single_call_batch_sizes(func_no_noncall, {})
+	assert result_no_noncall == []
+
+
+def test_test_ast_analysis_with_assertion_context_covers_non_call_items_directly():
+	import ast as _ast
+	from kycortex_agents.orchestration.test_ast_analysis import (
+		with_uses_pytest_assertion_context,
+	)
+	# Line 1585: context_expr is not a Call (e.g., it's a Name) → continue
+	# Line 1593: return False when no assertion context found
+	# A "with open(path) as f:" → context_expr is a Call, but not "raises"/"warns"
+	no_assertion_with = _ast.parse(
+		"def test_foo():\n    with open(\'f\') as f:\n        pass",
+		mode="exec",
+	).body[0].body[0]
+	assert with_uses_pytest_assertion_context(no_assertion_with) is False  # line 1593
+
+	# "with cm:" where cm is a Name → context_expr is ast.Name → not a Call → line 1585 continue
+	name_with = _ast.parse(
+		"def test_foo():\n    with cm as x:\n        pass",
+		mode="exec",
+	).body[0].body[0]
+	assert with_uses_pytest_assertion_context(name_with) is False
+
+
+def test_test_ast_analysis_mock_assertion_methods_cover_func_value_path_directly():
+	import ast as _ast
+	from kycortex_agents.orchestration.test_ast_analysis import (
+		count_test_assertion_like_checks,
+	)
+	# Line 1616: child.func.attr in MOCK_ASSERTION_METHODS → target_node = child.func.value
+	# "mock_svc" starts with "mock" so supports_mock_assertion_target returns True
+	test_code = """
+def test_foo():
+	mock_svc.assert_called_once_with("arg")
+"""
+	func_node = _ast.parse(test_code.strip(), mode="exec").body[0]
+	count = count_test_assertion_like_checks(func_node)
+	assert count >= 1
+
+
+def test_test_ast_analysis_auto_fix_covers_syntax_error_and_empty_keys_directly():
+	# Lines 1046-1047, 1066-1067: test_content has SyntaxError
+	result_syntax_err = auto_fix_test_type_mismatches(
+		"def test_invalid_syntax(:\n    pass",  # invalid Python
+		"data = request[\"key\"]",  # valid code with dict access
+	)
+	# Syntax error caught → returns original test_content unchanged
+	assert "def test_invalid_syntax" in result_syntax_err
+
+	# Line 1072: dict_keys has param with empty key list → continue
+	result_empty_keys = auto_fix_test_type_mismatches(
+		"def test_foo():\n    pass",
+		"",
+		dict_key_extractor=lambda tree: {"param_name": []},
+	)
+	assert "def test_foo" in result_empty_keys
+
+
+def test_module_ast_analysis_direct_return_and_constructor_match_edge_cases_directly():
+	import ast as _ast
+	# Line 68: direct_return_expression → None when no return
+	func_no_return = _ast.parse("def foo():\n    x = 1", mode="exec").body[0]
+	assert direct_return_expression(func_no_return) is None
+
+	# Line 307: constructor_param_matches_class → False when empty param
+	assert constructor_param_matches_class("   ", "SomeClass") is False
+
+
+def test_module_ast_analysis_extract_type_constraints_covers_edge_cases_directly():
+	import ast as _ast
+	# Lines 937, 940, 943: isinstance calls with wrong arg counts/types
+	code = """
+def foo(x):
+	if isinstance(x):  # len(args) < 2 → line 937
+		pass
+	if isinstance(42, int):  # isinstance_subject_name(42) is "" → line 940
+		pass
+	if isinstance(x, None):  # isinstance_type_names(None const) is [] → line 943
+		pass
+"""
+	func_node = _ast.parse(code.strip(), mode="exec").body[0]
+	result = extract_type_constraints(func_node)
+	assert isinstance(result, dict)
+
+
+def test_module_ast_analysis_extract_class_definition_style_covers_basemodel_and_typeddict_directly():
+	import ast as _ast
+	# Line 1040: class inheriting from BaseModel
+	basemodel_class = _ast.parse("class Foo(BaseModel): pass", mode="exec").body[0]
+	result = extract_class_definition_style(basemodel_class)
+	assert "pydantic BaseModel" in result
+
+	# Line 1042: class inheriting from TypedDict
+	typeddict_class = _ast.parse("class Bar(TypedDict): pass", mode="exec").body[0]
+	result2 = extract_class_definition_style(typeddict_class)
+	assert "TypedDict" in result2
+
+
+def test_module_ast_analysis_function_returns_score_covers_false_return_directly():
+	import ast as _ast
+	# Line 1098: function_returns_score_value → False when no score reference
+	func_no_score = _ast.parse("def foo():\n    return result", mode="exec").body[0]
+	assert function_returns_score_value(func_no_score) is False
+
+
+def test_module_ast_analysis_expand_local_name_aliases_covers_continues_directly():
+	import ast as _ast
+	# Line 1110: non-Assign statement (AugAssign) → continue
+	# Line 1113: Assign with non-Name target → continue
+	code = """
+def foo(x):
+	x += 1
+	a.b = x
+	y = x + 1
+	return y
+"""
+	func_node = _ast.parse(code.strip(), mode="exec").body[0]
+	expression = _ast.parse("x", mode="eval").body
+	result = expand_local_name_aliases(expression, func_node)
+	assert result is not None  # should return substituted expression (y → x+1) or original
+
+
+def test_module_ast_analysis_inline_score_helper_covers_empty_name_and_no_return_directly():
+	import ast as _ast
+	# Line 1136: helper_name is "" → return expression (subscript call)
+	subscript_call = _ast.parse("funcs[\'key\'](x)", mode="eval").body
+	result = inline_score_helper_expression(subscript_call, {})
+	assert result is subscript_call
+
+	# Line 1143: helper has no direct return → return expression
+	helper_func = _ast.parse("def compute(x):\n    x += 1", mode="exec").body[0]
+	call_node = _ast.parse("compute(value)", mode="eval").body
+	result2 = inline_score_helper_expression(call_node, {"compute": helper_func})
+	assert result2 is call_node
+
+	# Line 1156: no replacements (helper has no params → zip is empty, no keywords)
+	helper_no_params = _ast.parse("def compute():\n    return 1 + 2", mode="exec").body[0]
+	call_no_args = _ast.parse("compute()", mode="eval").body
+	result3 = inline_score_helper_expression(call_no_args, {"compute": helper_no_params})
+	assert result3 is call_no_args
+
+
+def test_module_ast_analysis_extract_score_derivation_covers_early_returns_directly():
+	import ast as _ast
+	# Line 1192: score=... but function doesn't return score → return ""
+	code_no_return_score = """
+def calculate(data):
+	score = data["value"] * 0.5
+	return result  # does not return "score"
+"""
+	func_no_return = _ast.parse(code_no_return_score.strip(), mode="exec").body[0]
+	result = extract_score_derivation_rule(func_no_return, {})
+	assert result == ""
+
+	# Line 1206: "score" in name but no return statement
+	code_no_return = """
+def get_score(data):
+	x = 1
+"""
+	func_no_return2 = _ast.parse(code_no_return.strip(), mode="exec").body[0]
+	result2 = extract_score_derivation_rule(func_no_return2, {})
+	assert result2 == ""
+
+
+def test_module_ast_analysis_field_selector_name_and_dataclass_helpers_directly():
+	import ast as _ast
+	# Line 1289: field_selector_name with non-Name non-Attribute → return ""
+	subscript_node = _ast.parse("items[0]", mode="eval").body
+	assert field_selector_name(subscript_node) == ""
+
+	# Line 1298: dataclass_field_has_default → True when field() has positional args
+	field_with_arg = _ast.parse("field(0)", mode="eval").body
+	assert dataclass_field_has_default(field_with_arg) is True
+
+	# Line 1310: dataclass_field_is_init_enabled → True when init keyword value is not a bool const
+	# e.g., field(init=some_var) where some_var is an ast.Name (not bool Constant)
+	field_non_bool_init = _ast.parse("field(init=some_var)", mode="eval").body
+	assert dataclass_field_is_init_enabled(field_non_bool_init) is True
+
+
+def test_module_ast_analysis_inline_score_helper_keyword_handling_directly():
+	import ast as _ast
+	# Lines 1151-1153: keyword with valid arg → added to replacements
+	helper_with_param = _ast.parse("def compute(x):\n    return x * 2", mode="exec").body[0]
+	call_with_kw = _ast.parse("compute(x=value)", mode="eval").body
+	result = inline_score_helper_expression(call_with_kw, {"compute": helper_with_param})
+	# Should inline x → value, giving "value * 2"
+	assert result is not call_with_kw

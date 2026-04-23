@@ -5532,7 +5532,6 @@ def test_quick_win_dependency_manager_edge_cases_directly():
 	from kycortex_agents.agents.dependency_manager import (
 		is_provenance_unsafe_requirement,
 		extract_requirement_name,
-		normalize_requirement_line,
 	)
 	# Line 50: empty/comment line → return False
 	assert is_provenance_unsafe_requirement("") is False
@@ -5608,7 +5607,6 @@ def test_test_ast_analysis_invalid_outcome_and_call_negation_directly():
 	import ast as _ast
 	from kycortex_agents.orchestration.test_ast_analysis import (
 		assert_expects_invalid_outcome,
-		invalid_outcome_subject_matches,
 	)
 	# Line 820: ast.UnaryOp(Not, ...) → calls invalid_outcome_subject_matches on operand
 	not_node = _ast.parse("not result", mode="eval").body

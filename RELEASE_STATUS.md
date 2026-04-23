@@ -25,8 +25,9 @@ This file is the short repository-owned snapshot of the current release posture 
 
 - The current development head is stable with comprehensive test coverage and passing CI.
 - Documentation governance has been applied; all public/internal boundaries are respected.
-- No active release candidate, canary claim, or production-readiness claim is attached to the current head.
-- Repository is in excellent operational state, ready for release candidate review if needed.
+- Release-candidate review is now open for the current `main` head.
+- No canary claim or production-readiness claim is attached to the current head.
+- Repository is in excellent operational state for package-level release review.
 - Historical canary operations and evidence are retained separately and are not summarized here.
 
 ## Repository Release Gate
@@ -37,9 +38,9 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Next Release-Facing Action
 
-1. Finish the documentation and governance reset for the current branch.
-2. Decide whether the current head should enter a new release-candidate review.
-3. If that review is opened, follow [RELEASE.md](RELEASE.md) for package publication and [docs/go-live-policy.md](docs/go-live-policy.md) for any production-readiness claim.
+1. Complete release-candidate review sign-off for the current `main` head.
+2. If approved, follow [RELEASE.md](RELEASE.md) to create and push the next version tag.
+3. Keep go-live claims gated by [docs/go-live-policy.md](docs/go-live-policy.md); release review does not imply production-readiness.
 
 ## Canonical References
 

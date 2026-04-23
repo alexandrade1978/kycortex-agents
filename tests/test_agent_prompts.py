@@ -1,9 +1,17 @@
 import ast
+from typing import cast
 
 import pytest
 
 from kycortex_agents.agents.architect import ArchitectAgent
-from kycortex_agents.agents.code_engineer import CodeEngineerAgent
+from kycortex_agents.agents.code_engineer import (
+    CodeEngineerAgent,
+    _budget_compaction_line_target,
+    _compact_task_constraints_block,
+    _repair_literal_replacement_hint,
+    _repair_quoted_broken_line_hint,
+    _split_repair_task_description,
+)
 from kycortex_agents.agents.code_reviewer import CodeReviewerAgent
 from kycortex_agents.agents.dependency_manager import DependencyManagerAgent
 from kycortex_agents.agents.docs_writer import DocsWriterAgent
@@ -200,6 +208,20 @@ def test_code_engineer_requires_architecture_context(tmp_path):
         agent.execute(agent_input)
 
 
+def test_code_engineer_helper_functions_cover_empty_and_mid_budget_edges():
+    assert _compact_task_constraints_block("") == ""
+    assert _compact_task_constraints_block(
+        "Public contract anchor:\n- Public facade: ComplianceIntakeService"
+    ).startswith("Task constraints summary:\n- Public contract anchor:")
+
+    assert _budget_compaction_line_target(220, 900) == 140
+    assert _budget_compaction_line_target(260, 1800) == 180
+
+    assert _split_repair_task_description("") == ("", "")
+    assert _repair_literal_replacement_hint(cast(str, None)) is None
+    assert _repair_quoted_broken_line_hint(cast(str, None)) == ""
+
+
 def test_code_reviewer_uses_typed_code_context(tmp_path):
     agent = CaptureCodeReviewerAgent(build_config(tmp_path))
     agent_input = AgentInput(
@@ -287,6 +309,80 @@ def test_code_engineer_run_uses_context_module_details(tmp_path):
     assert "Treat the architecture as guidance for required behavior" in agent.last_system_prompt
     assert "For compact single-module service tasks, prefer one cohesive public service surface plus domain models over separate helper-only collaborator classes." in agent.last_system_prompt
     assert "Do not split validation, scoring, audit logging, or batch handling into separate Logger, Scorer, Processor, Manager, or interface classes" in agent.last_system_prompt
+
+
+def test_code_engineer_run_with_input_compacts_task_block_when_low_budget_anchor_present(tmp_path):
+    agent = CaptureCodeEngineerAgent(build_config(tmp_path))
+    agent_input = AgentInput(
+        task_id="code",
+        task_title="Implementation",
+        task_description=(
+            "Write one Python module under 220 lines. "
+            "Use only the standard library. "
+            "Keep a minimal CLI entrypoint in the same file."
+        ),
+        project_name="Demo",
+        project_goal="Build demo",
+        context={
+            "architecture": "Compact layered design.",
+            "provider_max_tokens": 900,
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "task_public_contract_anchor": (
+                "- Public facade: ComplianceIntakeService\n"
+                "- Primary request model: ComplianceRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: ComplianceIntakeService.handle_request(request)"
+            ),
+        },
+    )
+
+    result = agent.run_with_input(agent_input)
+
+    assert result == "ok"
+    assert "Task-level public contract anchor:" in agent.last_user_message
+    assert "Task constraints summary:" in agent.last_user_message
+    assert "- Write one Python module under 220 lines." in agent.last_user_message
+    assert "- Use only the standard library." in agent.last_user_message
+    assert "- Keep a minimal CLI entrypoint in the same file." in agent.last_user_message
+
+
+def test_code_engineer_run_repair_mode_includes_validation_and_compact_task_block(tmp_path):
+    agent = CaptureCodeEngineerAgent(build_config(tmp_path))
+
+    result = agent.run(
+        (
+            "Repair objective:\n"
+            "Repair the generated Python module so the happy path stops failing on a missing attribute. "
+            "Prefer replacing VendorProfile.expired_certifications with VendorProfile.certifications."
+        ),
+        {
+            "architecture": "Layered design with optional collaborators.",
+            "existing_code": "if vendor_profile.expired_certifications:\n    score += 1.0",
+            "existing_tests": "def test_happy_path():\n    assert service.handle_request(request) is not None",
+            "repair_validation_summary": (
+                "Generated test validation:\n"
+                "- Pytest failure details: AttributeError: 'VendorProfile' object has no attribute 'expired_certifications'\n"
+                "- Verdict: FAIL"
+            ),
+            "provider_max_tokens": 900,
+            "module_name": "service_module",
+            "module_filename": "service_module.py",
+            "task_public_contract_anchor": (
+                "- Public facade: VendorOnboardingService\n"
+                "- Primary request model: VendorRequest(request_id, request_type, details, timestamp)\n"
+                "- Required request workflow: VendorOnboardingService.handle_request(request)"
+            ),
+        },
+    )
+
+    assert result == "ok"
+    assert agent.last_user_message.startswith("Target module: service_module.py")
+    assert "Task-level public contract anchor:" in agent.last_user_message
+    assert "Highest-priority repair directives:" in agent.last_user_message
+    assert "Previous validation summary:" in agent.last_user_message
+    assert "Buggy existing code context (edit this broken baseline rather than preserving it unchanged):" in agent.last_user_message
+    assert "Task constraints summary:" in agent.last_user_message
+    assert "- Repair objective:" in agent.last_user_message
 
 
 def test_code_engineer_prioritizes_repair_directives_over_buggy_baseline(tmp_path):

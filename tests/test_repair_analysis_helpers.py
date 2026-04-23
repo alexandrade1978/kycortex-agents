@@ -70,9 +70,9 @@ def test_artifact_category_helpers_and_missing_import_details_cover_edges(monkey
 	monkeypatch.setattr(
 		repair_analysis_module,
 		"failed_artifact_content",
-		lambda output, output_payload, artifact_type: f"artifact:{artifact_type}",
+		lambda output, output_payload, artifact_type: f"artifact:{getattr(artifact_type, 'value', artifact_type)}",
 	)
-	assert failed_artifact_content_for_category("out", "payload", FailureCategory.CODE_VALIDATION.value) == "artifact:ArtifactType.CODE"
+	assert failed_artifact_content_for_category("out", "payload", FailureCategory.CODE_VALIDATION.value) == "artifact:code"
 	assert failed_artifact_content_for_category("out", "payload", "unknown") == "artifact:None"
 
 	assert first_non_import_line_with_name("", "helper_factory") == ""

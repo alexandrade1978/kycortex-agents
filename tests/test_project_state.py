@@ -4928,3 +4928,130 @@ def test_snapshot_does_not_expose_created_at_as_started_at_for_never_started_tas
     assert result.status == TaskStatus.PENDING
     assert result.started_at is None
     assert result.completed_at is None
+
+
+def test_normalized_redacted_reason_non_string_returns_default():
+    from kycortex_agents.memory.project_state import _normalized_redacted_reason
+    # Line 88: non-string input returns default
+    assert _normalized_redacted_reason(42, "fallback") == "fallback"
+    assert _normalized_redacted_reason(None, "fallback") == "fallback"
+    assert _normalized_redacted_reason("   ", "fallback") == "fallback"
+
+
+def test_resume_workflow_not_paused_returns_false(tmp_path):
+    # Line 379: resume_workflow when not paused returns False
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project.resume_workflow()
+    assert result is False
+
+
+def test_replay_workflow_with_running_task_raises(tmp_path):
+    # Line 391: replay_workflow when a task is RUNNING raises ValueError
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.add_task(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+    task = project.get_task("t1")
+    assert task is not None
+    task.status = TaskStatus.RUNNING.value
+    with pytest.raises(ValueError, match="running"):
+        project.replay_workflow()
+
+
+def test_cancel_workflow_already_cancelled_returns_empty(tmp_path):
+    # Line 456: cancel_workflow when already CANCELLED returns []
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.add_task(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+    project.cancel_workflow()
+    result = project.cancel_workflow()
+    assert result == []
+
+
+def test_cancel_workflow_completed_raises(tmp_path):
+    # Line 458: cancel_workflow when COMPLETED raises ValueError
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.add_task(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+    task = project.get_task("t1")
+    assert task is not None
+    task.status = TaskStatus.DONE.value
+    project.mark_workflow_finished("completed", terminal_outcome=WorkflowOutcome.COMPLETED.value)
+    with pytest.raises(ValueError, match="finished"):
+        project.cancel_workflow()
+
+
+def test_create_budget_decomposition_task_existing_updates(tmp_path):
+    # Lines 652-654: _create_budget_decomposition_task updates existing task
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.add_task(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+    repair_context = {"cycle": 1, "reason": "initial"}
+    project._create_budget_decomposition_task("t1", repair_context)
+    repair_context2 = {"cycle": 1, "reason": "updated"}
+    result = project._create_budget_decomposition_task("t1", repair_context2)
+    assert result is not None
+
+
+def test_override_task_missing_returns_false(tmp_path):
+    # Line 1305: override_task when task_id not found returns False
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project.override_task("nonexistent", "output", reason="reason")
+    assert result is False
+
+
+def test_override_task_with_agent_output(tmp_path):
+    # Lines 1311-1312: override_task with AgentOutput instance
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.add_task(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+    output = AgentOutput(summary="done", raw_content="result")
+    result = project.override_task("t1", output, reason="manual")
+    assert result is True
+    task = project.get_task("t1")
+    assert task is not None
+    assert task.output == "result"
+
+
+def test_redacted_execution_event_non_dict_details(tmp_path):
+    # Lines 1572, 1580, 1588, 1596, 1604, 1612, 1620, 1628, 1636, 1644, 1652, 1660,
+    # 1668, 1676, 1687, 1698, 1706, 1714, 1722, 1730, 1738, 1747
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    event_names = [
+        "workflow_paused", "workflow_resumed", "workflow_cancelled", "workflow_replayed",
+        "task_repair_planned", "task_budget_decomposition_created", "task_repair_created",
+        "task_requeued", "task_cancelled", "task_overridden", "task_started",
+        "task_retry_scheduled", "task_repair_started", "task_repair_retry_scheduled",
+        "task_repair_failed", "task_repaired", "workflow_progress",
+        "workflow_repair_cycle_started", "task_completed", "task_failed",
+        "policy_enforcement", "workflow_finished",
+    ]
+    for event_name in event_names:
+        result = project._redacted_execution_event({"event": event_name, "details": "not_a_dict"})
+        assert isinstance(result, dict), f"Failed for event {event_name}"

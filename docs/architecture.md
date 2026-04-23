@@ -1,6 +1,16 @@
 # Architecture Guide
 
-This guide describes the current 1.0-oriented runtime architecture for `kycortex-agents` after the execution, persistence, and public API stabilization work completed in earlier phases.
+This guide describes the current 1.0-oriented runtime architecture for `kycortex-agents` after the execution, persistence, public API stabilization, and product-positioning work.
+
+KYCortex should be understood as an agent orchestration runtime and control plane with a developer framework layer on top. It is not just a prompt orchestration helper library, and it is not presented here as a full standalone "AI operating system". The package owns runtime execution, policy enforcement, validation, repair, and persistence while still exposing framework-style extension points for developers.
+
+## Product Positioning
+
+The repository maps to three complementary layers:
+
+1. **Orchestration runtime / control plane**: executes workflows, applies retry and repair policy, routes provider/model calls, validates outputs, and persists operator-visible state.
+2. **Developer framework / SDK**: exposes the supported Python APIs for custom agents, providers, workflows, configuration, and persistence backends.
+3. **Regulated-workflow foundation**: provides the baseline execution substrate that domain-specific workflow packs, validation suites, and compliance-oriented product surfaces can build on.
 
 ## Runtime Layers
 
@@ -13,7 +23,7 @@ The package is organized into a small set of runtime layers with explicit respon
 5. Provider abstraction: `kycortex_agents.providers` decouples agent execution from provider backends through `BaseLLMProvider` and the built-in OpenAI, Anthropic, and Ollama implementations.
 6. State and persistence: `kycortex_agents.memory.project_state.ProjectState` owns task, decision, artifact, and execution-event state, while `kycortex_agents.memory.state_store` persists that state to JSON or SQLite.
 
-The current head completes the orchestrator-thinning pass: `Orchestrator` no longer owns private deterministic helper methods, and direct regression anchors now target the owner modules when they need to lock internal behavior.
+`Orchestrator` now acts as a thin public control surface and runtime dispatcher, while deterministic internal behavior is owned by modules under `kycortex_agents.orchestration`.
 
 ## Core Domain Contracts
 
@@ -28,7 +38,7 @@ The typed runtime revolves around the public contracts in `kycortex_agents.types
 
 These contracts define the stable boundary between orchestration, agents, persistence, and downstream consumers.
 
-The active boundary split now treats four views explicitly: internal persisted workflow state is the exact resume source of truth, `ProjectSnapshot` is the public normalized read model, `AgentView` is the prompt-facing filtered projection, and `InternalRuntimeTelemetry` is the private operator surface exposed through `ProjectState.internal_runtime_telemetry()`. The local workspace now includes the full three-slice split: the `AgentView` wall is active, the dedicated internal telemetry read path is active, and the old public snapshot, public execution-event, and provider-matrix telemetry mirrors are removed.
+The architecture treats four views explicitly: internal persisted workflow state is the exact resume source of truth, `ProjectSnapshot` is the public normalized read model, `AgentView` is the prompt-facing filtered projection, and `InternalRuntimeTelemetry` is the private operator surface exposed through `ProjectState.internal_runtime_telemetry()`. The public snapshot and execution-event surfaces intentionally avoid exact telemetry mirrors.
 
 ## Workflow Execution Model
 

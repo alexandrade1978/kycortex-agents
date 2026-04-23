@@ -6,15 +6,7 @@ Use it together with `RELEASE.md`.
 
 A tagged package release publishes a versioned artifact. It does not, by itself, declare the framework ready for production customer traffic.
 
-## Current Status
-
-- The public package line remains Alpha.
-- `1.0.13a6` remains the current released alpha baseline.
-- The current development head is in refactor-engineering mode and does not carry an active canary or production-readiness claim.
-- Historical Phase 16 evidence for the published `v1.0.13a6` line remains tracked at `docs/canary-evidence/f99a38d/` as the last published canary evidence set.
-- `1.0.13a5` remains the previous historical published line below the current baseline, and its canary evidence remains the abort record at `docs/canary-evidence/c74e957/` after `release_user_smoke_ollama` triggered a code-validation incident.
-- `1.0.13a4` remains the older historical published line below that baseline, and its canary evidence remains the abort record at `docs/canary-evidence/8bfdc29/`.
-- Production go-live is not declared until the gates in this document are satisfied and the decision is recorded in repository release materials.
+Until the gates below are satisfied and the decision is recorded in repository release materials, the correct posture is package publication readiness only, not production go-live.
 
 ## Scope
 

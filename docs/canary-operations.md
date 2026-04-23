@@ -6,6 +6,8 @@ Use it together with `docs/go-live-policy.md` and `RELEASE.md`.
 
 It does not declare the framework production-ready by itself. It defines the operator procedure and evidence expectations for a controlled canary window.
 
+This is repository-owned operational material, not a primary public product guide.
+
 ## Scope
 
 This guide applies to candidate commits that already satisfy the release-candidate gate in `docs/go-live-policy.md` and are being evaluated for canary readiness.
@@ -40,24 +42,13 @@ Before a canary starts, the operator must have all of the following:
 
 If one person holds multiple roles, that overlap must be recorded in the canary record before traffic starts.
 
-## Current Phase 16 Operating Model
+## Operating Model Note
 
-The current repository state is still a maintainer-operated alpha line rather than a staffed multi-team service.
+The repository may be operated by one or more maintainers depending on the deployment class being evaluated.
 
-Until a broader operating model is documented in repository-controlled material, the default Phase 16 binding for the current deployment class is:
-
-| Role | Current named owner | Contact path |
-| --- | --- | --- |
-| Release owner | Alexandre Andrade | `alex@kycortex.com` |
-| Canary operator | Alexandre Andrade | `alex@kycortex.com` |
-| Support responder | Alexandre Andrade | `alex@kycortex.com` |
-| Security responder | Alexandre Andrade | `alex@kycortex.com` |
-
-Operational reading:
-
-- this is a single-maintainer operating model
-- any canary record must explicitly note that one person may temporarily hold multiple roles
-- before a broader deployment class is claimed, this section should be updated if responsibility is split across additional operators or support paths
+- The named release owner, canary operator, support responder, and security responder must be recorded in the candidate-specific canary record.
+- If one person temporarily holds multiple roles, that overlap must be recorded explicitly in the canary record before traffic starts.
+- Contact paths and staffing details belong in candidate-specific records or local operational material, not in this shared repository guide.
 
 ## Preflight Checklist
 

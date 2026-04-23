@@ -235,8 +235,6 @@ When a workflow does not progress as expected, inspect these areas first:
 
 The persisted `ProjectState`, execution events, and workflow summary usually provide enough information to diagnose the cause.
 
-For empirical full-workflow validation across providers, use `examples/example_provider_matrix_validation.py` with `workflow_failure_policy="continue"`, `workflow_resume_policy="resume_failed"`, and a bounded repair budget. That is the canonical repository-owned path for comparing provider behavior against the same task graph.
-
 ## Production Service Objectives
 
 The workflow runtime is acceptance-first: a workflow only counts as successful when its declared acceptance criteria pass end to end.

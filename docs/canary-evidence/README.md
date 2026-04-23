@@ -4,6 +4,8 @@ This directory is the repository-controlled root for Phase 16 canary evidence bu
 
 Use it together with `../canary-operations.md` and `../go-live-policy.md`.
 
+It is repository-owned operational and historical material, not part of the primary public product documentation surface.
+
 Candidate directories may be opened before traffic starts.
 
 If the canary window has not started yet, every file in the candidate directory must say so explicitly. A pre-canary bundle is allowed, but it does not satisfy the Phase 16 gate until the live window evidence is present.
@@ -22,31 +24,7 @@ Example:
 docs/canary-evidence/be748fa/
 ```
 
-There is no active canary claim on the current development head.
-
-The most recent retained published-line canary evidence bundle is:
-
-```text
-docs/canary-evidence/f99a38d/
-```
-
-The most recent released-candidate abort bundle records the published `v1.0.13a5` window:
-
-```text
-docs/canary-evidence/c74e957/
-```
-
-The previous released-candidate abort bundle records the published `v1.0.13a4` window:
-
-```text
-docs/canary-evidence/8bfdc29/
-```
-
-Historical abort evidence for the disqualified `v1.0.13a3` release remains at:
-
-```text
-docs/canary-evidence/2563383/
-```
+Historical bundles, abort bundles, and active candidate bundles may coexist under this root. This README defines the layout rule only; it does not summarize live or historical canary state.
 
 ## Minimum Contents
 

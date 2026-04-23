@@ -28,6 +28,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - `OpenAIProvider._build_create_kwargs()` now applies `_effective_max_tokens()` instead of the raw config value, ensuring reasoning models receive a sufficient token budget.
 - `OllamaProvider._build_payload()` now forwards runtime token budgets as `options.num_predict`, so `KYCortexConfig.max_tokens` actively bounds completions on Ollama runs.
 - `OllamaProvider` now defaults `think=false` for reasoning-capable Ollama models (Qwen3 family) when `ollama_think` is unset, while preserving explicit user overrides (`ollama_think=True/False`).
+- Repository docs now frame KYCortex primarily as an agent orchestration runtime/control plane for regulated workflows, while retaining framework/SDK language as the developer entry layer.
+- Documentation governance now separates public entry docs, public guides, repository-owned operational canary records, and `.local-docs` working notes with explicit role boundaries.
 - Contract anchor validation now rejects non-dict `details` arguments and includes explicit type-constraint instructions in scenario prompts.
 - QA tester system prompt now includes a type-constraint instruction block derived from the behavior contract, reducing fixture type mismatches across models.
 - Behavior contract parser now strips dict key hints from type names for cleaner extraction.
@@ -46,6 +48,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Empirical Validation
 
+- Consolidated tuned full-workflow provider checkpoint on 2026-04-22: OpenAI, Anthropic, and explicit Ollama `qwen3.5:9b` all completed under `failure_policy=continue`, `resume_policy=resume_failed`, `max_repair_cycles=3`, `max_tokens=3200`, and `ollama_num_ctx=16384` in `output/provider_matrix_validation_2026_04_22_consolidated_tuned`, with `7/7` tasks done and empty repair history on all three lanes.
 - gpt-4o-mini: 5/5 GREEN (v50, with `--max-repair-cycles 3`); 4/5 GREEN (v56, with `--max-repair-cycles 1`).
 - gpt-4.1-mini: 4/5 GREEN (v52, with `--max-repair-cycles 3`); 3/5 GREEN (v57, with `--max-repair-cycles 1`).
 - gpt-5-mini: 5/5 GREEN (v55 and v58, both confirmed); required Fix 9 (token multiplier) and Fix 10 (sys.modules registration).
@@ -55,8 +58,9 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 ### Release Readiness Notes
 
 - The next maintenance entry will be recorded here until it is promoted into a versioned release section.
-- All 1539 tests pass. Ruff and mypy clean.
+- The repository-owned release gate is green again on the current head after the consolidated tuned checkpoint: `ruff`, `mypy`, focused public/package regressions, package validation, release metadata validation, coverage gate (`1696 passed`, `91.59%`), and full pytest (`1696 passed`).
 - Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN → 14/15 GREEN after v1.0.13a8 typed fixture fix → **15/15 GREEN** after v1.0.13a9 additive scoring guidance.
+- The current refactor head now also has a consolidated 3-provider tuned full-workflow checkpoint covering OpenAI, Anthropic, and explicit Ollama `qwen3.5:9b` in one artifact root.
 
 ## 1.0.13a9 - 2026-04-18 (branch-only checkpoint)
 

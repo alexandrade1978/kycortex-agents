@@ -1,26 +1,36 @@
-# KYCortex AI Software House
+# KYCortex
 
-**Multi-agent orchestration framework for building AI products**
+**Open-source agent orchestration runtime and developer framework for regulated workflows**
 
-KYCortex is an open-source framework that simulates an entire AI software house with specialized agents (Architect, Code Engineer, Dependency Manager, Code Reviewer, QA Tester, Docs Writer, Legal Advisor) coordinated by an Orchestrator to build complete software products.
+KYCortex is an open-source agent orchestration runtime and control plane for regulated workflows. It coordinates specialized agents, provider and model routing, validation, repair cycles, and persisted workflow state so teams can build and run auditable AI-assisted delivery flows.
+
+The package still exposes a framework and SDK layer for developers who want to compose custom agents, providers, and workflows on top of the runtime. In practice, KYCortex should be read as a runtime/platform with framework ergonomics rather than as a prompt-only helper library.
 
 ## Features
 
-- **Orchestrator**: Coordinates all agents, manages workflow state, and ensures tasks are completed in order
-- **Multi-provider runtime**: Supports OpenAI, Anthropic, and Ollama through a shared provider interface with preflight backend and model-readiness checks
-- **Workflow resilience**: Supports task dependencies, topological ordering, configurable failure policies, and resumable execution after interruptions or failed runs
-- **Completion-aware validation**: Detects likely truncated code or test outputs, enforces task-level size and shape constraints, and feeds structured repair evidence into follow-up attempts
-- **Deterministic validation context**: Derives API, test, and dependency-manifest checks from generated artifacts so downstream agents can review against concrete signals instead of prompt text alone
-- **Specialized Agents**:
-  - **Architect**: Designs software architecture and module structure
-  - **Code Engineer**: Writes production-quality Python code
-    - **Dependency Manager**: Produces runtime dependency manifests such as requirements.txt for generated projects
-  - **Code Reviewer**: Reviews code for quality, security, and best practices
-  - **QA Tester**: Generates pytest test suites
-  - **Docs Writer**: Creates README, API docs, tutorials
-  - **Legal Advisor**: Handles licensing, compliance, NOTICE files
-- **Project Memory**: Persistent JSON and SQLite state management tracks tasks, decisions, artifacts, and execution history
-- **Extensible**: Easy to add new agents or customize workflows
+- **Orchestration core**: Coordinates agents, manages workflow state, and exposes the public control surface for task and workflow execution.
+- **Provider and model routing**: Supports OpenAI, Anthropic, and Ollama through a shared provider interface with model-readiness checks, primary-provider model candidates, and fallback-provider routing.
+- **Workflow resilience**: Supports task dependencies, topological ordering, configurable failure policies, and resumable execution, plus bounded repair cycles after interruptions or failed runs.
+- **Validation and repair runtime**: Detects likely truncated code or test outputs, enforces task-level size and shape constraints, and feeds structured repair evidence into follow-up attempts.
+- **Deterministic validation context**: Derives API, test, and dependency-manifest checks from generated artifacts so downstream agents can review against concrete runtime signals instead of prompt text alone.
+- **Specialized agents**:
+    - **Architect**: Designs software architecture and module structure.
+    - **Code Engineer**: Writes production-quality Python code.
+    - **Dependency Manager**: Produces runtime dependency manifests such as `requirements.txt` for generated projects.
+    - **Code Reviewer**: Reviews code for quality, security, and best practices.
+    - **QA Tester**: Generates pytest test suites.
+    - **Docs Writer**: Creates README files, API docs, and tutorials.
+    - **Legal Advisor**: Handles licensing, compliance, and NOTICE files.
+- **Persistent project memory**: JSON and SQLite state management tracks tasks, decisions, artifacts, execution history, and provider-call metadata.
+- **Extensible framework layer**: Exposes public configuration, agent, provider, workflow, and persistence seams for custom runtime integrations.
+
+## Product Layers
+
+KYCortex currently spans three complementary layers:
+
+1. **Runtime / control plane**: executes agent workflows, enforces policies, persists state, and captures operator-facing telemetry.
+2. **Developer framework / SDK**: provides the public Python interfaces for configuring agents, providers, workflows, and persistence backends.
+3. **Reference workflow layer**: includes repository workflows such as provider-matrix validation and release-user-smoke that demonstrate how the runtime behaves on regulated-style delivery tasks.
 
 ## Installation
 
@@ -245,6 +255,7 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow guida
 
 Use [RELEASE.md](RELEASE.md) for the repository-owned release validation and tagging procedure.
 Use [RELEASE_STATUS.md](RELEASE_STATUS.md) for the current repository release-state snapshot.
+Historical canary operations and evidence are retained separately from the primary public entry surface and are not summarized here.
 
 ## License
 

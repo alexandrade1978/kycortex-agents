@@ -109,7 +109,7 @@ That snapshot exposes:
 - workflow lifecycle timestamps and overall `WorkflowStatus`
 - durable execution-event audit trails for workflow and task transitions, including public workflow lifecycle details without embedded workflow telemetry
 
-This is the preferred public read model for inspection code because it normalizes legacy payloads and backend-specific storage details. It is not the operator telemetry surface: exact workflow and task runtime telemetry now lives behind `ProjectState.internal_runtime_telemetry()`, and the public `workflow_telemetry`, public `resource_telemetry`, and public execution-event telemetry echoes are already removed from the current local contract.
+This is the preferred public read model for inspection code because it normalizes legacy payloads and backend-specific storage details. It is not the operator telemetry surface: exact workflow and task runtime telemetry lives behind `ProjectState.internal_runtime_telemetry()`, and public `workflow_telemetry`, public `resource_telemetry`, and public execution-event telemetry echoes are not part of the supported public contract.
 
 `ProjectState.internal_runtime_telemetry()` is now the dedicated internal read path for operator and UI telemetry. It preserves exact per-task provider/model identities, usage, durations and latencies, repair-budget counters, and richer provider-health data without widening the public snapshot contract.
 

@@ -118,7 +118,6 @@ Use the Ollama provider when `llm_provider="ollama"`.
 - Required runtime fields: model name plus a valid base URL when the default is overridden
 - Optional runtime field: `ollama_num_ctx` to request an explicit `num_ctx` value for larger-context local workflows
 - Optional runtime field: `ollama_think` to explicitly control Ollama thinking mode (`true` or `false`)
-- Repository-local empirical baseline: `qwen2.5-coder:7b` with `ollama_num_ctx=16384`
 - API style: HTTP POST to the Ollama `/api/generate` endpoint
 - Runtime token budget behavior: `max_tokens` is forwarded as Ollama `options.num_predict`
 - Reasoning-model default: when `ollama_think` is unset, runtime requests disable implicit thinking (`think=false`) for reasoning-capable Qwen3-family models to keep bounded completion behavior under workflow timeouts
@@ -187,9 +186,7 @@ The agent runtime also emits higher-level provider execution metadata such as:
 - provider timeout resolution by backend
 - circuit-breaker state and remaining cooldown
 
-This metadata is later persisted into task state and the internal runtime telemetry read model so retries, repair routing, and audits can reconstruct provider behavior. `ProjectState.internal_runtime_telemetry()` is now the dedicated operator-facing read path for exact provider/model, latency, usage, repair-budget, and provider-health telemetry. Public `workflow_telemetry`, per-task `resource_telemetry`, and provider-matrix `workflow_telemetry` payloads are removed from the current local public contract.
-
-The current empirical maintenance baseline treats cloud-provider full-workflow runs as the primary comparison surface. OpenAI and Anthropic are currently tracked through that matrix, while Ollama validation still depends on a reachable local `/api/tags` endpoint and the configured model being installed on the local machine.
+This metadata is later persisted into task state and the internal runtime telemetry read model so retries, repair routing, and audits can reconstruct provider behavior. `ProjectState.internal_runtime_telemetry()` is the dedicated operator-facing read path for exact provider/model, latency, usage, repair-budget, and provider-health telemetry. Public `workflow_telemetry`, per-task `resource_telemetry`, and provider-matrix `workflow_telemetry` payloads are not part of the supported public contract.
 
 ## Error Handling
 

@@ -455,8 +455,8 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "RELEASE.md" in docs_readme
     assert "RELEASE_STATUS.md" in docs_readme
     assert "## Public API Navigation" in docs_readme
-    assert "## Module Guides" in docs_readme
-    assert "## Examples And Usage" in docs_readme
+    assert "## Public Guides" in docs_readme
+    assert "## Public Examples" in docs_readme
     assert "kycortex_agents/config.py" in docs_readme
     assert "kycortex_agents/orchestrator.py" in docs_readme
     assert "kycortex_agents/types.py" in docs_readme
@@ -473,45 +473,22 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "examples/example_complex_workflow.py" in docs_readme
     assert "examples/example_failure_recovery.py" in docs_readme
     assert "examples/example_snapshot_inspection.py" in docs_readme
-    assert "OpenAI, Anthropic, and Ollama runtime setup" in docs_readme
-    assert "task dependencies, failure policies, and resume policies" in docs_readme
-    assert "JSON and SQLite state files or when debugging resume behavior" in docs_readme
-    assert "custom agents, registries, providers, or persistence backends" in docs_readme
-    assert "debugging configuration failures, blocked workflows, retries, or persisted-state recovery" in docs_readme
-    assert "persisted reload and resume behavior" in docs_readme
-    assert "custom agents plug into the public runtime" in docs_readme
-    assert "supported provider configurations against the same workflow definition" in docs_readme
-    assert "validating workflow behavior locally without calling a live provider" in docs_readme
-    assert "converging DAGs expose merged upstream artifacts and decisions" in docs_readme
-    assert "persisted failed workflows reload and continue" in docs_readme
-    assert "snapshot()` exposes structured task results, artifacts, decisions, and execution events while exact operator-facing observability comes from `ProjectState.internal_runtime_telemetry()`" in docs_readme
-    assert "repository `Makefile` targets and shared `.editorconfig` defaults" in docs_readme
+    # Prose descriptions present in the new concise docs index
+    assert "provider configuration, routing, health checks" in docs_readme
+    assert "dependency scheduling, failure policies, and resume semantics" in docs_readme
+    assert "state persistence backends, resume behavior, and snapshot inspection" in docs_readme
+    assert "supported customization seams for agents, providers, registries" in docs_readme
+    assert "public failure classes, diagnosis, and recovery patterns" in docs_readme
+    assert "same workflow across OpenAI, Anthropic, and Ollama" in docs_readme
+    assert "deterministic local execution without a live provider" in docs_readme
+    assert "converging multi-parent workflow example" in docs_readme
+    assert "persisted failure-and-resume example" in docs_readme
+    assert "internal telemetry read path" in docs_readme
     assert "dual-license overview" in docs_readme
-    assert "contributor-rights policy" in docs_readme
-    assert "repository `.pre-commit-config.yaml` workflow" in docs_readme
-    assert ".github/workflows/ci.yml" in docs_readme
-    assert ".github/workflows/release.yml" in docs_readme
-    assert "repository CI baseline for pull requests, pushes to `main`, or GitHub-hosted lint/type/test verification" in docs_readme
-    assert "scripts/package_check.py" in docs_readme
-    assert "scripts/release_artifact_manifest.py" in docs_readme
-    assert "scripts/release_published_assets_check.py" in docs_readme
-    assert "scripts/release_promotion_summary.py" in docs_readme
-    assert "validating built wheel and source-distribution artifacts, including an already-built staged `dist/` directory, before publishing releases or changing packaging metadata" in docs_readme
-    assert "staged release artifact manifest attached to tagged releases" in docs_readme
-    assert "promotion provenance packet that binds the verified manifest to the release tag and promoted artifacts" in docs_readme
-    assert "published GitHub release for a tag exposes the same attached asset set staged in `dist/`" in docs_readme
-    assert "manual release dry runs or publishing tagged GitHub releases with attached wheel and source-distribution artifacts" in docs_readme
-    assert "release notes" in docs_readme
-    assert "migrating from earlier prototype revisions" in docs_readme
-    assert "local `ruff` and `mypy` validation commands" in docs_readme
-    assert "focused public-API, packaging/docs, and full-suite test commands" in docs_readme
-    assert "repository coverage gate command" in docs_readme
-    assert "scripts/release_check.py" in docs_readme
-    assert "scripts/release_metadata_check.py" in docs_readme
-    assert "release validation pass" in docs_readme
-    assert "post-tag GitHub release workflow results" in docs_readme
-    assert "current release-readiness state" in docs_readme
-    assert "coverage-gate enforcement" in docs_readme
+    assert "go-live-policy.md" in docs_readme
+    assert "canary-operations.md" in docs_readme
+    assert "## Public Entry Points" in docs_readme
+    assert "## Operational And Historical Records" in docs_readme
 
 
 def test_changelog_documents_current_release_scope():
@@ -1064,36 +1041,18 @@ def test_release_status_documents_current_repository_release_readiness_state():
     latest_released_version = "1.0.13a6"
 
     assert "# Release Status" in release_status
-    assert "## Current State" in release_status
+    assert "## Current Snapshot" in release_status
     assert f"Package version in `pyproject.toml`: `{version}`" in release_status
-    assert f"Latest released version: `{latest_released_version}`" in release_status
-    assert "Release tag for this version: `not tagged (development head)`" in release_status
-    assert f"Most recent published release tag: `v{latest_released_version}`" in release_status
-    assert "## Refactor Engineering Suspension" in release_status
-    assert "## Repository Release Gates" in release_status
-    assert "python scripts/release_check.py" in release_status
-    assert "make release-check" in release_status
-    assert "scripts/package_check.py" in release_status
-    assert "python scripts/package_check.py --dist-dir dist" in release_status
-    assert "scripts/release_artifact_manifest.py" in release_status
-    assert "release-artifact-manifest.json" in release_status
-    assert "scripts/release_published_assets_check.py" in release_status
-    assert "scripts/release_promotion_summary.py" in release_status
-    assert "release-promotion-summary.json" in release_status
-    assert "python scripts/release_metadata_check.py" in release_status
-    assert "make release-metadata-check" in release_status
-    assert ".github/workflows/release.yml" in release_status
-    assert "## Latest Validated Release-Readiness Pass" in release_status
-    assert "release metadata check: passing" in release_status
-    assert "## Release Outcome" in release_status
-    assert "COMMERCIAL_LICENSE.md" in release_status
-    assert "commercial licensing path" in release_status
+    assert f"Latest published release: `{latest_released_version}`" in release_status
+    assert f"Latest published tag: `v{latest_released_version}`" in release_status
+    assert "## Current Posture" in release_status
+    assert "## Repository Release Gate" in release_status
+    assert "## Next Release-Facing Action" in release_status
+    assert "## Canonical References" in release_status
     assert "RELEASE.md" in release_status
     assert "CHANGELOG.md" in release_status
     assert "MIGRATION.md" in release_status
-    assert "## Next Maintenance Action" in release_status
-    assert "complete the documentation and version truth reset for the refactor branch" in release_status
-    assert "begin the low-risk orchestrator refactor by extracting deterministic infrastructure and internal interfaces" in release_status
+    assert "docs/go-live-policy.md" in release_status
 
 
 def test_migration_notes_document_public_upgrade_path():
@@ -1263,14 +1222,13 @@ def test_docs_troubleshooting_guide_documents_current_failure_surface():
 
 
 def test_docs_readme_documents_supported_environment_variables():
-    docs_readme_path = Path(__file__).resolve().parents[1] / "docs" / "README.md"
-    docs_readme = docs_readme_path.read_text(encoding="utf-8")
+    # env-var documentation now lives in docs/providers.md (the public provider guide)
+    providers_path = Path(__file__).resolve().parents[1] / "docs" / "providers.md"
+    providers = providers_path.read_text(encoding="utf-8")
 
-    assert "## Environment Variables" in docs_readme
-    assert "OPENAI_API_KEY" in docs_readme
-    assert "ANTHROPIC_API_KEY" in docs_readme
-    assert 'base_url="http://localhost:11434"' in docs_readme
-    assert "These values mirror the provider mappings and defaults exported by `kycortex_agents.config`." in docs_readme
+    assert "OPENAI_API_KEY" in providers
+    assert "ANTHROPIC_API_KEY" in providers
+    assert 'base_url="http://localhost:11434"' in providers
 
 
 def test_requirements_file_uses_package_test_extra_as_single_source_of_truth():

@@ -5389,3 +5389,168 @@ def test_merge_prior_repair_context_skips_blocks_when_prior_already_in_current_d
 	merge_prior_repair_context(task_c, ctx_c)
 	assert "Prior unresolved repair context:" in ctx_c["validation_summary"]
 	assert "Prior repair objective:" not in ctx_c["validation_summary"]
+
+
+def test_quick_win_repair_analysis_covers_empty_required_field_list_and_no_container_directly():
+	# Line 141: required_fields = [] triggers ast.literal_eval path returning list([])
+	result = required_field_list_from_failed_artifact("required_fields = []")
+	assert result == []
+
+	# Line 170: container_name is "" → return None
+	result2 = nested_payload_wrapper_field_validation_details(
+		"ValueError: invalid test_happy_path value",
+		"def test(): pass",  # no request.details/data/metadata/payload
+	)
+	assert result2 is None
+
+	# Lines 614, 626: missing_object_attribute_details with non-string validation_summary
+	assert missing_object_attribute_details(None, "def Foo: pass") is None
+	# Line 626: attribute_name stripped to "" (spaces)
+	result3 = missing_object_attribute_details(
+		"AttributeError: 'Foo' object has no attribute '   '",
+		"class Foo: x: int",
+	)
+	assert result3 is None
+
+
+def test_quick_win_repair_test_analysis_covers_edge_cases_directly():
+	# Line 48: failure_category is "test_validation" but validation_payload is not a dict
+	result_48 = helper_surface_usages_for_test_repair(None, "test_validation")
+	assert result_48 == []
+
+	# Lines 152, 158, 160: failed_test_requires_code_repair edge cases
+	from kycortex_agents.orchestration.validation_analysis import (
+		pytest_failure_origin,
+		pytest_contract_overreach_signals,
+		validation_has_blocking_issues,
+		pytest_failure_is_semantic_assertion_mismatch,
+	)
+	qa_task = Task(id="qa", title="Tests", description="Test", assigned_to="qa_tester")
+	qa_task.last_error_category = "code_validation"  # NOT test_validation → line 152
+	assert failed_test_requires_code_repair(
+		qa_task,
+		{"test_execution": {"ran": True, "returncode": 1}},
+		pytest_failure_origin=pytest_failure_origin,
+		pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+		test_validation_has_blocking_issues=validation_has_blocking_issues,
+		pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+	) is False
+
+	qa_task2 = Task(id="qa2", title="Tests", description="Test", assigned_to="qa_tester")
+	qa_task2.last_error_category = "test_validation"
+	# Line 158: test_execution is not a dict
+	assert failed_test_requires_code_repair(
+		qa_task2,
+		{"test_execution": "not a dict"},
+		pytest_failure_origin=pytest_failure_origin,
+		pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+		test_validation_has_blocking_issues=validation_has_blocking_issues,
+		pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+	) is False
+
+	# Line 160: ran=False → return False
+	assert failed_test_requires_code_repair(
+		qa_task2,
+		{"test_execution": {"ran": False, "returncode": 1}},
+		pytest_failure_origin=pytest_failure_origin,
+		pytest_contract_overreach_signals=pytest_contract_overreach_signals,
+		test_validation_has_blocking_issues=validation_has_blocking_issues,
+		pytest_failure_is_semantic_assertion_mismatch=pytest_failure_is_semantic_assertion_mismatch,
+	) is False
+
+	# Line 213: imported_code_task_for_failed_test with no import_roots → return None
+	project_no_roots = ProjectState(project_name="Demo", goal="Build demo")
+	test_t = Task(id="tests", title="Test", description="Test", assigned_to="qa_tester")
+	result_213 = imported_code_task_for_failed_test(
+		project_no_roots,
+		test_t,
+		failed_artifact_content=lambda task, artifact_type=None: "",
+		python_import_roots=lambda content: set(),
+		default_module_name_for_task=lambda t: t.id,
+	)
+	assert result_213 is None
+
+	# Line 240: upstream_code_task_for_test_failure with a nonexistent dependency id
+	project_dep = ProjectState(project_name="Demo", goal="Build demo")
+	test_dep_task = Task(id="tests2", title="Test", description="Test", assigned_to="qa_tester", dependencies=["nonexistent"])
+	project_dep.add_task(test_dep_task)
+	result_240 = upstream_code_task_for_test_failure(
+		project_dep,
+		test_dep_task,
+		imported_code_task_for_failed_test=lambda proj, task: None,
+	)
+	assert result_240 is None
+
+
+def test_quick_win_context_building_build_agent_view_artifacts_skips_non_string_names_directly():
+	# Line 703: artifact_name is not a string → continue
+	artifacts = [
+		{"metadata": {"task_id": "t1"}, "name": None, "artifact_type": "code", "content": "def foo(): pass", "created_at": "2024-01-01"},
+		{"metadata": {"task_id": "t1"}, "name": "impl.py", "artifact_type": "code", "content": "def foo(): pass", "created_at": "2024-01-01"},
+	]
+	result = build_agent_view_artifacts(
+		artifacts,
+		visible_task_ids={"t1"},
+		direct_dependency_ids={"t1"},
+	)
+	# Only the second artifact has a string name and should appear
+	assert len(result) == 1
+	assert result[0].name == "impl.py"
+
+
+def test_quick_win_providers_base_covers_tuple_and_non_dict_edge_cases_directly():
+	from kycortex_agents.providers.base import sanitize_provider_call_metadata, redact_sensitive_data
+
+	# Line 85: tuple input to redact_sensitive_data
+	result = redact_sensitive_data(("a", "b", "c"))
+	assert isinstance(result, tuple)
+
+	# Line 94: sanitize_provider_call_metadata when dict() result is not a dict
+	# Note: redact_sensitive_data(dict(x)) returns a dict, so we can't easily reach line 94
+	# Instead test sanitize_provider_call_metadata with attempt_history having non-dict entries
+	# Lines 118-119: attempt_history entry that is not a dict
+	pc = {"attempt_history": ["not_a_dict_entry", {"backoff": 0.5}]}
+	sanitized = sanitize_provider_call_metadata(pc)
+	assert "attempt_history" in sanitized
+	attempt_list = sanitized["attempt_history"]
+	assert "not_a_dict_entry" in attempt_list
+
+	# Lines 249-250: fallback_history entry that is not a dict
+	pc2 = {"fallback_history": ["not_a_dict_entry", {"model": "gpt-4"}]}
+	sanitized2 = sanitize_provider_call_metadata(pc2)
+	assert "fallback_history" in sanitized2
+	fallback_list = sanitized2["fallback_history"]
+	assert "not_a_dict_entry" in fallback_list
+
+	# Lines 285-286: provider_health entry that is not a Mapping
+	pc3 = {"provider_health": {"openai": "degraded", "anthropic": {"status": "ok"}}}
+	sanitized3 = sanitize_provider_call_metadata(pc3)
+	assert "provider_health" in sanitized3
+
+
+def test_quick_win_dependency_manager_edge_cases_directly():
+	from kycortex_agents.agents.dependency_manager import (
+		is_provenance_unsafe_requirement,
+		extract_requirement_name,
+		normalize_requirement_line,
+	)
+	# Line 50: empty/comment line → return False
+	assert is_provenance_unsafe_requirement("") is False
+	assert is_provenance_unsafe_requirement("# comment") is False
+
+	# Line 60: empty/comment → return ""
+	assert extract_requirement_name("") == ""
+	assert extract_requirement_name("# comment") == ""
+
+	# Line 64: -e without a space after → normalized_line becomes ""
+	result = extract_requirement_name("-e")
+	assert isinstance(result, str)
+
+
+def test_quick_win_config_normalize_model_sequence_invalid_type_directly():
+	from kycortex_agents.config import KYCortexConfig
+	# Line 160: model_names is not str/list/tuple → return ()
+	result = KYCortexConfig._normalize_model_sequence(42)
+	assert result == ()
+	result2 = KYCortexConfig._normalize_model_sequence({})
+	assert result2 == ()

@@ -2545,3 +2545,82 @@ def test_execute_empirical_validation_workflow_breaks_on_stalled_blocked_loop(mo
         provider_matrix.execute_empirical_validation_workflow(config, project)
 
     assert execute_calls["count"] == 1
+
+
+def test_public_path_label_returns_empty_string_for_empty_path():
+    from kycortex_agents.provider_matrix import _public_path_label
+
+    assert _public_path_label("") == ""
+
+
+def test_harden_private_file_permissions_skips_on_non_posix(tmp_path, monkeypatch):
+    import kycortex_agents.provider_matrix as pm_module
+
+    monkeypatch.setattr(pm_module.os, "name", "nt")
+    from kycortex_agents.provider_matrix import _harden_private_file_permissions
+
+    file_path = tmp_path / "results.json"
+    file_path.write_text("{}", encoding="utf-8")
+    _harden_private_file_permissions(file_path)
+
+
+def test_harden_private_directory_permissions_skips_on_non_posix(tmp_path, monkeypatch):
+    import kycortex_agents.provider_matrix as pm_module
+
+    monkeypatch.setattr(pm_module.os, "name", "nt")
+    from kycortex_agents.provider_matrix import _harden_private_directory_permissions
+
+    _harden_private_directory_permissions(tmp_path)
+
+
+def test_ollama_base_url_raises_when_resolve_returns_empty(monkeypatch):
+    import kycortex_agents.provider_matrix as pm_module
+    from kycortex_agents.provider_matrix import _ollama_base_url
+
+    monkeypatch.setattr(
+        pm_module,
+        "resolve_provider_base_url",
+        lambda provider, override, **kwargs: "",
+    )
+
+    with pytest.raises(ValueError, match="Ollama base_url could not be resolved"):
+        _ollama_base_url(None)
+
+
+def test_can_resume_failed_workflow_returns_true_when_non_repair_failed_task_and_non_failed_outcome(tmp_path):
+    from kycortex_agents.provider_matrix import _can_resume_failed_workflow
+    from kycortex_agents.types import TaskStatus
+
+    project = ProjectState(
+        project_name="Demo",
+        goal="test degraded resume",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(Task(id="code", title="Code", description="Write code", assigned_to="coder"))
+    project.add_task(Task(id="tests", title="Tests", description="Write tests", assigned_to="tester", dependencies=["code"]))
+
+    project.tasks[0].status = TaskStatus.DONE.value
+    project.tasks[1].status = TaskStatus.FAILED.value
+
+    project.terminal_outcome = WorkflowOutcome.DEGRADED.value
+
+    assert _can_resume_failed_workflow(project) is True
+
+def test_can_resume_failed_workflow_returns_false_when_workflow_was_cancelled(tmp_path):
+    from kycortex_agents.provider_matrix import _can_resume_failed_workflow
+    from kycortex_agents.types import TaskStatus
+
+    project = ProjectState(
+        project_name="Demo",
+        goal="test cancelled resume",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(Task(id="code", title="Code", description="Write code", assigned_to="coder"))
+    project.add_task(Task(id="tests", title="Tests", description="Write tests", assigned_to="tester", dependencies=["code"]))
+
+    project.tasks[0].status = TaskStatus.DONE.value
+    project.tasks[1].status = TaskStatus.FAILED.value
+
+    project.terminal_outcome = WorkflowOutcome.CANCELLED.value
+
+    assert _can_resume_failed_workflow(project) is False

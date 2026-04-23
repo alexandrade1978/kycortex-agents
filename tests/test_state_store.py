@@ -370,3 +370,90 @@ def test_json_state_store_serializes_non_json_native_values(tmp_path):
 
     loaded = json.loads(state_path.read_text(encoding="utf-8"))
     assert isinstance(loaded["metadata"]["raw"], str)
+
+
+def test_public_state_path_label_returns_empty_string_for_empty_path():
+    from kycortex_agents.memory.state_store import _public_state_path_label
+
+    assert _public_state_path_label("") == ""
+
+
+def test_harden_state_file_permissions_skips_on_non_posix(monkeypatch):
+    from kycortex_agents.memory.state_store import _harden_state_file_permissions
+
+    monkeypatch.setattr("kycortex_agents.memory.state_store.os.name", "nt")
+    _harden_state_file_permissions("/some/path/state.json")
+
+
+def test_harden_state_file_permissions_raises_state_persistence_error_on_chmod_failure(tmp_path, monkeypatch):
+    from kycortex_agents.memory.state_store import _harden_state_file_permissions
+    import kycortex_agents.memory.state_store as ss_module
+
+    state_path = tmp_path / "state.json"
+    state_path.write_text("{}", encoding="utf-8")
+
+    def fail_chmod(path, mode):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(ss_module.os, "chmod", fail_chmod)
+
+    with pytest.raises(StatePersistenceError, match="Failed to lock down"):
+        _harden_state_file_permissions(str(state_path))
+
+
+def test_harden_state_directory_permissions_skips_on_non_posix(monkeypatch):
+    from kycortex_agents.memory.state_store import _harden_state_directory_permissions
+
+    monkeypatch.setattr("kycortex_agents.memory.state_store.os.name", "nt")
+    _harden_state_directory_permissions("/some/dir")
+
+
+def test_harden_state_directory_permissions_raises_state_persistence_error_on_chmod_failure(tmp_path, monkeypatch):
+    from kycortex_agents.memory.state_store import _harden_state_directory_permissions
+    import kycortex_agents.memory.state_store as ss_module
+
+    def fail_chmod(path, mode):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(ss_module.os, "chmod", fail_chmod)
+
+    with pytest.raises(StatePersistenceError, match="Failed to lock down.*directory"):
+        _harden_state_directory_permissions(str(tmp_path))
+
+
+def test_json_state_store_save_reraises_state_persistence_error_from_chmod_failure(tmp_path, monkeypatch):
+    import os as real_os
+    import kycortex_agents.memory.state_store as ss_module
+
+    real_chmod = real_os.chmod
+
+    def fail_file_chmod(path, mode):
+        if mode == 0o600:
+            raise OSError("permission denied")
+        real_chmod(path, mode)
+
+    monkeypatch.setattr(ss_module.os, "chmod", fail_file_chmod)
+
+    state_path = tmp_path / "state.json"
+    store = JsonStateStore()
+    with pytest.raises(StatePersistenceError, match="Failed to lock down"):
+        store.save(str(state_path), {"key": "value"})
+
+
+def test_sqlite_state_store_save_reraises_state_persistence_error_from_chmod_failure(tmp_path, monkeypatch):
+    import os as real_os
+    import kycortex_agents.memory.state_store as ss_module
+
+    real_chmod = real_os.chmod
+
+    def fail_file_chmod(path, mode):
+        if mode == 0o600:
+            raise OSError("permission denied")
+        real_chmod(path, mode)
+
+    monkeypatch.setattr(ss_module.os, "chmod", fail_file_chmod)
+
+    state_path = tmp_path / "project_state.sqlite"
+    store = SqliteStateStore()
+    with pytest.raises(StatePersistenceError, match="Failed to lock down"):
+        store.save(str(state_path), {"project_name": "Demo"})

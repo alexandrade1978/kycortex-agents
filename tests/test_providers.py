@@ -1605,3 +1605,49 @@ def test_base_provider_generate_super_raises_not_implemented():
 
     with pytest.raises(NotImplementedError):
         SuperCallingProvider().generate("system", "message")
+
+
+def test_openai_provider_is_unsupported_temperature_error_detects_dict_body():
+    from kycortex_agents.providers.openai_provider import _is_unsupported_temperature_error
+
+    direct_param = Exception("unsupported_value")
+    direct_param.body = {"param": "temperature", "code": "unsupported_value"}  # type: ignore[attr-defined]
+    assert _is_unsupported_temperature_error(direct_param) is True
+
+    nested_error = Exception("unsupported_value")
+    nested_error.body = {"error": {"param": "temperature", "code": "unsupported_value"}}  # type: ignore[attr-defined]
+    assert _is_unsupported_temperature_error(nested_error) is True
+
+    wrong_param = Exception("unsupported_value")
+    wrong_param.body = {"error": {"param": "max_tokens", "code": "unsupported_value"}}  # type: ignore[attr-defined]
+    assert _is_unsupported_temperature_error(wrong_param) is False
+
+    non_dict_error = Exception("unrelated")
+    non_dict_error.body = {"error": "not_a_dict_value"}  # type: ignore[attr-defined]
+    assert _is_unsupported_temperature_error(non_dict_error) is False
+
+
+def test_openai_provider_retries_generate_when_temperature_is_unsupported(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    call_count = [0]
+
+    unsupported_exc = Exception("temperature unsupported_value")
+    unsupported_exc.body = {"param": "temperature", "code": "unsupported_value"}  # type: ignore[attr-defined]
+
+    def create(**kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise unsupported_exc
+        return build_response_with_usage("ok")
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+    )
+    provider = OpenAIProvider(config, client=client)
+    assert provider._capabilities.supports_temperature is True
+
+    result = provider.generate("system", "message")
+
+    assert result == "ok"
+    assert call_count[0] == 2
+    assert provider._capabilities.supports_temperature is False

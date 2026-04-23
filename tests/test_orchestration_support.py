@@ -4909,3 +4909,59 @@ def test_validation_analysis_helpers_detect_contract_overreach_directly():
 	assert signals == [
 		"exact status/action label mismatch ('approved' vs 'rejected') suggests an unsupported threshold assumption"
 	]
+
+
+def test_execute_generated_module_import_returns_early_for_empty_code(tmp_path):
+	policy = KYCortexConfig(output_dir=str(tmp_path / "output")).execution_sandbox_policy()
+
+	result = execute_generated_module_import(
+		"generated_module.py",
+		"   \n  \t  ",
+		policy,
+	)
+
+	assert result["ran"] is False
+	assert result["summary"] == "generated code was empty"
+
+
+def test_execute_generated_module_import_omits_isolated_flag_when_sandbox_disabled(tmp_path):
+	from dataclasses import replace as dc_replace
+	from types import SimpleNamespace
+	policy = KYCortexConfig(output_dir=str(tmp_path / "output")).execution_sandbox_policy()
+	policy = dc_replace(policy, enabled=False)
+	captured = {}
+
+	def fake_run(command, **kwargs):
+		captured["command"] = command
+		return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+	result = execute_generated_module_import(
+		"generated_module.py",
+		"def ok():\n    return 1\n",
+		policy,
+		subprocess_run=fake_run,
+	)
+
+	assert result["ran"] is True
+	assert "-I" not in captured["command"]
+
+
+def test_execute_generated_module_import_handles_timeout_expired(tmp_path):
+	import subprocess as subprocess_module
+	from dataclasses import replace as dc_replace
+	policy = KYCortexConfig(output_dir=str(tmp_path / "output")).execution_sandbox_policy()
+	policy = dc_replace(policy, max_wall_clock_seconds=5.0)
+
+	def fake_run(command, **kwargs):
+		raise subprocess_module.TimeoutExpired(command, 5.0)
+
+	result = execute_generated_module_import(
+		"generated_module.py",
+		"import time; time.sleep(999)\n",
+		policy,
+		subprocess_run=fake_run,
+	)
+
+	assert result["ran"] is True
+	assert result["returncode"] == -1
+	assert "timed out after" in result["summary"]

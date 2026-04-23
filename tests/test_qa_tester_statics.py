@@ -122,3 +122,50 @@ class TestQATesterStaticMethods:
         """Test empty string returns False."""
         assert QATesterAgent._is_validation_failure_test_name("") is False
         assert QATesterAgent._is_validation_failure_test_name("   ") is False
+
+    def test_test_function_block_extracts_function(self):
+        """Test extracting a test function block from content."""
+        content = '''def test_example():
+    """Test docstring."""
+    assert True
+
+def test_other():
+    assert False
+'''
+        result = QATesterAgent._test_function_block(content, "test_example")
+        assert "def test_example():" in result
+        assert 'assert True' in result
+        # Should not include the next function
+        assert "test_other" not in result
+
+    def test_test_function_block_with_arguments(self):
+        """Test extracting function with arguments."""
+        content = '''def test_with_args(param1, param2):
+    """Test with parameters."""
+    return param1 + param2
+'''
+        result = QATesterAgent._test_function_block(content, "test_with_args")
+        assert "def test_with_args(param1, param2):" in result
+        assert "return param1 + param2" in result
+
+    def test_test_function_block_function_not_found(self):
+        """Test when function is not found returns empty string."""
+        content = "def test_other():\n    pass"
+        result = QATesterAgent._test_function_block(content, "test_missing")
+        assert result == ""
+
+    def test_test_function_block_empty_content(self):
+        """Test empty content returns empty string."""
+        result = QATesterAgent._test_function_block("", "test_func")
+        assert result == ""
+
+    def test_test_function_block_empty_test_name(self):
+        """Test empty test name returns empty string."""
+        content = "def test_example():\n    pass"
+        result = QATesterAgent._test_function_block(content, "")
+        assert result == ""
+
+    def test_test_function_block_non_string_content(self):
+        """Test non-string content returns empty string."""
+        result = QATesterAgent._test_function_block(123, "test_func")
+        assert result == ""

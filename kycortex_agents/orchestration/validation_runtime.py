@@ -247,7 +247,6 @@ def record_code_validation_metadata(
 def validate_code_output_runtime(
     output: AgentOutput,
     line_budget: Optional[int],
-    line_budget_for_validation: Optional[int],
     requires_cli_entrypoint: bool,
     should_validate_code_content: Any,
     analyze_python_module: Any,
@@ -258,6 +257,7 @@ def validate_code_output_runtime(
     execute_generated_module_import: Any,
     record_output_validation: Any,
     completion_validation_issue: Any,
+    line_budget_for_validation: Optional[int] = None,
 ) -> None:
     code_artifact_content = ""
     for artifact in output.artifacts:
@@ -365,7 +365,6 @@ def validate_code_output_for_task_runtime(
     validate_code_output_runtime(
         output,
         line_budget,
-        effective_line_budget,
         requires_cli_entrypoint,
         should_validate_code_content,
         analyze_python_module,
@@ -394,6 +393,7 @@ def validate_code_output_for_task_runtime(
         if isinstance(current_output.metadata.setdefault("validation", {}), dict)
         else None,
         completion_validation_issue,
+        line_budget_for_validation=effective_line_budget,
     )
 
 
@@ -551,7 +551,6 @@ def validate_test_output_runtime(
     context: dict[str, Any],
     output: AgentOutput,
     line_budget: Optional[int],
-    line_budget_for_validation: Optional[int],
     exact_test_count: Optional[int],
     max_test_count: Optional[int],
     fixture_budget: Optional[int],
@@ -566,6 +565,7 @@ def validate_test_output_runtime(
     record_output_validation: Any,
     completion_validation_issue: Any,
     summarize_output: Any,
+    line_budget_for_validation: Optional[int] = None,
 ) -> None:
     raw_code_analysis = context.get("code_analysis")
     code_analysis = cast(dict[str, Any], raw_code_analysis) if isinstance(raw_code_analysis, dict) else {}
@@ -699,7 +699,6 @@ def validate_test_output_for_task_runtime(
         context,
         output,
         line_budget,
-        effective_line_budget,
         exact_test_count,
         max_test_count,
         fixture_budget,
@@ -727,4 +726,5 @@ def validate_test_output_for_task_runtime(
         else None,
         completion_validation_issue,
         summarize_output,
+        line_budget_for_validation=effective_line_budget,
     )

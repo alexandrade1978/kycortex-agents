@@ -14,7 +14,7 @@ class FakeMetadataProvider(BaseLLMProvider):
         return self.response
 
     def get_last_call_metadata(self) -> dict[str, Any]:
-        return dict(self.metadata)
+        return self.metadata.copy()
 
     def health_check(self) -> dict[str, Any]:
         return {

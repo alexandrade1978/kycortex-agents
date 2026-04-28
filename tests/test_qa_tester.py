@@ -1040,8 +1040,8 @@ class TestPayloadOverrideHelpers:
         )
 
         assert QATesterAgent._sample_literal_for_required_key("policy_id") == '"policy123"'
-        assert QATesterAgent._sample_literal_for_required_key("unknown_key") == '"value"'
-        assert overrides == {"details": '{"policy_id": "policy123", "custom_field": "value"}'}
+        assert QATesterAgent._sample_literal_for_required_key("unknown_key") == '"sample"'
+        assert overrides == {"details": '{"policy_id": "policy123", "custom_field": "sample"}'}
 
     def test_required_payload_argument_overrides_returns_empty_without_payload_like_parameters(self, monkeypatch):
         monkeypatch.setattr(
@@ -1095,13 +1095,13 @@ class TestPayloadOverrideHelpers:
         assert QATesterAgent._validation_failure_omitted_payload_key("implementation_code") == "documents"
         assert QATesterAgent._validation_failure_missing_request_field("implementation_code") == "timestamp"
         assert overrides == {
-            "details": '{"policy_id": "policy123", "risk_score": "value"}',
+            "details": '{"policy_id": "policy123", "risk_score": 1}',
             "timestamp": "fixed_time",
         }
         assert scaffold_name == "invalid_request"
         assert scaffold_line == (
             'invalid_request = type("InvalidRequest", (), {"request_id": "request_id-1", '
-            '"requester": "analyst"})()'
+            '"requester": {"id": "analyst"}})()'
         )
 
 
@@ -3198,7 +3198,7 @@ class TestRepairRequestPayloadLiterals:
         monkeypatch.setattr(
             QATesterAgent,
             "_payload_dict_with_required_keys",
-            lambda *args, **kwargs: ast.parse("{'documents': ['ID']}").body[0].value,
+            lambda *args, **kwargs: ast.parse("{'documents': ['ID']}", mode="eval").body,
         )
 
         content = (

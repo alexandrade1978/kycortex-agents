@@ -3,6 +3,7 @@ import os
 import re
 import stat
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -5668,19 +5669,19 @@ def test_test_ast_analysis_loop_and_batch_size_covers_continue_and_false_directl
 	# Lines 1497, 1499: visible_repeated_single_call_batch_sizes
 	# Line 1497: batch_items is None or <= 1 → continue
 	# Use a function with a for loop over a single-item list → skip
-	func_single = _ast.parse(
+	func_single = cast(_ast.FunctionDef, _ast.parse(
 		"def test_foo():\n    for x in [1]:\n        process(x)",
 		mode="exec",
-	).body[0]
+	).body[0])
 	result_single = visible_repeated_single_call_batch_sizes(func_single, {})
 	assert result_single == []
 
 	# Line 1499: batch_items > 1 but loop_contains_non_batch_call is False → continue
 	# A for loop over [1, 2, 3] with only "len" call
-	func_no_noncall = _ast.parse(
+	func_no_noncall = cast(_ast.FunctionDef, _ast.parse(
 		"def test_foo():\n    for x in [1, 2, 3]:\n        len(x)",
 		mode="exec",
-	).body[0]
+	).body[0])
 	result_no_noncall = visible_repeated_single_call_batch_sizes(func_no_noncall, {})
 	assert result_no_noncall == []
 
@@ -5693,17 +5694,19 @@ def test_test_ast_analysis_with_assertion_context_covers_non_call_items_directly
 	# Line 1585: context_expr is not a Call (e.g., it's a Name) → continue
 	# Line 1593: return False when no assertion context found
 	# A "with open(path) as f:" → context_expr is a Call, but not "raises"/"warns"
-	no_assertion_with = _ast.parse(
+	no_assertion_fn = cast(_ast.FunctionDef, _ast.parse(
 		"def test_foo():\n    with open(\'f\') as f:\n        pass",
 		mode="exec",
-	).body[0].body[0]
+	).body[0])
+	no_assertion_with = cast(_ast.With, no_assertion_fn.body[0])
 	assert with_uses_pytest_assertion_context(no_assertion_with) is False  # line 1593
 
 	# "with cm:" where cm is a Name → context_expr is ast.Name → not a Call → line 1585 continue
-	name_with = _ast.parse(
+	name_with_fn = cast(_ast.FunctionDef, _ast.parse(
 		"def test_foo():\n    with cm as x:\n        pass",
 		mode="exec",
-	).body[0].body[0]
+	).body[0])
+	name_with = cast(_ast.With, name_with_fn.body[0])
 	assert with_uses_pytest_assertion_context(name_with) is False
 
 
@@ -5718,7 +5721,7 @@ def test_test_ast_analysis_mock_assertion_methods_cover_func_value_path_directly
 def test_foo():
 	mock_svc.assert_called_once_with("arg")
 """
-	func_node = _ast.parse(test_code.strip(), mode="exec").body[0]
+	func_node = cast(_ast.FunctionDef, _ast.parse(test_code.strip(), mode="exec").body[0])
 	count = count_test_assertion_like_checks(func_node)
 	assert count >= 1
 
@@ -5744,7 +5747,7 @@ def test_test_ast_analysis_auto_fix_covers_syntax_error_and_empty_keys_directly(
 def test_module_ast_analysis_direct_return_and_constructor_match_edge_cases_directly():
 	import ast as _ast
 	# Line 68: direct_return_expression → None when no return
-	func_no_return = _ast.parse("def foo():\n    x = 1", mode="exec").body[0]
+	func_no_return = cast(_ast.FunctionDef, _ast.parse("def foo():\n    x = 1", mode="exec").body[0])
 	assert direct_return_expression(func_no_return) is None
 
 	# Line 307: constructor_param_matches_class → False when empty param
@@ -5763,7 +5766,7 @@ def foo(x):
 	if isinstance(x, None):  # isinstance_type_names(None const) is [] → line 943
 		pass
 """
-	func_node = _ast.parse(code.strip(), mode="exec").body[0]
+	func_node = cast(_ast.FunctionDef, _ast.parse(code.strip(), mode="exec").body[0])
 	result = extract_type_constraints(func_node)
 	assert isinstance(result, dict)
 
@@ -5771,12 +5774,12 @@ def foo(x):
 def test_module_ast_analysis_extract_class_definition_style_covers_basemodel_and_typeddict_directly():
 	import ast as _ast
 	# Line 1040: class inheriting from BaseModel
-	basemodel_class = _ast.parse("class Foo(BaseModel): pass", mode="exec").body[0]
+	basemodel_class = cast(_ast.ClassDef, _ast.parse("class Foo(BaseModel): pass", mode="exec").body[0])
 	result = extract_class_definition_style(basemodel_class)
 	assert "pydantic BaseModel" in result
 
 	# Line 1042: class inheriting from TypedDict
-	typeddict_class = _ast.parse("class Bar(TypedDict): pass", mode="exec").body[0]
+	typeddict_class = cast(_ast.ClassDef, _ast.parse("class Bar(TypedDict): pass", mode="exec").body[0])
 	result2 = extract_class_definition_style(typeddict_class)
 	assert "TypedDict" in result2
 
@@ -5784,7 +5787,7 @@ def test_module_ast_analysis_extract_class_definition_style_covers_basemodel_and
 def test_module_ast_analysis_function_returns_score_covers_false_return_directly():
 	import ast as _ast
 	# Line 1098: function_returns_score_value → False when no score reference
-	func_no_score = _ast.parse("def foo():\n    return result", mode="exec").body[0]
+	func_no_score = cast(_ast.FunctionDef, _ast.parse("def foo():\n    return result", mode="exec").body[0])
 	assert function_returns_score_value(func_no_score) is False
 
 
@@ -5799,7 +5802,7 @@ def foo(x):
 	y = x + 1
 	return y
 """
-	func_node = _ast.parse(code.strip(), mode="exec").body[0]
+	func_node = cast(_ast.FunctionDef, _ast.parse(code.strip(), mode="exec").body[0])
 	expression = _ast.parse("x", mode="eval").body
 	result = expand_local_name_aliases(expression, func_node)
 	assert result is not None  # should return substituted expression (y → x+1) or original
@@ -5813,13 +5816,13 @@ def test_module_ast_analysis_inline_score_helper_covers_empty_name_and_no_return
 	assert result is subscript_call
 
 	# Line 1143: helper has no direct return → return expression
-	helper_func = _ast.parse("def compute(x):\n    x += 1", mode="exec").body[0]
+	helper_func = cast(_ast.FunctionDef, _ast.parse("def compute(x):\n    x += 1", mode="exec").body[0])
 	call_node = _ast.parse("compute(value)", mode="eval").body
 	result2 = inline_score_helper_expression(call_node, {"compute": helper_func})
 	assert result2 is call_node
 
 	# Line 1156: no replacements (helper has no params → zip is empty, no keywords)
-	helper_no_params = _ast.parse("def compute():\n    return 1 + 2", mode="exec").body[0]
+	helper_no_params = cast(_ast.FunctionDef, _ast.parse("def compute():\n    return 1 + 2", mode="exec").body[0])
 	call_no_args = _ast.parse("compute()", mode="eval").body
 	result3 = inline_score_helper_expression(call_no_args, {"compute": helper_no_params})
 	assert result3 is call_no_args
@@ -5833,7 +5836,7 @@ def calculate(data):
 	score = data["value"] * 0.5
 	return result  # does not return "score"
 """
-	func_no_return = _ast.parse(code_no_return_score.strip(), mode="exec").body[0]
+	func_no_return = cast(_ast.FunctionDef, _ast.parse(code_no_return_score.strip(), mode="exec").body[0])
 	result = extract_score_derivation_rule(func_no_return, {})
 	assert result == ""
 
@@ -5842,7 +5845,7 @@ def calculate(data):
 def get_score(data):
 	x = 1
 """
-	func_no_return2 = _ast.parse(code_no_return.strip(), mode="exec").body[0]
+	func_no_return2 = cast(_ast.FunctionDef, _ast.parse(code_no_return.strip(), mode="exec").body[0])
 	result2 = extract_score_derivation_rule(func_no_return2, {})
 	assert result2 == ""
 
@@ -5866,7 +5869,7 @@ def test_module_ast_analysis_field_selector_name_and_dataclass_helpers_directly(
 def test_module_ast_analysis_inline_score_helper_keyword_handling_directly():
 	import ast as _ast
 	# Lines 1151-1153: keyword with valid arg → added to replacements
-	helper_with_param = _ast.parse("def compute(x):\n    return x * 2", mode="exec").body[0]
+	helper_with_param = cast(_ast.FunctionDef, _ast.parse("def compute(x):\n    return x * 2", mode="exec").body[0])
 	call_with_kw = _ast.parse("compute(x=value)", mode="eval").body
 	result = inline_score_helper_expression(call_with_kw, {"compute": helper_with_param})
 	# Should inline x → value, giving "value * 2"

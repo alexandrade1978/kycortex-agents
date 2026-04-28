@@ -13,9 +13,9 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Coverage Status
 
-- **Test Count**: 1952 tests (up from 1913 baseline)
-- **Coverage**: 96.66% (251 missing statements of 13,813 total)
-- **Coverage Threshold**: 90% minimum (current: 96.66%, exceeds requirement)
+- **Test Count**: 1967 tests (up from 1913 baseline)
+- **Coverage**: 96.53% (271 missing statements of 13,972 total)
+- **Coverage Threshold**: 90% minimum (current: 96.53%, exceeds requirement)
 - **Recent Improvements**: 
   - Fixed case-sensitivity bug in `_summary_has_active_issue()`
   - Added 39 direct unit tests for qa_tester and architect modules
@@ -28,7 +28,7 @@ This file is the short repository-owned snapshot of the current release posture 
 - The provider-matrix empirical workflow helpers now support configurable timeout and prompt-budget envelopes for code/test task constraints while preserving previous defaults.
 - Runtime validation now applies adaptive-policy-aware secondary line-budget tolerance (`compact=0%`, `balanced=5%`, `rich=15%`) while keeping contract mismatch, syntax/import, CLI-entrypoint, and truncation failures as strict blockers.
 - Documentation governance has been applied; all public/internal boundaries are respected.
-- Release-candidate review is now open for the current `main` head.
+- Release-candidate review remains closed pending a fresh clean canonical `15/15` real-world result.
 - No canary claim or production-readiness claim is attached to the current head.
 - Repository is in excellent operational state for package-level release review.
 - Historical canary operations and evidence are retained separately and are not summarized here.
@@ -37,13 +37,23 @@ This file is the short repository-owned snapshot of the current release posture 
 
 - Deterministic repository release validation is currently green on the development head.
 - The latest validated gate includes `ruff`, `mypy`, focused public and package regressions, package validation, release metadata validation, the repository coverage gate, and the full pytest suite.
+- The latest deterministic revalidation checkpoint (`2026-04-25`) remained green on the current `main` head with `1967` tests passing and coverage gate passing at `96.53%`.
+- The latest canonical real-world 5x3 campaign progression:
+  - Ronda 4: 10/15 clean (generated 2026-04-27T03:34:04Z)
+  - Ronda 5: 11/15 clean (generated 2026-04-27T04:25:49Z, +1 improvement)
+  - Candidate review remains closed (need 15/15 to open)
+- Temporary operational adjustment (2026-04-27): Anthropic lane is frozen due external billing outage (`HTTP 402 Payment Required`).
+- **Current operation**: active relaunch uses `openai + ollama` only (`resume_failed`) while Anthropic remains paused.
+- Active operational convergence target during freeze: `10/10` clean in the 2-provider scope.
 - A green deterministic gate does not by itself create a new release or production claim.
 
 ## Next Release-Facing Action
 
-1. Complete release-candidate review sign-off for the current `main` head.
-2. If approved, follow [RELEASE.md](RELEASE.md) to create and push the next version tag.
-3. Keep go-live claims gated by [docs/go-live-policy.md](docs/go-live-policy.md); release review does not imply production-readiness.
+1. While Anthropic is frozen, complete a fresh canonical real-world `10/10` evidence run for active providers (`openai + ollama`, no degraded outcomes).
+2. Re-enable Anthropic once funding is restored and then recover the full canonical `15/15` target.
+3. Only after the applicable active-scope gate is met, reopen release-candidate review sign-off for the current `main` head.
+4. If approved, follow [RELEASE.md](RELEASE.md) to create and push the next version tag.
+5. Keep go-live claims gated by [docs/go-live-policy.md](docs/go-live-policy.md); release review does not imply production-readiness.
 
 ## Canonical References
 

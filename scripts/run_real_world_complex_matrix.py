@@ -14,7 +14,7 @@ import time
 import traceback
 from typing import Any, cast
 
-from kycortex_agents import ProjectState, Task
+from kycortex_agents.memory.project_state import ProjectState, Task
 from kycortex_agents.provider_matrix import (
     DEFAULT_PROVIDER_MODELS,
     build_full_workflow_config,
@@ -1013,7 +1013,12 @@ def _composite_acceptance_evaluation(
     acceptance_policy: str,
     scenario_validation: dict[str, Any],
 ) -> dict[str, Any]:
-    base_evaluation = dict(project.acceptance_evaluation) if isinstance(project.acceptance_evaluation, dict) else {}
+    if isinstance(project.acceptance_evaluation, dict):
+        base_evaluation: dict[str, Any] = {
+            str(key): value for key, value in project.acceptance_evaluation.items()
+        }
+    else:
+        base_evaluation = {}
     base_evaluation.setdefault("policy", acceptance_policy)
     for key, values in _task_acceptance_lists(project, acceptance_policy).items():
         base_evaluation.setdefault(key, values)

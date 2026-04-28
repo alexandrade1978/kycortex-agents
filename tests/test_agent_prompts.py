@@ -3581,9 +3581,9 @@ def test_qa_tester_finalizer_preserves_dict_payloads_when_string_annotation_stil
 
     assert "details='policy_id claim_category claim_amount evidence'" not in finalized
     assert "'policy_id': 'policy-1'" in finalized
-    assert "'claim_category': 'value'" in finalized
+    assert "'claim_category': 'sample'" in finalized
     assert "'claim_amount': 1000" in finalized
-    assert "'evidence': 'photo'" in finalized
+    assert "'evidence': ['photo']" in finalized
 
 
 def test_qa_tester_prefers_request_constructor_signature_over_sorted_outcome_constructor():
@@ -4892,7 +4892,7 @@ def test_qa_tester_locks_exact_missing_required_payload_key_when_optional_scorin
     )
 
     assert result == "ok"
-    assert 'details={"policy_id": "policy123", "claim_type": "collision", "loss_amount": 5000, "evidence": "photo"}, timestamp=fixed_time' in agent.last_user_message
+    assert 'details={"policy_id": "policy123", "claim_type": "collision", "loss_amount": 5000, "evidence": ["photo"]}, timestamp=fixed_time' in agent.last_user_message
     assert "Keep the scaffolded missing-field case on `timestamp` exactly as shown." in agent.last_user_message
     assert "In `test_validation_failure`, keep the scaffolded omission of the required payload key `timestamp` exactly as shown. Do not swap that missing key to a different field." in agent.last_user_message
     assert "Do not swap that missing-field case to optional downstream business keys such as `evidence`." in agent.last_user_message
@@ -4927,7 +4927,7 @@ def test_qa_tester_validation_failure_scaffold_keeps_optional_payload_keys_prese
         "ClaimRequest(request_id, request_type, details, timestamp)",
         code,
     ) == {
-        "details": '{"policy_id": "policy123", "claim_type": "collision", "evidence": "photo"}',
+        "details": '{"policy_id": "policy123", "claim_type": "collision", "evidence": ["photo"]}',
         "timestamp": "fixed_time",
     }
 

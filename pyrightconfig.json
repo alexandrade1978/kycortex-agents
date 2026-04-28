@@ -1,4 +1,6 @@
 {
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
   "include": [
     "kycortex_agents",
     "tests",

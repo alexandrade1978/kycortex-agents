@@ -41,6 +41,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Fixed
 
+- CI hotfix: removed a duplicated `from typing import cast` import in `tests/test_orchestration_support.py` that triggered Ruff `F811` and failed the `Lint and Typecheck` workflow.
 - `examples/example_full_provider_workflow.py` now keeps backward-compatible execution when parser/project builders are monkeypatched with legacy signatures in tests, using safe argument fallbacks and signature-aware budget-kwargs routing.
 - Local Ollama qwen3 remediation (Option B): architect-path timeouts caused by unbounded reasoning output are mitigated in runtime-path workflows by disabling implicit think mode and applying completion token caps through `num_predict`.
 - Fix 3–3c: Enriched behavior contract with dict key hints and concrete dict examples to reduce type-mismatch failures.

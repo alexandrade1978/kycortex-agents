@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 
 from kycortex_agents.agents.base_agent import BaseAgent

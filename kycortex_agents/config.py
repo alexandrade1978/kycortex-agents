@@ -1,5 +1,7 @@
 """Public runtime configuration model and provider environment-variable mappings."""
 
+from __future__ import annotations
+
 import os
 import re
 from dataclasses import dataclass, field, fields, replace

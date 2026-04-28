@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.config import KYCortexConfig
 from kycortex_agents.types import AgentInput, ArtifactType

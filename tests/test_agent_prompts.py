@@ -504,8 +504,10 @@ def test_code_engineer_includes_budget_decomposition_brief(tmp_path):
     assert "Every attribute you read from a dataclass or typed internal model must be declared on that model or derived there consistently." in agent.last_system_prompt
     assert "If repair context cites AttributeError that an object has no attribute X, the rewritten module must either declare and populate X on that object's model or remove every read of .X." in agent.last_system_prompt
     assert "If you define dataclasses or typed record models with defaults, keep every required non-default field before every defaulted field so the module imports cleanly" in agent.last_system_prompt
+    assert "If you use @dataclass anywhere in the module, import dataclass explicitly from dataclasses so the module imports cleanly." in agent.last_system_prompt
     assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_system_prompt
     assert "If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types" in agent.last_system_prompt
+    assert "If import validation reports NameError that dataclass is not defined, add `from dataclasses import dataclass` or remove every @dataclass decorator before finalizing." in agent.last_system_prompt
     assert "If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses" in agent.last_system_prompt
     assert "Keep imports consistent with the names you reference. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime." in agent.last_system_prompt
     assert "If the existing tests or repair summary show a validation-failure sample with a clearly wrong required-field value or type" in agent.last_system_prompt
@@ -699,8 +701,11 @@ def test_code_engineer_budget_compaction_mode_uses_oversized_existing_code_basel
     assert "If you define dataclasses or typed record models with defaults, keep every required field before any defaulted field so the module imports cleanly and does not fail at import time." in agent.last_user_message
     assert "Example: if AuditLog has required action and details fields plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...)." in agent.last_user_message
     assert "If import validation reports a 'non-default argument ... follows default argument' error, inspect every dataclass in the module, including audit, review, and result record types" in agent.last_user_message
+    assert "If you use @dataclass anywhere in the module, import dataclass explicitly from dataclasses so the module imports cleanly." in agent.last_user_message
     assert "if you used dataclasses or typed record models with defaults, every required field appears before any field with a default so the module imports cleanly" in agent.last_user_message
     assert "if import validation cited a 'non-default argument ... follows default argument' error, you inspected every dataclass in the module and reordered each offending class" in agent.last_user_message
+    assert "If import validation reports NameError that dataclass is not defined, add `from dataclasses import dataclass` or remove every @dataclass decorator before you finalize." in agent.last_user_message
+    assert "if you used @dataclass anywhere in the module, you imported dataclass explicitly from dataclasses so the module imports cleanly" in agent.last_user_message
     assert "If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly." in agent.last_user_message
     assert "if you used dataclasses.field(...) or field(default_factory=...) anywhere in the module, you imported field explicitly from dataclasses so the module imports cleanly" in agent.last_user_message
     assert "Keep imports consistent with how you reference names. If you call datetime.datetime.now(), datetime.date.today(), datetime.timedelta(...), or datetime.timezone.utc, import datetime." in agent.last_user_message

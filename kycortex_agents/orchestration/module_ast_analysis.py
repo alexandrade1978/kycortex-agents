@@ -460,14 +460,29 @@ def build_module_run_command(module_filename: str, code_analysis: Dict[str, Any]
 
 def parse_behavior_contract(
     contract: str,
-) -> tuple[Dict[str, list[str]], Dict[str, Dict[str, list[str]]], Dict[str, Dict[str, Any]], set[str], Dict[str, Dict[str, list[str]]]]:
+) -> tuple[
+    Dict[str, list[str]],
+    Dict[str, Dict[str, list[str]]],
+    Dict[str, Dict[str, Any]],
+    set[str],
+    Dict[str, Dict[str, list[str]]],
+    Dict[str, Dict[str, list[str]]],
+]:
     validation_rules: Dict[str, list[str]] = {}
     field_value_rules: Dict[str, Dict[str, list[str]]] = {}
     type_constraint_rules: Dict[str, Dict[str, list[str]]] = {}
+    dict_key_rules: Dict[str, Dict[str, list[str]]] = {}
     batch_rules: Dict[str, Dict[str, Any]] = {}
     sequence_input_functions: set[str] = set()
     if not contract.strip():
-        return validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules
+        return (
+            validation_rules,
+            field_value_rules,
+            batch_rules,
+            sequence_input_functions,
+            type_constraint_rules,
+            dict_key_rules,
+        )
 
     for raw_line in contract.splitlines():
         line = raw_line.strip()
@@ -485,10 +500,16 @@ def parse_behavior_contract(
         if type_constraint_match:
             function_name = type_constraint_match.group(1)
             field_name = type_constraint_match.group(2)
-            raw_types = re.sub(r"\s*\(keys used:[^)]*\)", "", type_constraint_match.group(3))
+            raw_constraint = type_constraint_match.group(3)
+            keys_match = re.search(r"\(keys used: ([^)]*)\)", raw_constraint)
+            raw_types = re.sub(r"\s*\(keys used:[^)]*\)", "", raw_constraint)
             types = [t.strip() for t in raw_types.split(",") if t.strip()]
             if types:
                 type_constraint_rules.setdefault(function_name, {})[field_name] = types
+                if keys_match and any(type_name.lower() == "dict" for type_name in types):
+                    keys = [key.strip() for key in keys_match.group(1).split(",") if key.strip()]
+                    if keys:
+                        dict_key_rules.setdefault(function_name, {})[field_name] = keys
             continue
 
         field_value_match = re.match(r"-\s+(\w+) expects field `([^`]+)` to be one of: (.+)$", line)
@@ -534,7 +555,14 @@ def parse_behavior_contract(
                 "fields": [field.strip() for field in wrapper_match.group(3).split(",") if field.strip()],
             }
 
-    return validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules
+    return (
+        validation_rules,
+        field_value_rules,
+        batch_rules,
+        sequence_input_functions,
+        type_constraint_rules,
+        dict_key_rules,
+    )
 
 
 def build_code_public_api(code_analysis: Dict[str, Any]) -> str:
@@ -787,6 +815,57 @@ def example_from_default(node: ast.expr) -> str | None:
     return None
 
 
+def _example_node_looks_like_placeholder(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value in {"sample", "value", "test"}
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return bool(node.elts) and all(_example_node_looks_like_placeholder(element) for element in node.elts)
+    if isinstance(node, ast.Dict):
+        observed_keys = [
+            key.value
+            for key in node.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        ]
+        return bool(observed_keys) and all(key == "key" for key in observed_keys) and all(
+            _example_node_looks_like_placeholder(value) for value in node.values
+        )
+    return False
+
+
+def _example_source_is_placeholder(example: str) -> bool:
+    try:
+        expression = ast.parse(example, mode="eval")
+    except SyntaxError:
+        return False
+    return _example_node_looks_like_placeholder(expression.body)
+
+
+def _store_example_value(example_map: Dict[str, str], key_name: str, example: str) -> None:
+    existing = example_map.get(key_name)
+    if existing is None or (
+        _example_source_is_placeholder(existing)
+        and not _example_source_is_placeholder(example)
+    ):
+        example_map[key_name] = example
+
+
+def _record_literal_dict_examples(
+    dict_name: str,
+    node: ast.Dict,
+    raw: Dict[str, Dict[str, str]],
+) -> None:
+    example_map = raw.setdefault(dict_name, {})
+    for key_node, value_node in zip(node.keys, node.values):
+        if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+            continue
+        key_name = key_node.value
+        example = example_from_default(value_node)
+        if example is not None:
+            _store_example_value(example_map, key_name, example)
+        if isinstance(value_node, ast.Dict):
+            _record_literal_dict_examples(key_name, value_node, raw)
+
+
 def infer_dict_key_value_examples(tree: ast.AST) -> Dict[str, Dict[str, str]]:
     alias_map: Dict[str, str] = {}
     raw: Dict[str, Dict[str, str]] = {}
@@ -801,30 +880,51 @@ def infer_dict_key_value_examples(tree: ast.AST) -> Dict[str, Dict[str, str]]:
                 and isinstance(value.value, ast.Name)
             ):
                 alias_map[target.id] = value.attr
+            if isinstance(target, ast.Name) and isinstance(value, ast.Dict):
+                _record_literal_dict_examples(target.id, value, raw)
 
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == "get"
-            and isinstance(node.func.value, ast.Name)
             and node.args
             and isinstance(node.args[0], ast.Constant)
             and isinstance(node.args[0].value, str)
         ):
-            var_name = node.func.value.id
+            if isinstance(node.func.value, ast.Name):
+                var_name = node.func.value.id
+            elif isinstance(node.func.value, ast.Attribute):
+                var_name = node.func.value.attr
+            else:
+                var_name = ""
+            if not var_name:
+                continue
             key_name = node.args[0].value
             if len(node.args) >= 2:
                 default_node = node.args[1]
                 example = example_from_default(default_node)
                 if example is not None:
-                    raw.setdefault(var_name, {})[key_name] = example
+                    _store_example_value(raw.setdefault(var_name, {}), key_name, example)
+
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg and isinstance(keyword.value, ast.Dict):
+                    _record_literal_dict_examples(keyword.arg, keyword.value, raw)
+
+        if isinstance(node, ast.Dict):
+            for key_node, value_node in zip(node.keys, node.values):
+                if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                    continue
+                if isinstance(value_node, ast.Dict):
+                    _record_literal_dict_examples(key_node.value, value_node, raw)
 
     merged: Dict[str, Dict[str, str]] = {}
     for var_name, key_examples in raw.items():
         real_name = alias_map.get(var_name, var_name)
         if real_name not in merged:
             merged[real_name] = {}
-        merged[real_name].update(key_examples)
+        for key_name, example in key_examples.items():
+            _store_example_value(merged[real_name], key_name, example)
     return merged
 
 
@@ -845,22 +945,35 @@ def dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
         var_name = ""
         key_value = ""
         if isinstance(node, ast.Subscript):
-            if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
-                var_name = node.value.id
+            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                if isinstance(node.value, ast.Name):
+                    var_name = node.value.id
+                elif isinstance(node.value, ast.Attribute):
+                    var_name = node.value.attr
                 key_value = node.slice.value
-        elif isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.In):
+        elif (
+            isinstance(node, ast.Compare)
+            and len(node.ops) == 1
+            and isinstance(node.ops[0], (ast.In, ast.NotIn))
+        ):
             if (
                 isinstance(node.left, ast.Constant)
                 and isinstance(node.left.value, str)
                 and len(node.comparators) == 1
-                and isinstance(node.comparators[0], ast.Name)
             ):
-                var_name = node.comparators[0].id
+                comparator = node.comparators[0]
+                if isinstance(comparator, ast.Name):
+                    var_name = comparator.id
+                elif isinstance(comparator, ast.Attribute):
+                    var_name = comparator.attr
                 key_value = node.left.value
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if node.func.attr == "get" and isinstance(node.func.value, ast.Name):
+            if node.func.attr == "get":
                 if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-                    var_name = node.func.value.id
+                    if isinstance(node.func.value, ast.Name):
+                        var_name = node.func.value.id
+                    elif isinstance(node.func.value, ast.Attribute):
+                        var_name = node.func.value.attr
                     key_value = node.args[0].value
         if var_name and key_value and key_value not in keys_by_name.get(var_name, []):
             keys_by_name.setdefault(var_name, []).append(key_value)
@@ -875,6 +988,53 @@ def dict_accessed_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
         else:
             merged[real_name] = list(keys)
     return merged
+
+
+def dict_required_keys_from_tree(tree: ast.AST) -> Dict[str, list[str]]:
+    if not isinstance(tree, ast.Module):
+        return {}
+
+    function_map: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    validation_rules: Dict[str, list[str]] = {}
+    required_keys_by_name: Dict[str, list[str]] = {}
+
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            function_nodes = [
+                stmt for stmt in node.body if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            function_nodes = [node]
+        else:
+            continue
+
+        for function_node in function_nodes:
+            function_map[function_node.name] = function_node
+            required_fields = extract_required_fields(function_node)
+            if required_fields:
+                validation_rules[function_node.name] = required_fields
+
+    for function_name, function_node in function_map.items():
+        if function_name in validation_rules:
+            continue
+        propagated_fields = extract_indirect_required_fields(function_node, validation_rules)
+        if propagated_fields:
+            validation_rules[function_name] = propagated_fields
+
+    for function_name, function_node in function_map.items():
+        required_fields = validation_rules.get(function_name) or []
+        if not required_fields:
+            continue
+        constraints = extract_type_constraints(function_node)
+        for field_name, type_names in constraints.items():
+            if "dict" not in type_names:
+                continue
+            existing = required_keys_by_name.setdefault(field_name, [])
+            for required_field in required_fields:
+                if required_field not in existing:
+                    existing.append(required_field)
+
+    return required_keys_by_name
 
 
 def isinstance_subject_name(node: ast.AST) -> str:
@@ -1408,6 +1568,7 @@ __all__ = [
     "dataclass_field_has_default",
     "dataclass_field_is_init_enabled",
     "dict_accessed_keys_from_tree",
+    "dict_required_keys_from_tree",
     "direct_return_expression",
     "example_from_default",
     "collect_isinstance_calls",

@@ -1,0 +1,1687 @@
+{
+  "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
+  "generated_at": "2026-04-29T23:42:40Z",
+  "status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_13_completed_1_degraded_and_access_review_ollama_remaining",
+  "release_candidate_baseline": {
+    "deterministic_repository_gate": {
+      "status": "green",
+      "release_metadata_check": "passed",
+      "release_check": {
+        "tests_passed": 1967,
+        "coverage_percent": 96.25
+      }
+    },
+    "active_scope_empirical_baseline": {
+      "campaign": "real_world_complex_matrix_2026_04_28_full_scope",
+      "providers": [
+        {
+          "provider": "openai",
+          "status": "completed",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "task_status_counts": {
+            "done": 7
+          }
+        },
+        {
+          "provider": "ollama",
+          "status": "completed",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "task_status_counts": {
+            "done": 7
+          }
+        }
+      ],
+      "clean_scope": "10/10 active providers clean",
+      "canonical_artifact": "output/real_world_complex_matrix_2026_04_28_full_scope/campaign_summary.json"
+    },
+    "current_head_full_scope_requalification": {
+      "campaign": "real_world_complex_matrix_2026_04_28_head03d6403_rc_requal",
+      "status": "blocked_before_full_scope_completion",
+      "completed_checkpoints": [
+        {
+          "checkpoint": "kyc_compliance_intake_openai",
+          "completed_at": "2026-04-28T22:19:46.125754+00:00",
+          "provider": "openai",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "result": "repository_owned_pre_canary_checkpoint_clean",
+          "state_file": "output/real_world_complex_matrix_2026_04_28_head03d6403_rc_requal/kyc_compliance_intake/openai/project_state.json"
+        }
+      ],
+      "blocked_checkpoint": {
+        "checkpoint": "kyc_compliance_intake_anthropic",
+        "completed_at": "2026-04-28T22:19:47.104179+00:00",
+        "provider": "anthropic",
+        "status": "execution_error",
+        "phase": "failed",
+        "terminal_outcome": "failed",
+        "failure_category": "workflow_blocked",
+        "blocking_reason": "Architect: Anthropic provider rejected the model API request",
+        "repair_cycles_exhausted": 3,
+        "run_result": "output/real_world_complex_matrix_2026_04_28_head03d6403_rc_requal/kyc_compliance_intake/anthropic/run_result.json"
+      }
+    },
+    "current_head_post_thaw_requalification": {
+      "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed",
+      "status": "post_thaw_root_contaminated_by_pre_fix_resume_attempts_runner_fix_validated",
+      "completed_checkpoints": [
+        {
+          "checkpoint": "kyc_compliance_intake_openai_post_thaw",
+          "completed_at": "2026-04-28T23:10:34.777095+00:00",
+          "provider": "openai",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "result": "repository_owned_post_thaw_checkpoint_clean",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/openai/project_state.json"
+        },
+        {
+          "checkpoint": "kyc_compliance_intake_anthropic_post_thaw",
+          "completed_at": "2026-04-28T23:12:21.241656+00:00",
+          "provider": "anthropic",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "result": "repository_owned_post_thaw_checkpoint_clean",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/anthropic/project_state.json"
+        },
+        {
+          "checkpoint": "kyc_compliance_intake_ollama_post_thaw_terminal_failure",
+          "completed_at": "2026-04-29T00:30:39.817274+00:00",
+          "provider": "ollama",
+          "phase": "failed",
+          "terminal_outcome": "failed",
+          "result": "repository_owned_post_thaw_blocker_failed_after_exhausted_repairs",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json"
+        },
+        {
+          "checkpoint": "insurance_claim_triage_openai_post_thaw",
+          "completed_at": "2026-04-29T00:32:11.442083+00:00",
+          "provider": "openai",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "result": "repository_owned_post_thaw_checkpoint_clean",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/openai/project_state.json"
+        },
+        {
+          "checkpoint": "insurance_claim_triage_anthropic_post_thaw",
+          "completed_at": "2026-04-29T00:33:43.800909+00:00",
+          "provider": "anthropic",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "result": "repository_owned_post_thaw_checkpoint_clean",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/anthropic/project_state.json"
+        },
+        {
+          "checkpoint": "insurance_claim_triage_ollama_post_thaw",
+          "completed_at": "2026-04-29T01:17:32.154579+00:00",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "result": "repository_owned_post_thaw_checkpoint_clean",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json"
+        },
+        {
+          "checkpoint": "vendor_onboarding_risk_openai_post_thaw",
+          "completed_at": "2026-04-29T01:18:50.552353+00:00",
+          "provider": "openai",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "result": "repository_owned_post_thaw_checkpoint_clean",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/openai/project_state.json"
+        },
+        {
+          "checkpoint": "vendor_onboarding_risk_anthropic_post_thaw",
+          "completed_at": "2026-04-29T01:21:27.177170+00:00",
+          "provider": "anthropic",
+          "phase": "completed",
+          "terminal_outcome": "degraded",
+          "result": "repository_owned_post_thaw_degraded_completion",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/anthropic/project_state.json"
+        }
+      ],
+      "latest_persisted_blocker": {
+        "checkpoint": "kyc_compliance_intake_ollama_post_thaw_terminal_failure",
+        "provider": "ollama",
+        "result": "tests_repair_3_failed_after_exhausted_repairs",
+        "phase": "failed",
+        "terminal_outcome": "failed",
+        "updated_at": "2026-04-29T00:30:39.817274+00:00",
+        "repair_cycle_count": 3,
+        "failed_task_id": "tests__repair_3",
+        "last_error": "Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.10s",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json"
+      },
+      "contamination_notes": {
+        "whole_root_resume_overwrite": {
+          "checkpoint": "kyc_compliance_intake_openai_pre_fix_resume_overwrite",
+          "provider": "openai",
+          "updated_at": "2026-04-29T02:20:08.729748+00:00",
+          "result": "contaminated_clean_state_rewritten_by_whole_root_resume"
+        },
+        "scenario_scoped_resume_overwrite": {
+          "checkpoint": "vendor_onboarding_risk_ollama_pre_fix_resume_overwrite",
+          "provider": "ollama",
+          "updated_at": "2026-04-29T02:25:22.749396+00:00",
+          "historical_failed_checkpoint_updated_at": "2026-04-29T02:13:54.273606+00:00",
+          "result": "contaminated_failed_state_rewritten_by_scenario_scoped_resume"
+        },
+        "runner_fix_validated": {
+          "status": "validated_locally",
+          "behavior": "resume mode now reuses cached terminal run_result.json files and loads persisted failed_or_interrupted project_state.json state",
+          "validation_commands": [
+            "/home/tupira/Dados/projectos/kycortex_agents/.venv/bin/python -m pytest tests/test_real_world_complex_matrix.py -k \"reuses_cached_result_for_terminal_state or loads_existing_failed_state_when_resuming\"",
+            "/home/tupira/Dados/projectos/kycortex_agents/.venv/bin/python -m pytest tests/test_real_world_complex_matrix.py -k run_scenario_provider"
+          ]
+        }
+      },
+      "active_checkpoint": {
+        "checkpoint": "vendor_onboarding_risk_ollama_pre_fix_resume_overwrite",
+        "provider": "ollama",
+        "result": "contaminated_fresh_rebuild_before_runner_fix",
+        "phase": "execution",
+        "terminal_outcome": null,
+        "updated_at": "2026-04-29T02:25:22.749396+00:00",
+        "task_status_counts": {
+          "done": 1,
+          "pending": 6
+        },
+        "repair_cycle_count": 0,
+        "failed_task_id": null,
+        "repair_task_id": null,
+        "active_repair_task_ids": [],
+        "last_error": null,
+        "recovered_error": null,
+        "terminal_evidence": [],
+        "operational_note": "This state reflects an unsafe pre-fix scenario-scoped relaunch that rebuilt vendor_onboarding_risk/ollama from scratch. The runner is now fixed for future resume-mode launches, but the historical failed state at 2026-04-29T02:13:54.273606+00:00 has already been lost from disk and no workflow writer is active on this root.",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/ollama/project_state.json"
+      },
+      "clean_postfix_vendor_recovery": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_postfix_recovery",
+        "status": "terminal_failure_after_repeated_dataclass_failures_on_old_runtime_image",
+        "latest_checkpoint": {
+          "checkpoint": "vendor_onboarding_risk_ollama_postfix_recovery_code_repair_3_terminal_failure",
+          "provider": "ollama",
+          "phase": "failed",
+          "terminal_outcome": "failed",
+          "failure_category": "workflow_blocked",
+          "updated_at": "2026-04-29T03:09:34.506579+00:00",
+          "task_status_counts": {
+            "done": 1,
+            "failed": 4,
+            "pending": 5
+          },
+          "repair_cycle_count": 3,
+          "failed_task_id": "code__repair_3",
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": "Generated code validation failed: module import failed: NameError: name 'dataclass' is not defined",
+          "completed_task_id": "arch",
+          "completed_task_at": "2026-04-29T02:41:31.243502+00:00",
+          "terminal_evidence": [
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[WARNING] dependent_tasks_skipped",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked",
+            "[1/1] scenario=vendor_onboarding_risk provider=ollama status=execution_error phase=failed terminal=failed"
+          ],
+          "operational_note": "The clean post-fix root terminalized after code, code__repair_1, code__repair_2, and code__repair_3 all repeated the same missing-dataclass import error. The writer process started before the local validation-runtime autofix landed, so this closed chain remains old-runtime evidence only and should be compared against a fresh rerun under the current codebase.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_postfix_recovery/vendor_onboarding_risk/ollama/project_state.json"
+        }
+      },
+      "fresh_runtime_autofix_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_runtime_autofix_rerun",
+        "status": "terminal_degraded_productivity_validation_failure_after_full_task_completion",
+        "latest_checkpoint": {
+          "checkpoint": "vendor_onboarding_risk_ollama_runtime_autofix_rerun_terminal_degraded",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "degraded",
+          "failure_category": "scenario_validation",
+          "updated_at": "2026-04-29T03:47:18.018534+00:00",
+          "task_status_counts": {
+            "done": 7
+          },
+          "repair_cycle_count": 0,
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": "Generated code did not explicitly reject a malformed request through handle_request(...).",
+          "completed_task_id": "legal",
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[1/1] scenario=vendor_onboarding_risk provider=ollama status=validation_error phase=completed terminal=degraded"
+          ],
+          "operational_note": "The fresh runtime-autofix rerun completed all seven canonical tasks with no repair history. Persisted artifacts include the normalized `code_implementation.py` plus downstream `tests_tests.py`, `review_review.md`, `docs_documentation.md`, and `legal_legal_analysis.md`, so this fresh process has empirically avoided the old missing-import code-validation failure family. The root still terminalized degraded because scenario validation rejected malformed-request handling and other productivity checks.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_runtime_autofix_rerun/vendor_onboarding_risk/ollama/project_state.json"
+        }
+      },
+      "fresh_malformed_request_prompt_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_malformed_request_prompt_rerun",
+        "status": "terminal_completed_on_old_validator_current_probe_rejects_permissive_generated_tests",
+        "latest_checkpoint": {
+          "checkpoint": "vendor_onboarding_risk_ollama_malformed_request_prompt_rerun_terminal_completed",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T04:30:25.694403+00:00",
+          "task_status_counts": {
+            "done": 7
+          },
+          "repair_cycle_count": 0,
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": "legal",
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[1/1] scenario=vendor_onboarding_risk provider=ollama status=completed phase=completed terminal=completed"
+          ],
+          "operational_note": "This fresh rerun uses additional malformed-request prompt/tests hardening and now converged through all seven canonical tasks with no repair lane. The persisted `code_implementation.py` explicitly raises `ValueError(\"Invalid request details\")` for malformed non-dict `details`, but the persisted `tests_tests.py` artifact still uses `details=None` plus a permissive `try/except ValueError` fallback. Because this process started before the latest generated-tests validator hardening landed, the root closed `completed` under the older validator image only.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_malformed_request_prompt_rerun/vendor_onboarding_risk/ollama/project_state.json"
+        },
+        "current_validator_probe": {
+          "observed_at": "2026-04-29T04:31:40Z",
+          "validated": false,
+          "error": "Generated tests did not explicitly assert ValueError for malformed non-dict details.",
+          "checks": {
+            "audit_signal_present": false,
+            "batch_processing_supported": false,
+            "generated_tests_assert_invalid_request_value_error": false,
+            "invalid_request_handled": true,
+            "invalid_request_rejected": true,
+            "request_signature_supported": true,
+            "risk_signal_observable": false,
+            "service_constructor_supported": true,
+            "stdlib_only": true,
+            "syntax_valid": true,
+            "valid_request_accepted": true,
+            "validation_surface_supported": true
+          }
+        }
+      },
+      "fresh_generated_test_validator_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_generated_test_validator_rerun",
+        "status": "terminal_degraded_matches_current_validator_probe",
+        "latest_checkpoint": {
+          "checkpoint": "vendor_onboarding_risk_ollama_generated_test_validator_rerun_terminal_degraded",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "degraded",
+          "updated_at": "2026-04-29T05:11:21.308805+00:00",
+          "task_status_counts": {
+            "done": 7
+          },
+          "repair_cycle_count": 0,
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": "Generated tests did not explicitly assert ValueError for malformed non-dict details.",
+          "completed_task_id": "legal",
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[1/1] scenario=vendor_onboarding_risk provider=ollama status=validation_error phase=completed terminal=degraded"
+          ],
+          "operational_note": "This fresh rerun starts after the generated-tests validator hardening landed locally and still converged through all seven canonical tasks with no repair lane. The terminal workflow result then degraded exactly as the earlier direct validator probe predicted because `tests_tests.py` remained on the permissive invalid-request pattern instead of explicitly asserting `ValueError` for malformed non-dict `details`.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_generated_test_validator_rerun/vendor_onboarding_risk/ollama/project_state.json"
+        },
+        "current_validator_probe": {
+          "observed_at": "2026-04-29T05:11:21Z",
+          "validated": false,
+          "error": "Generated tests did not explicitly assert ValueError for malformed non-dict details.",
+          "checks": {
+            "audit_signal_present": false,
+            "batch_processing_supported": false,
+            "generated_tests_assert_invalid_request_value_error": false,
+            "invalid_request_handled": true,
+            "invalid_request_rejected": true,
+            "request_signature_supported": true,
+            "risk_signal_observable": false,
+            "service_constructor_supported": true,
+            "stdlib_only": true,
+            "syntax_valid": true,
+            "valid_request_accepted": true,
+            "validation_surface_supported": true
+          }
+        }
+      },
+      "fresh_qa_tester_value_error_preservation_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_qa_tester_value_error_preservation_rerun",
+        "status": "terminal_completed_matches_current_validator_probe",
+        "latest_checkpoint": {
+          "checkpoint": "vendor_onboarding_risk_ollama_qa_tester_value_error_preservation_rerun_terminal_completed",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T05:52:11.957915+00:00",
+          "task_status_counts": {
+            "done": 7
+          },
+          "repair_cycle_count": 0,
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": "legal",
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[1/1] scenario=vendor_onboarding_risk provider=ollama model=qwen2.5-coder:14b available=True",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[1/1] scenario=vendor_onboarding_risk provider=ollama status=completed phase=completed terminal=completed"
+          ],
+          "operational_note": "This fresh rerun starts after the QA tester post-processor was fixed to preserve explicit malformed-request `pytest.raises(ValueError)` assertions when the implementation already raises `ValueError`. The terminal workflow result then completed cleanly with all seven canonical tasks done, no repair lane opened, and a fully green scenario-validation block, exactly matching the earlier direct validator probe.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_qa_tester_value_error_preservation_rerun/vendor_onboarding_risk/ollama/project_state.json"
+        },
+        "local_fix_validation": {
+          "qa_tester_regression_slice": "passed",
+          "qa_tester_regression_command": "/home/tupira/Dados/projectos/kycortex_agents/.venv/bin/python -m pytest tests/test_qa_tester.py -k \"validation_failure_preserves_pytest_raises or validation_failure_rewrites_pytest_raises or validation_failure_drops_stale_details_key_deletion_when_details_becomes_none\"",
+          "real_implementation_probe": "explicit malformed-request ValueError assertion preserved"
+        },
+        "current_validator_probe": {
+          "observed_at": "2026-04-29T05:43:03Z",
+          "validated": true,
+          "error": null,
+          "checks": {
+            "audit_signal_present": true,
+            "batch_processing_supported": true,
+            "generated_tests_assert_invalid_request_value_error": true,
+            "invalid_request_handled": true,
+            "invalid_request_rejected": true,
+            "request_signature_supported": true,
+            "risk_signal_observable": true,
+            "service_constructor_supported": true,
+            "stdlib_only": true,
+            "syntax_valid": true,
+            "valid_request_accepted": true,
+            "validation_surface_supported": true
+          }
+        }
+      },
+      "fresh_full_scope_post_qa_tester_fix_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix",
+        "status": "fresh_canonical_rerun_terminalized_14_of_15_clean_with_access_review_audit_ollama_code_validation_blocker_local_typing_import_autofix_validated",
+        "provider_preflight": {
+          "observed_at": "2026-04-29T09:47:42Z",
+          "providers": {
+            "openai": "healthy",
+            "anthropic": "healthy",
+            "ollama": "healthy"
+          }
+        },
+        "completed_provider_checkpoints": {
+          "openai": {
+            "updated_at": "2026-04-29T11:02:32.767195+00:00",
+            "terminal_outcome": "completed",
+            "repair_cycle_count": 0,
+            "task_status_counts": {
+              "done": 7
+            },
+            "run_result_status": "completed",
+            "acceptance_reason": "all_evaluated_tasks_done"
+          },
+          "anthropic": {
+            "updated_at": "2026-04-29T11:04:14.614927+00:00",
+            "terminal_outcome": "completed",
+            "repair_cycle_count": 0,
+            "task_status_counts": {
+              "done": 7
+            },
+            "run_result_status": "completed",
+            "acceptance_reason": "all_evaluated_tasks_done"
+          },
+          "ollama": {
+            "updated_at": "2026-04-29T11:01:02.223726+00:00",
+            "terminal_outcome": "completed",
+            "repair_cycle_count": 0,
+            "task_status_counts": {
+              "done": 7
+            },
+            "run_result_status": "completed",
+            "acceptance_reason": "all_evaluated_tasks_done"
+          }
+        },
+        "latest_checkpoint": {
+          "checkpoint": "access_review_audit_ollama_full_scope_post_qa_tester_fix_terminal_failure",
+          "provider": "ollama",
+          "phase": "failed",
+          "terminal_outcome": "failed",
+          "updated_at": "2026-04-29T11:19:33.647158+00:00",
+          "repair_cycle_count": 3,
+          "failed_task_id": "code__repair_3",
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": "Generated code validation failed: module import failed: NameError: name 'List' is not defined. Did you mean: 'list'?",
+          "completed_task_id": "arch",
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[12/15] scenario=returns_abuse_screening provider=ollama model=qwen2.5-coder:7b available=True",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[12/15] scenario=returns_abuse_screening provider=ollama status=completed phase=completed terminal=completed",
+            "[13/15] scenario=access_review_audit provider=openai status=completed phase=completed terminal=completed",
+            "[14/15] scenario=access_review_audit provider=anthropic status=completed phase=completed terminal=completed",
+            "[15/15] scenario=access_review_audit provider=ollama model=qwen2.5-coder:7b available=True",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[WARNING] dependent_tasks_skipped",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked",
+            "[15/15] scenario=access_review_audit provider=ollama status=execution_error phase=failed terminal=failed"
+          ],
+          "operational_note": "The fresh canonical full-scope rerun started immediately after a healthy three-provider preflight on the current host and reached `14/15` clean provider/scenario checkpoints. It terminalized at `access_review_audit/ollama`, where `code` plus three repair attempts all repeated the same missing-`List` import failure during code validation. A local validation-runtime autofix now injects missing `typing` aliases referenced in annotations, and the exact failed artifact imports cleanly under a direct probe, but fresh empirical rerun evidence is still required.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/access_review_audit/ollama/project_state.json"
+        }
+      },
+      "access_review_audit_ollama_typing_import_autofix_verification_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_autofix_rerun",
+        "status": "stale_after_tests_repair_1_failure_and_local_test_repair_instruction_fix",
+        "latest_checkpoint": {
+          "checkpoint": "access_review_audit_ollama_typing_import_autofix_tests_repair_1_failed",
+          "provider": "ollama",
+          "phase": "execution",
+          "terminal_outcome": null,
+          "updated_at": "2026-04-29T11:51:12.284794+00:00",
+          "repair_cycle_count": 1,
+          "failed_task_id": "tests",
+          "repair_task_id": "tests__repair_1",
+          "active_repair_task_ids": [],
+          "last_error": "Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.16s",
+          "completed_task_id": "tests__repair_1",
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[1/1] scenario=access_review_audit provider=ollama model=qwen2.5-coder:7b available=True",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[WARNING] dependent_tasks_skipped",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started"
+          ],
+          "operational_note": "The first clean scenario-scoped verification rerun cleared the former missing-`List` blocker lane, but it later failed `tests__repair_1` and exposed a warning-only repair-instruction blind spot: the repair prompt kept surfacing `details=None` while omitting the real pytest failure details for invalid happy-path payload shape. The writer was later terminated because a narrower local fix landed and the old process image could not consume it.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_autofix_rerun/access_review_audit/ollama/project_state.json"
+        }
+      },
+      "access_review_audit_ollama_typing_import_and_test_repair_fix_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun",
+        "status": "terminal_failed_after_three_repair_cycles_third_local_fix_validated_out_of_process",
+        "latest_checkpoint": {
+          "checkpoint": "access_review_audit_ollama_typing_import_and_test_repair_fix_terminal_failed_after_tests_repair_2",
+          "provider": "ollama",
+          "phase": "failed",
+          "terminal_outcome": "failed",
+          "updated_at": "2026-04-29T12:25:16.275890+00:00",
+          "repair_cycle_count": 3,
+          "failed_task_id": "tests__repair_2",
+          "repair_task_id": null,
+          "active_repair_task_ids": [
+            "code__repair_1__repair_2__repair_3",
+            "tests__repair_3"
+          ],
+          "last_error": "Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.15s",
+          "completed_task_id": "code__repair_1__repair_2",
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[1/1] scenario=access_review_audit provider=ollama model=qwen2.5-coder:7b available=True",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[WARNING] dependent_tasks_skipped",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[ERROR] workflow_blocked"
+          ],
+          "operational_note": "The fresh rerun launched after the first two local mitigations proved the warning-only repair-instruction fix was active in-process, but it later failed `tests__repair_1` and `tests__repair_2` on nested invalid payload shape (`approval_metadata={'key': 'sample'}`) and then terminalized on the stale process image. A third local fix is now validated locally against that exact failed artifact, but it still needs a fresh rerun to become empirical evidence.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun/access_review_audit/ollama/project_state.json"
+        }
+      },
+      "access_review_audit_ollama_typing_import_test_repair_and_nested_payload_autofix_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_test_repair_and_nested_payload_autofix_rerun",
+        "status": "completed_after_three_local_mitigations",
+        "latest_checkpoint": {
+          "checkpoint": "access_review_audit_ollama_typing_import_test_repair_and_nested_payload_autofix_workflow_completed",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T12:58:02.956548+00:00",
+          "repair_cycle_count": 1,
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": null,
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[1/1] scenario=access_review_audit provider=ollama model=qwen2.5-coder:7b available=True",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[ERROR] task_failed",
+            "[INFO] workflow_progress",
+            "[WARNING] dependent_tasks_skipped",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] task_started",
+            "[INFO] task_completed",
+            "[INFO] workflow_progress",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[1/1] scenario=access_review_audit provider=ollama status=completed phase=completed terminal=completed"
+          ],
+          "operational_note": "This fresh scenario-scoped rerun is the first live process image launched after the third local mitigation for nested test-payload autofix landed. It completed cleanly after one repair cycle and closed the narrow `access_review_audit/ollama` blocker, but the repaired artifact still converged with direct dict payloads rather than reproducing the older nested placeholder shape.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_test_repair_and_nested_payload_autofix_rerun/access_review_audit/ollama/project_state.json"
+        }
+      },
+      "current_head_post_access_review_audit_ollama_three_fix_canonical_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_access_review_audit_ollama_three_fix_rerun",
+        "status": "completed_12_of_15_with_three_ollama_test_blockers",
+        "summary": {
+          "total_cells": 15,
+          "completed_cells": 12,
+          "failed_cells": 3,
+          "provider_outcomes": {
+            "openai": {
+              "completed_cells": 5,
+              "failed_cells": 0
+            },
+            "anthropic": {
+              "completed_cells": 5,
+              "failed_cells": 0
+            },
+            "ollama": {
+              "completed_cells": 2,
+              "failed_cells": 3
+            }
+          }
+        },
+        "failed_checkpoints": {
+          "kyc_compliance_intake_ollama": {
+            "phase": "failed",
+            "terminal_outcome": "failed",
+            "updated_at": "2026-04-29T13:47:33.166441+00:00",
+            "repair_cycle_count": 3,
+            "task_status_counts": {
+              "done": 6,
+              "failed": 4,
+              "pending": 3
+            },
+            "failed_task_ids": [
+              "tests",
+              "tests__repair_1",
+              "tests__repair_2",
+              "tests__repair_3"
+            ],
+            "last_error": "Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.16s",
+            "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_access_review_audit_ollama_three_fix_rerun/kyc_compliance_intake/ollama/project_state.json"
+          },
+          "insurance_claim_triage_ollama": {
+            "phase": "failed",
+            "terminal_outcome": "failed",
+            "updated_at": "2026-04-29T14:29:27.431947+00:00",
+            "repair_cycle_count": 3,
+            "task_status_counts": {
+              "done": 6,
+              "failed": 4,
+              "pending": 3
+            },
+            "failed_task_ids": [
+              "tests",
+              "tests__repair_1",
+              "tests__repair_2",
+              "tests__repair_3"
+            ],
+            "last_error": "Generated test validation failed: pytest failed: FAILED tests_tests.py::test_batch_processing - ValueError: Invalid claim request; (warning) payload contract violations: handle_request payload missing required fields: policy_id, claim_category, claim_amount, evidence at line 9",
+            "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_access_review_audit_ollama_three_fix_rerun/insurance_claim_triage/ollama/project_state.json"
+          },
+          "vendor_onboarding_risk_ollama": {
+            "phase": "failed",
+            "terminal_outcome": "failed",
+            "updated_at": "2026-04-29T15:15:09.532843+00:00",
+            "repair_cycle_count": 3,
+            "task_status_counts": {
+              "done": 6,
+              "failed": 4,
+              "pending": 3
+            },
+            "failed_task_ids": [
+              "tests",
+              "tests__repair_1",
+              "tests__repair_2",
+              "tests__repair_3"
+            ],
+            "last_error": "Generated test validation failed: pytest failed: 2 failed, 1 passed in 0.19s",
+            "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_access_review_audit_ollama_three_fix_rerun/vendor_onboarding_risk/ollama/project_state.json"
+          }
+        },
+        "latest_checkpoint": {
+          "checkpoint": "access_review_audit_ollama_completed_after_repair_cycle_1_while_canonical_root_closed_12_of_15",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T15:59:50.764865+00:00",
+          "repair_cycle_count": 1,
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": null,
+          "completed_task_at": null,
+          "terminal_evidence": [
+            "[9/15] scenario=vendor_onboarding_risk provider=ollama status=execution_error phase=failed terminal=failed",
+            "[10/15] scenario=returns_abuse_screening provider=openai status=completed phase=completed terminal=completed",
+            "[11/15] scenario=returns_abuse_screening provider=anthropic status=completed phase=completed terminal=completed",
+            "[12/15] scenario=returns_abuse_screening provider=ollama status=completed phase=completed terminal=completed",
+            "[13/15] scenario=access_review_audit provider=openai status=completed phase=completed terminal=completed",
+            "[14/15] scenario=access_review_audit provider=anthropic status=completed phase=completed terminal=completed",
+            "[15/15] scenario=access_review_audit provider=ollama status=completed phase=completed terminal=completed"
+          ],
+          "operational_note": "The fresh canonical rerun did not hang and the terminal exited successfully, but the root closed non-clean at `12/15`: the former `access_review_audit/ollama` blocker is now fixed in canonical context, while three earlier Ollama scenarios still fail after exhausting generated-test repair cycles.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_access_review_audit_ollama_three_fix_rerun/access_review_audit/ollama/project_state.json"
+        }
+      },
+      "current_head_remaining_three_ollama_required_fields_autofix_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_ollama_three_remaining_required_fields_autofix_rerun",
+        "status": "three_of_three_remaining_blockers_completed_cleanly",
+        "summary": {
+          "targeted_scenarios": 3,
+          "completed_scenarios": 3,
+          "remaining_scenarios": 0
+        },
+        "scope": {
+          "providers": [
+            "ollama"
+          ],
+          "scenarios": [
+            "kyc_compliance_intake",
+            "insurance_claim_triage",
+            "vendor_onboarding_risk"
+          ]
+        },
+        "latest_checkpoint": {
+          "checkpoint": "vendor_onboarding_risk_ollama_completed_cleanly",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T19:25:20.307372+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-29T19:25:20.277421+00:00",
+          "terminal_evidence": [
+            "[3/3] scenario=vendor_onboarding_risk provider=ollama model=qwen2.5-coder:7b available=True",
+            "[INFO] workflow_started",
+            "[INFO] task_started",
+            "[INFO] workflow_completed",
+            "[INFO] workflow_finished",
+            "[3/3] scenario=vendor_onboarding_risk provider=ollama status=completed phase=completed terminal=completed",
+            "campaign_summary_json=campaign_summary.json",
+            "campaign_summary_md=campaign_summary.md"
+          ],
+          "operational_note": "This focused rerun exists to validate the shared required-fields test autofix on a fresh process image restricted to the three remaining Ollama blockers. It has now completed 3/3 cleanly with zero repair cycles on every targeted scenario, so the next release-facing step is a fresh canonical full-scope rerun.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_ollama_three_remaining_required_fields_autofix_rerun/vendor_onboarding_risk/ollama/project_state.json"
+        },
+        "current_active_checkpoint": {
+          "scenario": "vendor_onboarding_risk",
+          "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_ollama_three_remaining_required_fields_autofix_rerun/vendor_onboarding_risk/ollama/project_state.json",
+          "persisted_state_written": true,
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T19:25:20.307372+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-29T19:25:20.277421+00:00",
+          "operational_note": "The same focused writer has now completed `vendor_onboarding_risk/ollama` without opening repair; the focused rerun is fully closed at 3/3 recovered scenarios and no active checkpoint remains on this root."
+        }
+      },
+      "current_head_full_scope_post_required_fields_autofix_canonical_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_required_fields_autofix_rerun",
+        "status": "full_matrix_terminalized_with_all_ollama_cells_completed_and_two_non_ollama_execution_errors_remaining",
+        "summary": {
+          "total_cells": 15,
+          "completed_cells": 13,
+          "failed_cells": 2,
+          "active_cells": 0,
+          "remaining_cells": 0
+        },
+        "latest_checkpoint": {
+          "checkpoint": "access_review_audit_ollama_completed_after_one_repair_cycle",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T21:11:06.935887+00:00",
+          "repair_cycle_count": 1,
+          "failed_task_id": null,
+          "repair_task_id": "tests__repair_1",
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-29T21:11:06.895177+00:00",
+          "terminal_evidence": [
+            "[15/15] scenario=access_review_audit provider=ollama model=qwen2.5-coder:7b available=True",
+            "[ERROR] task_failed",
+            "[INFO] workflow_resumed",
+            "[INFO] workflow_completed",
+            "[15/15] scenario=access_review_audit provider=ollama status=completed phase=completed terminal=completed"
+          ],
+          "operational_note": "The canonical rerun is now fully terminalized. All five Ollama cells completed, but the matrix still carries two release-blocking execution errors on non-Ollama providers.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_required_fields_autofix_rerun/access_review_audit/ollama/project_state.json"
+        },
+        "current_active_checkpoint": {
+          "scenario": "access_review_audit",
+          "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_required_fields_autofix_rerun/access_review_audit/ollama/project_state.json",
+          "persisted_state_written": true,
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T21:11:06.935887+00:00",
+          "repair_cycle_count": 1,
+          "task_status_counts": {
+            "done": 9
+          },
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-29T21:11:06.895177+00:00",
+          "operational_note": "No active checkpoint remains on this root. The final terminal checkpoint is `access_review_audit/ollama`, and local replay on the current head now normalizes the exact persisted failed test payloads for the two remaining Anthropic/OpenAI blockers. Fresh rerun evidence is still required before either blocker can be cleared.",
+          "terminal_evidence": [
+            "[15/15] scenario=access_review_audit provider=ollama model=qwen2.5-coder:7b available=True",
+            "[ERROR] task_failed",
+            "[INFO] workflow_resumed",
+            "[15/15] scenario=access_review_audit provider=ollama status=completed phase=completed terminal=completed"
+          ]
+        }
+      },
+      "current_head_insurance_claim_triage_ollama_validation_failure_semantics_fix_narrow_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_insurance_claim_triage_ollama_validation_failure_semantics_fix_rerun",
+        "status": "completed_clean_narrow_proof_for_qa_tester_validation_failure_mitigation",
+        "scope": {
+          "providers": [
+            "ollama"
+          ],
+          "scenarios": [
+            "insurance_claim_triage"
+          ]
+        },
+        "latest_checkpoint": {
+          "checkpoint": "insurance_claim_triage_ollama_validation_failure_semantics_fix_completed",
+          "provider": "ollama",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T23:19:51.383550+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": null,
+          "completed_task_at": null,
+          "terminal_evidence": [],
+          "operational_note": "This narrow rerun exists to prove the `qa_tester` validation-failure normalization fix on a fresh process image. It completed cleanly with no repair lane, so the earlier `insurance_claim_triage/ollama` degraded lane is empirically cleared on a dedicated rerun root.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_insurance_claim_triage_ollama_validation_failure_semantics_fix_rerun/insurance_claim_triage/ollama/project_state.json"
+        },
+        "current_active_checkpoint": {
+          "scenario": "insurance_claim_triage",
+          "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_insurance_claim_triage_ollama_validation_failure_semantics_fix_rerun/insurance_claim_triage/ollama/project_state.json",
+          "persisted_state_written": true,
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-29T23:19:51.383550+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "completed_task_id": null,
+          "completed_task_at": null,
+          "operational_note": "No active checkpoint remains on this narrow proof root; the terminal persisted state is already the clean completed result.",
+          "terminal_evidence": []
+        }
+      },
+      "current_head_full_scope_post_non_ollama_blocker_literal_example_autofix_canonical_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun",
+        "status": "live_with_13_completed_1_degraded_and_access_review_ollama_remaining",
+        "summary": {
+          "total_cells": 15,
+          "completed_cells": 13,
+          "failed_cells": 1,
+          "active_cells": 0,
+          "remaining_cells": 1,
+          "provider_outcomes": {
+            "openai": {
+              "completed_cells": 5,
+              "failed_cells": 0
+            },
+            "anthropic": {
+              "completed_cells": 4,
+              "failed_cells": 1
+            },
+            "ollama": {
+              "completed_cells": 4,
+              "failed_cells": 0
+            }
+          }
+        },
+        "latest_checkpoint": {
+          "checkpoint": "returns_abuse_screening_anthropic_terminalized_degraded_after_repair_cycle_3",
+          "provider": "anthropic",
+          "phase": "completed",
+          "terminal_outcome": "degraded",
+          "updated_at": "2026-04-29T23:25:05.093925+00:00",
+          "repair_cycle_count": 3,
+          "task_status_counts": {
+            "done": 4,
+            "failed": 5,
+            "skipped": 4
+          },
+          "failed_task_id": null,
+          "failed_task_ids": [
+            "tests",
+            "tests__repair_1",
+            "code__repair_1__repair_2",
+            "tests__repair_2",
+            "code__repair_1__repair_2__repair_3"
+          ],
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": null,
+          "completed_task_at": null,
+          "run_result_status": "completed",
+          "acceptance_reason": "evaluated_tasks_incomplete",
+          "terminal_evidence": [],
+          "operational_note": "After the crash recovery, on-disk state showed that this canonical rerun had already recovered `insurance_claim_triage/ollama`, completed the full `vendor_onboarding_risk/*` family, and then degraded on `returns_abuse_screening/anthropic` after exhausting three repair cycles.",
+          "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/returns_abuse_screening/anthropic/project_state.json"
+        },
+        "current_active_checkpoint": {
+          "scenario": "access_review_audit",
+          "provider": "ollama",
+          "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/",
+          "persisted_state_written": false,
+          "phase": null,
+          "terminal_outcome": null,
+          "updated_at": null,
+          "repair_cycle_count": 0,
+          "task_status_counts": {},
+          "completed_task_id": null,
+          "completed_task_at": null,
+          "writer_process_id": 2264452,
+          "pending_task_ids": [],
+          "operational_note": "The canonical writer is still alive after `returns_abuse_screening/ollama` completed and after `access_review_audit/openai` plus `anthropic` completed. `access_review_audit/ollama` is the only remaining lane, but no persisted state file exists yet. The VS Code crash severed the old terminal handle, so the next reliable checkpoint is the first on-disk state write for this lane.",
+          "terminal_evidence": []
+        }
+      }
+    }
+  },
+  "canary_window": {
+    "status": "not-started",
+    "eligible_workflows_seen": 0,
+    "accepted_workflows": 0,
+    "accepted_workflow_rate": null,
+    "false_success_rate": null,
+    "bounded_termination_rate": null,
+    "autonomous_recovery_rate": null,
+    "resume_integrity_rate": null,
+    "checkpoint_history": [
+      {
+        "checkpoint": "current_head_pre_canary_openai_partial_checkpoint",
+        "completed_at": "2026-04-28T22:19:46.125754+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_28_head03d6403_rc_requal/kyc_compliance_intake/openai/project_state.json",
+        "result": "repository_owned_pre_canary_checkpoint_clean"
+      },
+      {
+        "checkpoint": "current_head_pre_canary_anthropic_blocker",
+        "completed_at": "2026-04-28T22:19:47.104179+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_28_head03d6403_rc_requal/kyc_compliance_intake/anthropic/project_state.json",
+        "result": "pre_canary_blocker"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_openai_clean",
+        "completed_at": "2026-04-28T23:10:34.777095+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/openai/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_clean"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_anthropic_clean",
+        "completed_at": "2026-04-28T23:12:21.241656+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/anthropic/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_clean"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_started",
+        "completed_at": "2026-04-28T23:16:33.048697+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_started"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_code_validation_failure",
+        "completed_at": "2026-04-28T23:27:34.446649+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_repair_active"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_repair_1_recovered_code",
+        "completed_at": "2026-04-28T23:38:29.013694+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_repair_recovered"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_tests_validation_failure",
+        "completed_at": "2026-04-28T23:46:33.777076+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_chained_repairs_active"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_repair_cycle_2_started",
+        "completed_at": "2026-04-29T00:01:33.940283+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_second_repair_cycle_active"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_repair_cycle_2_partial_recovery",
+        "completed_at": "2026-04-29T00:15:55.611378+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_second_repair_cycle_in_progress"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_tests_repair_2_failed",
+        "completed_at": "2026-04-29T00:24:00.248042+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_third_repair_attempt_pending"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_ollama_tests_repair_3_failed",
+        "completed_at": "2026-04-29T00:30:39.817274+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_first_scenario_terminal_failure"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_openai_clean",
+        "completed_at": "2026-04-29T00:32:11.442083+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/openai/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_clean"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_anthropic_clean",
+        "completed_at": "2026-04-29T00:33:43.800909+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/anthropic/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_clean"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_started",
+        "completed_at": "2026-04-29T00:38:08.687466+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_started"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_code_validation_failure",
+        "completed_at": "2026-04-29T00:49:30.905468+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_repair_active"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_code_repair_recovered",
+        "completed_at": "2026-04-29T01:01:29.453193+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_recovery_checkpoint"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_deps_completed",
+        "completed_at": "2026-04-29T01:02:19.456020+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_execution_resumed"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_tests_completed",
+        "completed_at": "2026-04-29T01:09:37.920964+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_tests_completed"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_review_completed",
+        "completed_at": "2026-04-29T01:11:25.525845+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_review_completed"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_docs_completed",
+        "completed_at": "2026-04-29T01:15:32.685533+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_docs_completed"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_insurance_claim_triage_ollama_completed",
+        "completed_at": "2026-04-29T01:17:32.154579+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_completed"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_openai_completed",
+        "completed_at": "2026-04-29T01:18:50.552353+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/openai/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_clean"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_anthropic_degraded_completed",
+        "completed_at": "2026-04-29T01:21:27.177170+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/anthropic/project_state.json",
+        "result": "repository_owned_post_thaw_degraded_completion"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_ollama_started",
+        "completed_at": "2026-04-29T01:25:42.064972+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_checkpoint_started"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_ollama_code_validation_failure",
+        "completed_at": "2026-04-29T01:37:28.649600+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_repair_active"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_ollama_repair_recovered",
+        "completed_at": "2026-04-29T01:50:23.062387+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_repair_recovered"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_ollama_tests_failed",
+        "completed_at": "2026-04-29T01:59:11.509761+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_generated_test_repair_active"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_ollama_tests_repair_1_failed",
+        "completed_at": "2026-04-29T02:07:59.041688+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_second_generated_test_repair_active"
+      },
+      {
+        "checkpoint": "current_head_post_thaw_vendor_onboarding_risk_ollama_tests_repair_2_failed",
+        "completed_at": "2026-04-29T02:13:54.273606+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_rc_requal_thawed/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_post_thaw_resume_required_after_tests_repair_2_failed"
+      },
+      {
+        "checkpoint": "current_head_postfix_vendor_onboarding_risk_ollama_arch_completed",
+        "completed_at": "2026-04-29T02:41:31.243855+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_postfix_recovery/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_postfix_recovery_active_arch_checkpoint"
+      },
+      {
+        "checkpoint": "current_head_postfix_vendor_onboarding_risk_ollama_code_validation_failure",
+        "completed_at": "2026-04-29T02:52:49.792574+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_vendor_ollama_postfix_recovery/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_postfix_recovery_code_validation_repair_active"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_kyc_compliance_intake_openai_tests_repair_1_active",
+        "completed_at": "2026-04-29T09:50:15.923818+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/kyc_compliance_intake/openai/project_state.json",
+        "result": "repository_owned_full_scope_repair_active_after_payload_contract_failure"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_kyc_compliance_intake_anthropic_completed",
+        "completed_at": "2026-04-29T09:51:56.288283+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/kyc_compliance_intake/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_checkpoint_clean"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_kyc_compliance_intake_ollama_started",
+        "completed_at": "2026-04-29T09:53:50.837376+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_full_scope_first_ollama_checkpoint_started"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_kyc_compliance_intake_ollama_tests_live",
+        "completed_at": "2026-04-29T09:58:47.236016+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_full_scope_ollama_tests_live_after_clean_code_and_deps"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_kyc_compliance_intake_ollama_review_live",
+        "completed_at": "2026-04-29T10:02:25.195995+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_full_scope_ollama_review_live_after_clean_tests"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_kyc_compliance_intake_ollama_docs_live",
+        "completed_at": "2026-04-29T10:03:13.410611+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_full_scope_ollama_docs_live_after_clean_review"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_kyc_compliance_intake_ollama_completed",
+        "completed_at": "2026-04-29T10:07:09.122857+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/kyc_compliance_intake/ollama/project_state.json",
+        "result": "repository_owned_full_scope_first_scenario_all_providers_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_openai_completed",
+        "completed_at": "2026-04-29T10:08:36.051610+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/openai/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_openai_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_anthropic_legal_live",
+        "completed_at": "2026-04-29T10:09:39.830590+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_anthropic_legal_live"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_anthropic_completed",
+        "completed_at": "2026-04-29T10:10:10.650539+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_anthropic_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_ollama_started",
+        "completed_at": "2026-04-29T10:12:09.318998+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_ollama_started"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_ollama_tests_live",
+        "completed_at": "2026-04-29T10:16:55.276664+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_ollama_tests_live_after_clean_code_and_deps"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_ollama_review_live",
+        "completed_at": "2026-04-29T10:20:27.030331+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_ollama_review_live_after_clean_tests"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_ollama_docs_live",
+        "completed_at": "2026-04-29T10:21:15.018558+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_ollama_docs_live_after_clean_review"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_ollama_legal_live",
+        "completed_at": "2026-04-29T10:23:18.841977+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_ollama_legal_live_after_clean_docs"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_insurance_claim_triage_ollama_completed",
+        "completed_at": "2026-04-29T10:24:17.276905+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/insurance_claim_triage/ollama/project_state.json",
+        "result": "repository_owned_full_scope_second_scenario_all_providers_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_openai_legal_live",
+        "completed_at": "2026-04-29T10:25:20.027808+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/openai/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_openai_legal_live_after_clean_docs"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_openai_completed",
+        "completed_at": "2026-04-29T10:25:40.951172+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/openai/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_openai_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_anthropic_completed",
+        "completed_at": "2026-04-29T10:27:14.801490+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_anthropic_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_ollama_started",
+        "completed_at": "2026-04-29T10:29:23.190528+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_ollama_started"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_ollama_tests_live",
+        "completed_at": "2026-04-29T10:34:37.432220+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_ollama_tests_live_after_clean_code_and_deps"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_ollama_review_live",
+        "completed_at": "2026-04-29T10:38:07.844625+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_ollama_review_live_after_clean_tests"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_ollama_docs_live",
+        "completed_at": "2026-04-29T10:38:59.413219+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_ollama_docs_live_after_clean_review"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_ollama_legal_live",
+        "completed_at": "2026-04-29T10:41:05.830224+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_ollama_legal_live_after_clean_docs"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_vendor_onboarding_risk_ollama_completed",
+        "completed_at": "2026-04-29T10:43:00.668466+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/vendor_onboarding_risk/ollama/project_state.json",
+        "result": "repository_owned_full_scope_third_scenario_all_providers_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_returns_abuse_screening_openai_tests_live",
+        "completed_at": "2026-04-29T10:43:38.036691+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/returns_abuse_screening/openai/project_state.json",
+        "result": "repository_owned_full_scope_fourth_scenario_openai_tests_live_after_clean_code_and_deps"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_returns_abuse_screening_openai_completed",
+        "completed_at": "2026-04-29T10:44:31.330527+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/returns_abuse_screening/openai/project_state.json",
+        "result": "repository_owned_full_scope_fourth_scenario_openai_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_returns_abuse_screening_anthropic_started",
+        "completed_at": "2026-04-29T10:44:47.025381+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/returns_abuse_screening/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_fourth_scenario_anthropic_started"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_returns_abuse_screening_anthropic_legal_live",
+        "completed_at": "2026-04-29T10:45:50.546024+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/returns_abuse_screening/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_fourth_scenario_anthropic_legal_live_after_clean_docs"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_returns_abuse_screening_anthropic_completed",
+        "completed_at": "2026-04-29T10:46:22.598633+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/returns_abuse_screening/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_fourth_scenario_openai_and_anthropic_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_returns_abuse_screening_ollama_started",
+        "completed_at": "2026-04-29T10:48:25.089476+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/returns_abuse_screening/ollama/project_state.json",
+        "result": "repository_owned_full_scope_fourth_scenario_ollama_started"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_returns_abuse_screening_ollama_completed",
+        "completed_at": "2026-04-29T11:01:02.223726+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/returns_abuse_screening/ollama/project_state.json",
+        "result": "repository_owned_full_scope_fourth_scenario_all_providers_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_access_review_audit_openai_completed",
+        "completed_at": "2026-04-29T11:02:32.767195+00:00",
+        "provider": "openai",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/access_review_audit/openai/project_state.json",
+        "result": "repository_owned_full_scope_fifth_scenario_openai_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_access_review_audit_anthropic_completed",
+        "completed_at": "2026-04-29T11:04:14.614927+00:00",
+        "provider": "anthropic",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/access_review_audit/anthropic/project_state.json",
+        "result": "repository_owned_full_scope_fifth_scenario_anthropic_completed"
+      },
+      {
+        "checkpoint": "current_head_full_scope_post_qa_tester_fix_access_review_audit_ollama_terminal_failure",
+        "completed_at": "2026-04-29T11:19:33.647158+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_qa_tester_fix/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_full_scope_terminal_blocker_after_repeated_missing_list_import_failures"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_autofix_verification_started",
+        "completed_at": "2026-04-29T11:34:13.599385+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_autofix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_verification_rerun_started_after_typing_import_autofix"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_autofix_code_cleared",
+        "completed_at": "2026-04-29T11:38:39.187256+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_autofix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_verification_rerun_cleared_former_missing_list_code_blocker"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_autofix_tests_failed_repair_cycle_1_started",
+        "completed_at": "2026-04-29T11:41:56.900646+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_autofix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_verification_rerun_shifted_to_tests_validation_failure_with_repair_cycle_1_active"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_autofix_code_repair_1_completed",
+        "completed_at": "2026-04-29T11:47:22.638263+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_autofix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_verification_rerun_code_repair_1_completed_tests_repair_1_live"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_autofix_tests_repair_1_failed",
+        "completed_at": "2026-04-29T11:51:12.284794+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_autofix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_verification_rerun_exposed_warning_only_test_repair_instruction_blind_spot"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_and_test_repair_fix_started",
+        "completed_at": "2026-04-29T11:58:23.634429+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_fresh_rerun_started_after_both_local_mitigations"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_and_test_repair_fix_code_cleared",
+        "completed_at": "2026-04-29T12:02:50.106062+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_fresh_rerun_cleared_code_lane_after_two_local_mitigations"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_and_test_repair_fix_tests_failed_repair_cycle_1_started",
+        "completed_at": "2026-04-29T12:06:07.807439+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_fresh_rerun_shifted_to_tests_failure_with_repair_instruction_fix_confirmed_in_process"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_and_test_repair_fix_code_repair_1_completed",
+        "completed_at": "2026-04-29T12:11:34.360572+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_fresh_rerun_code_repair_1_completed_tests_repair_1_live_under_strengthened_instruction"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_and_test_repair_fix_tests_repair_1_failed",
+        "completed_at": "2026-04-29T12:15:23.862551+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_fresh_rerun_exposed_nested_payload_placeholder_failure_in_tests_repair_1"
+      },
+      {
+        "checkpoint": "current_head_access_review_audit_ollama_typing_import_and_test_repair_fix_terminal_failed",
+        "completed_at": "2026-04-29T12:25:16.275890+00:00",
+        "provider": "ollama",
+        "state_file": "output/real_world_complex_matrix_2026_04_29_head03d6403_access_review_audit_ollama_typing_import_and_test_repair_fix_rerun/access_review_audit/ollama/project_state.json",
+        "result": "repository_owned_two_fix_rerun_terminalized_stale_before_third_local_fix"
+      }
+    ],
+    "next_checkpoint": "Capture the first persisted checkpoint for `access_review_audit/ollama` on `output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun`. `returns_abuse_screening/ollama` is already complete, `access_review_audit/openai` and `anthropic` are already complete, and the next discriminating step is whether the only remaining lane starts cleanly or opens a new repair or degraded path."
+  }
+}

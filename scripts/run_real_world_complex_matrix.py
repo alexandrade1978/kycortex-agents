@@ -154,6 +154,7 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep due_diligence_evidence as the evidence collection inside details. Do not replace it with guessed aliases such as certifications, documents, or compliance_docs.",
             "Keep sanctioned_region and critical_service as boolean flags. Keep expired_certifications and unresolved_incidents as list-like collections, using [] when absent and explicit list entries when risk is present.",
             'The request_type value in test payloads is "vendor_submission". Accept it as-is — do not restrict request_type to an invented whitelist such as ("initial_onboarding", "renewal", "incident_review").',
+            'The listed review outcomes are a possible label set, not proof that a chosen happy-path payload must resolve to "approved". Do not hard-code an exact happy-path or valid-batch outcome label unless the visible score formula or explicit contract defines that threshold for the chosen input.',
         ),
         detail_fixture_example={
             "vendor_name": "Acme Corp",
@@ -281,6 +282,7 @@ _SCENARIO_REAL_WORKFLOW_CHECKS = frozenset(
     {
         "valid_request_accepted",
         "invalid_request_rejected",
+        "generated_tests_assert_invalid_request_value_error",
         "risk_signal_observable",
         "audit_signal_present",
     }
@@ -332,6 +334,7 @@ def _observable_outcome_contract_block() -> str:
     return "\n".join(
         (
             "- handle_request(request) must return a per-request outcome object or dict, not None.",
+            "- For malformed requests where details is not a dict, handle_request(request) must raise ValueError explicitly. Never return a normal outcome dict, fallback result, or 'invalid' response payload for that malformed input.",
             "- The returned outcome must make the review decision and risk signal observable to callers, for example through outcome and risk_score style fields or equivalent structured keys.",
             "- Preserve audit evidence either in the returned outcome or on a service audit history surface that accumulates one auditable entry per processed request.",
             "- Do not treat a logging side effect alone or a None return as sufficient happy-path or batch behavior.",
@@ -387,6 +390,7 @@ def build_project(spec: ScenarioSpec, output_dir: str) -> ProjectState:
                 "Use only the standard library. Include typed models, request validation, risk scoring, audit logging, "
                 "batch processing, and a small CLI demo entrypoint. Prefer a small but complete design with one primary service facade. "
                 "Avoid speculative helper layers, unnecessary abstractions, and third-party imports. "
+                "If you use @dataclass anywhere in the module, import dataclass explicitly from dataclasses so the module imports cleanly. "
                 "If you define dataclasses with defaults, place required non-default fields before defaulted ones. "
                 "If you use field(default_factory=...), import field explicitly from dataclasses. "
                 "Keep imports consistent with how you reference datetime symbols.\n\n"
@@ -424,6 +428,7 @@ def build_project(spec: ScenarioSpec, output_dir: str) -> ProjectState:
                 f"Write one compact raw pytest module for the generated {spec.domain_summary} module. "
                 "Keep the suite concise and stable: target 4 to 6 top-level tests, at most 3 fixtures, and clear headroom below 180 lines. "
                 "Include at least one happy path, one validation failure, one risk-scoring assertion, one batch-processing scenario, and one audit-trail assertion. "
+                "The validation-failure test must use a malformed request whose details is not a dict, assert validate_request(...) is False, and assert handle_request(...) raises ValueError. "
                 "Prefer directly observable outcomes over guessed internal implementation details. "
                 "Do not import or test CLI entrypoints. Do not invent helper classes, renamed APIs, or missing fields. "
                 "If you use the pytest namespace, import pytest explicitly.\n\n"
@@ -616,6 +621,23 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 def _write_markdown(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _load_cached_run_result(run_root: Path) -> dict[str, object] | None:
+    run_result_path = run_root / "run_result.json"
+    if not run_result_path.exists():
+        return None
+    try:
+        payload = json.loads(run_result_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _project_requires_resume(project: ProjectState) -> bool:
+    if project.phase == "execution":
+        return True
+    return any(task.status in {TaskStatus.FAILED.value, TaskStatus.RUNNING.value} for task in project.tasks)
 
 
 def _artifact_paths(task: Task) -> list[str]:
@@ -926,6 +948,164 @@ def _invalid_request_is_rejected(validate_request: Any, handle_request: Any, inv
     return False
 
 
+def _handle_request_explicitly_rejects_malformed_request(
+    service_cls: type[Any],
+    service_name: str,
+    request_cls: type[Any],
+    invalid_payload: dict[str, Any],
+) -> tuple[bool, str | None]:
+    try:
+        invalid_request = request_cls(
+            request_id=invalid_payload["request_id"],
+            request_type=invalid_payload["request_type"],
+            details=invalid_payload["details"],
+            timestamp=invalid_payload["timestamp"],
+        )
+    except Exception:
+        # Constructor-level rejection is acceptable for malformed payloads.
+        return True, None
+    svc = _instantiate_service(service_cls, service_name)
+    try:
+        svc.handle_request(invalid_request)
+    except _PROGRAMMING_ERROR_TYPES as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    except Exception:
+        # Deliberate rejection (ValueError, KeyError, etc.) is required here.
+        return True, None
+    return False, None
+
+
+def _test_artifact_paths(output_dir: str) -> list[Path]:
+    artifacts_dir = Path(output_dir) / "artifacts"
+    if not artifacts_dir.exists():
+        return []
+    return sorted(path for path in artifacts_dir.glob("*.py") if "test" in path.stem)
+
+
+def _assigned_names(target: ast.expr) -> list[str]:
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: list[str] = []
+        for element in target.elts:
+            names.extend(_assigned_names(element))
+        return names
+    return []
+
+
+def _node_is_non_dict_test_value(node: ast.AST, non_dict_names: set[str]) -> bool:
+    if isinstance(node, ast.Dict):
+        return False
+    if isinstance(node, ast.Name):
+        return node.id in non_dict_names
+    if isinstance(node, (ast.Constant, ast.List, ast.Tuple, ast.Set)):
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
+        return True
+    return False
+
+
+def _expr_contains_method_call(node: ast.AST, method_name: str) -> bool:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Attribute) and func.attr == method_name:
+            return True
+        if isinstance(func, ast.Name) and func.id == method_name:
+            return True
+    return False
+
+
+def _assert_requires_validate_request_false(expr: ast.AST, validate_result_names: set[str]) -> bool:
+    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.Not):
+        operand = expr.operand
+        return _expr_contains_method_call(operand, "validate_request") or (
+            isinstance(operand, ast.Name) and operand.id in validate_result_names
+        )
+    if isinstance(expr, ast.Compare) and len(expr.ops) == 1 and len(expr.comparators) == 1:
+        if not isinstance(expr.ops[0], (ast.Is, ast.Eq)):
+            return False
+        comparator = expr.comparators[0]
+        if not (isinstance(comparator, ast.Constant) and comparator.value is False):
+            return False
+        return _expr_contains_method_call(expr.left, "validate_request") or (
+            isinstance(expr.left, ast.Name) and expr.left.id in validate_result_names
+        )
+    return False
+
+
+def _call_is_value_error_raises(call: ast.Call) -> bool:
+    if not call.args:
+        return False
+    first_arg = call.args[0]
+    if not (isinstance(first_arg, ast.Name) and first_arg.id == "ValueError"):
+        return False
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        return isinstance(func.value, ast.Name) and func.value.id == "pytest" and func.attr == "raises"
+    return isinstance(func, ast.Name) and func.id == "raises"
+
+
+def _function_explicitly_asserts_invalid_request_value_error(function: ast.AST) -> bool:
+    validate_result_names: set[str] = set()
+    non_dict_names: set[str] = set()
+    has_non_dict_details = False
+    has_validate_false_assert = False
+    has_handle_request_value_error_assert = False
+
+    for node in ast.walk(function):
+        if isinstance(node, ast.Assign):
+            assigned_names = [name for target in node.targets for name in _assigned_names(target)]
+            if _expr_contains_method_call(node.value, "validate_request"):
+                validate_result_names.update(assigned_names)
+            if _node_is_non_dict_test_value(node.value, non_dict_names):
+                non_dict_names.update(assigned_names)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            assigned_names = _assigned_names(node.target)
+            if _expr_contains_method_call(node.value, "validate_request"):
+                validate_result_names.update(assigned_names)
+            if _node_is_non_dict_test_value(node.value, non_dict_names):
+                non_dict_names.update(assigned_names)
+
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call):
+            if any(
+                keyword.arg == "details" and _node_is_non_dict_test_value(keyword.value, non_dict_names)
+                for keyword in node.keywords
+            ):
+                has_non_dict_details = True
+        elif isinstance(node, ast.Assert):
+            if _assert_requires_validate_request_false(node.test, validate_result_names):
+                has_validate_false_assert = True
+        elif isinstance(node, ast.With):
+            if any(
+                isinstance(item.context_expr, ast.Call) and _call_is_value_error_raises(item.context_expr)
+                for item in node.items
+            ) and any(_expr_contains_method_call(statement, "handle_request") for statement in node.body):
+                has_handle_request_value_error_assert = True
+
+    return has_non_dict_details and has_validate_false_assert and has_handle_request_value_error_assert
+
+
+def _generated_tests_explicitly_assert_invalid_request_value_error(output_dir: str) -> tuple[bool, str | None]:
+    test_artifacts = _test_artifact_paths(output_dir)
+    if not test_artifacts:
+        return False, "Generated tests artifact was not found."
+
+    for artifact_path in test_artifacts:
+        try:
+            tree = ast.parse(artifact_path.read_text(encoding="utf-8"), filename=str(artifact_path))
+        except Exception as exc:
+            return False, f"Generated tests artifact could not be parsed: {artifact_path.name}: {exc}"
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+                if _function_explicitly_asserts_invalid_request_value_error(node):
+                    return True, None
+
+    return False, "Generated tests did not explicitly assert ValueError for malformed non-dict details."
+
+
 def _handle_request_survives_invalid(
     service_cls: type[Any],
     service_name: str,
@@ -1075,6 +1255,7 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
         "valid_request_accepted": False,
         "invalid_request_rejected": False,
         "invalid_request_handled": False,
+        "generated_tests_assert_invalid_request_value_error": False,
         "risk_signal_observable": False,
         "audit_signal_present": False,
         "batch_processing_supported": False,
@@ -1167,6 +1348,23 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
             raise RuntimeError("Generated code did not reject a malformed scenario request.")
         checks["invalid_request_rejected"] = True
 
+        if invalid_request_error is None:
+            explicitly_rejected, rejection_error = _handle_request_explicitly_rejects_malformed_request(
+                service_cls,
+                spec.service_name,
+                request_cls,
+                request_payloads["invalid"],
+            )
+            if not explicitly_rejected:
+                if rejection_error:
+                    raise RuntimeError(
+                        "Generated code crashed with a programming error instead of explicitly rejecting a malformed request: "
+                        f"{rejection_error}"
+                    )
+                raise RuntimeError(
+                    "Generated code did not explicitly reject a malformed request through handle_request(...)."
+                )
+
         # Verify that handle_request does not crash with programming errors
         # when given a request whose details are incomplete (the most common
         # invalid-path shape produced by generated tests).
@@ -1197,6 +1395,15 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
                     f"malformed request: {prog_error_full}"
                 )
         checks["invalid_request_handled"] = True
+
+        tests_contract_ok, tests_contract_error = _generated_tests_explicitly_assert_invalid_request_value_error(
+            output_dir
+        )
+        if not tests_contract_ok:
+            raise RuntimeError(
+                tests_contract_error or "Generated tests did not explicitly assert malformed-request rejection."
+            )
+        checks["generated_tests_assert_invalid_request_value_error"] = True
 
         low_service = _instantiate_service(service_cls, spec.service_name)
         low_outcome = low_service.handle_request(low_request)
@@ -1303,14 +1510,29 @@ def run_scenario_provider(
     total_runs: int,
 ) -> dict[str, object]:
     effective_model_override = model_override
+    run_root = output_root / spec.slug / provider
+    run_root.mkdir(parents=True, exist_ok=True)
+    persisted_project: ProjectState | None = None
+
+    if resume_policy in {"resume_failed", "interrupted_only"}:
+        state_file = run_root / "project_state.json"
+        if state_file.exists():
+            persisted_project = ProjectState.load(str(state_file))
+            if not _project_requires_resume(persisted_project):
+                cached_result = _load_cached_run_result(run_root)
+                if cached_result is not None:
+                    print(
+                        f"[{run_index}/{total_runs}] scenario={spec.slug} provider={provider} status={cached_result.get('status', 'completed')} reused=existing",
+                        flush=True,
+                    )
+                    return cached_result
+
     if provider == "ollama":
         availability = get_provider_availability(provider, ollama_base_url=ollama_base_url)
         model = resolve_model(provider, ollama_model or effective_model_override, ollama_base_url=ollama_base_url)
     else:
         availability = get_provider_availability(provider)
         model = resolve_model(provider, effective_model_override)
-    run_root = output_root / spec.slug / provider
-    run_root.mkdir(parents=True, exist_ok=True)
 
     result: dict[str, object] = {
         "scenario": spec.slug,
@@ -1364,7 +1586,7 @@ def run_scenario_provider(
             workflow_resume_policy=resume_policy,
             workflow_max_repair_cycles=max_repair_cycles,
         )
-    project = build_project(spec, str(run_root))
+    project = persisted_project if persisted_project is not None else build_project(spec, str(run_root))
 
     started = time.perf_counter()
     try:

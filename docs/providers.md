@@ -18,7 +18,7 @@ All built-in providers implement the same public entrypoints:
 
 - `generate(system_prompt, user_message)`: execute a model call and return the generated text response.
 - `get_last_call_metadata()`: return provider-specific usage and timing metadata captured from the most recent successful call when available.
-- `health_check()`: return a lightweight provider health snapshot without generating model output.
+- `health_check()`: return a provider health snapshot before generation; built-in probes stay lightweight when inventory checks are sufficient, but a provider may use a minimal backend request when model inventory alone cannot confirm execution readiness.
 
 Provider implementations surface two operational failure classes:
 
@@ -92,7 +92,7 @@ Use the Anthropic provider when `llm_provider="anthropic"`.
 - Required runtime fields: valid API key, model name
 - API style: Anthropic messages API
 - Metadata captured: requested token budget, input/output/total/cache token counts, plus `stop_reason` and `stop_type` when the backend returns them
-- Health probe behavior: validates backend reachability and confirms the configured model is present in the provider model list before generation begins
+- Health probe behavior: validates backend reachability and confirms the configured model is present in the provider model list before generation begins; when a custom `base_url` or `ANTHROPIC_BASE_URL` gateway is configured, the probe also performs a minimal `messages.create` request so inventory-only reachability does not mask a blocked execution path
 
 Example:
 
@@ -171,7 +171,7 @@ Health probes also flow through a shared shape:
 - `retryable`: whether a failed probe indicates a transient condition
 - `latency_ms`: elapsed probe latency for readiness checks
 
-When a provider is reachable but the configured model is unavailable, the built-in providers report `status="failing"`, `backend_reachable=True`, and `model_ready=False`. This is treated as a deterministic failure so the runtime can fail fast or move to a fallback provider without burning transient retry budget.
+When a provider is reachable but the configured model is unavailable, the built-in providers report `status="failing"`, `backend_reachable=True`, and `model_ready=False`. The same deterministic failing shape is used when a custom Anthropic-compatible gateway can list models but rejects the minimal live message probe. This is treated as a deterministic failure so the runtime can fail fast or move to a fallback provider without burning transient retry budget.
 
 Cached unhealthy health snapshots additionally expose:
 

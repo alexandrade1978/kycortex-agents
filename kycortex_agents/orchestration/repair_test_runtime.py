@@ -181,6 +181,13 @@ def build_runtime_only_test_repair_lines(
             lines.append(
                 "Apply the same rule to return-review labels such as auto-approve, manual inspection, and abuse escalation. Do not hard-code those happy-path or batch outcomes unless the contract explicitly defines that mapping."
             )
+        if "exact zero-risk assertion" in summary_lower:
+            lines.append(
+                "The previous suite asserted a zero risk score even though its own visible payload already included risk factors that must raise the score. Remove that exact zero literal or rebuild the payload as a truly clean request before keeping a zero-risk expectation."
+            )
+            lines.append(
+                "If a happy-path or batch payload includes adverse_indicators, missing_documents, or empty identity_evidence, do not assert exact zero risk for that payload. Switch to a contract-backed invariant or to a genuinely risk-free input."
+            )
         if "exact internal action-map key assumption" in summary_lower:
             lines.append(
                 "The previous runtime failure came from assuming an internal action or review map used request identity as its key. Do not assert request.request_id in service.review_actions or a similar membership check unless the contract explicitly defines that storage key."

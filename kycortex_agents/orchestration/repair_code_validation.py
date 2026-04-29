@@ -118,6 +118,10 @@ def build_code_validation_repair_lines(
         )
     if missing_import_details is not None:
         missing_name, broken_line = missing_import_details
+        if missing_name == "dataclass":
+            lines.append(
+                "If the module uses @dataclass anywhere, import dataclass explicitly with `from dataclasses import dataclass` before the first decorator. Do not leave @dataclass in the final module without that import."
+            )
         if broken_line and f"{missing_name}." in broken_line:
             lines.append(
                 f"The module import is failing because `{broken_line}` uses {missing_name} before it is imported. If you keep that module-qualified reference, add `import {missing_name}` before first use instead of returning the same line unchanged."

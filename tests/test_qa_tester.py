@@ -3240,6 +3240,123 @@ class TestRepairRequestPayloadLiterals:
 
         assert updated == content
 
+    def test_validation_failure_drops_stale_details_key_deletion_when_details_becomes_none(self):
+        content = (
+            "def test_validation_failure():\n"
+            "    vendor_submission = VendorSubmission(request_id='request_id-1', request_type='screening', details={'vendor_name': 'SampleVendor'}, timestamp=fixed_time)\n"
+            "    del vendor_submission.details['due_diligence_evidence']\n"
+        )
+        implementation_code = (
+            "from datetime import datetime\n\n"
+            "class VendorSubmission:\n"
+            "    request_id: str\n"
+            "    request_type: str\n"
+            "    details: dict[str, object]\n"
+            "    timestamp: datetime\n\n"
+            "class VendorRiskReviewService:\n"
+            "    def validate_request(self, request: VendorSubmission) -> bool:\n"
+            "        return isinstance(request.details, dict)\n"
+        )
+        updated = QATesterAgent._normalize_placeholder_payload_values(
+            content,
+            implementation_code,
+        )
+
+        assert "details=None" in updated
+        assert "del vendor_submission.details['due_diligence_evidence']" not in updated
+
+    def test_validation_failure_preserves_pytest_raises_when_implementation_raises_value_error(self):
+        content = (
+            "import pytest\n\n"
+            "def test_validation_failure():\n"
+            "    with pytest.raises(ValueError):\n"
+            "        service.handle_request(vendor_submission)\n"
+        )
+        implementation_code = (
+            "class VendorRiskReviewService:\n"
+            "    def validate_request(self, request):\n"
+            "        return isinstance(request.details, dict)\n\n"
+            "    def handle_request(self, request):\n"
+            "        if not self.validate_request(request):\n"
+            "            raise ValueError('invalid request')\n"
+            "        return {'outcome': 'accepted'}\n"
+        )
+
+        updated = QATesterAgent._normalize_placeholder_payload_values(
+            content,
+            implementation_code,
+        )
+
+        assert "with pytest.raises(ValueError):" in updated
+        assert "_validation_result = service.handle_request(vendor_submission)" not in updated
+
+    def test_validation_failure_rewrites_pytest_raises_when_implementation_does_not_raise_value_error(self):
+        content = (
+            "import pytest\n\n"
+            "def test_validation_failure():\n"
+            "    with pytest.raises(ValueError):\n"
+            "        service.handle_request(vendor_submission)\n"
+        )
+        implementation_code = (
+            "class VendorRiskReviewService:\n"
+            "    def validate_request(self, request):\n"
+            "        return isinstance(request.details, dict)\n\n"
+            "    def handle_request(self, request):\n"
+            "        return {'outcome': 'blocked'}\n"
+        )
+
+        updated = QATesterAgent._normalize_placeholder_payload_values(
+            content,
+            implementation_code,
+        )
+
+        assert "with pytest.raises(ValueError):" not in updated
+        assert "_validation_result = service.handle_request(vendor_submission)" in updated
+        assert "try:" in updated
+
+    def test_validation_failure_rewrites_inverted_bool_assert_and_direct_outcome_assertions(self):
+        content = (
+            "import pytest\n"
+            "from datetime import datetime\n"
+            "from code_implementation import ClaimTriageService, ClaimRequest, ClaimOutcome\n\n"
+            "def test_validation_failure():\n"
+            "    service = ClaimTriageService()\n"
+            "    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+            "    request = ClaimRequest(request_id='request_id-1', request_type='screening', details=None, timestamp=fixed_time)\n"
+            "    is_valid = service.validate_request(request)\n"
+            "    assert is_valid is True\n"
+            "    outcome = service.handle_request(request)\n"
+            "    assert outcome.request_id == request.request_id\n"
+            "    assert isinstance(outcome.outcome, str)\n"
+        )
+        implementation_code = (
+            "from datetime import datetime\n\n"
+            "class ClaimRequest:\n"
+            "    request_id: str\n"
+            "    request_type: str\n"
+            "    details: dict[str, object]\n"
+            "    timestamp: datetime\n\n"
+            "class ClaimTriageService:\n"
+            "    def validate_request(self, request):\n"
+            "        return isinstance(request.details, dict)\n\n"
+            "    def handle_request(self, request):\n"
+            "        if not self.validate_request(request):\n"
+            "            raise ValueError('invalid request')\n"
+            "        return {'outcome': 'accepted'}\n"
+        )
+
+        updated = QATesterAgent._normalize_placeholder_payload_values(
+            content,
+            implementation_code,
+        )
+
+        assert "assert is_valid is False" in updated
+        assert "with pytest.raises(ValueError):" in updated
+        assert "service.handle_request(request)" in updated
+        assert "outcome = service.handle_request(request)" not in updated
+        assert "assert outcome.request_id == request.request_id" not in updated
+        assert "assert isinstance(outcome.outcome, str)" not in updated
+
 
 class TestServiceDependencyHelpers:
     def test_maps_dependency_methods_and_infers_forwarded_return_types(self):

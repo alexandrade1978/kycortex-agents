@@ -105,6 +105,7 @@ from kycortex_agents.orchestration.module_ast_analysis import (
 )
 from kycortex_agents.orchestration.test_ast_analysis import (
 	analyze_test_module,
+	analyze_test_module_runtime,
 	analyze_test_behavior_contracts,
 	analyze_test_type_mismatches,
 	auto_fix_test_type_mismatches,
@@ -981,7 +982,14 @@ def test_build_module_run_command_returns_python_command_for_main_guard():
 
 
 def test_parse_behavior_contract_extracts_validation_type_and_batch_rules():
-	validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
+	(
+		validation_rules,
+		field_value_rules,
+		batch_rules,
+		sequence_input_functions,
+		type_constraint_rules,
+		dict_key_rules,
+	) = parse_behavior_contract(
 		"\n".join(
 			[
 				"- intake_request requires fields: request_id, compliance_data",
@@ -998,6 +1006,7 @@ def test_parse_behavior_contract_extracts_validation_type_and_batch_rules():
 	assert validation_rules == {"intake_request": ["request_id", "compliance_data"]}
 	assert field_value_rules == {"intake_request": {"status": ["approved", "denied"]}}
 	assert type_constraint_rules == {"intake_request": {"payload": ["dict", "list"]}}
+	assert dict_key_rules == {"intake_request": {"payload": ["request_id"]}}
 	assert sequence_input_functions == {"process_batch"}
 	assert batch_rules == {
 		"process_batch": {"request_key": "request_id", "wrapper_key": "payload", "fields": ["compliance_data", "status"]},
@@ -1029,6 +1038,53 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
 		"validate_request payload missing required fields: email at line 2",
 	]
 	assert non_batch_calls == ["helper does not accept batch/list inputs at line 4"]
+
+
+def test_analyze_test_module_runtime_flags_missing_required_nested_dict_keys_for_request_details():
+	module_code = (
+		"from dataclasses import dataclass\n"
+		"from datetime import datetime\n"
+		"from typing import Any, Dict\n\n"
+		"@dataclass\n"
+		"class VendorSubmission:\n"
+		"    request_id: str\n"
+		"    request_type: str\n"
+		"    details: Dict[str, Any]\n"
+		"    timestamp: datetime\n\n"
+		"class VendorRiskReviewService:\n"
+		"    def handle_request(self, request):\n"
+		"        if not isinstance(request.details, dict):\n"
+		"            return {'decision': 'rejected'}\n"
+		"        vendor_name = request.details.get('vendor_name', '')\n"
+		"        service_category = request.details.get('service_category', '')\n"
+		"        if not vendor_name or not service_category:\n"
+		"            return {'decision': 'rejected'}\n"
+		"        return {'decision': 'approved'}\n"
+	)
+	test_content = (
+		"from datetime import datetime\n"
+		"from module_under_test import VendorSubmission, VendorRiskReviewService\n\n"
+		"def test_happy_path():\n"
+		"    service = VendorRiskReviewService()\n"
+		"    request = VendorSubmission(\n"
+		"        request_id='req-1',\n"
+		"        request_type='vendor_submission',\n"
+		"        details={'key': 'value'},\n"
+		"        timestamp=datetime.now(),\n"
+		"    )\n"
+		"    assert service.handle_request(request)['decision'] == 'approved'\n"
+	)
+
+	analysis = analyze_test_module_runtime(
+		test_content,
+		"module_under_test",
+		analyze_python_module(module_code),
+		build_code_behavior_contract(module_code),
+	)
+
+	assert analysis["payload_contract_violations"] == [
+		"handle_request parameter `details` missing required dict keys: service_category, vendor_name at line 12"
+	]
 
 
 def test_analyze_test_type_mismatches_reports_only_non_negative_type_mismatches():
@@ -1079,6 +1135,120 @@ def test_auto_fix_test_type_mismatches_reuses_existing_dict_variable_and_skips_n
 
 	assert "s.handle(details=details)" in fixed
 	assert "details='bad'" in fixed
+
+
+def test_auto_fix_test_type_mismatches_normalizes_nested_dict_placeholders_in_positive_tests():
+	impl_code = (
+		"def handle(details):\n"
+		"    required_fields = {'requester_identity', 'requested_roles', 'approval_metadata'}\n"
+		"    if not required_fields.issubset(details):\n"
+		"        return False\n"
+		"    approval_metadata = details.get('approval_metadata')\n"
+		"    if not isinstance(approval_metadata, dict) or 'approved_by' not in approval_metadata or 'age_days' not in approval_metadata:\n"
+		"        return False\n"
+		"    return True\n"
+	)
+	test_code = (
+		"def test_happy_path():\n"
+		"    handle(details={'requester_identity': 'sample', 'requested_roles': ['sample'], 'approval_metadata': {'key': 'sample'}})\n\n"
+		"def test_validation_failure():\n"
+		"    handle(details=None)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'approval_metadata': {" in fixed
+	assert "'approved_by': 'sample'" in fixed
+	assert "'age_days': 1" in fixed
+	assert "'requester_identity': 'sample'" in fixed
+	assert "'requested_roles': ['sample']" in fixed
+	assert "handle(details=None)" in fixed
+
+
+def test_auto_fix_test_type_mismatches_adds_required_fields_from_validation_rules():
+	impl_code = (
+		"def validate_request(details):\n"
+		"    if not isinstance(details, dict):\n"
+		"        return False\n"
+		"    required_fields = {'policy_id', 'claim_category', 'claim_amount', 'evidence'}\n"
+		"    return required_fields.issubset(details)\n\n"
+		"def handle_request(details):\n"
+		"    if not validate_request(details):\n"
+		"        raise ValueError('Invalid claim request')\n"
+		"    if details.get('duplicate_claim'):\n"
+		"        return True\n"
+		"    return details.get('suspicious_timing', False)\n"
+	)
+	test_code = (
+		"def test_happy_path():\n"
+		"    handle_request(details={'duplicate_claim': 'sample', 'suspicious_timing': 'sample'})\n\n"
+		"def test_validation_failure():\n"
+		"    handle_request(details=None)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'policy_id': 'sample'" in fixed
+	assert "'claim_category': 'sample'" in fixed
+	assert "'claim_amount': 1" in fixed
+	assert "'evidence': ['sample']" in fixed
+	assert "'duplicate_claim': 'sample'" in fixed
+	assert "'suspicious_timing': False" in fixed
+	assert "handle_request(details=None)" in fixed
+
+
+def test_auto_fix_test_type_mismatches_uses_literal_examples_from_sample_payloads():
+	impl_code = (
+		"from datetime import datetime\n\n"
+		"class VendorRiskReviewService:\n"
+		"    def handle_request(self, request):\n"
+		"        vendor_name = request.details.get('vendor_name', '')\n"
+		"        service_category = request.details.get('service_category', '')\n"
+		"        due_diligence_evidence = request.details.get('due_diligence_evidence', [])\n"
+		"        return vendor_name, service_category, due_diligence_evidence\n\n"
+		"def main():\n"
+		"    sample_submissions = [\n"
+		"        {'details': {'vendor_name': 'TechCorp Inc', 'service_category': 'IT Services', 'due_diligence_evidence': ['cert_iso27001']}}\n"
+		"    ]\n"
+	)
+	test_code = (
+		"def test_happy_path():\n"
+		"    service.handle_request(VendorSubmission(details={'vendor_name': 'sample', 'service_category': 'sample', 'due_diligence_evidence': ['sample']}))\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'vendor_name': 'TechCorp Inc'" in fixed
+	assert "'service_category': 'IT Services'" in fixed
+	assert "'due_diligence_evidence': ['cert_iso27001']" in fixed
+
+
+def test_auto_fix_test_type_mismatches_replaces_placeholder_list_values_with_literal_examples():
+	impl_code = (
+		"from datetime import datetime\n\n"
+		"class ReturnScreeningService:\n"
+		"    def handle_request(self, request):\n"
+		"        return self.score_risk(request.details)\n\n"
+		"    def score_risk(self, details):\n"
+		"        if any(item.get('value', 0) > 1000 for item in details.get('items', [])):\n"
+		"            return 1\n"
+		"        return 0\n\n"
+		"def main():\n"
+		"    request = ReturnCase(\n"
+		"        request_id='12345',\n"
+		"        request_type='return',\n"
+		"        details={'items': [{'sku': 'item1', 'category': 'electronics', 'value': 1500}], 'prior_returns': 3, 'receipt_present': False},\n"
+		"        timestamp=datetime.now(),\n"
+		"    )\n"
+	)
+	test_code = (
+		"def test_happy_path():\n"
+		"    service.handle_request(ReturnCase(request_id='request_id-1', request_type='return', details={'items': ['sample'], 'prior_returns': 1, 'receipt_present': False}, timestamp=fixed_time))\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'items': [{'sku': 'item1', 'category': 'electronics', 'value': 1500}]" in fixed
 
 
 def test_analyze_test_module_returns_default_shape_for_blank_and_syntax_invalid_input():
@@ -2437,6 +2607,40 @@ def test_build_repair_instruction_covers_missing_import_plain_class_and_warning_
 
 	assert "Focus on the actual pytest failure details" in warning_only_instruction
 
+	detailed_warning_instruction = build_repair_instruction(
+		"tests-task",
+		"test_validation",
+		last_error="",
+		failed_code="",
+		validation={
+			"test_analysis": {
+				"type_mismatches": [
+					"validate_request passes NoneType for `details` (expected dict) at line 30"
+				],
+				"payload_contract_violations": [
+					"handle_request parameter `details` missing required dict keys: requester_identity, requested_roles at line 9"
+				],
+			},
+			"test_execution": {
+				"ran": True,
+				"returncode": 1,
+				"summary": "2 failed, 1 passed in 0.16s",
+				"stdout": (
+					"FAILED tests_tests.py::test_happy_path - ValueError: Invalid request details\n"
+					"E   ValueError: Invalid request details\n"
+				),
+			},
+		},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: None,
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: True,
+	)
+
+	assert "validate_request passes NoneType for `details`" in detailed_warning_instruction
+	assert "missing required dict keys: requester_identity, requested_roles" in detailed_warning_instruction
+	assert "ValueError: Invalid request details" in detailed_warning_instruction
+
 
 def test_build_repair_instruction_runtime_reads_code_artifact_directly():
 	instruction = build_repair_instruction_runtime(
@@ -3067,6 +3271,25 @@ def test_build_code_validation_repair_lines_covers_non_module_qualified_missing_
 	assert any("logger = build_logger()" in line for line in lines)
 
 
+def test_build_code_validation_repair_lines_explicitly_guides_dataclass_import_directly():
+	lines = build_code_validation_repair_lines(
+		summary_lower="generated code validation:\n- module import: fail\n- import summary: nameerror: name 'dataclass' is not defined\n",
+		failed_content_lower="@dataclass\nclass ReviewAction:\n    action_id: str\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=None,
+		duplicate_constructor_call_hint="",
+		duplicate_constructor_explicit_rewrite_hint="",
+		missing_attribute_details=None,
+		nested_payload_wrapper_details=None,
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=("dataclass", "@dataclass"),
+	)
+
+	assert any("from dataclasses import dataclass" in line for line in lines)
+	assert any("Do not leave @dataclass in the final module without that import" in line for line in lines)
+
+
 def test_build_runtime_only_test_repair_lines_handles_return_shape_and_did_not_raise_directly():
 	lines = build_runtime_only_test_repair_lines(
 		summary_lower=(
@@ -3087,6 +3310,26 @@ def test_build_runtime_only_test_repair_lines_handles_return_shape_and_did_not_r
 	assert any("wrapped object return shape" in line for line in lines)
 	assert any("rebuild that scenario around an input that actually violates the current validator or contract" in line for line in lines)
 	assert any("reserve pytest.raises only for an input that the current validator demonstrably rejects" in line for line in lines)
+
+
+def test_build_runtime_only_test_repair_lines_handles_zero_risk_overreach_directly():
+	lines = build_runtime_only_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- contract overreach signals: exact zero-risk assertion on 'result['risk_score']' in test_happy_path (line 4) contradicts visible risk factors that must increase score\n"
+			"- pytest execution: fail\n"
+		),
+		failed_content_lower="def test_happy_path():\n    assert result['risk_score'] == 0.0\n",
+		imported_module_symbols=[],
+		unknown_module_symbols=[],
+		previous_member_calls={},
+		previous_constructor_keywords={},
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+	)
+
+	assert any("asserted a zero risk score" in line for line in lines)
+	assert any("do not assert exact zero risk" in line for line in lines)
 
 
 def test_build_structural_test_repair_lines_handles_budget_and_assertionless_guidance_directly():
@@ -4641,6 +4884,100 @@ def test_validate_code_output_runtime_rejects_missing_cli_entrypoint_directly():
 		)
 
 
+def test_validate_code_output_runtime_injects_missing_dataclass_import_directly():
+	broken_code = (
+		"from datetime import datetime\n"
+		"from typing import Any, Dict\n\n"
+		"@dataclass\n"
+		"class VendorSubmission:\n"
+		"    request_id: str\n"
+		"    request_type: str\n"
+		"    details: Dict[str, Any]\n"
+		"    timestamp: datetime\n"
+	)
+	output = AgentOutput(
+		summary="code",
+		raw_content=broken_code,
+		artifacts=[
+			ArtifactRecord(name="code", artifact_type=ArtifactType.CODE, path="code.py", content=broken_code),
+		],
+	)
+	validated_contents: list[str] = []
+
+	assert validate_code_output_runtime(
+		output,
+		None,
+		False,
+		lambda content, has_typed_artifact: True,
+		lambda content: {"syntax_ok": True, "has_main_guard": True, "third_party_imports": []},
+		lambda content: len(content.splitlines()),
+		lambda code_analysis: {"passed": True, "issues": []},
+		lambda agent_output, **kwargs: {"likely_truncated": False, "hit_token_limit": False},
+		lambda agent_output, artifact_type, default_filename: default_filename,
+		lambda module_filename, code_content: validated_contents.append(code_content) or {"ran": True, "returncode": 0, "summary": "ok"},
+		lambda *args, **kwargs: None,
+		lambda diagnostics: "truncated",
+	) is None
+
+	expected_code = (
+		"from dataclasses import dataclass\n"
+		"from datetime import datetime\n"
+		"from typing import Any, Dict\n\n"
+		"@dataclass\n"
+		"class VendorSubmission:\n"
+		"    request_id: str\n"
+		"    request_type: str\n"
+		"    details: Dict[str, Any]\n"
+		"    timestamp: datetime\n"
+	)
+	assert validated_contents == [expected_code]
+
+
+def test_validate_code_output_runtime_injects_missing_typing_annotation_import_directly():
+	broken_code = (
+		"from datetime import datetime\n"
+		"from typing import Any, Dict\n\n"
+		"class AccessReviewService:\n"
+		"    def get_audit_history(self) -> List[Dict[str, Any]]:\n"
+		"        return []\n"
+	)
+	output = AgentOutput(
+		summary="code",
+		raw_content=broken_code,
+		artifacts=[
+			ArtifactRecord(name="code", artifact_type=ArtifactType.CODE, path="code.py", content=broken_code),
+		],
+	)
+	validated_contents: list[str] = []
+
+	assert validate_code_output_runtime(
+		output,
+		None,
+		False,
+		lambda content, has_typed_artifact: True,
+		lambda content: {"syntax_ok": True, "has_main_guard": True, "third_party_imports": []},
+		lambda content: len(content.splitlines()),
+		lambda code_analysis: {"passed": True, "issues": []},
+		lambda agent_output, **kwargs: {"likely_truncated": False, "hit_token_limit": False},
+		lambda agent_output, artifact_type, default_filename: default_filename,
+		lambda module_filename, code_content: validated_contents.append(code_content) or {"ran": True, "returncode": 0, "summary": "ok"},
+		lambda *args, **kwargs: None,
+		lambda diagnostics: "truncated",
+	) is None
+
+	expected_code = (
+		"from typing import List\n"
+		"from datetime import datetime\n"
+		"from typing import Any, Dict\n\n"
+		"class AccessReviewService:\n"
+		"    def get_audit_history(self) -> List[Dict[str, Any]]:\n"
+		"        return []\n"
+	)
+	assert validated_contents == [expected_code]
+	assert output.raw_content == expected_code
+	assert output.artifacts[0].content == expected_code
+
+
 def test_validate_dependency_output_runtime_records_analysis_and_rejects_invalid_manifest_directly():
 	output = AgentOutput(summary="deps", raw_content="requests>=2\n")
 	recorded: dict[str, object] = {}
@@ -4909,6 +5246,19 @@ def test_validation_analysis_helpers_detect_contract_overreach_directly():
 
 	assert signals == [
 		"exact status/action label mismatch ('approved' vs 'rejected') suggests an unsupported threshold assumption"
+	]
+
+
+def test_find_contract_overreach_signals_detects_zero_risk_assertion_with_visible_risk_factors_directly():
+	overreach_function = ast.parse(
+		"def test_happy_path():\n"
+		"    request = ComplianceRequest(request_id='1', request_type='screening', details={'identity_evidence': ['passport'], 'adverse_indicators': ['pep'], 'missing_documents': []}, timestamp=fixed_time)\n"
+		"    result = service.handle_request(request)\n"
+		"    assert result['risk_score'] == 0.0\n"
+	).body[0]
+	assert isinstance(overreach_function, ast.FunctionDef)
+	assert find_contract_overreach_signals(overreach_function, {}, "") == [
+		"exact zero-risk assertion on 'result['risk_score']' in test_happy_path (line 4) contradicts visible risk factors that must increase score"
 	]
 
 

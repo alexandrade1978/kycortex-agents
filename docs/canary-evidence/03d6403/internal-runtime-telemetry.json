@@ -1,0 +1,342 @@
+{
+  "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
+  "generated_at": "2026-04-28T22:23:00Z",
+  "status": "pre-canary-partial-exports-collected",
+  "reason": "The live canary window has not started. This export contains only repository-owned pre-canary telemetry collected from retained ProjectState files.",
+  "required_source": "ProjectState.internal_runtime_telemetry()",
+  "planned_collection_points": [
+    "before traffic starts",
+    "first admitted workflow",
+    "10 eligible workflows or first incident",
+    "50 eligible workflows",
+    "daily review while the window remains closed or open",
+    "100 eligible workflows or 7 consecutive days",
+    "final canary close"
+  ],
+  "exports": {
+    "current_head_openai": {
+      "source": "output/real_world_complex_matrix_2026_04_28_head03d6403_rc_requal/kyc_compliance_intake/openai/project_state.json",
+      "phase": "completed",
+      "terminal_outcome": "completed",
+      "updated_at": "2026-04-28T22:19:46.125754+00:00",
+      "workflow": {
+        "task_count": 7,
+        "task_status_counts": {
+          "done": 7
+        },
+        "tasks_with_provider_calls": 7,
+        "tasks_without_provider_calls": 0,
+        "acceptance_evaluation": {
+          "policy": "all_tasks",
+          "accepted": true,
+          "reason": "all_evaluated_tasks_done",
+          "terminal_outcome": "completed"
+        },
+        "resume_summary": {
+          "resume_event_count": 0,
+          "reason_counts": {},
+          "resumed_task_count": 0,
+          "unique_task_count": 0,
+          "last_resumed_at": null
+        },
+        "repair_summary": {
+          "cycle_count": 0,
+          "max_cycles": 3,
+          "budget_remaining": 3,
+          "history_count": 0,
+          "reason_counts": {},
+          "failure_category_counts": {},
+          "failed_task_count": 0
+        },
+        "final_providers": [
+          "openai"
+        ],
+        "observed_providers": [
+          "openai"
+        ],
+        "provider_summary": {
+          "openai": {
+            "task_count": 7,
+            "success_count": 7,
+            "failure_count": 0,
+            "attempt_count": 7,
+            "retry_attempt_count": 0,
+            "models": [
+              "gpt-4o-mini"
+            ],
+            "duration_ms": {
+              "count": 7,
+              "total": 100263.823,
+              "min": 1639.547,
+              "max": 23386.009,
+              "avg": 14323.403
+            },
+            "usage": {
+              "input_tokens": 19007,
+              "output_tokens": 4094,
+              "total_tokens": 23101
+            }
+          }
+        },
+        "provider_health_summary": {
+          "openai": {
+            "models": [
+              "gpt-4o-mini"
+            ],
+            "status_counts": {
+              "healthy": 7
+            },
+            "last_outcome_counts": {
+              "success": 7
+            },
+            "retryable_failure_count": 0,
+            "active_health_check_count": 7
+          }
+        },
+        "attempt_count": 7,
+        "retry_attempt_count": 0,
+        "duration_ms": {
+          "count": 7,
+          "total": 100263.823,
+          "min": 1639.547,
+          "max": 23386.009,
+          "avg": 14323.403
+        },
+        "usage": {
+          "input_tokens": 19007,
+          "output_tokens": 4094,
+          "total_tokens": 23101
+        },
+        "fallback_summary": {
+          "task_count": 0,
+          "entry_count": 0,
+          "providers": [],
+          "statuses": []
+        },
+        "error_summary": {
+          "final_error_count": 0,
+          "fallback_error_count": 0
+        }
+      }
+    },
+    "current_head_anthropic": {
+      "source": "output/real_world_complex_matrix_2026_04_28_head03d6403_rc_requal/kyc_compliance_intake/anthropic/project_state.json",
+      "phase": "failed",
+      "terminal_outcome": "failed",
+      "updated_at": "2026-04-28T22:19:47.097023+00:00",
+      "workflow": {
+        "task_count": 10,
+        "task_status_counts": {
+          "failed": 4,
+          "pending": 6
+        },
+        "tasks_with_provider_calls": 4,
+        "tasks_without_provider_calls": 6,
+        "acceptance_evaluation": {
+          "policy": "all_tasks",
+          "accepted": false,
+          "reason": "evaluated_tasks_incomplete",
+          "terminal_outcome": "failed",
+          "failure_category": "workflow_blocked"
+        },
+        "resume_summary": {
+          "resume_event_count": 3,
+          "reason_counts": {
+            "failed_workflow": 3
+          },
+          "resumed_task_count": 9,
+          "unique_task_count": 9,
+          "last_resumed_at": "2026-04-28T22:19:46.960381+00:00"
+        },
+        "repair_summary": {
+          "cycle_count": 3,
+          "max_cycles": 3,
+          "budget_remaining": 0,
+          "history_count": 3,
+          "reason_counts": {
+            "resume_failed_tasks": 3
+          },
+          "failure_category_counts": {
+            "task_execution": 3
+          },
+          "failed_task_count": 1
+        },
+        "final_providers": [
+          "anthropic"
+        ],
+        "observed_providers": [
+          "anthropic"
+        ],
+        "provider_summary": {
+          "anthropic": {
+            "task_count": 4,
+            "success_count": 0,
+            "failure_count": 4,
+            "attempt_count": 4,
+            "retry_attempt_count": 0,
+            "models": [
+              "claude-haiku-4-5-20251001"
+            ],
+            "duration_ms": {
+              "count": 4,
+              "total": 442.832,
+              "min": 96.169,
+              "max": 139.525,
+              "avg": 110.708
+            },
+            "usage": {}
+          }
+        },
+        "provider_health_summary": {
+          "anthropic": {
+            "models": [
+              "claude-haiku-4-5-20251001"
+            ],
+            "status_counts": {
+              "failing": 4
+            },
+            "last_outcome_counts": {
+              "failure": 4
+            },
+            "retryable_failure_count": 0,
+            "active_health_check_count": 4
+          }
+        },
+        "attempt_count": 4,
+        "retry_attempt_count": 0,
+        "duration_ms": {
+          "count": 4,
+          "total": 442.832,
+          "min": 96.169,
+          "max": 139.525,
+          "avg": 110.708
+        },
+        "usage": {},
+        "fallback_summary": {
+          "task_count": 0,
+          "entry_count": 0,
+          "providers": [],
+          "statuses": []
+        },
+        "error_summary": {
+          "final_error_count": 4,
+          "fallback_error_count": 0
+        }
+      }
+    },
+    "active_scope_ollama": {
+      "source": "output/real_world_complex_matrix_2026_04_28_full_scope/ollama/project_state.json",
+      "phase": "completed",
+      "terminal_outcome": "completed",
+      "updated_at": "2026-04-28T16:50:25.390800+00:00",
+      "workflow": {
+        "task_count": 7,
+        "task_status_counts": {
+          "done": 7
+        },
+        "tasks_with_provider_calls": 7,
+        "tasks_without_provider_calls": 0,
+        "acceptance_evaluation": {
+          "policy": "all_tasks",
+          "accepted": true,
+          "reason": "all_evaluated_tasks_done",
+          "terminal_outcome": "completed"
+        },
+        "resume_summary": {
+          "resume_event_count": 0,
+          "reason_counts": {},
+          "resumed_task_count": 0,
+          "unique_task_count": 0,
+          "last_resumed_at": null
+        },
+        "repair_summary": {
+          "cycle_count": 0,
+          "max_cycles": 1,
+          "budget_remaining": 1,
+          "history_count": 0,
+          "reason_counts": {},
+          "failure_category_counts": {},
+          "failed_task_count": 0
+        },
+        "final_providers": [
+          "ollama"
+        ],
+        "observed_providers": [
+          "ollama"
+        ],
+        "provider_summary": {
+          "ollama": {
+            "task_count": 7,
+            "success_count": 7,
+            "failure_count": 0,
+            "attempt_count": 7,
+            "retry_attempt_count": 0,
+            "models": [
+              "qwen2.5-coder:7b"
+            ],
+            "duration_ms": {
+              "count": 7,
+              "total": 641717.155,
+              "min": 14125.478,
+              "max": 208396.601,
+              "avg": 91673.879
+            },
+            "usage": {
+              "input_tokens": 16184,
+              "output_tokens": 3262,
+              "total_tokens": 19446
+            }
+          }
+        },
+        "provider_health_summary": {
+          "ollama": {
+            "models": [
+              "qwen2.5-coder:7b"
+            ],
+            "status_counts": {
+              "healthy": 7
+            },
+            "last_outcome_counts": {
+              "success": 7
+            },
+            "retryable_failure_count": 0,
+            "active_health_check_count": 7
+          }
+        },
+        "attempt_count": 7,
+        "retry_attempt_count": 0,
+        "duration_ms": {
+          "count": 7,
+          "total": 641717.155,
+          "min": 14125.478,
+          "max": 208396.601,
+          "avg": 91673.879
+        },
+        "usage": {
+          "input_tokens": 16184,
+          "output_tokens": 3262,
+          "total_tokens": 19446
+        },
+        "fallback_summary": {
+          "task_count": 0,
+          "entry_count": 0,
+          "providers": [],
+          "statuses": []
+        },
+        "error_summary": {
+          "final_error_count": 0,
+          "fallback_error_count": 0
+        }
+      }
+    }
+  },
+  "missing_live_window_exports": [
+    "before traffic starts",
+    "first admitted workflow",
+    "10 eligible workflows or first incident",
+    "50 eligible workflows",
+    "daily review while the window remains open",
+    "100 eligible workflows or 7 consecutive days",
+    "final canary close"
+  ]
+}

@@ -268,6 +268,7 @@ def build_full_workflow_project_with_budgets(
                 "If you derive a numeric risk score from request data, prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds unless the architecture explicitly requires them. "
                 "If a boolean or toggle-like request field influences behavior, use its truth value rather than mere field presence unless the architecture explicitly defines presence-only semantics. "
                 "If you model requests or records as dataclasses or typed objects, keep object access consistent and do not mix in dict-style membership checks or subscripting unless the architecture explicitly requires mappings. "
+                "If you use @dataclass anywhere in the module, import dataclass explicitly from dataclasses so the module imports cleanly. "
                 "If you define dataclasses or typed record models with defaults, place every required non-default field before any defaulted field so the module imports cleanly and avoids import-time field-order errors. "
                 "If a dataclass such as AuditLog has required fields action and details plus a defaulted timestamp, declare action and details before timestamp = field(default_factory=...) so the module imports cleanly. "
                 "If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses so the module imports cleanly. "

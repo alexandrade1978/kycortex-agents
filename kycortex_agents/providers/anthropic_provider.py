@@ -44,6 +44,20 @@ class AnthropicProvider(BaseLLMProvider):
     def _health_check_timeout(self) -> float:
         return min(self.config.timeout_seconds, 5.0)
 
+    def _requires_live_message_probe(self) -> bool:
+        return self._base_url() is not None
+
+    def _live_message_probe_kwargs(self, timeout_seconds: float) -> dict[str, Any]:
+        create_kwargs: dict[str, Any] = {
+            "model": self.config.llm_model,
+            self._capabilities.max_tokens_param: 1,
+            "timeout": timeout_seconds,
+            "messages": [{"role": "user", "content": "ping"}],
+        }
+        if self._capabilities.supports_temperature:
+            create_kwargs["temperature"] = 0.0
+        return create_kwargs
+
     def _listed_model_ids(self, payload: Any) -> set[str]:
         data = getattr(payload, "data", payload)
         if isinstance(data, dict):
@@ -102,6 +116,30 @@ class AnthropicProvider(BaseLLMProvider):
                 "timeout_seconds": round(timeout_seconds, 6),
                 "latency_ms": round((completed_at - started_at) * 1000, 3),
             }
+        if self._requires_live_message_probe():
+            try:
+                client.messages.create(**self._live_message_probe_kwargs(timeout_seconds))
+            except Exception as exc:
+                self._last_call_metadata = None
+                completed_at = perf_counter()
+                if is_transient_provider_exception(exc):
+                    raise ProviderTransientError("Anthropic provider live message health probe failed") from exc
+                return {
+                    "provider": self.config.llm_provider,
+                    "model": self.config.llm_model,
+                    "status": "failing",
+                    "active_check": True,
+                    "retryable": False,
+                    "backend_reachable": True,
+                    "model_ready": False,
+                    "error_type": "AgentExecutionError",
+                    "error_message": (
+                        "Anthropic provider health check could list models but live message probe was rejected"
+                    ),
+                    "timeout_seconds": round(timeout_seconds, 6),
+                    "latency_ms": round((completed_at - started_at) * 1000, 3),
+                }
+            completed_at = perf_counter()
         return {
             "provider": self.config.llm_provider,
             "model": self.config.llm_model,

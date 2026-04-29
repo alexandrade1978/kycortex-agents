@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from functools import partial
 import inspect
@@ -58,6 +59,28 @@ ADAPTIVE_LINE_BUDGET_TOLERANCE_RATIO: dict[str, float] = {
     "rich": 0.15,
 }
 
+_TYPING_ANNOTATION_IMPORT_NAMES = frozenset(
+    {
+        "Annotated",
+        "Any",
+        "Callable",
+        "Dict",
+        "FrozenSet",
+        "Iterable",
+        "List",
+        "Literal",
+        "Mapping",
+        "MutableMapping",
+        "Optional",
+        "Sequence",
+        "Set",
+        "Tuple",
+        "TypeAlias",
+        "TypedDict",
+        "Union",
+    }
+)
+
 
 def build_task_output_validator_callbacks(
     sandbox_policy: ExecutionSandboxPolicy,
@@ -78,6 +101,149 @@ def _adaptive_prompt_mode(context: object) -> str | None:
     if isinstance(mode, str) and mode.strip():
         return mode.strip().lower()
     return None
+
+
+def _module_imports_bare_name(tree: ast.Module, module: str, name: str) -> bool:
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom) or node.module != module:
+            continue
+        for alias in node.names:
+            if alias.name == "*":
+                return True
+            if alias.name == name and (alias.asname is None or alias.asname == name):
+                return True
+    return False
+
+
+def _module_imports_bare_dataclass(tree: ast.Module) -> bool:
+    return _module_imports_bare_name(tree, "dataclasses", "dataclass")
+
+
+def _import_insertion_line(code_content: str, tree: ast.Module) -> int:
+    lines = code_content.splitlines()
+    leading_preamble_lines = 0
+    while leading_preamble_lines < len(lines):
+        line = lines[leading_preamble_lines]
+        stripped = line.strip()
+        if line.startswith("#!") or (stripped.startswith("#") and "coding" in stripped):
+            leading_preamble_lines += 1
+            continue
+        break
+
+    insert_line = leading_preamble_lines + 1
+    body_index = 0
+    if tree.body:
+        first_node = tree.body[0]
+        if isinstance(first_node, ast.Expr):
+            first_value = first_node.value
+            if isinstance(first_value, ast.Constant) and isinstance(first_value.value, str):
+                insert_line = max(insert_line, (first_node.end_lineno or first_node.lineno) + 1)
+                body_index = 1
+
+    while body_index < len(tree.body):
+        node = tree.body[body_index]
+        if isinstance(node, ast.ImportFrom) and node.module == "__future__":
+            insert_line = max(insert_line, (node.end_lineno or node.lineno) + 1)
+            body_index += 1
+            continue
+        break
+
+    return max(leading_preamble_lines, min(insert_line - 1, len(lines)))
+
+
+def _insert_import_lines(code_content: str, import_lines: list[str], tree: ast.Module) -> str:
+    if not import_lines:
+        return code_content
+
+    lines = code_content.splitlines()
+    line_index = _import_insertion_line(code_content, tree)
+    lines[line_index:line_index] = import_lines
+    normalized = "\n".join(lines)
+    if code_content.endswith("\n"):
+        normalized += "\n"
+    return normalized
+
+
+class _TypingAnnotationNameCollector(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def _visit_annotation(self, node: ast.AST | None) -> None:
+        if node is not None:
+            self.visit(node)
+
+    def _visit_arguments(self, node: ast.arguments) -> None:
+        for arg in (*node.posonlyargs, *node.args, *node.kwonlyargs):
+            self._visit_annotation(arg.annotation)
+        self._visit_annotation(node.vararg.annotation if node.vararg is not None else None)
+        self._visit_annotation(node.kwarg.annotation if node.kwarg is not None else None)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_arguments(node.args)
+        self._visit_annotation(node.returns)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_arguments(node.args)
+        self._visit_annotation(node.returns)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self._visit_annotation(node.annotation)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Load) and node.id in _TYPING_ANNOTATION_IMPORT_NAMES:
+            self.names.add(node.id)
+
+
+def _missing_typing_annotation_imports(tree: ast.Module) -> list[str]:
+    collector = _TypingAnnotationNameCollector()
+    collector.visit(tree)
+    return sorted(
+        name for name in collector.names if not _module_imports_bare_name(tree, "typing", name)
+    )
+
+
+def _ensure_explicit_dataclass_import(code_content: str) -> str:
+    if "@dataclass" not in code_content:
+        return code_content
+
+    try:
+        tree = ast.parse(code_content)
+    except SyntaxError:
+        return code_content
+
+    if _module_imports_bare_dataclass(tree):
+        return code_content
+
+    return _insert_import_lines(code_content, ["from dataclasses import dataclass"], tree)
+
+
+def _ensure_typing_annotation_imports(code_content: str) -> str:
+    try:
+        tree = ast.parse(code_content)
+    except SyntaxError:
+        return code_content
+
+    missing_imports = _missing_typing_annotation_imports(tree)
+    if not missing_imports:
+        return code_content
+
+    return _insert_import_lines(code_content, [f"from typing import {', '.join(missing_imports)}"], tree)
+
+
+def _apply_code_content_autofixes(output: AgentOutput, code_content: str) -> str:
+    normalized = _ensure_explicit_dataclass_import(code_content)
+    normalized = _ensure_typing_annotation_imports(normalized)
+    if normalized == code_content:
+        return code_content
+
+    if output.raw_content == code_content:
+        output.raw_content = normalized
+    for artifact in output.artifacts:
+        if artifact.artifact_type != ArtifactType.CODE:
+            continue
+        if isinstance(artifact.content, str) and artifact.content == code_content:
+            artifact.content = normalized
+    return normalized
 
 
 def _effective_line_budget(line_budget: Optional[int], context: object) -> Optional[int]:
@@ -269,6 +435,8 @@ def validate_code_output_runtime(
     code_content = code_artifact_content or output.raw_content
     if not should_validate_code_content(code_content, has_typed_artifact=bool(code_artifact_content)):
         return
+
+    code_content = _apply_code_content_autofixes(output, code_content)
 
     code_analysis = analyze_python_module(code_content)
     code_analysis["line_count"] = output_line_count(code_content)

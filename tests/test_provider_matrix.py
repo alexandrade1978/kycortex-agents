@@ -888,6 +888,7 @@ def test_build_full_workflow_project_uses_explicit_compact_output_constraints(tm
     assert "prefer a direct, easy-to-verify formula and avoid hidden caps, clamps, or arbitrary thresholds" in code_task.description
     assert "use its truth value rather than mere field presence" in code_task.description
     assert "keep object access consistent and do not mix in dict-style membership checks or subscripting" in code_task.description
+    assert "If you use @dataclass anywhere in the module, import dataclass explicitly from dataclasses so the module imports cleanly" in code_task.description
     assert "place every required non-default field before any defaulted field" in code_task.description
     assert "AuditLog has required fields action and details plus a defaulted timestamp" in code_task.description
     assert "If you use dataclasses.field(...) or field(default_factory=...) anywhere in the module, import field explicitly from dataclasses" in code_task.description

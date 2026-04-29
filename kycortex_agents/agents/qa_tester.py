@@ -6020,6 +6020,7 @@ Return complete raw Python only."""
         impl_str = implementation_code if isinstance(implementation_code, str) else ""
         import re as _re
         _uses_isinstance_dict = bool(_re.search(r"isinstance\s*\([^,]+,\s*dict\s*\)", impl_str))
+        _implementation_raises_value_error = cls._implementation_raises_value_error(implementation_code)
 
         try:
             tree = ast.parse(content)
@@ -6162,10 +6163,53 @@ Return complete raw Python only."""
                         changed = True
                 return node
 
+            @staticmethod
+            def _targets_details_like_subscript(target: ast.expr) -> bool:
+                if not isinstance(target, ast.Subscript):
+                    return False
+                value = target.value
+                if isinstance(value, ast.Attribute):
+                    return value.attr.lower() in {
+                        "details",
+                        "metadata",
+                        "requester",
+                        "payload",
+                        "context",
+                        "profile",
+                    }
+                if isinstance(value, ast.Name):
+                    return value.id.lower() in {
+                        "details",
+                        "metadata",
+                        "requester",
+                        "payload",
+                        "context",
+                        "profile",
+                    }
+                return False
+
+            def visit_Delete(self, node: ast.Delete) -> ast.AST | None:
+                nonlocal changed
+                self.generic_visit(node)
+                if not self._in_vf or not _uses_isinstance_dict:
+                    return node
+                remaining_targets = [
+                    target for target in node.targets if not self._targets_details_like_subscript(target)
+                ]
+                if len(remaining_targets) == len(node.targets):
+                    return node
+                changed = True
+                if not remaining_targets:
+                    return None
+                node.targets = remaining_targets
+                return node
+
             def visit_With(self, node: ast.With) -> ast.AST | list[ast.stmt]:
                 nonlocal changed
                 self.generic_visit(node)
                 if not self._in_vf:
+                    return node
+                if _implementation_raises_value_error:
                     return node
                 if len(node.items) != 1:
                     return node
@@ -6210,8 +6254,169 @@ Return complete raw Python only."""
                 changed = True
                 return replacement
 
+        class ValidationFailureExpectationFixer(ast.NodeTransformer):
+            @staticmethod
+            def _statement_call(stmt: ast.stmt) -> ast.Call | None:
+                if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Call):
+                    return stmt.value
+                if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                    return stmt.value
+                return None
+
+            @staticmethod
+            def _assigned_name(stmt: ast.stmt) -> str:
+                if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+                    return ""
+                target = stmt.targets[0]
+                if isinstance(target, ast.Name):
+                    return target.id
+                return ""
+
+            @staticmethod
+            def _call_request_name(call: ast.Call) -> str:
+                if call.args and isinstance(call.args[0], ast.Name):
+                    return call.args[0].id
+                for keyword in call.keywords:
+                    if isinstance(keyword.value, ast.Name):
+                        return keyword.value.id
+                return ""
+
+            @staticmethod
+            def _is_validation_call(call: ast.Call) -> bool:
+                return isinstance(call.func, ast.Attribute) and call.func.attr.startswith("validate")
+
+            @staticmethod
+            def _is_pytest_value_error_with(stmt: ast.stmt) -> bool:
+                if not isinstance(stmt, ast.With) or len(stmt.items) != 1:
+                    return False
+                ctx = stmt.items[0].context_expr
+                if not isinstance(ctx, ast.Call):
+                    return False
+                if not isinstance(ctx.func, ast.Attribute):
+                    return False
+                if ctx.func.attr != "raises":
+                    return False
+                if not isinstance(ctx.func.value, ast.Name) or ctx.func.value.id != "pytest":
+                    return False
+                if not ctx.args:
+                    return False
+                first_arg = ctx.args[0]
+                return isinstance(first_arg, ast.Name) and first_arg.id == "ValueError"
+
+            @staticmethod
+            def _assert_references_names(stmt: ast.stmt, names: set[str]) -> bool:
+                if not isinstance(stmt, ast.Assert) or not names:
+                    return False
+                return any(isinstance(node, ast.Name) and node.id in names for node in ast.walk(stmt.test))
+
+            @staticmethod
+            def _is_true_assert_for_validation_name(stmt: ast.stmt, validation_names: set[str]) -> bool:
+                if not isinstance(stmt, ast.Assert):
+                    return False
+                test = stmt.test
+                if not isinstance(test, ast.Compare) or len(test.ops) != 1 or len(test.comparators) != 1:
+                    return False
+                comparator = test.comparators[0]
+                if not isinstance(comparator, ast.Constant) or comparator.value is not True:
+                    return False
+
+                left = test.left
+                if isinstance(left, ast.Name) and left.id in validation_names:
+                    return True
+                return (
+                    isinstance(left, ast.Attribute)
+                    and left.attr == "is_valid"
+                    and isinstance(left.value, ast.Name)
+                    and left.value.id in validation_names
+                )
+
+            @staticmethod
+            def _false_assert(stmt: ast.Assert) -> ast.Assert:
+                test = cast(ast.Compare, stmt.test)
+                updated = ast.Assert(
+                    test=ast.Compare(
+                        left=test.left,
+                        ops=test.ops,
+                        comparators=[ast.Constant(value=False)],
+                    ),
+                    msg=stmt.msg,
+                )
+                return cast(ast.Assert, ast.copy_location(updated, stmt))
+
+            @staticmethod
+            def _value_error_with(stmt: ast.stmt, call: ast.Call) -> ast.With:
+                context_expr = ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="pytest", ctx=ast.Load()),
+                        attr="raises",
+                        ctx=ast.Load(),
+                    ),
+                    args=[ast.Name(id="ValueError", ctx=ast.Load())],
+                    keywords=[],
+                )
+                replacement = ast.With(
+                    items=[ast.withitem(context_expr=context_expr, optional_vars=None)],
+                    body=[ast.Expr(value=call)],
+                    type_comment=None,
+                )
+                return cast(ast.With, ast.copy_location(replacement, stmt))
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+                nonlocal changed
+                self.generic_visit(node)
+                if node.name != "test_validation_failure":
+                    return node
+
+                validation_names: set[str] = set()
+                invalid_request_names: set[str] = set()
+                skipped_result_names: set[str] = set()
+                saw_value_error_with = any(self._is_pytest_value_error_with(stmt) for stmt in node.body)
+                rewritten_body: list[ast.stmt] = []
+
+                for stmt in node.body:
+                    call = self._statement_call(stmt)
+                    if call and self._is_validation_call(call):
+                        assigned_name = self._assigned_name(stmt)
+                        if assigned_name:
+                            validation_names.add(assigned_name)
+                        request_name = self._call_request_name(call)
+                        if request_name:
+                            invalid_request_names.add(request_name)
+
+                    if self._is_true_assert_for_validation_name(stmt, validation_names):
+                        rewritten_body.append(self._false_assert(cast(ast.Assert, stmt)))
+                        changed = True
+                        continue
+
+                    if (
+                        call
+                        and _implementation_raises_value_error
+                        and not saw_value_error_with
+                        and isinstance(call.func, ast.Attribute)
+                        and not call.func.attr.startswith("validate")
+                        and self._call_request_name(call) in invalid_request_names
+                    ):
+                        assigned_name = self._assigned_name(stmt)
+                        if assigned_name:
+                            skipped_result_names.add(assigned_name)
+                        rewritten_body.append(self._value_error_with(stmt, call))
+                        changed = True
+                        saw_value_error_with = True
+                        continue
+
+                    if self._assert_references_names(stmt, skipped_result_names):
+                        changed = True
+                        continue
+
+                    rewritten_body.append(stmt)
+
+                node.body = rewritten_body
+                return node
+
         vf_fixer = ValidationFailureTestFixer()
         updated_tree = vf_fixer.visit(updated_tree)
+        expectation_fixer = ValidationFailureExpectationFixer()
+        updated_tree = expectation_fixer.visit(updated_tree)
 
         if not changed:
             return content

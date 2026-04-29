@@ -403,6 +403,73 @@ def test_probe_provider_health_wraps_deterministic_provider_failures(tmp_path, m
     assert require_number(snapshot["latency_ms"]) >= 0
 
 
+def test_probe_provider_health_reports_failing_anthropic_live_message_probe_for_custom_base_url(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="anthropic",
+        llm_model="claude-3-5-sonnet",
+        base_url="https://api.llmapi.ai/v1",
+    )
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            error=FakeAPIError("payment required", 402),
+        ),
+    )
+
+    monkeypatch.setattr("kycortex_agents.providers.factory.create_provider", lambda runtime_config: provider)
+
+    snapshot = probe_provider_health(config)
+
+    assert snapshot["provider"] == "anthropic"
+    assert snapshot["model"] == "claude-3-5-sonnet"
+    assert snapshot["status"] == "failing"
+    assert snapshot["active_check"] is True
+    assert snapshot["retryable"] is False
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is False
+    assert snapshot["error_type"] == "AgentExecutionError"
+    assert "live message probe was rejected" in require_text(snapshot["error_message"])
+    assert snapshot["cooldown_cached"] is False
+    assert snapshot["cooldown_remaining_seconds"] == 0.0
+    assert require_number(snapshot["latency_ms"]) >= 0
+
+
+def test_probe_provider_health_caches_failing_anthropic_live_message_probe_during_cooldown(tmp_path, monkeypatch):
+    provider_factory._HEALTH_PROBE_CACHE.clear()
+    captured_kwargs: list[dict[str, object]] = []
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="anthropic",
+        llm_model="claude-3-5-sonnet",
+        base_url="https://api.llmapi.ai/v1",
+        provider_health_check_cooldown_seconds=30.0,
+    )
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            error=FakeAPIError("payment required", 402),
+            captured_kwargs=captured_kwargs,
+        ),
+    )
+
+    monkeypatch.setattr("kycortex_agents.providers.factory.create_provider", lambda runtime_config: provider)
+
+    first_snapshot = probe_provider_health(config)
+    second_snapshot = probe_provider_health(config)
+
+    assert len(captured_kwargs) == 1
+    assert first_snapshot["status"] == "failing"
+    assert first_snapshot["cooldown_cached"] is False
+    assert first_snapshot["cooldown_remaining_seconds"] == 0.0
+    assert second_snapshot["status"] == "failing"
+    assert second_snapshot["cooldown_cached"] is True
+    assert require_number(second_snapshot["cooldown_remaining_seconds"]) > 0
+
+
 def test_probe_provider_health_caches_unhealthy_snapshot_during_cooldown(tmp_path, monkeypatch):
     provider_factory._HEALTH_PROBE_CACHE.clear()
     config = KYCortexConfig(
@@ -964,6 +1031,68 @@ def test_anthropic_provider_health_check_returns_structured_success_snapshot(tmp
     assert snapshot["active_check"] is True
     assert snapshot["backend_reachable"] is True
     assert snapshot["model_ready"] is True
+    assert snapshot["timeout_seconds"] == 5.0
+    assert require_number(snapshot["latency_ms"]) >= 0
+
+
+def test_anthropic_provider_health_check_uses_live_message_probe_for_custom_base_url(tmp_path):
+    captured_kwargs: list[dict[str, object]] = []
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="anthropic",
+        llm_model="claude-3-5-sonnet",
+        base_url="https://api.llmapi.ai/v1",
+        timeout_seconds=14.0,
+    )
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            response=SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")]),
+            captured_kwargs=captured_kwargs,
+        ),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["status"] == "healthy"
+    assert captured_kwargs == [
+        {
+            "model": "claude-3-5-sonnet",
+            "max_tokens": 1,
+            "timeout": 5.0,
+            "messages": [{"role": "user", "content": "ping"}],
+            "temperature": 0.0,
+        }
+    ]
+
+
+def test_anthropic_provider_health_check_reports_live_message_probe_rejection_for_custom_base_url(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="anthropic",
+        llm_model="claude-3-5-sonnet",
+        base_url="https://api.llmapi.ai/v1",
+    )
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            error=FakeAPIError("payment required", 402),
+        ),
+    )
+
+    snapshot = provider.health_check()
+
+    assert snapshot["provider"] == "anthropic"
+    assert snapshot["model"] == "claude-3-5-sonnet"
+    assert snapshot["status"] == "failing"
+    assert snapshot["active_check"] is True
+    assert snapshot["retryable"] is False
+    assert snapshot["backend_reachable"] is True
+    assert snapshot["model_ready"] is False
+    assert snapshot["error_type"] == "AgentExecutionError"
+    assert "live message probe was rejected" in snapshot["error_message"]
     assert snapshot["timeout_seconds"] == 5.0
     assert require_number(snapshot["latency_ms"]) >= 0
 

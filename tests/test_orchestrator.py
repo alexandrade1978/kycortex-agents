@@ -1137,7 +1137,14 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
+    (
+        validation_rules,
+        field_value_rules,
+        batch_rules,
+        sequence_input_functions,
+        type_constraint_rules,
+        dict_key_rules,
+    ) = parse_behavior_contract(
         contract
     )
 
@@ -1162,6 +1169,7 @@ def test_parse_behavior_contract_supports_all_rule_shapes(tmp_path):
     }
     assert sequence_input_functions == set()
     assert type_constraint_rules == {}
+    assert dict_key_rules == {}
 
 
 def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path):
@@ -1177,7 +1185,14 @@ def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path
         ]
     )
 
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
+    (
+        validation_rules,
+        field_value_rules,
+        batch_rules,
+        sequence_input_functions,
+        type_constraint_rules,
+        dict_key_rules,
+    ) = parse_behavior_contract(
         contract
     )
 
@@ -1186,6 +1201,7 @@ def test_parse_behavior_contract_ignores_blank_and_non_matching_entries(tmp_path
     assert batch_rules == {"process_batch": {"request_key": None, "wrapper_key": None, "fields": []}}
     assert sequence_input_functions == set()
     assert type_constraint_rules == {}
+    assert dict_key_rules == {}
 
 
 def test_summarize_pytest_output_handles_empty_and_fallback_cases(tmp_path):

@@ -41,6 +41,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Fixed
 
+- Generated-test AST autofix now prefers concrete literal examples harvested from implementation payloads over placeholder `.get(..., default)` heuristics and rewrites existing happy-path placeholder values inside positive-path dict payloads, clearing the exact persisted blocker shapes seen in vendor onboarding and returns screening repair lanes.
+- Anthropic health checks now perform a minimal live `messages.create` probe when a custom `base_url` or `ANTHROPIC_BASE_URL` gateway is configured, preventing model-list reachability from producing a false `healthy` snapshot while the real execution path is deterministically rejected.
 - CI hotfix: removed a duplicated `from typing import cast` import in `tests/test_orchestration_support.py` that triggered Ruff `F811` and failed the `Lint and Typecheck` workflow.
 - `examples/example_full_provider_workflow.py` now keeps backward-compatible execution when parser/project builders are monkeypatched with legacy signatures in tests, using safe argument fallbacks and signature-aware budget-kwargs routing.
 - Local Ollama qwen3 remediation (Option B): architect-path timeouts caused by unbounded reasoning output are mitigated in runtime-path workflows by disabling implicit think mode and applying completion token caps through `num_predict`.
@@ -52,6 +54,9 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 - Fix 8: Resolve dict-variable aliases and add word-boundary guards to prevent partial-match replacements in auto-fix regex.
 - Fix 9: Reasoning models (gpt-5-mini, o1, o3, o4 families) no longer produce empty responses due to exhausted token budget; a 4× multiplier gives sufficient room for both reasoning and visible output.
 - Fix 10: Dynamic module validation no longer crashes with `'NoneType' object has no attribute '__dict__'` when validating generated code that uses `from __future__ import annotations` with `@dataclass` on Python 3.12+.
+- Runtime output validation now auto-injects missing `typing` aliases used in annotations before import execution, clearing repeated `NameError: List is not defined` code-validation failures on generated Ollama modules such as `access_review_audit`.
+- Warning-only test-repair instructions now carry real pytest failure details and payload-contract violations alongside type mismatches, preventing narrow static warnings from hiding the actual failing fixture shape during QA repair cycles.
+- Test autofix now recognizes dict keys discovered through both `in` and `not in` membership checks and can rewrite nested placeholder payloads like `approval_metadata={'key': 'sample'}` into concrete fixtures before pytest execution.
 - **QA tester AST normalizer (Fix 11)**: `_normalize_placeholder_payload_values()` now uses three coordinated AST transformers to resolve test-suite failures on Ollama real-world scenarios:
   - `PlaceholderPayloadFixer.visit_Dict()` replaces placeholder `"value"` strings in dict literals with type-aware values (lists, nested dicts, bools, ints) based on key-name heuristics.
   - `PlaceholderPayloadFixer.visit_Call()` converts space-separated placeholder strings for dict-typed kwargs (e.g. `details='emergency_access stale_approval'`) to `{'key': 'value'}`.

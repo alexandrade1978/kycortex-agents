@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Optional, Sequence
 
 from kycortex_agents.types import FailureCategory
+from kycortex_agents.orchestration.validation_analysis import pytest_failure_details
 
 
 def repair_owner_for_category(task_assigned_to: str, failure_category: str) -> str:
@@ -78,12 +79,32 @@ def build_repair_instruction(
 		if pytest_failed and validation and test_validation_has_only_warnings(validation):
 			test_analysis = validation.get("test_analysis") or {}
 			type_mismatches = test_analysis.get("type_mismatches") or []
-			if type_mismatches:
+			payload_contract_violations = test_analysis.get("payload_contract_violations") or []
+			pytest_failures = pytest_failure_details(test_execution, limit=2)
+			if type_mismatches or payload_contract_violations or pytest_failures:
+				detail_parts: list[str] = []
+				if type_mismatches:
+					detail_parts.append(
+						"The following type mismatches in test arguments MUST be fixed: "
+						+ "; ".join(type_mismatches)
+						+ "."
+					)
+				if payload_contract_violations:
+					detail_parts.append(
+						"The following payload contract violations MUST be fixed: "
+						+ "; ".join(payload_contract_violations)
+						+ "."
+					)
+				if pytest_failures:
+					detail_parts.append(
+						"The current pytest failures also show: "
+						+ "; ".join(pytest_failures)
+						+ "."
+					)
 				return (
 					"Repair the generated pytest suite so it passes when executed. "
-					"The following type mismatches in test arguments are causing the pytest failures and MUST be fixed: "
-					+ "; ".join(type_mismatches)
-					+ ". Use the correct argument types as documented in the module contract."
+					+ " ".join(detail_parts)
+					+ " Use the correct argument types, fixture payload structure, and canonical field names documented in the module contract."
 				)
 			return (
 				"Repair the generated pytest suite so it passes when executed. "

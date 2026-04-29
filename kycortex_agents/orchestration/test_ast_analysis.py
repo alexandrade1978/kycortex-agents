@@ -67,9 +67,14 @@ def analyze_test_module_runtime(
     class_map = code_analysis.get("classes") or {}
     helper_class_names_to_avoid = set(helper_classes_to_avoid(code_analysis))
     entrypoint_names = entrypoint_symbol_names(code_analysis)
-    validation_rules, field_value_rules, batch_rules, sequence_input_functions, type_constraint_rules = parse_behavior_contract(
-        code_behavior_contract
-    )
+    (
+        validation_rules,
+        field_value_rules,
+        batch_rules,
+        sequence_input_functions,
+        type_constraint_rules,
+        dict_key_rules,
+    ) = parse_behavior_contract(code_behavior_contract)
     return analyze_test_module(
         raw_content,
         module_name,
@@ -87,6 +92,7 @@ def analyze_test_module_runtime(
         RESERVED_FIXTURE_NAMES,
         PYTEST_BUILTIN_FIXTURES,
         code_behavior_contract,
+        dict_key_rules,
     )
 
 
@@ -486,7 +492,7 @@ def extract_literal_dict_keys(
                 if isinstance(key_node, ast.Constant) and key_node.value == resolved.slice.value:
                     return extract_literal_dict_keys(value_node, bindings, class_map)
     if isinstance(resolved, ast.Call):
-        for candidate_name in ("data", "payload", "request", "item"):
+        for candidate_name in ("data", "payload", "request", "item", "details"):
             candidate_value = call_argument_value(resolved, candidate_name, class_map or {})
             nested_keys = extract_literal_dict_keys(candidate_value, bindings, class_map)
             if nested_keys is not None:
@@ -892,9 +898,11 @@ def analyze_test_behavior_contracts(
     sequence_input_functions: set[str],
     function_names: set[str],
     class_map: Dict[str, Any],
+    dict_key_rules: Optional[Dict[str, Dict[str, list[str]]]] = None,
 ) -> tuple[list[str], list[str]]:
     payload_violations: set[str] = set()
     non_batch_calls: set[str] = set()
+    resolved_dict_key_rules = dict_key_rules or {}
 
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
@@ -924,6 +932,20 @@ def analyze_test_behavior_contracts(
                     if missing_fields and not invalid_outcome_expectation:  # pragma: no branch
                         payload_violations.add(
                             f"{called_name} payload missing required fields: {', '.join(missing_fields)} at line {child.lineno}"
+                        )
+
+            if called_name in resolved_dict_key_rules:
+                for param_name, required_keys in resolved_dict_key_rules[called_name].items():
+                    payload_node = call_argument_value(child, param_name, class_map)
+                    if payload_node is None and param_name in {"data", "payload", "request", "item", "details"}:
+                        payload_node = payload_argument_for_validation(child, called_name)
+                    payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map)
+                    if payload_keys is None:
+                        continue
+                    missing_keys = [field for field in required_keys if field not in payload_keys]
+                    if missing_keys and not invalid_outcome_expectation:
+                        payload_violations.add(
+                            f"{called_name} parameter `{param_name}` missing required dict keys: {', '.join(missing_keys)} at line {child.lineno}"
                         )
 
             if called_name in field_value_rules:
@@ -1005,6 +1027,71 @@ def analyze_test_type_mismatches(
     return sorted(mismatches)
 
 
+def dict_literal_source_from_examples(
+    dict_name: str,
+    dict_keys: Dict[str, list[str]],
+    dict_key_examples: Dict[str, Dict[str, str]],
+) -> str:
+    def example_value_source(key_name: str, example_map: Dict[str, str]) -> str:
+        direct_example = example_map.get(key_name)
+        if direct_example:
+            return direct_example
+
+        key_lower = key_name.lower()
+        if any(token in key_lower for token in ("identity", "requester", "approved_by", "approver", "owner", "name", "type")):
+            return "'sample'"
+        if any(token in key_lower for token in ("roles", "conflicts", "items", "documents", "evidence")):
+            return "['sample']"
+        if any(token in key_lower for token in ("age", "days", "count", "score", "amount", "total", "quantity")):
+            return "1"
+        if any(token in key_lower for token in ("approved", "enabled", "stale", "emergency", "valid", "blocked")):
+            return "True"
+        return "'sample'"
+
+    example_map = dict_key_examples.get(dict_name, {})
+    pairs: list[str] = []
+    for key in sorted(dict_keys.get(dict_name, [])):
+        nested_examples = dict_key_examples.get(key)
+        if nested_examples:
+            nested_pairs = [
+                f"'{nested_key}': {example_value_source(nested_key, nested_examples)}"
+                for nested_key in sorted(nested_examples)
+            ]
+            value_source = "{" + ", ".join(nested_pairs) + "}"
+        else:
+            value_source = example_value_source(key, example_map)
+        pairs.append(f"'{key}': {value_source}")
+    return "{" + ", ".join(pairs) + "}"
+
+
+def dict_node_missing_required_keys(node: ast.AST, required_keys: list[str]) -> bool:
+    if not isinstance(node, ast.Dict):
+        return True
+    observed_keys = {
+        key.value
+        for key in node.keys
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+    return any(key not in observed_keys for key in required_keys)
+
+
+def node_looks_like_placeholder(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value in {"sample", "value", "test"}
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return bool(node.elts) and all(node_looks_like_placeholder(element) for element in node.elts)
+    if isinstance(node, ast.Dict):
+        observed_keys = [
+            key.value
+            for key in node.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        ]
+        return bool(observed_keys) and all(key == "key" for key in observed_keys) and all(
+            node_looks_like_placeholder(value) for value in node.values
+        )
+    return False
+
+
 def auto_fix_test_type_mismatches(
     test_content: str,
     code_content: str,
@@ -1012,17 +1099,37 @@ def auto_fix_test_type_mismatches(
 ) -> str:
     """Auto-fix str->dict type mismatches in generated test code."""
     if dict_key_extractor is None:
-        from kycortex_agents.orchestration.module_ast_analysis import dict_accessed_keys_from_tree
+        from kycortex_agents.orchestration.module_ast_analysis import (
+            dict_required_keys_from_tree,
+            dict_accessed_keys_from_tree,
+            infer_dict_key_value_examples,
+        )
 
         dict_key_extractor = dict_accessed_keys_from_tree
+    else:
+        from kycortex_agents.orchestration.module_ast_analysis import (
+            dict_required_keys_from_tree,
+            infer_dict_key_value_examples,
+        )
 
     try:
         impl_tree = ast.parse(code_content)
     except SyntaxError:
         return test_content
     dict_keys = dict_key_extractor(impl_tree)
+    for dict_name, required_keys in dict_required_keys_from_tree(impl_tree).items():
+        existing_keys = dict_keys.setdefault(dict_name, [])
+        for required_key in required_keys:
+            if required_key not in existing_keys:
+                existing_keys.append(required_key)
     if not dict_keys:
         return test_content
+    dict_key_examples = infer_dict_key_value_examples(impl_tree)
+    expected_dict_literals = {
+        dict_name: dict_literal_source_from_examples(dict_name, dict_keys, dict_key_examples)
+        for dict_name, keys in dict_keys.items()
+        if keys
+    }
 
     skip_lines: set[int] = set()
     try:
@@ -1070,7 +1177,9 @@ def auto_fix_test_type_mismatches(
     for param_name, keys in dict_keys.items():
         if not keys:
             continue
-        dict_literal = "{" + ", ".join(f"'{key}': 'value'" for key in sorted(keys)) + "}"
+        dict_literal = expected_dict_literals.get(param_name) or (
+            "{" + ", ".join(f"'{key}': 'value'" for key in sorted(keys)) + "}"
+        )
         str_pattern = re.compile(
             rf"\b({re.escape(param_name)})\s*=\s*(?:'[^']*'|\"[^\"]*\")"
         )
@@ -1085,7 +1194,114 @@ def auto_fix_test_type_mismatches(
                     replacement = param_name
                     break
             lines[line_index] = str_pattern.sub(rf"\1={replacement}", line)
-    return "\n".join(lines)
+
+    updated_content = "\n".join(lines)
+    try:
+        updated_tree = ast.parse(updated_content)
+    except SyntaxError:
+        return updated_content
+
+    line_offsets: list[int] = []
+    current_offset = 0
+    for line in updated_content.splitlines(keepends=True):
+        line_offsets.append(current_offset)
+        current_offset += len(line)
+    line_offsets.append(current_offset)
+
+    def offset_for(line_number: int, column_offset: int) -> int:
+        return line_offsets[line_number - 1] + column_offset
+
+    replacements: list[tuple[int, int, str]] = []
+    for node in ast.walk(updated_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not node.name.startswith("test_"):
+            continue
+        name_lower = node.name.lower()
+        is_negative = "validation_failure" in name_lower or "invalid" in name_lower
+        if not is_negative:
+            func_src = ast.get_source_segment(updated_content, node) or ""
+            if "is False" in func_src or "is_valid is False" in func_src:
+                is_negative = True
+        if is_negative:
+            continue
+
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
+                continue
+            for param_name, required_keys in dict_keys.items():
+                arg_node = call_argument_value(child, param_name, {})
+                if arg_node is None:
+                    continue
+                if isinstance(arg_node, ast.Dict):
+                    example_map = dict_key_examples.get(param_name, {})
+                    if dict_node_missing_required_keys(arg_node, required_keys):
+                        replacement_source = expected_dict_literals.get(param_name)
+                        if replacement_source:
+                            replacements.append(
+                                (
+                                    offset_for(arg_node.lineno, arg_node.col_offset),
+                                    offset_for(arg_node.end_lineno or arg_node.lineno, arg_node.end_col_offset or arg_node.col_offset),
+                                    replacement_source,
+                                )
+                            )
+                        continue
+
+                    for key_node, value_node in zip(arg_node.keys, arg_node.values):
+                        if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                            continue
+                        nested_required_keys = dict_keys.get(key_node.value)
+                        if not nested_required_keys:
+                            direct_example = example_map.get(key_node.value)
+                            if not direct_example or not node_looks_like_placeholder(value_node):
+                                continue
+                            replacements.append(
+                                (
+                                    offset_for(value_node.lineno, value_node.col_offset),
+                                    offset_for(value_node.end_lineno or value_node.lineno, value_node.end_col_offset or value_node.col_offset),
+                                    direct_example,
+                                )
+                            )
+                            continue
+                        if not dict_node_missing_required_keys(value_node, nested_required_keys):
+                            direct_example = example_map.get(key_node.value)
+                            if not direct_example or not node_looks_like_placeholder(value_node):
+                                continue
+                            replacements.append(
+                                (
+                                    offset_for(value_node.lineno, value_node.col_offset),
+                                    offset_for(value_node.end_lineno or value_node.lineno, value_node.end_col_offset or value_node.col_offset),
+                                    direct_example,
+                                )
+                            )
+                            continue
+                        replacement_source = expected_dict_literals.get(key_node.value)
+                        if not replacement_source:
+                            continue
+                        replacements.append(
+                            (
+                                offset_for(value_node.lineno, value_node.col_offset),
+                                offset_for(value_node.end_lineno or value_node.lineno, value_node.end_col_offset or value_node.col_offset),
+                                replacement_source,
+                            )
+                        )
+                elif isinstance(arg_node, ast.Constant) and isinstance(arg_node.value, str):
+                    replacement_source = expected_dict_literals.get(param_name)
+                    if replacement_source:
+                        replacements.append(
+                            (
+                                offset_for(arg_node.lineno, arg_node.col_offset),
+                                offset_for(arg_node.end_lineno or arg_node.lineno, arg_node.end_col_offset or arg_node.col_offset),
+                                replacement_source,
+                            )
+                        )
+
+    if not replacements:
+        return updated_content
+
+    for start, end, replacement in sorted(replacements, reverse=True):
+        updated_content = updated_content[:start] + replacement + updated_content[end:]
+    return updated_content
 
 
 def analyze_test_module(
@@ -1105,6 +1321,7 @@ def analyze_test_module(
     reserved_fixture_names: set[str],
     pytest_builtin_fixtures: set[str],
     code_behavior_contract: str = "",
+    dict_key_rules: Optional[Dict[str, Dict[str, list[str]]]] = None,
 ) -> Dict[str, Any]:
     analysis: Dict[str, Any] = {
         "syntax_ok": True,
@@ -1297,6 +1514,7 @@ def analyze_test_module(
         sequence_input_functions,
         function_names,
         class_map,
+        dict_key_rules,
     )
     type_mismatches = analyze_test_type_mismatches(
         tree,
@@ -1372,6 +1590,60 @@ def int_constant_value(node: ast.AST) -> Optional[int]:
     if isinstance(node, ast.Constant) and isinstance(node.value, int):
         return node.value
     return None
+
+
+def numeric_constant_value(node: ast.AST) -> Optional[float]:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return float(node.value)
+    return None
+
+
+def exact_numeric_assertion(node: ast.AST) -> Optional[tuple[str, float]]:
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+        return None
+    if not isinstance(node.ops[0], ast.Eq):
+        return None
+
+    left = node.left
+    right = node.comparators[0]
+    right_value = numeric_constant_value(right)
+    if right_value is not None and numeric_constant_value(left) is None:
+        return render_expression(left), right_value
+
+    left_value = numeric_constant_value(left)
+    if left_value is not None and right_value is None:
+        return render_expression(right), left_value
+
+    return None
+
+
+def is_observable_risk_score_target(rendered_target: str) -> bool:
+    if is_internal_score_state_target(rendered_target):
+        return False
+    normalized_target = rendered_target.replace(" ", "").lower()
+    return bool(re.search(r"(?<![a-z0-9_])(?:risk_)?score(?![a-z0-9_])", normalized_target))
+
+
+def visible_risk_factors_require_positive_score(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    bindings: Dict[str, ast.AST],
+) -> bool:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Dict):
+            continue
+        for key_node, value_node in zip(child.keys, child.values):
+            if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                continue
+            resolved_value = resolve_bound_value(value_node, bindings)
+            if not isinstance(resolved_value, (ast.List, ast.Tuple, ast.Set)):
+                continue
+            key = key_node.value
+            item_count = len(resolved_value.elts)
+            if key in {"adverse_indicators", "missing_documents"} and item_count > 0:
+                return True
+            if key == "identity_evidence" and item_count == 0:
+                return True
+    return False
 
 
 def comparison_implies_partial_batch_result(
@@ -1513,32 +1785,40 @@ def find_contract_overreach_signals(
         if not isinstance(child, ast.Assert):
             continue
         assertion = exact_len_assertion(child.test)
-        if assertion is None:
-            continue
-        asserted_target, compared_value = assertion
-        normalized_target = asserted_target.replace(" ", "").lower()
-        if largest_batch_size is not None and (
-            "audit_log" in normalized_target or "audit_logs" in normalized_target
-        ):
-            if compared_value > largest_batch_size:
-                signals.add(
-                    f"exact batch audit length {compared_value} exceeds visible batch size {largest_batch_size} in {node.name} (line {child.lineno})"
-                )
+        if assertion is not None:
+            asserted_target, compared_value = assertion
+            normalized_target = asserted_target.replace(" ", "").lower()
+            if largest_batch_size is not None and (
+                "audit_log" in normalized_target or "audit_logs" in normalized_target
+            ):
+                if compared_value > largest_batch_size:
+                    signals.add(
+                        f"exact batch audit length {compared_value} exceeds visible batch size {largest_batch_size} in {node.name} (line {child.lineno})"
+                    )
 
-        if not name_suggests_validation_failure(node.name):
+            if name_suggests_validation_failure(node.name):
+                if compared_value == 0 and is_internal_score_state_target(asserted_target):
+                    if not behavior_contract_explicitly_limits_score_state_to_valid_requests(
+                        code_behavior_contract,
+                        asserted_target,
+                    ):
+                        signals.add(
+                            "exact validation-failure score-state emptiness assertion on "
+                            f"'{asserted_target}' in {node.name} (line {child.lineno}) assumes rejected input leaves internal score state empty"
+                        )
+
+        numeric_assertion = exact_numeric_assertion(child.test)
+        if numeric_assertion is None:
             continue
-        if compared_value != 0:
+        asserted_target, compared_value = numeric_assertion
+        if compared_value != 0.0:
             continue
-        if not is_internal_score_state_target(asserted_target):
+        if not is_observable_risk_score_target(asserted_target):
             continue
-        if behavior_contract_explicitly_limits_score_state_to_valid_requests(
-            code_behavior_contract,
-            asserted_target,
-        ):
+        if not visible_risk_factors_require_positive_score(node, bindings):
             continue
         signals.add(
-            "exact validation-failure score-state emptiness assertion on "
-            f"'{asserted_target}' in {node.name} (line {child.lineno}) assumes rejected input leaves internal score state empty"
+            f"exact zero-risk assertion on '{asserted_target}' in {node.name} (line {child.lineno}) contradicts visible risk factors that must increase score"
         )
     return sorted(signals)
 

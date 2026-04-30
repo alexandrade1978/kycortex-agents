@@ -2005,6 +2005,24 @@ def test_auto_fix_test_type_mismatches_aligns_exact_assertions_with_literals_hid
 	assert "assert result['status'] == 'pending'" in fixed
 
 
+def test_auto_fix_test_type_mismatches_aligns_exact_assertions_with_literals_hidden_in_builder_filter_binding_without_builder_metadata():
+	impl_code = (
+		"def get_logs(filters):\n"
+		"    return {'status': filters['status']}\n"
+	)
+	test_code = (
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    filters = builder.build_filters('user-1', 'eu', {'status': 'pending'})\n"
+		"    result = get_logs(filters=filters)\n"
+		"    assert result['status'] == 'approved'\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "assert result['status'] == 'pending'" in fixed
+
+
 def test_auto_fix_test_type_mismatches_replaces_placeholder_list_values_with_literal_examples():
 	impl_code = (
 		"from datetime import datetime\n\n"

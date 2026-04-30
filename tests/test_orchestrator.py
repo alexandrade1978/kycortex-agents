@@ -4288,6 +4288,74 @@ def test_analyze_test_behavior_contracts_flags_missing_nested_fields_for_builder
     assert non_batch_calls == []
 
 
+def test_analyze_test_behavior_contracts_accepts_complete_builder_batch_items_without_builder_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    builder = SubmissionBuilder()\n"
+        "    requests = [\n"
+        "        builder.build_item('user-1', 'eu', {'name': 'Ada', 'email': 'ada@example.com'}),\n"
+        "        builder.build_item('user-2', 'eu', {'name': 'Bob', 'email': 'bob@example.com'}),\n"
+        "    ]\n"
+        "    process_batch(requests)\n"
+    )
+
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+        tree,
+        {},
+        {},
+        {
+            "process_batch": {
+                "fields": ["name", "email"],
+                "request_key": None,
+                "wrapper_key": None,
+            }
+        },
+        set(),
+        {"process_batch"},
+        {},
+        {},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_accepts_complete_nested_builder_batch_items_without_builder_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    builder = SubmissionBuilder()\n"
+        "    requests = [\n"
+        "        builder.build_item('user-1', 'eu', {'request_id': 'id-1', 'payload': {'name': 'Ada', 'email': 'ada@example.com'}}),\n"
+        "        builder.build_item('user-2', 'eu', {'request_id': 'id-2', 'payload': {'name': 'Bob', 'email': 'bob@example.com'}}),\n"
+        "    ]\n"
+        "    process_batch(requests)\n"
+    )
+
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+        tree,
+        {},
+        {},
+        {
+            "process_batch": {
+                "fields": ["name", "email"],
+                "request_key": "request_id",
+                "wrapper_key": "payload",
+            }
+        },
+        set(),
+        {"process_batch"},
+        {},
+        {},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
 def test_analyze_test_module_allows_optional_constructor_arguments(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)

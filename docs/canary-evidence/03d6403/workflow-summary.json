@@ -1,6 +1,6 @@
 {
   "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
-  "generated_at": "2026-04-30T00:22:18Z",
+  "generated_at": "2026-04-30T00:27:10Z",
   "status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_14_completed_1_degraded_and_no_active_or_unstarted_cells",
   "release_candidate_baseline": {
     "deterministic_repository_gate": {
@@ -1117,6 +1117,81 @@
           "operational_note": "No active checkpoint remains on this canonical root. `access_review_audit/ollama` completed after one repair cycle, and the only remaining non-clean checkpoint on the full root is `returns_abuse_screening/anthropic`.",
           "terminal_evidence": []
         }
+      },
+      "current_head_full_scope_post_returns_anthropic_recovery_canonical_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun",
+        "status": "active_with_1_completed_0_failed_1_active_and_13_remaining",
+        "summary": {
+          "total_cells": 15,
+          "completed_cells": 1,
+          "failed_cells": 0,
+          "active_cells": 1,
+          "remaining_cells": 13,
+          "provider_outcomes": {
+            "openai": {
+              "completed_cells": 1,
+              "failed_cells": 0
+            },
+            "anthropic": {
+              "completed_cells": 0,
+              "failed_cells": 0
+            },
+            "ollama": {
+              "completed_cells": 0,
+              "failed_cells": 0
+            }
+          }
+        },
+        "latest_checkpoint": {
+          "checkpoint": "kyc_compliance_intake_openai_completed_on_followup_canonical_rerun",
+          "provider": "openai",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-30T00:26:46.793706+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-30T00:26:46.756663+00:00",
+          "run_result_status": "completed",
+          "acceptance_reason": "all_evaluated_tasks_done",
+          "terminal_evidence": [],
+          "operational_note": "The new canonical rerun on `501a3a1` re-entered cleanly on `kyc_compliance_intake/openai` with no repair lane.",
+          "state_file": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/kyc_compliance_intake/openai/project_state.json"
+        },
+        "current_active_checkpoint": {
+          "scenario": "kyc_compliance_intake",
+          "provider": "anthropic",
+          "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/kyc_compliance_intake/anthropic/project_state.json",
+          "persisted_state_written": true,
+          "phase": "execution",
+          "terminal_outcome": null,
+          "updated_at": "2026-04-30T00:27:10.162389+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 1,
+            "pending": 6
+          },
+          "completed_task_id": "arch",
+          "completed_task_at": "2026-04-30T00:27:10.162051+00:00",
+          "failed_task_id": null,
+          "writer_process_id": null,
+          "pending_task_ids": [
+            "code",
+            "deps",
+            "tests",
+            "review",
+            "docs",
+            "legal"
+          ],
+          "operational_note": "The new canonical rerun is currently advancing through `kyc_compliance_intake/anthropic` after the initial `arch` checkpoint. The next discriminating checkpoints are `code`, `tests`, and terminal completion.",
+          "terminal_evidence": []
+        }
       }
     }
   },
@@ -1677,6 +1752,6 @@
         "result": "repository_owned_two_fix_rerun_terminalized_stale_before_third_local_fix"
       }
     ],
-    "next_checkpoint": "Launch a fresh canonical full-scope rerun on the published remediation head `f0bbe59` and capture its first persisted checkpoints. The focused Anthropic rerun is complete, and the remaining release-facing question is whether the current head now closes `15/15`."
+    "next_checkpoint": "Capture the next persisted checkpoints for the active canonical rerun `output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun`, starting with `kyc_compliance_intake/anthropic`. The remaining release-facing question is whether the current head now closes `15/15`."
   }
 }

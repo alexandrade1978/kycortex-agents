@@ -41,6 +41,7 @@ This file is the short repository-owned snapshot of the current release posture 
 - A new narrow current-head remediation is now locally validated for that sole degraded lane: `qa_tester` now recognizes positive `result.risk_factors` assertions in generated `test_risk_scoring()` cases and rewrites returns-screening payloads onto the implementation's real risk-bearing schema keys (`prior_returns`, `receipt_present`, `items`); the focused `tests/test_qa_tester.py` slice passed around the new regression and adjacent override behavior.
 - The same remediation is now also proven against the exact persisted degraded artifact chain: the failed `tests` and `tests__repair_2` modules from `returns_abuse_screening/anthropic/project_state.json` both rewrite to schema-correct high-risk fixtures and both pass as repaired pytest modules against the persisted implementation artifact.
 - A fresh focused rerun for `returns_abuse_screening/anthropic` on the published head `f0bbe59` has now completed cleanly at `2026-04-30T00:21:50.817929+00:00` with `phase=completed`, `terminal_outcome=completed`, `repair_cycle_count=0`, `task_status_counts={done: 7}`, and `acceptance_reason=all_evaluated_tasks_done`.
+- A fresh canonical full-scope rerun is now active on the newer published head `501a3a1` at `output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun`. `kyc_compliance_intake/openai` has already completed cleanly at `2026-04-30T00:26:46.806519+00:00`, and `kyc_compliance_intake/anthropic` has already written its first persisted checkpoint with `arch` done and no repair lane opened yet.
 - No canary claim or production-readiness claim is attached to the current head.
 - Repository is in excellent operational state for package-level release review.
 - Current-head Phase 16 material is now tracked as a pre-canary evidence rebuild, not as an open or closed canary window.
@@ -128,9 +129,9 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Next Release-Facing Action
 
-1. Publish the clean focused-rerun evidence for `returns_abuse_screening/anthropic` and then launch a fresh canonical full-scope rerun on `f0bbe59`.
+1. Monitor the live canonical rerun `output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun`, beginning with `kyc_compliance_intake/anthropic`.
 2. Keep release-candidate review closed until the canonical matrix is requalified cleanly.
-3. Only reopen release-candidate review if that subsequent canonical rerun proves `15/15` on the current head.
+3. Only reopen release-candidate review if that canonical rerun proves `15/15` on the current head.
 
 
 ## Canonical References

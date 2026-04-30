@@ -1417,6 +1417,7 @@ def test_analyze_test_type_mismatches_reports_only_non_negative_type_mismatches(
 	)
 
 	assert mismatches == [
+		"score_request passes list for `details` (expected dict) at line 5",
 		"validate_request passes tuple for `details` (expected dict) at line 2"
 	]
 

@@ -4368,6 +4368,7 @@ def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional
     )
 
     assert mismatches == [
+        "score_request passes list for `details` (expected dict) at line 5",
         "validate_request passes tuple for `details` (expected dict) at line 2"
     ]
     assert infer_argument_type(

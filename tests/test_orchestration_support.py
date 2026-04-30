@@ -1413,6 +1413,31 @@ def test_analyze_test_behavior_contracts_flags_unsupported_field_values_for_meth
 	assert non_batch_calls == []
 
 
+def test_analyze_test_behavior_contracts_flags_unsupported_field_values_for_builder_nested_payload_binding_without_builder_metadata():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    item = builder.build_item('user-1', 'eu', {'request_id': 'id-1', 'payload': {'status': 'pending'}})\n"
+		"    process_nested(item['payload'])\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{},
+		{"process_nested": {"status": ["approved"]}},
+		{},
+		set(),
+		{"process_nested"},
+		{"process_nested": {"params": ["payload"]}},
+		{},
+	)
+
+	assert payload_violations == [
+		"process_nested field `status` uses unsupported values: pending at line 4"
+	]
+	assert non_batch_calls == []
+
+
 def test_analyze_test_behavior_contracts_flags_unsupported_field_values_for_method_builder_filter_binding():
 	tree = ast.parse(
 		"def test_case():\n"
@@ -1440,6 +1465,31 @@ def test_analyze_test_behavior_contracts_flags_unsupported_field_values_for_meth
 				},
 			},
 		},
+	)
+
+	assert payload_violations == [
+		"get_logs field `status` uses unsupported values: pending at line 4"
+	]
+	assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_flags_unsupported_field_values_for_builder_filter_binding_without_builder_metadata():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    filters = builder.build_filters('user-1', 'eu', {'status': 'pending'})\n"
+		"    get_logs(filters=filters)\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{},
+		{"get_logs": {"status": ["approved"]}},
+		{},
+		set(),
+		{"get_logs"},
+		{"get_logs": {"params": ["filters"]}},
+		{},
 	)
 
 	assert payload_violations == [

@@ -491,6 +491,7 @@ def extract_literal_dict_keys(
     bindings: Dict[str, ast.AST],
     class_map: Optional[Dict[str, Any]] = None,
     function_map: Optional[Dict[str, Any]] = None,
+    local_types: Optional[Dict[str, str]] = None,
 ) -> Optional[set[str]]:
     resolved = resolve_bound_value(node, bindings)
     if isinstance(resolved, ast.Dict):
@@ -508,16 +509,37 @@ def extract_literal_dict_keys(
         if isinstance(source, ast.Dict):
             for key_node, value_node in zip(source.keys, source.values):
                 if isinstance(key_node, ast.Constant) and key_node.value == resolved.slice.value:
-                    return extract_literal_dict_keys(value_node, bindings, class_map, function_map)
+                    return extract_literal_dict_keys(value_node, bindings, class_map, function_map, local_types)
+        if isinstance(source, ast.Call):
+            for candidate_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
+                candidate_value = call_argument_value(
+                    source,
+                    candidate_name,
+                    class_map or {},
+                    function_map,
+                    local_types,
+                )
+                if not isinstance(candidate_value, ast.expr):
+                    continue
+                nested_keys = extract_literal_dict_keys(
+                    ast.Subscript(value=candidate_value, slice=resolved.slice),
+                    bindings,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if nested_keys is not None:
+                    return nested_keys
     if isinstance(resolved, ast.Call):
-        for candidate_name in ("data", "payload", "request", "item", "details"):
+        for candidate_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
             candidate_value = call_argument_value(
                 resolved,
                 candidate_name,
                 class_map or {},
                 function_map,
+                local_types,
             )
-            nested_keys = extract_literal_dict_keys(candidate_value, bindings, class_map, function_map)
+            nested_keys = extract_literal_dict_keys(candidate_value, bindings, class_map, function_map, local_types)
             if nested_keys is not None:
                 return nested_keys
     return None
@@ -751,6 +773,9 @@ def validate_batch_call(
     bindings: Dict[str, ast.AST],
     callable_name: str,
     batch_rule: Dict[str, Any],
+    class_map: Optional[Dict[str, Any]] = None,
+    function_map: Optional[Dict[str, Any]] = None,
+    local_types: Optional[Dict[str, str]] = None,
 ) -> list[str]:
     violations: list[str] = []
     batch_arg = first_call_argument(node)
@@ -763,21 +788,34 @@ def validate_batch_call(
     wrapper_key = batch_rule.get("wrapper_key")
     for item in batch_items:
         resolved_item = resolve_bound_value(item, bindings)
-        if not isinstance(resolved_item, ast.Dict):
+        item_keys = extract_literal_dict_keys(item, bindings, class_map, function_map, local_types)
+        if item_keys is None:
             violations.append(
                 f"{callable_name} expects dict-like batch items, but test uses {type(resolved_item).__name__} at line {getattr(item, 'lineno', node.lineno)}"
             )
             continue
 
-        item_keys = extract_literal_dict_keys(resolved_item, bindings) or set()
         if request_key and request_key not in item_keys:
             violations.append(
                 f"{callable_name} batch item missing required key: {request_key} at line {getattr(item, 'lineno', node.lineno)}"
             )
         if wrapper_key:
+            nested_source: Optional[ast.expr] = None
+            if isinstance(item, ast.expr):
+                nested_source = item
+            elif isinstance(resolved_item, ast.expr):
+                nested_source = resolved_item
+            if nested_source is None:
+                violations.append(
+                    f"{callable_name} batch item missing nested payload `{wrapper_key}` at line {getattr(item, 'lineno', node.lineno)}"
+                )
+                continue
             nested_keys = extract_literal_dict_keys(
-                ast.Subscript(value=resolved_item, slice=ast.Constant(value=wrapper_key)),
+                ast.Subscript(value=nested_source, slice=ast.Constant(value=wrapper_key)),
                 bindings,
+                class_map,
+                function_map,
+                local_types,
             )
             if nested_keys is None:
                 violations.append(
@@ -989,7 +1027,7 @@ def analyze_test_behavior_contracts(
                     local_types,
                 )
                 payload_node = resolve_bound_value(payload_arg, bindings)
-                payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map, function_map)
+                payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map, function_map, local_types)
                 if payload_keys is not None:
                     missing_fields = [field for field in validation_rules[called_name] if field not in payload_keys]
                     if missing_fields and not invalid_outcome_expectation:  # pragma: no branch
@@ -1008,7 +1046,7 @@ def analyze_test_behavior_contracts(
                             class_map,
                             local_types,
                         )
-                    payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map, function_map)
+                    payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map, function_map, local_types)
                     if payload_keys is None:
                         continue
                     missing_keys = [field for field in required_keys if field not in payload_keys]
@@ -1053,6 +1091,9 @@ def analyze_test_behavior_contracts(
                     bindings,
                     called_name,
                     batch_rules[called_name],
+                    class_map,
+                    function_map,
+                    local_types,
                 )
                 payload_violations.update(batch_violations)
                 continue

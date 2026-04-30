@@ -4740,7 +4740,7 @@ def test_validate_batch_call_reports_missing_nested_fields_when_nested_payload_k
     batch_rule = {"fields": ["name", "email"], "request_key": "request_id", "wrapper_key": "payload"}
     real_extract = test_ast_analysis_module.extract_literal_dict_keys
 
-    def fake_extract(node, current_bindings, class_map=None):
+    def fake_extract(node, current_bindings, class_map=None, function_map=None, local_types=None):
         if isinstance(node, ast.Subscript):
             return {"name"}
         return real_extract(node, current_bindings, class_map)
@@ -4770,12 +4770,114 @@ def test_validate_batch_call_reports_missing_required_fields_for_direct_items(tm
     ]
 
 
+def test_validate_batch_call_accepts_complete_direct_items_from_method_builder(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    bindings: dict[str, ast.AST] = {
+        "batch": ast.List(
+            elts=[
+                ast.Name("item", ast.Load()),
+            ]
+        ),
+        "item": ast.Call(
+            func=ast.Attribute(value=ast.Name("builder", ast.Load()), attr="build_item", ctx=ast.Load()),
+            args=[
+                ast.Constant("user-1"),
+                ast.Constant("eu"),
+                ast.Dict(
+                    keys=[ast.Constant("name"), ast.Constant("email")],
+                    values=[ast.Constant("Ada"), ast.Constant("ada@example.com")],
+                ),
+            ],
+            keywords=[],
+        ),
+    }
+    call_node = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("batch")], keywords=[]))
+    batch_rule = {"fields": ["name", "email"], "request_key": None, "wrapper_key": None}
+    class_map = {
+        "SubmissionBuilder": {
+            "constructor_params": [],
+            "attributes": [],
+            "fields": [],
+            "is_enum": False,
+            "method_signatures": {
+                "build_item": {"params": ["user_id", "region", "payload"]},
+            },
+        },
+    }
+
+    assert validate_batch_call(
+        call_node,
+        bindings,
+        "process_batch",
+        batch_rule,
+        class_map,
+        {},
+        {"builder": "SubmissionBuilder"},
+    ) == []
+
+
+def test_validate_batch_call_reports_missing_nested_fields_for_method_builder_items(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    bindings: dict[str, ast.AST] = {
+        "batch": ast.List(
+            elts=[
+                ast.Name("item", ast.Load()),
+            ]
+        ),
+        "item": ast.Call(
+            func=ast.Attribute(value=ast.Name("builder", ast.Load()), attr="build_item", ctx=ast.Load()),
+            args=[
+                ast.Constant("user-1"),
+                ast.Constant("eu"),
+                ast.Dict(
+                    keys=[ast.Constant("request_id"), ast.Constant("payload")],
+                    values=[
+                        ast.Constant("id-1"),
+                        ast.Dict(
+                            keys=[ast.Constant("name")],
+                            values=[ast.Constant("Ada")],
+                        ),
+                    ],
+                ),
+            ],
+            keywords=[],
+        ),
+    }
+    call_node = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("batch")], keywords=[]))
+    batch_rule = {"fields": ["name", "email"], "request_key": "request_id", "wrapper_key": "payload"}
+    class_map = {
+        "SubmissionBuilder": {
+            "constructor_params": [],
+            "attributes": [],
+            "fields": [],
+            "is_enum": False,
+            "method_signatures": {
+                "build_item": {"params": ["user_id", "region", "payload"]},
+            },
+        },
+    }
+
+    assert validate_batch_call(
+        call_node,
+        bindings,
+        "process_batch",
+        batch_rule,
+        class_map,
+        {},
+        {"builder": "SubmissionBuilder"},
+    ) == [
+        "process_batch batch item nested `payload` missing required fields: email at line 1"
+    ]
+
+
 def test_validate_batch_call_accepts_complete_direct_and_nested_items(tmp_path, monkeypatch):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)
     real_extract = test_ast_analysis_module.extract_literal_dict_keys
 
-    def fake_extract(node, current_bindings, class_map=None):
+    def fake_extract(node, current_bindings, class_map=None, function_map=None, local_types=None):
         if isinstance(node, ast.Subscript):
             return {"name", "email"}
         return real_extract(node, current_bindings, class_map)

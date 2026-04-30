@@ -1198,6 +1198,41 @@ def test_analyze_test_behavior_contracts_flags_missing_required_fields_for_third
 	assert non_batch_calls == []
 
 
+def test_analyze_test_behavior_contracts_flags_missing_required_fields_for_method_builder_payload_binding():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    submission = builder.build_submission('user-1', 'eu', {'name': 'Ada'})\n"
+		"    validate_submission(submission)\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{"validate_submission": ["name", "email"]},
+		{},
+		{},
+		set(),
+		set(),
+		{"validate_submission": {"params": ["payload"]}},
+		{
+			"SubmissionBuilder": {
+				"constructor_params": [],
+				"attributes": [],
+				"fields": [],
+				"is_enum": False,
+				"method_signatures": {
+					"build_submission": {"params": ["user_id", "region", "payload"]},
+				},
+			},
+		},
+	)
+
+	assert payload_violations == [
+		"validate_submission payload missing required fields: email at line 4"
+	]
+	assert non_batch_calls == []
+
+
 def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_third_positional_method_argument():
 	tree = ast.parse(
 		"def test_case():\n"
@@ -1229,6 +1264,42 @@ def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_th
 
 	assert payload_violations == [
 		"get_logs parameter `filters` missing required dict keys: record_id at line 3"
+	]
+	assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_method_builder_filter_binding():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    filters = builder.build_filters('user-1', 'eu', {'action': 'create'})\n"
+		"    get_logs(filters=filters)\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{},
+		{},
+		{},
+		set(),
+		set(),
+		{"get_logs": {"params": ["filters"]}},
+		{
+			"SubmissionBuilder": {
+				"constructor_params": [],
+				"attributes": [],
+				"fields": [],
+				"is_enum": False,
+				"method_signatures": {
+					"build_filters": {"params": ["user_id", "region", "filters"]},
+				},
+			},
+		},
+		{"get_logs": {"filters": ["action", "record_id"]}},
+	)
+
+	assert payload_violations == [
+		"get_logs parameter `filters` missing required dict keys: record_id at line 4"
 	]
 	assert non_batch_calls == []
 

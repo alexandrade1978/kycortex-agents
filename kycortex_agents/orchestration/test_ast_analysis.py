@@ -1662,6 +1662,63 @@ def auto_fix_test_type_mismatches(
             pair_sources.append(missing_pairs)
         return "{" + ", ".join(pair_sources) + "}"
 
+    def editable_dict_node(
+        node: Optional[ast.AST],
+        bindings: Dict[str, ast.AST],
+        local_types: Dict[str, str],
+    ) -> Optional[ast.Dict]:
+        resolved = resolve_bound_value(node, bindings)
+        if isinstance(resolved, ast.Dict):
+            return resolved
+        if (
+            isinstance(resolved, ast.Subscript)
+            and isinstance(resolved.slice, ast.Constant)
+            and isinstance(resolved.slice.value, str)
+        ):
+            source = resolve_bound_value(resolved.value, bindings)
+            if isinstance(source, ast.Dict):
+                for key_node, value_node in zip(source.keys, source.values):
+                    if isinstance(key_node, ast.Constant) and key_node.value == resolved.slice.value:
+                        return editable_dict_node(value_node, bindings, local_types)
+            if isinstance(source, ast.Call):
+                for candidate_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
+                    candidate_value = call_argument_value(source, candidate_name, class_map, function_map, local_types)
+                    if not isinstance(candidate_value, ast.expr):
+                        continue
+                    nested_dict = editable_dict_node(
+                        ast.Subscript(value=candidate_value, slice=resolved.slice),
+                        bindings,
+                        local_types,
+                    )
+                    if nested_dict is not None:
+                        return nested_dict
+                for candidate_value in [*source.args, *(keyword.value for keyword in source.keywords if keyword.arg is not None)]:
+                    resolved_candidate = resolve_bound_value(candidate_value, bindings)
+                    if not isinstance(resolved_candidate, (ast.Dict, ast.Subscript, ast.Call)):
+                        continue
+                    nested_dict = editable_dict_node(
+                        ast.Subscript(value=candidate_value, slice=resolved.slice),
+                        bindings,
+                        local_types,
+                    )
+                    if nested_dict is not None:
+                        return nested_dict
+            return None
+        if isinstance(resolved, ast.Call):
+            for candidate_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
+                candidate_value = call_argument_value(resolved, candidate_name, class_map, function_map, local_types)
+                nested_dict = editable_dict_node(candidate_value, bindings, local_types)
+                if nested_dict is not None:
+                    return nested_dict
+            for candidate_value in [*resolved.args, *(keyword.value for keyword in resolved.keywords if keyword.arg is not None)]:
+                resolved_candidate = resolve_bound_value(candidate_value, bindings)
+                if not isinstance(resolved_candidate, (ast.Dict, ast.Subscript, ast.Call)):
+                    continue
+                nested_dict = editable_dict_node(candidate_value, bindings, local_types)
+                if nested_dict is not None:
+                    return nested_dict
+        return None
+
     replacements: list[tuple[int, int, str]] = []
     for node in ast.walk(updated_tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -1686,25 +1743,26 @@ def auto_fix_test_type_mismatches(
                 arg_node = call_argument_value(child, param_name, class_map, function_map, local_types)
                 if arg_node is None:
                     continue
-                if isinstance(arg_node, ast.Dict):
+                dict_node = editable_dict_node(arg_node, bindings, local_types)
+                if dict_node is not None:
                     example_map = dict_key_examples.get(param_name, {})
-                    if dict_node_missing_required_keys(arg_node, required_keys):
+                    if dict_node_missing_required_keys(dict_node, required_keys):
                         replacement_source = merged_dict_literal_source(
-                            arg_node,
+                            dict_node,
                             param_name,
                             required_keys,
                         ) or expected_dict_literals.get(param_name)
                         if replacement_source:
                             replacements.append(
                                 (
-                                    offset_for(arg_node.lineno, arg_node.col_offset),
-                                    offset_for(arg_node.end_lineno or arg_node.lineno, arg_node.end_col_offset or arg_node.col_offset),
+                                    offset_for(dict_node.lineno, dict_node.col_offset),
+                                    offset_for(dict_node.end_lineno or dict_node.lineno, dict_node.end_col_offset or dict_node.col_offset),
                                     replacement_source,
                                 )
                             )
                         continue
 
-                    for key_node, value_node in zip(arg_node.keys, arg_node.values):
+                    for key_node, value_node in zip(dict_node.keys, dict_node.values):
                         if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
                             continue
                         nested_required_keys = dict_keys.get(key_node.value)

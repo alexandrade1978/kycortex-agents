@@ -1681,6 +1681,44 @@ def test_auto_fix_test_type_mismatches_merges_missing_required_keys_for_third_po
 	assert "service.get_logs('user-1', 'eu', {'action': 'create', 'record_id': 'sample'})" in fixed
 
 
+def test_auto_fix_test_type_mismatches_merges_missing_required_keys_for_builder_payload_subscript_without_builder_metadata():
+	impl_code = (
+		"def send(payload):\n"
+		"    name = payload.get('name') if isinstance(payload, dict) else None\n"
+		"    email = payload.get('email') if isinstance(payload, dict) else None\n"
+		"    return name, email\n"
+	)
+	test_code = (
+		"def test_send():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    item = builder.build_item('user-1', 'eu', {'request_id': 'id-1', 'payload': {'name': 'Ada'}})\n"
+		"    assert send(item['payload']) == ('Ada', None)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'payload': {'name': 'Ada', 'email': 'sample'}" in fixed
+
+
+def test_auto_fix_test_type_mismatches_merges_missing_required_keys_for_builder_filter_binding_without_builder_metadata():
+	impl_code = (
+		"def get_logs(filters=None):\n"
+		"    action = filters.get('action') if isinstance(filters, dict) else None\n"
+		"    record_id = filters.get('record_id') if isinstance(filters, dict) else None\n"
+		"    return action, record_id\n"
+	)
+	test_code = (
+		"def test_get_logs():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    filters = builder.build_filters('user-1', 'eu', {'action': 'create'})\n"
+		"    assert get_logs(filters=filters) == ('create', None)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "builder.build_filters('user-1', 'eu', {'action': 'create', 'record_id': 'sample'})" in fixed
+
+
 def test_auto_fix_test_type_mismatches_adds_required_fields_from_validation_rules():
 	impl_code = (
 		"def validate_request(details):\n"

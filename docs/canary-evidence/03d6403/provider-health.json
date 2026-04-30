@@ -1,6 +1,6 @@
 {
   "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
-  "generated_at": "2026-04-30T00:34:26Z",
+  "generated_at": "2026-04-30T00:43:58Z",
   "bundle_status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_14_completed_1_degraded_and_no_active_or_unstarted_cells",
   "window_started": false,
   "window_started_at": null,
@@ -78,6 +78,29 @@
           "task_status_counts": {
             "done": 7
           },
+          "run_result_status": "completed",
+          "acceptance_reason": "all_evaluated_tasks_done"
+        },
+        "focused_terse_summary_followup_rerun": {
+          "campaign_root": "output/real_world_complex_matrix_2026_04_30_head8633d97_kyc_compliance_intake_anthropic_terse_summary_rerun",
+          "scenario": "kyc_compliance_intake",
+          "updated_at": "2026-04-30T00:42:55.773524+00:00",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "completed_task_ids": [
+            "arch",
+            "code",
+            "deps",
+            "tests",
+            "review",
+            "docs",
+            "legal"
+          ],
+          "pending_task_ids": [],
           "run_result_status": "completed",
           "acceptance_reason": "all_evaluated_tasks_done"
         }
@@ -186,10 +209,10 @@
     "latest_successful_backup_at": "2026-04-30 01:14:01 WEST",
     "summary": {
       "total_cells": 15,
-      "completed_cells": 1,
+      "completed_cells": 2,
       "failed_cells": 1,
       "active_cells": 1,
-      "remaining_cells": 12
+      "remaining_cells": 11
     },
     "latest_completed_checkpoints": [
       {
@@ -199,6 +222,20 @@
         "workflow_phase": "completed",
         "terminal_outcome": "completed",
         "updated_at": "2026-04-30T00:26:46.793706+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "kyc_compliance_intake",
+        "provider": "ollama",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T00:43:22.574237+00:00",
         "repair_cycle_count": 0,
         "task_status_counts": {
           "done": 7
@@ -233,13 +270,13 @@
       "failure_note": "Generated tests failed with a terse pytest summary (`1 failed, 4 passed`) while asserting an exact outcome label that the runtime did not match. The running canonical process is pre-fix evidence for this lane."
     },
     "current_active_checkpoint": {
-      "scenario": "kyc_compliance_intake",
-      "provider": "ollama",
-      "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/kyc_compliance_intake/ollama/project_state.json",
+      "scenario": "insurance_claim_triage",
+      "provider": "openai",
+      "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/insurance_claim_triage/openai/project_state.json",
       "persisted_state_written": true,
       "workflow_phase": "execution",
       "terminal_outcome": null,
-      "updated_at": "2026-04-30T00:34:26.437528+00:00",
+      "updated_at": "2026-04-30T00:43:58.813243+00:00",
       "repair_cycle_count": 0,
       "task_status_counts": {
         "done": 3,
@@ -262,7 +299,7 @@
       "terminal_evidence": [],
       "run_result_status": null,
       "acceptance_reason": null,
-      "operational_note": "The still-running canonical rerun has already closed `kyc_compliance_intake/openai` cleanly and degraded on `kyc_compliance_intake/anthropic` on a pre-fix process image. It is now actively progressing on `kyc_compliance_intake/ollama` after `arch`, `code`, and `deps`; the next reliable checkpoint is whether `tests` stays clean."
+      "operational_note": "The still-running canonical rerun has now fully terminalized the `kyc_compliance_intake` family: `openai` and `ollama` completed cleanly while `anthropic` remains the lone degraded lane on that scenario. The active frontier has moved to `insurance_claim_triage/openai`, currently just past `deps`."
     }
   },
   "recent_pre_canary_health_checks": [
@@ -367,5 +404,5 @@
       }
     }
   ],
-  "next_required_update": "Publish the locally validated Anthropic terse-summary remediation, then capture a focused fresh-process rerun for `kyc_compliance_intake/anthropic` while the still-running canonical root continues from `kyc_compliance_intake/ollama`."
+  "next_required_update": "Publish the clean focused Anthropic recovery plus the canonical `kyc_compliance_intake/ollama` completion, then capture the next persisted checkpoints for the live canonical frontier `insurance_claim_triage/openai`."
 }

@@ -1,6 +1,6 @@
 {
   "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
-  "generated_at": "2026-04-30T00:34:26Z",
+  "generated_at": "2026-04-30T00:43:58Z",
   "status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_14_completed_1_degraded_and_no_active_or_unstarted_cells",
   "release_candidate_baseline": {
     "deterministic_repository_gate": {
@@ -1121,12 +1121,13 @@
       "current_head_full_scope_post_returns_anthropic_recovery_canonical_rerun": {
         "campaign": "real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun",
         "status": "active_with_1_completed_1_failed_1_active_and_12_remaining",
+        "status": "active_with_2_completed_1_failed_1_active_and_11_remaining",
         "summary": {
           "total_cells": 15,
-          "completed_cells": 1,
+          "completed_cells": 2,
           "failed_cells": 1,
           "active_cells": 1,
-          "remaining_cells": 12,
+          "remaining_cells": 11,
           "provider_outcomes": {
             "openai": {
               "completed_cells": 1,
@@ -1137,50 +1138,48 @@
               "failed_cells": 1
             },
             "ollama": {
-              "completed_cells": 0,
+              "completed_cells": 1,
               "failed_cells": 0
             }
           }
         },
         "latest_checkpoint": {
-          "checkpoint": "kyc_compliance_intake_anthropic_degraded_on_followup_canonical_rerun",
-          "provider": "anthropic",
+          "checkpoint": "kyc_compliance_intake_ollama_completed_on_followup_canonical_rerun",
+          "provider": "ollama",
           "phase": "completed",
-          "terminal_outcome": "degraded",
-          "updated_at": "2026-04-30T00:27:34.592113+00:00",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-30T00:43:22.574237+00:00",
           "repair_cycle_count": 0,
           "task_status_counts": {
-            "done": 3,
-            "failed": 1,
-            "skipped": 3
+            "done": 7
           },
-          "failed_task_id": "tests",
+          "failed_task_id": null,
           "repair_task_id": null,
           "active_repair_task_ids": [],
-          "last_error": "Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.09s",
-          "completed_task_id": "deps",
-          "completed_task_at": "2026-04-30T00:27:34.581935+00:00",
+          "last_error": null,
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-30T00:43:22.573864+00:00",
           "run_result_status": "completed",
-          "acceptance_reason": "evaluated_tasks_incomplete",
+          "acceptance_reason": "all_evaluated_tasks_done",
           "terminal_evidence": [],
-          "operational_note": "This degradation came from a pre-fix process image. The generated tests overreached on an exact outcome label (`blocked`) that the runtime returned as `escalated`, and the terse pytest summary prevented the repair gate from opening before the local remediation was written.",
-          "state_file": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/kyc_compliance_intake/anthropic/project_state.json"
+          "operational_note": "The still-running canonical rerun has now fully terminalized the `kyc_compliance_intake/ollama` lane cleanly even though the sibling Anthropic lane on the same scenario remained a pre-fix degraded checkpoint.",
+          "state_file": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/kyc_compliance_intake/ollama/project_state.json"
         },
         "current_active_checkpoint": {
-          "scenario": "kyc_compliance_intake",
-          "provider": "ollama",
-          "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/kyc_compliance_intake/ollama/project_state.json",
+          "scenario": "insurance_claim_triage",
+          "provider": "openai",
+          "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/insurance_claim_triage/openai/project_state.json",
           "persisted_state_written": true,
           "phase": "execution",
           "terminal_outcome": null,
-          "updated_at": "2026-04-30T00:34:26.437528+00:00",
+          "updated_at": "2026-04-30T00:43:58.813243+00:00",
           "repair_cycle_count": 0,
           "task_status_counts": {
             "done": 3,
             "pending": 4
           },
           "completed_task_id": "deps",
-          "completed_task_at": "2026-04-30T00:34:26.436918+00:00",
+          "completed_task_at": "2026-04-30T00:43:58.812711+00:00",
           "failed_task_id": null,
           "writer_process_id": null,
           "pending_task_ids": [
@@ -1189,7 +1188,61 @@
             "docs",
             "legal"
           ],
-          "operational_note": "The still-running canonical rerun has moved on to `kyc_compliance_intake/ollama` after the pre-fix Anthropic degradation. The next discriminating checkpoint is whether `tests` stays clean on Ollama while the Anthropic blocker is revalidated separately on a fresh process.",
+          "operational_note": "The still-running canonical rerun has now finished the full `kyc_compliance_intake` family and moved into `insurance_claim_triage/openai`, currently just past `deps`. The next discriminating checkpoint is whether `tests` stays clean on this second scenario family.",
+          "terminal_evidence": []
+        }
+      },
+      "current_head_kyc_compliance_intake_anthropic_terse_summary_focused_rerun": {
+        "campaign": "real_world_complex_matrix_2026_04_30_head8633d97_kyc_compliance_intake_anthropic_terse_summary_rerun",
+        "status": "completed_clean_with_7_done_and_0_repairs",
+        "scope": {
+          "providers": [
+            "anthropic"
+          ],
+          "scenarios": [
+            "kyc_compliance_intake"
+          ]
+        },
+        "latest_checkpoint": {
+          "checkpoint": "kyc_compliance_intake_anthropic_focused_followup_completed",
+          "provider": "anthropic",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-30T00:42:55.773524+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "failed_task_id": null,
+          "repair_task_id": null,
+          "active_repair_task_ids": [],
+          "last_error": null,
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-30T00:42:55.772955+00:00",
+          "run_result_status": "completed",
+          "acceptance_reason": "all_evaluated_tasks_done",
+          "terminal_evidence": [],
+          "operational_note": "The focused Anthropic rerun on the published remediation head completed cleanly with no repair lane. The exact stage that degraded on the pre-fix canonical process (`tests`) therefore converged cleanly on a fresh process image.",
+          "state_file": "output/real_world_complex_matrix_2026_04_30_head8633d97_kyc_compliance_intake_anthropic_terse_summary_rerun/kyc_compliance_intake/anthropic/project_state.json"
+        },
+        "current_active_checkpoint": {
+          "scenario": "kyc_compliance_intake",
+          "provider": "anthropic",
+          "source": "output/real_world_complex_matrix_2026_04_30_head8633d97_kyc_compliance_intake_anthropic_terse_summary_rerun/kyc_compliance_intake/anthropic/project_state.json",
+          "persisted_state_written": true,
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-30T00:42:55.773524+00:00",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "completed_task_id": "legal",
+          "completed_task_at": "2026-04-30T00:42:55.772955+00:00",
+          "failed_task_id": null,
+          "writer_process_id": null,
+          "pending_task_ids": [],
+          "operational_note": "No active checkpoint remains on this focused rerun; the terminal persisted state is already the clean completed result.",
           "terminal_evidence": []
         }
       }
@@ -1752,6 +1805,6 @@
         "result": "repository_owned_two_fix_rerun_terminalized_stale_before_third_local_fix"
       }
     ],
-    "next_checkpoint": "Publish the locally validated Anthropic terse-summary remediation, then capture a focused fresh-process rerun for `kyc_compliance_intake/anthropic` while the still-running canonical rerun continues from `kyc_compliance_intake/ollama`. The remaining release-facing question is whether a post-fix canonical rerun closes `15/15`."
+    "next_checkpoint": "Publish the clean focused Anthropic recovery plus the canonical `kyc_compliance_intake/ollama` completion, then capture the next persisted checkpoints for the live canonical frontier `insurance_claim_triage/openai`. The remaining release-facing question is whether a post-fix canonical rerun closes `15/15`."
   }
 }

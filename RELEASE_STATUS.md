@@ -42,7 +42,9 @@ This file is the short repository-owned snapshot of the current release posture 
 - The same remediation is now also proven against the exact persisted degraded artifact chain: the failed `tests` and `tests__repair_2` modules from `returns_abuse_screening/anthropic/project_state.json` both rewrite to schema-correct high-risk fixtures and both pass as repaired pytest modules against the persisted implementation artifact.
 - A fresh focused rerun for `returns_abuse_screening/anthropic` on the published head `f0bbe59` has now completed cleanly at `2026-04-30T00:21:50.817929+00:00` with `phase=completed`, `terminal_outcome=completed`, `repair_cycle_count=0`, `task_status_counts={done: 7}`, and `acceptance_reason=all_evaluated_tasks_done`.
 - A fresh canonical full-scope rerun is still active at `output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun`, but its process image started before the newest local remediation landed. It has now produced three meaningful checkpoints: `kyc_compliance_intake/openai` completed cleanly at `2026-04-30T00:26:46.806519+00:00`; `kyc_compliance_intake/anthropic` degraded at `2026-04-30T00:27:34.603554+00:00` after `tests` failed with the terse summary `Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.09s` and no repair cycle opened; and `kyc_compliance_intake/ollama` is currently active after `arch`, `code`, and `deps` completed at `2026-04-30T00:34:26.437528+00:00`.
-- The new local remediation for that Anthropic degradation is already validated in the worktree: `qa_tester` now treats terse pytest-failure summaries as repairable signals for exact-status, exact-band, and positive-score overreach detection; the targeted pytest regression passes; and the exact degraded Anthropic artifact now returns `True` for both `_summary_has_exact_status_action_label_assertion_issue(...)` and `_should_rebuild_from_exact_contract(...)`.
+- That Anthropic terse-summary remediation is now published on `origin/main` at `8633d97`: `qa_tester` treats terse pytest-failure summaries as repairable signals for exact-status, exact-band, and positive-score overreach detection, the targeted pytest regression passes, and the exact degraded Anthropic artifact returns `True` for both `_summary_has_exact_status_action_label_assertion_issue(...)` and `_should_rebuild_from_exact_contract(...)`.
+- That focused Anthropic rerun has now completed cleanly on the published remediation head at `2026-04-30T00:42:55.793394+00:00`: `phase=completed`, `terminal_outcome=completed`, `repair_cycle_count=0`, all seven canonical tasks `done`, and `acceptance_reason=all_evaluated_tasks_done`. The former terse-summary degradation is therefore empirically recovered on a fresh process image.
+- The still-running pre-fix canonical root has also progressed further in parallel: `kyc_compliance_intake/ollama` completed cleanly at `2026-04-30T00:43:22.587331+00:00` with `phase=completed`, `terminal_outcome=completed`, `repair_cycle_count=0`, and all seven canonical tasks `done`; the same root has now advanced into `insurance_claim_triage/openai`, whose latest persisted checkpoint at `2026-04-30T00:43:58.813243+00:00` has `arch`, `code`, and `deps` done with `{tests, review, docs, legal}` still pending.
 - No canary claim or production-readiness claim is attached to the current head.
 - Repository is in excellent operational state for package-level release review.
 - Current-head Phase 16 material is now tracked as a pre-canary evidence rebuild, not as an open or closed canary window.
@@ -130,8 +132,8 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Next Release-Facing Action
 
-1. Publish the locally validated Anthropic terse-summary remediation and launch a focused rerun for `kyc_compliance_intake/anthropic` on the new head.
-2. Continue monitoring the still-running canonical root in parallel, currently at `kyc_compliance_intake/ollama`.
+1. Publish the clean focused Anthropic recovery plus the canonical `kyc_compliance_intake/ollama` completion checkpoint.
+2. Continue monitoring the still-running canonical root, now at `insurance_claim_triage/openai`.
 3. Keep release-candidate review closed until a post-fix canonical rerun proves `15/15` on the current head.
 
 

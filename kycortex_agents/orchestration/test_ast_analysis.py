@@ -1786,18 +1786,18 @@ def find_contract_overreach_signals(
             continue
         assertion = exact_len_assertion(child.test)
         if assertion is not None:
-            asserted_target, compared_value = assertion
+            asserted_target, compared_length = assertion
             normalized_target = asserted_target.replace(" ", "").lower()
             if largest_batch_size is not None and (
                 "audit_log" in normalized_target or "audit_logs" in normalized_target
             ):
-                if compared_value > largest_batch_size:
+                if compared_length > largest_batch_size:
                     signals.add(
-                        f"exact batch audit length {compared_value} exceeds visible batch size {largest_batch_size} in {node.name} (line {child.lineno})"
+                        f"exact batch audit length {compared_length} exceeds visible batch size {largest_batch_size} in {node.name} (line {child.lineno})"
                     )
 
             if name_suggests_validation_failure(node.name):
-                if compared_value == 0 and is_internal_score_state_target(asserted_target):
+                if compared_length == 0 and is_internal_score_state_target(asserted_target):
                     if not behavior_contract_explicitly_limits_score_state_to_valid_requests(
                         code_behavior_contract,
                         asserted_target,

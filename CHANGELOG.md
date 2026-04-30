@@ -41,6 +41,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ### Fixed
 
+- CI typecheck hotfix: `find_contract_overreach_signals()` now keeps integer length assertions and float-valued numeric assertions on separate local bindings, restoring the branch `mypy` gate without changing runtime behavior.
 - Generated-test AST autofix now prefers concrete literal examples harvested from implementation payloads over placeholder `.get(..., default)` heuristics and rewrites existing happy-path placeholder values inside positive-path dict payloads, clearing the exact persisted blocker shapes seen in vendor onboarding and returns screening repair lanes.
 - Anthropic health checks now perform a minimal live `messages.create` probe when a custom `base_url` or `ANTHROPIC_BASE_URL` gateway is configured, preventing model-list reachability from producing a false `healthy` snapshot while the real execution path is deterministically rejected.
 - CI hotfix: removed a duplicated `from typing import cast` import in `tests/test_orchestration_support.py` that triggered Ruff `F811` and failed the `Lint and Typecheck` workflow.

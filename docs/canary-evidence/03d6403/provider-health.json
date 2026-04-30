@@ -1,7 +1,7 @@
 {
   "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
-  "generated_at": "2026-04-30T00:48:47Z",
-  "bundle_status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_14_completed_1_degraded_and_no_active_or_unstarted_cells",
+  "generated_at": "2026-04-30T01:43:14Z",
+  "bundle_status": "live_canonical_full_scope_post_returns_anthropic_recovery_rerun_with_13_completed_1_degraded_1_active_and_0_remaining",
   "window_started": false,
   "window_started_at": null,
   "providers": [
@@ -11,16 +11,16 @@
       "status": "healthy_current_head_live_canonical_root_completed_5_cells_no_openai_blocker_on_active_root",
       "fresh_canary_health_check": "healthy_current_environment_preflight_2026-04-29T09:47:42Z",
       "evidence": {
-        "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun",
-        "latest_completed_source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/openai/project_state.json",
-        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/openai/run_result.json",
+        "campaign_root": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun",
+        "latest_completed_source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/openai/project_state.json",
+        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/openai/run_result.json",
         "workflow_phase": "mixed",
         "terminal_outcome": "mixed",
         "completed_cells_on_provider": 5,
         "failed_cells_on_provider": 0,
         "latest_completed_checkpoint": {
           "scenario": "access_review_audit",
-          "updated_at": "2026-04-29T23:41:03.648071+00:00",
+          "updated_at": "2026-04-30T01:39:27.223741+00:00",
           "repair_cycle_count": 0,
           "task_status_counts": {
             "done": 7
@@ -34,19 +34,19 @@
     {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
-      "status": "mixed_canonical_root_has_historical_degraded_lane_but_fresh_focused_recovery_rerun_completed_cleanly",
+      "status": "mixed_current_head_live_canonical_root_has_1_pre_fix_degraded_lane_but_later_cells_and_focused_followup_rerun_are_clean",
       "fresh_canary_health_check": "healthy_current_environment_preflight_2026-04-29T09:47:42Z",
       "evidence": {
-        "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun",
-        "latest_completed_source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/anthropic/project_state.json",
-        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/anthropic/run_result.json",
+        "campaign_root": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun",
+        "latest_completed_source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/anthropic/project_state.json",
+        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/anthropic/run_result.json",
         "workflow_phase": "mixed",
         "terminal_outcome": "mixed",
         "completed_cells_on_provider": 4,
         "failed_cells_on_provider": 1,
         "latest_completed_checkpoint": {
           "scenario": "access_review_audit",
-          "updated_at": "2026-04-29T23:42:40.214969+00:00",
+          "updated_at": "2026-04-30T01:41:06.802945+00:00",
           "repair_cycle_count": 0,
           "task_status_counts": {
             "done": 7
@@ -56,13 +56,13 @@
         },
         "failed_checkpoints": [
           {
-            "scenario": "returns_abuse_screening",
-            "updated_at": "2026-04-29T23:25:05.093925+00:00",
-            "repair_cycle_count": 3,
+            "scenario": "kyc_compliance_intake",
+            "updated_at": "2026-04-30T00:27:34.592113+00:00",
+            "repair_cycle_count": 0,
             "task_status_counts": {
-              "done": 4,
-              "failed": 5,
-              "skipped": 4
+              "done": 3,
+              "failed": 1,
+              "skipped": 3
             },
             "run_result_status": "completed",
             "acceptance_reason": "evaluated_tasks_incomplete"
@@ -109,22 +109,22 @@
     {
       "provider": "ollama",
       "model": "qwen2.5-coder:7b",
-      "status": "healthy_current_head_live_canonical_root_completed_5_cells_no_ollama_blocker_on_active_root",
+      "status": "healthy_current_head_live_canonical_root_completed_4_cells_with_access_review_audit_ollama_active",
       "fresh_canary_health_check": "healthy_current_environment_preflight_2026-04-29T09:47:42Z",
       "evidence": {
-        "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun",
-        "latest_completed_source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/project_state.json",
-        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/run_result.json",
+        "campaign_root": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun",
+        "latest_completed_source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/returns_abuse_screening/ollama/project_state.json",
+        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/returns_abuse_screening/ollama/run_result.json",
         "workflow_phase": "mixed",
         "terminal_outcome": "mixed",
-        "completed_cells_on_provider": 5,
+        "completed_cells_on_provider": 4,
         "failed_cells_on_provider": 0,
         "latest_completed_checkpoint": {
-          "scenario": "access_review_audit",
-          "updated_at": "2026-04-30T00:05:37.695417+00:00",
-          "repair_cycle_count": 1,
+          "scenario": "returns_abuse_screening",
+          "updated_at": "2026-04-30T01:37:44.735471+00:00",
+          "repair_cycle_count": 0,
           "task_status_counts": {
-            "done": 9
+            "done": 7
           },
           "run_result_status": "completed",
           "acceptance_reason": "all_evaluated_tasks_done"
@@ -132,18 +132,31 @@
         "failed_checkpoints": [],
         "current_active_lane": {
           "scenario": "access_review_audit",
-          "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/project_state.json",
+          "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/ollama/project_state.json",
           "persisted_state_written": true,
-          "workflow_phase": "completed",
-          "terminal_outcome": "completed",
-          "updated_at": "2026-04-30T00:05:37.695417+00:00",
-          "repair_cycle_count": 1,
+          "workflow_phase": "execution",
+          "terminal_outcome": null,
+          "updated_at": "2026-04-30T01:43:14.108926+00:00",
+          "repair_cycle_count": 0,
           "task_status_counts": {
-            "done": 9
+            "done": 1,
+            "pending": 6
           },
+          "completed_task_ids": [
+            "arch"
+          ],
           "failed_task_ids": [],
-          "pending_task_ids": [],
-          "operational_note": "No active Ollama lane remains on this canonical root. `access_review_audit/ollama` completed after one repair cycle, and the only remaining non-clean checkpoint on the full root now sits on `returns_abuse_screening/anthropic`."
+          "pending_task_ids": [
+            "code",
+            "deps",
+            "tests",
+            "review",
+            "docs",
+            "legal"
+          ],
+          "code_artifact_exists": true,
+          "tests_artifact_exists": false,
+          "operational_note": "The still-running canonical rerun has already completed `returns_abuse_screening/*` cleanly and then advanced through the hosted-provider lanes for `access_review_audit`. The last remaining frontier is now `access_review_audit/ollama`, currently just past `arch`."
         },
         "active_focused_rerun": {
           "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_ollama_three_remaining_required_fields_autofix_rerun",
@@ -209,10 +222,10 @@
     "latest_successful_backup_at": "2026-04-30 01:14:01 WEST",
     "summary": {
       "total_cells": 15,
-      "completed_cells": 4,
+      "completed_cells": 13,
       "failed_cells": 1,
       "active_cells": 1,
-      "remaining_cells": 9
+      "remaining_cells": 0
     },
     "latest_completed_checkpoints": [
       {
@@ -270,6 +283,132 @@
         },
         "run_result_status": "completed",
         "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "insurance_claim_triage",
+        "provider": "ollama",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:00:32.652777+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "vendor_onboarding_risk",
+        "provider": "openai",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:02:10.221939+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "vendor_onboarding_risk",
+        "provider": "anthropic",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:04:04.955634+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "vendor_onboarding_risk",
+        "provider": "ollama",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:20:07.516407+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "returns_abuse_screening",
+        "provider": "openai",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:21:30.953597+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "returns_abuse_screening",
+        "provider": "anthropic",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:23:16.852497+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "returns_abuse_screening",
+        "provider": "ollama",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:37:44.735471+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "access_review_audit",
+        "provider": "openai",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:39:27.223741+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "access_review_audit",
+        "provider": "anthropic",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T01:41:06.802945+00:00",
+        "repair_cycle_count": 0,
+        "task_status_counts": {
+          "done": 7
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
       }
     ],
     "latest_failed_checkpoint": {
@@ -298,13 +437,13 @@
       "failure_note": "Generated tests failed with a terse pytest summary (`1 failed, 4 passed`) while asserting an exact outcome label that the runtime did not match. The running canonical process is pre-fix evidence for this lane."
     },
     "current_active_checkpoint": {
-      "scenario": "insurance_claim_triage",
+      "scenario": "access_review_audit",
       "provider": "ollama",
-      "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/insurance_claim_triage/ollama/project_state.json",
+      "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/ollama/project_state.json",
       "persisted_state_written": true,
       "workflow_phase": "execution",
       "terminal_outcome": null,
-      "updated_at": "2026-04-30T00:48:47.691358+00:00",
+      "updated_at": "2026-04-30T01:43:14.108926+00:00",
       "repair_cycle_count": 0,
       "task_status_counts": {
         "done": 1,
@@ -327,7 +466,7 @@
       "terminal_evidence": [],
       "run_result_status": null,
       "acceptance_reason": null,
-      "operational_note": "The still-running canonical rerun has now completed both hosted-provider lanes for `insurance_claim_triage` cleanly and moved into the Ollama lane, currently just past `arch`. The lone degraded checkpoint in the whole root remains the older pre-fix `kyc_compliance_intake/anthropic` lane."
+      "operational_note": "The still-running canonical rerun has now completed the full `returns_abuse_screening/*` family and both hosted-provider lanes for `access_review_audit`. Only `access_review_audit/ollama` remains active, currently just past `arch`."
     }
   },
   "recent_pre_canary_health_checks": [

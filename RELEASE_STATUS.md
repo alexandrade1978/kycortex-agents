@@ -23,7 +23,7 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Current Posture
 
-- The published `main` branch still needs a safeguard publication to clear the inherited red GitHub `Lint and Typecheck` gate, but the local head has already re-cleared the reproduced blocker with green `ruff`, `mypy`, focused public/package regressions, and package validation.
+- Published `main` remains red until GitHub Actions reruns on the fixed head, but the local head has already re-cleared the reproduced blocker with green `ruff`, `mypy`, focused public/package regressions, and package validation.
 - The current development head includes a feature-flagged adaptive prompt-policy core for model-aware compaction behavior (`compact`, `balanced`, `rich`) while preserving legacy defaults.
 - The provider-matrix empirical workflow helpers now support configurable timeout and prompt-budget envelopes for code/test task constraints while preserving previous defaults.
 - Runtime validation now applies adaptive-policy-aware secondary line-budget tolerance (`compact=0%`, `balanced=5%`, `rich=15%`) while keeping contract mismatch, syntax/import, CLI-entrypoint, and truncation failures as strict blockers.
@@ -44,7 +44,7 @@ This file is the short repository-owned snapshot of the current release posture 
 - A fresh canonical full-scope rerun is still active at `output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun`, but its process image started before the newest local remediation landed. It has now produced three meaningful checkpoints: `kyc_compliance_intake/openai` completed cleanly at `2026-04-30T00:26:46.806519+00:00`; `kyc_compliance_intake/anthropic` degraded at `2026-04-30T00:27:34.603554+00:00` after `tests` failed with the terse summary `Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.09s` and no repair cycle opened; and `kyc_compliance_intake/ollama` is currently active after `arch`, `code`, and `deps` completed at `2026-04-30T00:34:26.437528+00:00`.
 - That Anthropic terse-summary remediation is now published on `origin/main` at `8633d97`: `qa_tester` treats terse pytest-failure summaries as repairable signals for exact-status, exact-band, and positive-score overreach detection, the targeted pytest regression passes, and the exact degraded Anthropic artifact returns `True` for both `_summary_has_exact_status_action_label_assertion_issue(...)` and `_should_rebuild_from_exact_contract(...)`.
 - That focused Anthropic rerun has now completed cleanly on the published remediation head at `2026-04-30T00:42:55.793394+00:00`: `phase=completed`, `terminal_outcome=completed`, `repair_cycle_count=0`, all seven canonical tasks `done`, and `acceptance_reason=all_evaluated_tasks_done`. The former terse-summary degradation is therefore empirically recovered on a fresh process image.
-- The still-running pre-fix canonical root has also progressed further in parallel: `returns_abuse_screening/ollama` completed cleanly at `2026-04-30T01:37:44.735471+00:00`; `access_review_audit/openai` then completed cleanly at `2026-04-30T01:39:27.223741+00:00`; `access_review_audit/anthropic` also completed cleanly at `2026-04-30T01:41:06.802945+00:00`; and `access_review_audit/ollama` is now the live frontier at `2026-04-30T01:43:14.108926+00:00` with only `arch` done so far.
+- The same pre-fix canonical root is now fully terminalized: `returns_abuse_screening/ollama` completed cleanly at `2026-04-30T01:37:44.735471+00:00`; `access_review_audit/openai` then completed cleanly at `2026-04-30T01:39:27.223741+00:00`; `access_review_audit/anthropic` also completed cleanly at `2026-04-30T01:41:06.802945+00:00`; and `access_review_audit/ollama` finally terminalized `degraded` at `2026-04-30T01:51:01.488710+00:00` after `tests` failed with no repair lane. That root therefore closed at `13` completed cells, `2` degraded cells, `0` active cells, and `0` unstarted cells; the non-clean checkpoints are `kyc_compliance_intake/anthropic` and `access_review_audit/ollama`.
 - No canary claim or production-readiness claim is attached to the current head.
 - Repository is in excellent operational state for package-level release review.
 - Current-head Phase 16 material is now tracked as a pre-canary evidence rebuild, not as an open or closed canary window.
@@ -132,9 +132,9 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Next Release-Facing Action
 
-1. Publish the local CI gate repair plus the synced evidence/docs checkpoint so GitHub Actions reruns on the fixed head.
-2. Continue monitoring the still-running canonical root from `access_review_audit/ollama` and capture its next persisted checkpoint.
-3. Keep release-candidate review closed until a post-fix canonical rerun proves `15/15` on the published head.
+1. Publish the local safeguard slice and follow the GitHub Actions rerun on the fixed head.
+2. Keep release-candidate review closed because the latest canonical root ended at `13/15` terminally clean-equivalent cells rather than `15/15`.
+3. Schedule a fresh post-fix canonical rerun after the branch gate is green again.
 
 
 ## Canonical References

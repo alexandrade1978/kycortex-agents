@@ -1,7 +1,7 @@
 {
   "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
-  "generated_at": "2026-04-30T01:43:14Z",
-  "status": "live_canonical_full_scope_post_returns_anthropic_recovery_rerun_with_13_completed_1_degraded_1_active_and_0_remaining",
+  "generated_at": "2026-04-30T01:51:01Z",
+  "status": "terminal_canonical_full_scope_post_returns_anthropic_recovery_rerun_with_13_completed_2_degraded_0_active_and_0_remaining",
   "release_candidate_baseline": {
     "deterministic_repository_gate": {
       "status": "green",
@@ -1120,12 +1120,12 @@
       },
       "current_head_full_scope_post_returns_anthropic_recovery_canonical_rerun": {
         "campaign": "real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun",
-        "status": "active_with_13_completed_1_degraded_1_active_and_0_remaining",
+        "status": "terminalized_with_13_completed_2_degraded_0_active_and_0_remaining",
         "summary": {
           "total_cells": 15,
           "completed_cells": 13,
-          "failed_cells": 1,
-          "active_cells": 1,
+          "failed_cells": 2,
+          "active_cells": 0,
           "remaining_cells": 0,
           "provider_outcomes": {
             "openai": {
@@ -1138,59 +1138,64 @@
             },
             "ollama": {
               "completed_cells": 4,
-              "failed_cells": 0
+              "failed_cells": 1
             }
           }
         },
         "latest_checkpoint": {
-          "checkpoint": "access_review_audit_anthropic_completed_on_followup_canonical_rerun",
-          "provider": "anthropic",
+          "checkpoint": "access_review_audit_ollama_degraded_on_followup_canonical_rerun",
+          "provider": "ollama",
           "phase": "completed",
-          "terminal_outcome": "completed",
-          "updated_at": "2026-04-30T01:41:06.802945+00:00",
+          "terminal_outcome": "degraded",
+          "updated_at": "2026-04-30T01:51:01.488710+00:00",
           "repair_cycle_count": 0,
           "task_status_counts": {
-            "done": 7
+            "done": 3,
+            "failed": 1,
+            "skipped": 3
           },
-          "failed_task_id": null,
+          "failed_task_id": "tests",
           "repair_task_id": null,
           "active_repair_task_ids": [],
           "last_error": null,
-          "completed_task_id": "legal",
-          "completed_task_at": "2026-04-30T01:41:06.759215+00:00",
+          "completed_task_id": "deps",
+          "completed_task_at": "2026-04-30T01:47:59.023396+00:00",
           "run_result_status": "completed",
-          "acceptance_reason": "all_evaluated_tasks_done",
-          "terminal_evidence": [],
-          "operational_note": "The still-running canonical rerun has now completed the hosted-provider lanes for `access_review_audit` cleanly. The active frontier has moved to `access_review_audit/ollama`.",
-          "state_file": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/anthropic/project_state.json"
+          "acceptance_reason": "evaluated_tasks_incomplete",
+          "terminal_evidence": [
+            "[15/15] scenario=access_review_audit provider=ollama status=completed phase=completed terminal=degraded"
+          ],
+          "operational_note": "The pre-fix canonical rerun is now fully terminalized. Its final checkpoint is the degraded `access_review_audit/ollama` lane, where `tests` failed without any repair cycle opening.",
+          "state_file": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/ollama/project_state.json"
         },
         "current_active_checkpoint": {
           "scenario": "access_review_audit",
           "provider": "ollama",
           "source": "output/real_world_complex_matrix_2026_04_30_head501a3a1_full_scope_post_returns_anthropic_recovery_rerun/access_review_audit/ollama/project_state.json",
           "persisted_state_written": true,
-          "phase": "execution",
-          "terminal_outcome": null,
-          "updated_at": "2026-04-30T01:43:14.108926+00:00",
+          "phase": "completed",
+          "terminal_outcome": "degraded",
+          "updated_at": "2026-04-30T01:51:01.488710+00:00",
           "repair_cycle_count": 0,
           "task_status_counts": {
-            "done": 1,
-            "pending": 6
+            "done": 3,
+            "failed": 1,
+            "skipped": 3
           },
-          "completed_task_id": "arch",
-          "completed_task_at": "2026-04-30T01:43:14.108591+00:00",
-          "failed_task_id": null,
+          "completed_task_id": "deps",
+          "completed_task_at": "2026-04-30T01:47:59.023396+00:00",
+          "failed_task_id": "tests",
           "writer_process_id": null,
-          "pending_task_ids": [
-            "code",
-            "deps",
-            "tests",
+          "pending_task_ids": [],
+          "skipped_task_ids": [
             "review",
             "docs",
             "legal"
           ],
-          "operational_note": "The still-running canonical rerun has already completed the full `returns_abuse_screening/*` family plus both hosted-provider lanes for `access_review_audit`. The local-provider lane is now just past `arch` with the rest of the workflow still pending.",
-          "terminal_evidence": []
+          "operational_note": "No active checkpoint remains on this canonical root. `access_review_audit/ollama` is the final terminal checkpoint, and the root now closes with two degraded lanes overall.",
+          "terminal_evidence": [
+            "[15/15] scenario=access_review_audit provider=ollama status=completed phase=completed terminal=degraded"
+          ]
         }
       },
       "current_head_kyc_compliance_intake_anthropic_terse_summary_focused_rerun": {

@@ -1253,6 +1253,23 @@ class ProjectState:
 
         return [t for t in self.tasks if t.status == TaskStatus.PENDING.value]
 
+    def _pending_repair_is_still_required(self, task: Task) -> bool:
+        """Return whether a pending repair is still justified by an unresolved source failure."""
+
+        if not task.repair_origin_task_id:
+            return False
+        source_failure_task_id = task.repair_context.get("source_failure_task_id")
+        if not isinstance(source_failure_task_id, str) or not source_failure_task_id:
+            return False
+        source_failure_task = self.get_task(source_failure_task_id)
+        if source_failure_task is None:
+            return False
+        return source_failure_task.status in {
+            TaskStatus.FAILED.value,
+            TaskStatus.PENDING.value,
+            TaskStatus.RUNNING.value,
+        }
+
     def skip_superseded_pending_repairs(self) -> List[str]:
         """Skip pending repair tasks whose repair origin has already completed successfully."""
 
@@ -1260,6 +1277,8 @@ class ProjectState:
         skipped_task_ids: List[str] = []
         for task in self.tasks:
             if task.status != TaskStatus.PENDING.value or not task.repair_origin_task_id:
+                continue
+            if self._pending_repair_is_still_required(task):
                 continue
             origin = self.get_task(task.repair_origin_task_id)
             if origin is None or origin.status != TaskStatus.DONE.value:

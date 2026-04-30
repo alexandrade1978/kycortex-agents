@@ -9890,7 +9890,7 @@ def test_run_task_normalizes_missing_nested_constructor_payload_fields(tmp_path)
 
     validation = require_test_validation(project.tasks[1])
     assert project.tasks[1].status == TaskStatus.DONE.value
-    assert "data={'compliance_data': 'sample'}" in project.tasks[1].output
+    assert "data={'key': 'sample', 'compliance_data': 'sample'}" in project.tasks[1].output
     assert validation["payload_contract_violations"] == []
     assert validation["undefined_fixtures"] == []
 

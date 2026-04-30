@@ -1428,6 +1428,52 @@ def test_skip_superseded_pending_repairs_marks_pending_repairs_when_origin_is_do
     assert any(event["event"] == "task_repair_superseded" and event["task_id"] == "tests__repair_1" for event in project.execution_events)
 
 
+def test_skip_superseded_pending_repairs_keeps_pending_repairs_required_by_failed_source_task():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output="def risky() -> int:\n    raise AttributeError('boom')",
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Validate the application",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            last_error_category=FailureCategory.TEST_VALIDATION.value,
+        )
+    )
+    project.add_task(
+        Task(
+            id="code__repair_1",
+            title="Repair implementation",
+            description="Repair the implementation",
+            assigned_to="code_engineer",
+            repair_origin_task_id="code",
+            repair_context={
+                "cycle": 1,
+                "source_failure_task_id": "tests",
+                "source_failure_category": FailureCategory.TEST_VALIDATION.value,
+            },
+            status=TaskStatus.PENDING.value,
+        )
+    )
+
+    skipped = project.skip_superseded_pending_repairs()
+
+    repair_task = require_task(project, "code__repair_1")
+    assert skipped == []
+    assert repair_task.status == TaskStatus.PENDING.value
+    assert repair_task.skip_reason_type is None
+
+
 def test_fail_task_syncs_repair_failure_back_to_origin():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

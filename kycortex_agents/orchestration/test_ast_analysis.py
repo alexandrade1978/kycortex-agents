@@ -516,9 +516,13 @@ def extract_literal_field_values(
         direct_value = call_argument_value(resolved, field_name, class_map)
         if direct_value is not None:
             return extract_string_literals(direct_value, bindings)
-        nested_payload = call_argument_value(resolved, "data", class_map)
-        if nested_payload is not None:
-            return extract_literal_field_values(nested_payload, bindings, field_name, class_map)
+        for nested_payload_name in ("data", "payload", "request", "item", "details"):
+            nested_payload = call_argument_value(resolved, nested_payload_name, class_map)
+            if nested_payload is None:
+                continue
+            nested_values = extract_literal_field_values(nested_payload, bindings, field_name, class_map)
+            if nested_values:
+                return nested_values
     return []
 
 
@@ -1027,26 +1031,28 @@ def analyze_test_type_mismatches(
     return sorted(mismatches)
 
 
+def example_value_source_for_key(key_name: str, example_map: Dict[str, str]) -> str:
+    direct_example = example_map.get(key_name)
+    if direct_example:
+        return direct_example
+
+    key_lower = key_name.lower()
+    if any(token in key_lower for token in ("identity", "requester", "approved_by", "approver", "owner", "name", "type")):
+        return "'sample'"
+    if any(token in key_lower for token in ("roles", "conflicts", "items", "documents", "evidence")):
+        return "['sample']"
+    if any(token in key_lower for token in ("age", "days", "count", "score", "amount", "total", "quantity")):
+        return "1"
+    if any(token in key_lower for token in ("approved", "enabled", "stale", "emergency", "valid", "blocked")):
+        return "True"
+    return "'sample'"
+
+
 def dict_literal_source_from_examples(
     dict_name: str,
     dict_keys: Dict[str, list[str]],
     dict_key_examples: Dict[str, Dict[str, str]],
 ) -> str:
-    def example_value_source(key_name: str, example_map: Dict[str, str]) -> str:
-        direct_example = example_map.get(key_name)
-        if direct_example:
-            return direct_example
-
-        key_lower = key_name.lower()
-        if any(token in key_lower for token in ("identity", "requester", "approved_by", "approver", "owner", "name", "type")):
-            return "'sample'"
-        if any(token in key_lower for token in ("roles", "conflicts", "items", "documents", "evidence")):
-            return "['sample']"
-        if any(token in key_lower for token in ("age", "days", "count", "score", "amount", "total", "quantity")):
-            return "1"
-        if any(token in key_lower for token in ("approved", "enabled", "stale", "emergency", "valid", "blocked")):
-            return "True"
-        return "'sample'"
 
     example_map = dict_key_examples.get(dict_name, {})
     pairs: list[str] = []
@@ -1054,12 +1060,12 @@ def dict_literal_source_from_examples(
         nested_examples = dict_key_examples.get(key)
         if nested_examples:
             nested_pairs = [
-                f"'{nested_key}': {example_value_source(nested_key, nested_examples)}"
+                f"'{nested_key}': {example_value_source_for_key(nested_key, nested_examples)}"
                 for nested_key in sorted(nested_examples)
             ]
             value_source = "{" + ", ".join(nested_pairs) + "}"
         else:
-            value_source = example_value_source(key, example_map)
+            value_source = example_value_source_for_key(key, example_map)
         pairs.append(f"'{key}': {value_source}")
     return "{" + ", ".join(pairs) + "}"
 
@@ -1092,14 +1098,60 @@ def node_looks_like_placeholder(node: ast.AST) -> bool:
     return False
 
 
+def exact_field_string_assertion(node: ast.Assert) -> Optional[tuple[str, ast.Constant]]:
+    test = node.test
+    if not isinstance(test, ast.Compare) or len(test.ops) != 1 or len(test.comparators) != 1:
+        return None
+    if not isinstance(test.ops[0], (ast.Eq, ast.Is)):
+        return None
+
+    def observed_field_name(candidate: ast.AST) -> Optional[str]:
+        if isinstance(candidate, ast.Attribute):
+            return candidate.attr
+        if (
+            isinstance(candidate, ast.Subscript)
+            and isinstance(candidate.slice, ast.Constant)
+            and isinstance(candidate.slice.value, str)
+        ):
+            return candidate.slice.value
+        return None
+
+    left = test.left
+    right = test.comparators[0]
+    if isinstance(left, ast.Constant) and isinstance(left.value, str):
+        field_name = observed_field_name(right)
+        if field_name:
+            return field_name, left
+    if isinstance(right, ast.Constant) and isinstance(right.value, str):
+        field_name = observed_field_name(left)
+        if field_name:
+            return field_name, right
+    return None
+
+
+def visible_field_string_literals(
+    bindings: Dict[str, ast.AST],
+    field_name: str,
+    class_map: Dict[str, Any],
+) -> list[str]:
+    literals: list[str] = []
+    for value_node in bindings.values():
+        for literal in extract_literal_field_values(value_node, bindings, field_name, class_map):
+            if literal not in literals:
+                literals.append(literal)
+    return literals
+
+
 def auto_fix_test_type_mismatches(
     test_content: str,
     code_content: str,
     dict_key_extractor: Optional[Callable[[ast.AST], Dict[str, list[str]]]] = None,
 ) -> str:
     """Auto-fix str->dict type mismatches in generated test code."""
+    class_map: Dict[str, Any] = {}
     if dict_key_extractor is None:
         from kycortex_agents.orchestration.module_ast_analysis import (
+            analyze_python_module,
             dict_required_keys_from_tree,
             dict_accessed_keys_from_tree,
             infer_dict_key_value_examples,
@@ -1108,6 +1160,7 @@ def auto_fix_test_type_mismatches(
         dict_key_extractor = dict_accessed_keys_from_tree
     else:
         from kycortex_agents.orchestration.module_ast_analysis import (
+            analyze_python_module,
             dict_required_keys_from_tree,
             infer_dict_key_value_examples,
         )
@@ -1116,6 +1169,7 @@ def auto_fix_test_type_mismatches(
         impl_tree = ast.parse(code_content)
     except SyntaxError:
         return test_content
+    class_map = analyze_python_module(code_content).get("classes") or {}
     dict_keys = dict_key_extractor(impl_tree)
     for dict_name, required_keys in dict_required_keys_from_tree(impl_tree).items():
         existing_keys = dict_keys.setdefault(dict_name, [])
@@ -1211,12 +1265,60 @@ def auto_fix_test_type_mismatches(
     def offset_for(line_number: int, column_offset: int) -> int:
         return line_offsets[line_number - 1] + column_offset
 
+    def merged_dict_literal_source(
+        dict_node: ast.AST,
+        dict_name: str,
+        required_keys: list[str],
+    ) -> Optional[str]:
+        if not isinstance(dict_node, ast.Dict):
+            return expected_dict_literals.get(dict_name)
+
+        observed_keys: set[str] = set()
+        pair_sources: list[str] = []
+        example_map = dict_key_examples.get(dict_name, {})
+        for key_node, value_node in zip(dict_node.keys, dict_node.values):
+            if key_node is None:
+                return expected_dict_literals.get(dict_name)
+            key_source = ast.get_source_segment(updated_content, key_node)
+            value_source = ast.get_source_segment(updated_content, value_node)
+            if key_source is None or value_source is None:
+                return expected_dict_literals.get(dict_name)
+            if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
+                key_name = key_node.value
+                observed_keys.add(key_name)
+                if node_looks_like_placeholder(value_node):
+                    nested_examples = dict_key_examples.get(key_name)
+                    if nested_examples:
+                        nested_pairs = [
+                            f"'{nested_key}': {example_value_source_for_key(nested_key, nested_examples)}"
+                            for nested_key in sorted(nested_examples)
+                        ]
+                        value_source = "{" + ", ".join(nested_pairs) + "}"
+                    else:
+                        value_source = example_value_source_for_key(key_name, example_map)
+            pair_sources.append(f"{key_source}: {value_source}")
+
+        missing_keys = [key for key in required_keys if key not in observed_keys]
+        if not missing_keys:
+            return None
+
+        missing_source = dict_literal_source_from_examples(
+            dict_name,
+            {dict_name: missing_keys},
+            dict_key_examples,
+        )
+        missing_pairs = missing_source[1:-1].strip()
+        if missing_pairs:
+            pair_sources.append(missing_pairs)
+        return "{" + ", ".join(pair_sources) + "}"
+
     replacements: list[tuple[int, int, str]] = []
     for node in ast.walk(updated_tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if not node.name.startswith("test_"):
             continue
+        bindings = collect_local_bindings(node)
         name_lower = node.name.lower()
         is_negative = "validation_failure" in name_lower or "invalid" in name_lower
         if not is_negative:
@@ -1230,13 +1332,17 @@ def auto_fix_test_type_mismatches(
             if not isinstance(child, ast.Call):
                 continue
             for param_name, required_keys in dict_keys.items():
-                arg_node = call_argument_value(child, param_name, {})
+                arg_node = call_argument_value(child, param_name, class_map)
                 if arg_node is None:
                     continue
                 if isinstance(arg_node, ast.Dict):
                     example_map = dict_key_examples.get(param_name, {})
                     if dict_node_missing_required_keys(arg_node, required_keys):
-                        replacement_source = expected_dict_literals.get(param_name)
+                        replacement_source = merged_dict_literal_source(
+                            arg_node,
+                            param_name,
+                            required_keys,
+                        ) or expected_dict_literals.get(param_name)
                         if replacement_source:
                             replacements.append(
                                 (
@@ -1276,6 +1382,12 @@ def auto_fix_test_type_mismatches(
                             )
                             continue
                         replacement_source = expected_dict_literals.get(key_node.value)
+                        if isinstance(value_node, ast.Dict):
+                            replacement_source = merged_dict_literal_source(
+                                value_node,
+                                key_node.value,
+                                nested_required_keys,
+                            ) or replacement_source
                         if not replacement_source:
                             continue
                         replacements.append(
@@ -1295,6 +1407,27 @@ def auto_fix_test_type_mismatches(
                                 replacement_source,
                             )
                         )
+
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Assert):
+                continue
+            exact_assertion = exact_field_string_assertion(child)
+            if exact_assertion is None:
+                continue
+            field_name, literal_node = exact_assertion
+            visible_literals = visible_field_string_literals(bindings, field_name, class_map)
+            if len(visible_literals) != 1:
+                continue
+            replacement_value = visible_literals[0]
+            if literal_node.value == replacement_value:
+                continue
+            replacements.append(
+                (
+                    offset_for(literal_node.lineno, literal_node.col_offset),
+                    offset_for(literal_node.end_lineno or literal_node.lineno, literal_node.end_col_offset or literal_node.col_offset),
+                    repr(replacement_value),
+                )
+            )
 
     if not replacements:
         return updated_content

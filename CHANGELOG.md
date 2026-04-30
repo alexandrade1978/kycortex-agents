@@ -10,7 +10,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - Current package version is now `1.0.13a10.dev0` ahead of the next alpha release.
 - The last published and trusted alpha baseline remains `1.0.13a6`.
-- Release and canary claims are suspended on the current development head while the orchestrator refactor is in progress.
+- The active unpublished head has requalified locally to the current Beta 1 minimum with deterministic green validation plus fresh same-head empirical evidence.
+- Publication, canary, and go-live remain separately gated; that local Beta 1 result does not publish or promote the head automatically.
 
 ### Added
 
@@ -43,6 +44,9 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - CI typecheck hotfix: `find_contract_overreach_signals()` now keeps integer length assertions and float-valued numeric assertions on separate local bindings, restoring the branch `mypy` gate without changing runtime behavior.
 - CI coverage-gate hotfix: provider integration tests now isolate ambient `ANTHROPIC_BASE_URL`, orchestrator coverage expectations now match the current normalized-success path, and real-world matrix stubs now include the required malformed-request assertion check.
+- Required-field inference for generated-service validation now recognizes literal key sequences discovered through `.issubset(...)`, `all(... for field in required_keys)`, and `for key in required_keys` membership guards.
+- Generated-test autofix now merges missing happy-path dict keys into existing payload literals, upgrades stale placeholder values when stronger examples are known, and aligns exact echoed-field assertions with the visible payload literals already bound in the test.
+- Repair planning and workflow acceptance now ignore superseded repair lineage once the origin task is already `done`, preventing stale pending or historical repair tasks from blocking `resume_failed` repair selection or degrading accepted workflows.
 - Generated-test AST autofix now prefers concrete literal examples harvested from implementation payloads over placeholder `.get(..., default)` heuristics and rewrites existing happy-path placeholder values inside positive-path dict payloads, clearing the exact persisted blocker shapes seen in vendor onboarding and returns screening repair lanes.
 - Anthropic health checks now perform a minimal live `messages.create` probe when a custom `base_url` or `ANTHROPIC_BASE_URL` gateway is configured, preventing model-list reachability from producing a false `healthy` snapshot while the real execution path is deterministically rejected.
 - CI hotfix: removed a duplicated `from typing import cast` import in `tests/test_orchestration_support.py` that triggered Ruff `F811` and failed the `Lint and Typecheck` workflow.
@@ -79,9 +83,9 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 ### Release Readiness Notes
 
 - The next maintenance entry will be recorded here until it is promoted into a versioned release section.
-- The repository-owned release gate is green again on the current head after the consolidated tuned checkpoint: `ruff`, `mypy`, focused public/package regressions, package validation, release metadata validation, coverage gate (`1696 passed`, `91.59%`), and full pytest (`1696 passed`).
-- Baseline 5×3 campaign (v59 OpenAI, v60 Anthropic, v61 Ollama): 13/15 GREEN → 14/15 GREEN after v1.0.13a8 typed fixture fix → **15/15 GREEN** after v1.0.13a9 additive scoring guidance.
-- The current refactor head now also has a consolidated 3-provider tuned full-workflow checkpoint covering OpenAI, Anthropic, and explicit Ollama `qwen3.5:9b` in one artifact root.
+- The active unpublished head is locally green across deterministic checks, touched-slice regressions, and fresh same-head empirical Beta 1 evidence.
+- The current same-head empirical floor for the unpublished head includes a clean full `5 x 3` `15/15` result plus a fresh clean replay of the previously hardest repaired scenario/provider pair.
+- No release, canary, or production claim is attached automatically to the unpublished head; publication and go-live remain separately gated.
 
 ## 1.0.13a9 - 2026-04-18 (branch-only checkpoint)
 

@@ -1484,24 +1484,67 @@ def comparison_required_field(node: ast.Compare) -> str:
 
 def extract_required_fields(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     literal_fields: list[str] = []
+    literal_sequences: Dict[str, list[str]] = {}
     for stmt in ast.walk(node):
-        if not isinstance(stmt, ast.Assign):
-            if not isinstance(stmt, ast.Compare):
+        if isinstance(stmt, ast.Assign):
+            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
                 continue
-            field_name = comparison_required_field(stmt)
-            if field_name and field_name not in literal_fields:
-                literal_fields.append(field_name)
+            if not isinstance(stmt.value, (ast.List, ast.Set, ast.Tuple)):
+                continue
+            fields = [
+                element.value
+                for element in stmt.value.elts
+                if isinstance(element, ast.Constant) and isinstance(element.value, str)
+            ]
+            if not fields:
+                continue
+            target_name = stmt.targets[0].id
+            literal_sequences[target_name] = fields
+            if target_name == "required_fields":
+                return fields
             continue
-        if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+        if not isinstance(stmt, ast.Compare):
             continue
-        if stmt.targets[0].id != "required_fields" or not isinstance(stmt.value, (ast.List, ast.Set, ast.Tuple)):
+        field_name = comparison_required_field(stmt)
+        if field_name and field_name not in literal_fields:
+            literal_fields.append(field_name)
+
+    for stmt in ast.walk(node):
+        if isinstance(stmt, ast.For):
+            if not isinstance(stmt.target, ast.Name) or not isinstance(stmt.iter, ast.Name):
+                continue
+            fields = literal_sequences.get(stmt.iter.id)
+            if not fields:
+                continue
+            loop_var = stmt.target.id
+            for child in ast.walk(stmt):
+                if not isinstance(child, ast.Compare):
+                    continue
+                if not isinstance(child.left, ast.Name) or child.left.id != loop_var:
+                    continue
+                if any(isinstance(op, ast.NotIn) for op in child.ops):
+                    return fields
+        if not isinstance(stmt, ast.Call):
             continue
-        fields: list[str] = []
-        for element in stmt.value.elts:
-            if isinstance(element, ast.Constant) and isinstance(element.value, str):
-                fields.append(element.value)
-        if fields:
-            return fields
+        if (
+            isinstance(stmt.func, ast.Attribute)
+            and stmt.func.attr == "issubset"
+            and isinstance(stmt.func.value, ast.Name)
+        ):
+            fields = literal_sequences.get(stmt.func.value.id)
+            if fields:
+                return fields
+        if not (isinstance(stmt.func, ast.Name) and stmt.func.id == "all" and stmt.args):
+            continue
+        generator = stmt.args[0]
+        if not isinstance(generator, ast.GeneratorExp):
+            continue
+        for comprehension in generator.generators:
+            if not isinstance(comprehension.iter, ast.Name):
+                continue
+            fields = literal_sequences.get(comprehension.iter.id)
+            if fields:
+                return fields
     return literal_fields
 
 

@@ -660,7 +660,11 @@ class ProjectState:
             title=f"Budget plan for {source_task.title}",
             description=source_task.description,
             assigned_to="architect",
-            dependencies=list(source_task.dependencies),
+            dependencies=[
+                dependency_id
+                for dependency_id in source_task.dependencies
+                if (dependency := self.get_task(dependency_id)) is None or not self._is_repair_lineage_task(dependency)
+            ],
             required_for_acceptance=False,
             retry_limit=source_task.retry_limit,
             repair_context=dict(repair_context),
@@ -698,7 +702,11 @@ class ProjectState:
             title=f"Repair {source_task.title}",
             description=source_task.description,
             assigned_to=repair_owner,
-            dependencies=list(source_task.dependencies),
+            dependencies=[
+                dependency_id
+                for dependency_id in source_task.dependencies
+                if (dependency := self.get_task(dependency_id)) is None or not self._is_repair_lineage_task(dependency)
+            ],
             required_for_acceptance=False,
             retry_limit=source_task.retry_limit,
             repair_context=dict(repair_context),
@@ -834,6 +842,31 @@ class ProjectState:
             status=origin.status,
             details={"repair_task_id": task.id, "repair_attempt": task.repair_attempt, "assigned_to": task.assigned_to},
         )
+        for sibling in self.tasks:
+            if sibling.id == task.id or sibling.repair_origin_task_id != origin.id:
+                continue
+            if sibling.status != TaskStatus.PENDING.value:
+                continue
+            sibling.status = TaskStatus.SKIPPED.value
+            sibling.last_error = f"Skipped because repair task '{task.id}' completed successfully"
+            sibling.last_error_type = None
+            sibling.last_error_category = None
+            sibling.output = sibling.last_error
+            sibling.output_payload = None
+            sibling.skip_reason_type = "superseded_repair"
+            sibling.last_provider_call = None
+            sibling.started_at = None
+            sibling.last_attempt_started_at = None
+            sibling.last_resumed_at = task.completed_at
+            sibling.completed_at = task.completed_at
+            self._record_task_event(sibling, "skipped", task.completed_at, error_message=sibling.last_error)
+            self._record_execution_event(
+                event="task_repair_superseded",
+                timestamp=task.completed_at,
+                task_id=sibling.id,
+                status=sibling.status,
+                details={"repair_origin_task_id": origin.id, "repair_task_id": task.id},
+            )
 
     def _is_dependency_failed_skip(self, task: Task) -> bool:
         if task.skip_reason_type is not None:
@@ -1219,6 +1252,43 @@ class ProjectState:
         """Return all tasks that are still pending execution."""
 
         return [t for t in self.tasks if t.status == TaskStatus.PENDING.value]
+
+    def skip_superseded_pending_repairs(self) -> List[str]:
+        """Skip pending repair tasks whose repair origin has already completed successfully."""
+
+        skipped_at: Optional[str] = None
+        skipped_task_ids: List[str] = []
+        for task in self.tasks:
+            if task.status != TaskStatus.PENDING.value or not task.repair_origin_task_id:
+                continue
+            origin = self.get_task(task.repair_origin_task_id)
+            if origin is None or origin.status != TaskStatus.DONE.value:
+                continue
+            skipped_at = skipped_at or datetime.now(timezone.utc).isoformat()
+            task.status = TaskStatus.SKIPPED.value
+            task.last_error = f"Skipped because repair target '{origin.id}' already completed successfully"
+            task.last_error_type = None
+            task.last_error_category = None
+            task.output = task.last_error
+            task.output_payload = None
+            task.skip_reason_type = "superseded_repair"
+            task.last_provider_call = None
+            task.started_at = None
+            task.last_attempt_started_at = None
+            task.last_resumed_at = skipped_at
+            task.completed_at = skipped_at
+            self._record_task_event(task, "skipped", skipped_at, error_message=task.last_error)
+            self._record_execution_event(
+                event="task_repair_superseded",
+                timestamp=skipped_at,
+                task_id=task.id,
+                status=task.status,
+                details={"repair_origin_task_id": origin.id},
+            )
+            skipped_task_ids.append(task.id)
+        if skipped_at is not None:
+            self._touch(skipped_at)
+        return skipped_task_ids
 
     def execution_plan(self) -> List[Task]:
         """Return tasks in dependency-safe topological execution order."""

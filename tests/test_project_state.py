@@ -1355,6 +1355,79 @@ def test_complete_task_syncs_repair_result_back_to_origin():
     assert "repair_task_id" not in repaired_event["details"]
 
 
+def test_complete_task_skips_superseded_pending_repairs_for_same_origin():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Validate the application",
+            assigned_to="qa_tester",
+            status=TaskStatus.FAILED.value,
+            output="pytest failed",
+            attempts=1,
+        )
+    )
+    old_repair = project._create_repair_task(
+        "tests",
+        "qa_tester",
+        {"cycle": 1, "instruction": "Repair the tests."},
+    )
+    assert old_repair is not None
+    new_repair = project._create_repair_task(
+        "tests",
+        "qa_tester",
+        {"cycle": 2, "instruction": "Repair the tests again."},
+    )
+    assert new_repair is not None
+
+    project.start_task(new_repair.id)
+    project.complete_task(new_repair.id, "def test_ok():\n    assert True\n")
+
+    origin = require_task(project, "tests")
+    superseded = require_task(project, old_repair.id)
+
+    assert origin.status == TaskStatus.DONE.value
+    assert superseded.status == TaskStatus.SKIPPED.value
+    assert superseded.skip_reason_type == "superseded_repair"
+    assert superseded.last_error == f"Skipped because repair task '{new_repair.id}' completed successfully"
+    assert superseded.history[-1]["event"] == "skipped"
+    assert any(event["event"] == "task_repair_superseded" and event["task_id"] == old_repair.id for event in project.execution_events)
+
+
+def test_skip_superseded_pending_repairs_marks_pending_repairs_when_origin_is_done():
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Validate the application",
+            assigned_to="qa_tester",
+            status=TaskStatus.DONE.value,
+            output="pytest passed",
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests__repair_1",
+            title="Repair tests",
+            description="Repair tests",
+            assigned_to="qa_tester",
+            repair_origin_task_id="tests",
+            status=TaskStatus.PENDING.value,
+        )
+    )
+
+    skipped = project.skip_superseded_pending_repairs()
+
+    repair_task = require_task(project, "tests__repair_1")
+    assert skipped == ["tests__repair_1"]
+    assert repair_task.status == TaskStatus.SKIPPED.value
+    assert repair_task.skip_reason_type == "superseded_repair"
+    assert repair_task.last_error == "Skipped because repair target 'tests' already completed successfully"
+    assert any(event["event"] == "task_repair_superseded" and event["task_id"] == "tests__repair_1" for event in project.execution_events)
+
+
 def test_fail_task_syncs_repair_failure_back_to_origin():
     project = ProjectState(project_name="Demo", goal="Build demo")
     project.add_task(

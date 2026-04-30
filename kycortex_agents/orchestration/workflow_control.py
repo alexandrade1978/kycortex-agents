@@ -327,7 +327,10 @@ def failed_task_ids_for_repair(project: ProjectState) -> list[str]:
         task.repair_origin_task_id
         for task in project.tasks
         if task.repair_origin_task_id
-        and task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}
+        and (
+            task.status == TaskStatus.RUNNING.value
+            or (task.status == TaskStatus.PENDING.value and project.is_task_ready(task))
+        )
     }
     return [
         task.id
@@ -1063,6 +1066,7 @@ def execute_workflow_loop(
     while True:
         if exit_if_workflow_cancelled(project):
             return True
+        project.skip_superseded_pending_repairs()
         pending = pending_tasks()
         if finish_workflow_if_no_pending_tasks(project, pending):
             return False

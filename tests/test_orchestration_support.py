@@ -1223,6 +1223,154 @@ def test_auto_fix_test_type_mismatches_uses_literal_examples_from_sample_payload
 	assert "'due_diligence_evidence': ['cert_iso27001']" in fixed
 
 
+def test_auto_fix_test_type_mismatches_fixes_missing_nested_dict_keys_for_positional_request_constructor():
+	impl_code = (
+		"from dataclasses import dataclass\n"
+		"from typing import Any, Dict\n\n"
+		"@dataclass\n"
+		"class VendorSubmission:\n"
+		"    request_id: str\n"
+		"    request_type: str\n"
+		"    details: Dict[str, Any]\n"
+		"    timestamp: float\n\n"
+		"class VendorRiskReviewService:\n"
+		"    def validate_request(self, request):\n"
+		"        required_fields = ['vendor_name', 'service_category', 'due_diligence_evidence']\n"
+		"        return isinstance(request.details, dict) and all(field in request.details for field in required_fields)\n\n"
+		"    def handle_request(self, request):\n"
+		"        vendor_name = request.details.get('vendor_name', '')\n"
+		"        service_category = request.details.get('service_category', '')\n"
+		"        due_diligence_evidence = request.details.get('due_diligence_evidence', [])\n"
+		"        return vendor_name, service_category, due_diligence_evidence\n"
+	)
+	test_code = (
+		"def test_happy_path():\n"
+		"    service = VendorRiskReviewService()\n"
+		"    request = VendorSubmission('1', 'onboarding', {'vendor_name': 'sample', 'due_diligence_evidence': ['sample']}, 1.0)\n"
+		"    service.handle_request(request)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'vendor_name': 'sample'" in fixed
+	assert "'service_category': 'sample'" in fixed
+	assert "'due_diligence_evidence': ['sample']" in fixed
+
+
+def test_auto_fix_test_type_mismatches_fixes_missing_required_keys_from_iterated_sequence_validation():
+	impl_code = (
+		"from dataclasses import dataclass\n"
+		"from datetime import datetime\n"
+		"from typing import Any, Dict\n\n"
+		"@dataclass\n"
+		"class VendorSubmission:\n"
+		"    request_id: str\n"
+		"    request_type: str\n"
+		"    details: Dict[str, Any]\n"
+		"    timestamp: datetime\n\n"
+		"class VendorRiskReviewService:\n"
+		"    def validate_request(self, request):\n"
+		"        if not isinstance(request.details, dict):\n"
+		"            return False\n"
+		"        required_keys = {'vendor_name', 'service_category', 'due_diligence_evidence'}\n"
+		"        for key in required_keys:\n"
+		"            if key not in request.details or not request.details[key]:\n"
+		"                return False\n"
+		"        return True\n\n"
+		"    def handle_request(self, request):\n"
+		"        if not self.validate_request(request):\n"
+		"            raise ValueError('Request validation failed')\n"
+		"        return request.details\n"
+	)
+	test_code = (
+		"def test_happy_path():\n"
+		"    service = VendorRiskReviewService()\n"
+		"    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+		"    request = VendorSubmission(request_id='request_id-1', request_type='screening', details={'critical_service': False, 'vendor_name': 'TechCorp Inc'}, timestamp=fixed_time)\n"
+		"    service.handle_request(request)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'vendor_name': 'TechCorp Inc'" in fixed
+	assert "'service_category': 'sample'" in fixed
+	assert "'due_diligence_evidence': ['sample']" in fixed
+
+
+def test_auto_fix_test_type_mismatches_fixes_missing_required_keys_from_issubset_validation():
+	impl_code = (
+		"from dataclasses import dataclass\n"
+		"from datetime import datetime\n"
+		"from typing import Any, Dict\n\n"
+		"@dataclass\n"
+		"class VendorSubmission:\n"
+		"    request_id: str\n"
+		"    request_type: str\n"
+		"    details: Dict[str, Any]\n"
+		"    timestamp: datetime\n\n"
+		"class VendorRiskReviewService:\n"
+		"    def validate_request(self, request):\n"
+		"        if not isinstance(request.details, dict):\n"
+		"            return False\n"
+		"        required_detail_keys = {'vendor_name', 'service_category', 'due_diligence_evidence'}\n"
+		"        return required_detail_keys.issubset(request.details.keys())\n\n"
+		"    def handle_request(self, request):\n"
+		"        if not self.validate_request(request):\n"
+		"            raise ValueError('Request validation failed')\n"
+		"        return request.details\n"
+	)
+	test_code = (
+		"def test_happy_path():\n"
+		"    service = VendorRiskReviewService()\n"
+		"    fixed_time = datetime(2024, 1, 1, 0, 0, 0)\n"
+		"    request = VendorSubmission(request_id='request_id-1', request_type='screening', details={'critical_service': False, 'due_diligence_evidence': ['sample']}, timestamp=fixed_time)\n"
+		"    service.handle_request(request)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "'vendor_name': 'sample'" in fixed
+	assert "'service_category': 'sample'" in fixed
+	assert "'due_diligence_evidence': ['sample']" in fixed
+
+
+def test_auto_fix_test_type_mismatches_aligns_exact_audit_field_assertions_with_visible_payload_literals():
+	impl_code = (
+		"from dataclasses import dataclass\n"
+		"from typing import Any, Dict\n\n"
+		"@dataclass\n"
+		"class VendorSubmission:\n"
+		"    request_id: str\n"
+		"    details: Dict[str, Any]\n\n"
+		"@dataclass\n"
+		"class AuditEntry:\n"
+		"    request_id: str\n"
+		"    vendor_name: str\n\n"
+		"class VendorRiskReviewService:\n"
+		"    def __init__(self):\n"
+		"        self._audit_history = []\n\n"
+		"    def handle_request(self, request):\n"
+		"        self._audit_history.append(\n"
+		"            AuditEntry(request_id=request.request_id, vendor_name=request.details.get('vendor_name', 'Unknown'))\n"
+		"        )\n\n"
+		"    def audit_history(self):\n"
+		"        return self._audit_history\n"
+	)
+	test_code = (
+		"def test_audit_trail():\n"
+		"    service = VendorRiskReviewService()\n"
+		"    vendor_submission = VendorSubmission(request_id='request_id-audit', details={'vendor_name': 'Unknown'})\n"
+		"    service.handle_request(vendor_submission)\n"
+		"    audit_entry = service.audit_history()[0]\n"
+		"    assert audit_entry.request_id == 'request_id-audit'\n"
+		"    assert audit_entry.vendor_name == 'audit_vendor'\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "assert audit_entry.vendor_name == 'Unknown'" in fixed
+
+
 def test_auto_fix_test_type_mismatches_replaces_placeholder_list_values_with_literal_examples():
 	impl_code = (
 		"from datetime import datetime\n\n"
@@ -1915,6 +2063,21 @@ def test_module_ast_analysis_helpers_cover_signatures_binding_kinds_and_self_ass
 	assert isinstance(required_fields_node, ast.FunctionDef)
 	assert extract_required_fields(required_fields_node) == ["name", "email"]
 
+	iterated_required_fields_node = ast.parse(
+		"def validate(request):\n"
+		"    required_keys = {'vendor_name', 'service_category', 'due_diligence_evidence'}\n"
+		"    for key in required_keys:\n"
+		"        if key not in request.details or not request.details[key]:\n"
+		"            return False\n"
+		"    return True\n"
+	).body[0]
+	assert isinstance(iterated_required_fields_node, ast.FunctionDef)
+	assert extract_required_fields(iterated_required_fields_node) == [
+		"vendor_name",
+		"service_category",
+		"due_diligence_evidence",
+	]
+
 	comparison_node = ast.Compare(left=ast.Constant("field"), ops=[ast.In()], comparators=[ast.Name("payload")])
 	assert comparison_required_field(comparison_node) == "field"
 	assert comparison_required_field(ast.Compare(left=ast.Constant("field"), ops=[ast.Eq()], comparators=[ast.Name("payload")])) == ""
@@ -2473,6 +2636,61 @@ def test_workflow_acceptance_helpers_build_lists_and_zero_budget_safety_directly
 	assert evaluation["acceptance_lanes"]["safety"].get("zero_budget_failure_categories") == [
 		FailureCategory.SANDBOX_SECURITY_VIOLATION.value
 	]
+
+
+def test_workflow_acceptance_ignores_historical_repairs_once_origin_is_done():
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	project.add_task(
+		Task(
+			id="code",
+			title="Implementation",
+			description="Implement",
+			assigned_to="code_engineer",
+			status=TaskStatus.DONE.value,
+		)
+	)
+	project.add_task(
+		Task(
+			id="code__repair_1",
+			title="Repair implementation",
+			description="Repair",
+			assigned_to="code_engineer",
+			repair_origin_task_id="code",
+			status=TaskStatus.FAILED.value,
+			last_error_category=FailureCategory.CODE_VALIDATION.value,
+		)
+	)
+	project.add_task(
+		Task(
+			id="tests",
+			title="Tests",
+			description="Test",
+			assigned_to="qa_tester",
+			status=TaskStatus.DONE.value,
+		)
+	)
+	project.add_task(
+		Task(
+			id="tests__repair_1",
+			title="Repair tests",
+			description="Repair tests",
+			assigned_to="qa_tester",
+			repair_origin_task_id="tests",
+			status=TaskStatus.SKIPPED.value,
+			skip_reason_type="superseded_repair",
+		)
+	)
+
+	all_lists = task_acceptance_lists(project, "all_tasks")
+	evaluation = evaluate_workflow_acceptance(project, "all_tasks", frozenset())
+
+	assert all_lists["evaluated_task_ids"] == ["code", "tests"]
+	assert all_lists["completed_task_ids"] == ["code", "tests"]
+	assert all_lists["failed_task_ids"] == []
+	assert all_lists["skipped_task_ids"] == []
+	assert evaluation["accepted"] is True
+	assert evaluation["reason"] == "all_evaluated_tasks_done"
+	assert evaluation["acceptance_lanes"]["real_workflow"]["accepted"] is True
 
 
 def test_validate_agent_resolution_raises_for_unknown_registry_entry_directly():
@@ -4040,6 +4258,31 @@ def test_workflow_control_log_helpers_minimize_task_ids_directly():
 	failed_project.add_task(Task(id="code__repair_1", title="Repair code", description="Repair code", assigned_to="code_engineer", repair_origin_task_id="code", status=TaskStatus.PENDING.value))
 	failed_project.add_task(Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", status=TaskStatus.FAILED.value))
 	assert failed_task_ids_for_repair(failed_project) == ["tests"]
+	blocked_repair_project = ProjectState(project_name="Demo", goal="Build demo")
+	blocked_repair_project.add_task(Task(id="code", title="Code", description="Code", assigned_to="code_engineer", status=TaskStatus.DONE.value))
+	blocked_repair_project.add_task(
+		Task(
+			id="code__repair_1",
+			title="Repair code",
+			description="Repair code",
+			assigned_to="code_engineer",
+			repair_origin_task_id="code",
+			status=TaskStatus.FAILED.value,
+		)
+	)
+	blocked_repair_project.add_task(Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", status=TaskStatus.FAILED.value))
+	blocked_repair_project.add_task(
+		Task(
+			id="tests__repair_1",
+			title="Repair tests",
+			description="Repair tests",
+			assigned_to="qa_tester",
+			repair_origin_task_id="tests",
+			status=TaskStatus.PENDING.value,
+			dependencies=["code__repair_1"],
+		)
+	)
+	assert failed_task_ids_for_repair(blocked_repair_project) == ["tests"]
 	repair_cycle_project = ProjectState(project_name="Demo", goal="Build demo")
 	repair_cycle_project.add_task(Task(id="code", title="Code", description="Code", assigned_to="code_engineer"))
 	repair_cycle_project.add_task(Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester", repair_context={"cycle": 1}))
@@ -5556,8 +5799,23 @@ def test_repair_task_ids_for_cycle_covers_decomposition_and_code_dependencies_di
 	# Lines 363, 370-373, 385-390: code_decomp and main_decomp not None, code_repair not None
 	dep_project = ProjectState(project_name="Demo", goal="Build demo")
 	code_task = Task(id="code_impl", title="Code", description="Implement", assigned_to="developer")
-	test_task = Task(id="test_impl", title="Test", description="Test", assigned_to="qa_tester")
+	stale_code_repair = Task(
+		id="code_impl__repair_1",
+		title="Repair code",
+		description="Repair code",
+		assigned_to="developer",
+		repair_origin_task_id="code_impl",
+		status=TaskStatus.FAILED.value,
+	)
+	test_task = Task(
+		id="test_impl",
+		title="Test",
+		description="Test",
+		assigned_to="qa_tester",
+		dependencies=["code_impl", "code_impl__repair_1"],
+	)
 	dep_project.tasks.append(code_task)
+	dep_project.tasks.append(stale_code_repair)
 	dep_project.tasks.append(test_task)
 	code_decomp = Task(id="code_decomp_1", title="Code Decomp", description="Budget decomp", assigned_to="architect")
 	main_decomp = Task(id="test_decomp_1", title="Test Decomp", description="Budget decomp", assigned_to="architect")
@@ -5591,6 +5849,7 @@ def test_repair_task_ids_for_cycle_covers_decomposition_and_code_dependencies_di
 	main_repair = dep_project.get_task("test_impl__repair_0")
 	assert main_repair is not None
 	assert "code_impl__repair_0" in main_repair.dependencies
+	assert "code_impl__repair_1" not in main_repair.dependencies
 
 
 def test_configure_repair_attempts_skips_none_tasks_and_covers_decomp_and_planned_ids_directly():

@@ -7,11 +7,24 @@ from kycortex_agents.orchestration.contracts import AcceptanceEvaluation, Accept
 from kycortex_agents.types import TaskStatus
 
 
+def task_counts_for_acceptance(project: ProjectState, task) -> bool:
+	if not task.repair_origin_task_id:
+		return True
+	origin = project.get_task(task.repair_origin_task_id)
+	if origin is None:
+		return True
+	return origin.status != TaskStatus.DONE.value
+
+
 def task_acceptance_lists(project: ProjectState, acceptance_policy: str) -> TaskAcceptanceLists:
 	if acceptance_policy == "required_tasks":
-		evaluated_tasks = [task for task in project.tasks if task.required_for_acceptance]
+		evaluated_tasks = [
+			task
+			for task in project.tasks
+			if task.required_for_acceptance and task_counts_for_acceptance(project, task)
+		]
 	else:
-		evaluated_tasks = list(project.tasks)
+		evaluated_tasks = [task for task in project.tasks if task_counts_for_acceptance(project, task)]
 	return {
 		"evaluated_task_ids": [task.id for task in evaluated_tasks],
 		"required_task_ids": [task.id for task in project.tasks if task.required_for_acceptance],

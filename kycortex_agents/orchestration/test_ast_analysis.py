@@ -454,16 +454,33 @@ def call_argument_value(
     node: ast.Call,
     argument_name: str,
     class_map: Dict[str, Any],
+    function_map: Optional[Dict[str, Any]] = None,
+    local_types: Optional[Dict[str, str]] = None,
 ) -> Optional[ast.AST]:
     for keyword in node.keywords:
         if keyword.arg == argument_name:
             return keyword.value
-    if not isinstance(node.func, ast.Name):
+    parameter_names: list[str] = []
+    if isinstance(node.func, ast.Name):
+        parameter_names = class_map.get(node.func.id, {}).get("constructor_params") or []
+        if not parameter_names:
+            parameter_names = (function_map or {}).get(node.func.id, {}).get("params") or []
+    elif isinstance(node.func, ast.Attribute):
+        owner_type = infer_expression_type(
+            node.func.value,
+            local_types or {},
+            class_map,
+            function_map or {},
+        )
+        if owner_type in class_map:
+            method_info = (class_map.get(owner_type, {}).get("method_signatures") or {}).get(node.func.attr)
+            if isinstance(method_info, dict):
+                parameter_names = method_info.get("params") or []
+    else:
         return None
-    constructor_params = class_map.get(node.func.id, {}).get("constructor_params") or []
-    if argument_name not in constructor_params:
+    if argument_name not in parameter_names:
         return None
-    argument_index = constructor_params.index(argument_name)
+    argument_index = parameter_names.index(argument_name)
     if argument_index < len(node.args):
         return node.args[argument_index]
     return None
@@ -473,6 +490,7 @@ def extract_literal_dict_keys(
     node: Optional[ast.AST],
     bindings: Dict[str, ast.AST],
     class_map: Optional[Dict[str, Any]] = None,
+    function_map: Optional[Dict[str, Any]] = None,
 ) -> Optional[set[str]]:
     resolved = resolve_bound_value(node, bindings)
     if isinstance(resolved, ast.Dict):
@@ -490,11 +508,16 @@ def extract_literal_dict_keys(
         if isinstance(source, ast.Dict):
             for key_node, value_node in zip(source.keys, source.values):
                 if isinstance(key_node, ast.Constant) and key_node.value == resolved.slice.value:
-                    return extract_literal_dict_keys(value_node, bindings, class_map)
+                    return extract_literal_dict_keys(value_node, bindings, class_map, function_map)
     if isinstance(resolved, ast.Call):
         for candidate_name in ("data", "payload", "request", "item", "details"):
-            candidate_value = call_argument_value(resolved, candidate_name, class_map or {})
-            nested_keys = extract_literal_dict_keys(candidate_value, bindings, class_map)
+            candidate_value = call_argument_value(
+                resolved,
+                candidate_name,
+                class_map or {},
+                function_map,
+            )
+            nested_keys = extract_literal_dict_keys(candidate_value, bindings, class_map, function_map)
             if nested_keys is not None:
                 return nested_keys
     return None
@@ -505,6 +528,8 @@ def extract_literal_field_values(
     bindings: Dict[str, ast.AST],
     field_name: str,
     class_map: Dict[str, Any],
+    function_map: Optional[Dict[str, Any]] = None,
+    local_types: Optional[Dict[str, str]] = None,
 ) -> list[str]:
     resolved = resolve_bound_value(node, bindings)
     if isinstance(resolved, ast.Dict):
@@ -513,14 +538,21 @@ def extract_literal_field_values(
                 return extract_string_literals(value_node, bindings)
         return []
     if isinstance(resolved, ast.Call):
-        direct_value = call_argument_value(resolved, field_name, class_map)
+        direct_value = call_argument_value(resolved, field_name, class_map, function_map, local_types)
         if direct_value is not None:
             return extract_string_literals(direct_value, bindings)
         for nested_payload_name in ("data", "payload", "request", "item", "details"):
-            nested_payload = call_argument_value(resolved, nested_payload_name, class_map)
+            nested_payload = call_argument_value(resolved, nested_payload_name, class_map, function_map, local_types)
             if nested_payload is None:
                 continue
-            nested_values = extract_literal_field_values(nested_payload, bindings, field_name, class_map)
+            nested_values = extract_literal_field_values(
+                nested_payload,
+                bindings,
+                field_name,
+                class_map,
+                function_map,
+                local_types,
+            )
             if nested_values:
                 return nested_values
     return []
@@ -548,6 +580,8 @@ def infer_argument_type(
     bindings: Dict[str, ast.AST],
     field_name: str,
     class_map: Dict[str, Any],
+    function_map: Optional[Dict[str, Any]] = None,
+    local_types: Optional[Dict[str, str]] = None,
 ) -> str:
     if payload_node is None:
         return ""
@@ -559,7 +593,7 @@ def infer_argument_type(
                 field_value = value_node
                 break
     elif isinstance(resolved, ast.Call):
-        field_value = call_argument_value(resolved, field_name, class_map)
+        field_value = call_argument_value(resolved, field_name, class_map, function_map, local_types)
     if field_value is None:
         return ""
     field_value = resolve_bound_value(field_value, bindings)
@@ -683,14 +717,31 @@ def analyze_typed_test_member_usage(
     return sorted(invalid_member_refs), sorted(call_arity_mismatches)
 
 
-def payload_argument_for_validation(node: ast.Call, callable_name: str) -> Optional[ast.expr]:
+def payload_argument_for_validation(
+    node: ast.Call,
+    callable_name: str,
+    function_map: Optional[Dict[str, Any]] = None,
+    class_map: Optional[Dict[str, Any]] = None,
+    local_types: Optional[Dict[str, str]] = None,
+) -> Optional[ast.expr]:
+    payload_parameter_names = ("data", "payload", "request", "item", "details", "filter", "filters")
     if callable_name == "validate_request":
         return first_call_argument(node)
+    for parameter_name in payload_parameter_names:
+        candidate_value = call_argument_value(
+            node,
+            parameter_name,
+            class_map or {},
+            function_map,
+            local_types,
+        )
+        if isinstance(candidate_value, ast.expr):
+            return candidate_value
     if len(node.args) >= 2:
         return node.args[1]
     if node.keywords:
         for keyword in node.keywords:
-            if keyword.arg in {"data", "payload", "request", "item"}:
+            if keyword.arg in payload_parameter_names:
                 return keyword.value
     return first_call_argument(node)
 
@@ -901,6 +952,7 @@ def analyze_test_behavior_contracts(
     batch_rules: Dict[str, Dict[str, Any]],
     sequence_input_functions: set[str],
     function_names: set[str],
+    function_map: Dict[str, Any],
     class_map: Dict[str, Any],
     dict_key_rules: Optional[Dict[str, Dict[str, list[str]]]] = None,
 ) -> tuple[list[str], list[str]]:
@@ -913,6 +965,7 @@ def analyze_test_behavior_contracts(
             continue
 
         bindings = collect_local_bindings(node)
+        local_types = collect_test_local_types(node, class_map, function_map, infer_call_result_type)
         node_parent_map = parent_map(node)
         for child in ast.walk(node):
             if not isinstance(child, ast.Call):
@@ -928,9 +981,15 @@ def analyze_test_behavior_contracts(
             )
 
             if called_name in validation_rules:
-                payload_arg = payload_argument_for_validation(child, called_name)
+                payload_arg = payload_argument_for_validation(
+                    child,
+                    called_name,
+                    function_map,
+                    class_map,
+                    local_types,
+                )
                 payload_node = resolve_bound_value(payload_arg, bindings)
-                payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map)
+                payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map, function_map)
                 if payload_keys is not None:
                     missing_fields = [field for field in validation_rules[called_name] if field not in payload_keys]
                     if missing_fields and not invalid_outcome_expectation:  # pragma: no branch
@@ -940,10 +999,16 @@ def analyze_test_behavior_contracts(
 
             if called_name in resolved_dict_key_rules:
                 for param_name, required_keys in resolved_dict_key_rules[called_name].items():
-                    payload_node = call_argument_value(child, param_name, class_map)
-                    if payload_node is None and param_name in {"data", "payload", "request", "item", "details"}:
-                        payload_node = payload_argument_for_validation(child, called_name)
-                    payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map)
+                    payload_node = call_argument_value(child, param_name, class_map, function_map, local_types)
+                    if payload_node is None and param_name in {"data", "payload", "request", "item", "details", "filter", "filters"}:
+                        payload_node = payload_argument_for_validation(
+                            child,
+                            called_name,
+                            function_map,
+                            class_map,
+                            local_types,
+                        )
+                    payload_keys = extract_literal_dict_keys(payload_node, bindings, class_map, function_map)
                     if payload_keys is None:
                         continue
                     missing_keys = [field for field in required_keys if field not in payload_keys]
@@ -953,10 +1018,23 @@ def analyze_test_behavior_contracts(
                         )
 
             if called_name in field_value_rules:
-                payload_arg = payload_argument_for_validation(child, called_name)
+                payload_arg = payload_argument_for_validation(
+                    child,
+                    called_name,
+                    function_map,
+                    class_map,
+                    local_types,
+                )
                 payload_node = resolve_bound_value(payload_arg, bindings)
                 for field_name, allowed_values in field_value_rules[called_name].items():
-                    observed_values = extract_literal_field_values(payload_node, bindings, field_name, class_map)
+                    observed_values = extract_literal_field_values(
+                        payload_node,
+                        bindings,
+                        field_name,
+                        class_map,
+                        function_map,
+                        local_types,
+                    )
                     invalid_values = [value for value in observed_values if value not in allowed_values]
                     if invalid_values and not invalid_outcome_expectation:
                         payload_violations.add(
@@ -997,6 +1075,7 @@ def analyze_test_type_mismatches(
     tree: ast.AST,
     type_constraint_rules: Dict[str, Dict[str, list[str]]],
     class_map: Dict[str, Any],
+    function_map: Optional[Dict[str, Any]] = None,
 ) -> list[str]:
     if not type_constraint_rules:
         return []
@@ -1005,6 +1084,7 @@ def analyze_test_type_mismatches(
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not node.name.startswith("test_"):
             continue
         bindings = collect_local_bindings(node)
+        local_types = collect_test_local_types(node, class_map, function_map or {}, infer_call_result_type)
         node_parent_map = parent_map(node)
         for child in ast.walk(node):
             if not isinstance(child, ast.Call):
@@ -1015,11 +1095,17 @@ def analyze_test_type_mismatches(
             if call_has_negative_expectation(child, node_parent_map):
                 continue
             constraints = type_constraint_rules[called_name]
-            payload_arg = payload_argument_for_validation(child, called_name)
+            payload_arg = payload_argument_for_validation(
+                child,
+                called_name,
+                function_map,
+                class_map,
+                local_types,
+            )
             payload_node = resolve_bound_value(payload_arg, bindings)
             for field_name, allowed_types in constraints.items():
                 observed_type = infer_argument_type(
-                    payload_node, bindings, field_name, class_map,
+                    payload_node, bindings, field_name, class_map, function_map, local_types,
                 )
                 if not observed_type:
                     continue
@@ -1133,10 +1219,19 @@ def visible_field_string_literals(
     bindings: Dict[str, ast.AST],
     field_name: str,
     class_map: Dict[str, Any],
+    function_map: Optional[Dict[str, Any]] = None,
+    local_types: Optional[Dict[str, str]] = None,
 ) -> list[str]:
     literals: list[str] = []
     for value_node in bindings.values():
-        for literal in extract_literal_field_values(value_node, bindings, field_name, class_map):
+        for literal in extract_literal_field_values(
+            value_node,
+            bindings,
+            field_name,
+            class_map,
+            function_map,
+            local_types,
+        ):
             if literal not in literals:
                 literals.append(literal)
     return literals
@@ -1149,6 +1244,7 @@ def auto_fix_test_type_mismatches(
 ) -> str:
     """Auto-fix str->dict type mismatches in generated test code."""
     class_map: Dict[str, Any] = {}
+    function_map: Dict[str, Any] = {}
     if dict_key_extractor is None:
         from kycortex_agents.orchestration.module_ast_analysis import (
             analyze_python_module,
@@ -1169,7 +1265,9 @@ def auto_fix_test_type_mismatches(
         impl_tree = ast.parse(code_content)
     except SyntaxError:
         return test_content
-    class_map = analyze_python_module(code_content).get("classes") or {}
+    code_analysis = analyze_python_module(code_content)
+    class_map = code_analysis.get("classes") or {}
+    function_map = {item["name"]: item for item in code_analysis.get("functions") or []}
     dict_keys = dict_key_extractor(impl_tree)
     for dict_name, required_keys in dict_required_keys_from_tree(impl_tree).items():
         existing_keys = dict_keys.setdefault(dict_name, [])
@@ -1319,6 +1417,7 @@ def auto_fix_test_type_mismatches(
         if not node.name.startswith("test_"):
             continue
         bindings = collect_local_bindings(node)
+        local_types = collect_test_local_types(node, class_map, function_map, infer_call_result_type)
         name_lower = node.name.lower()
         is_negative = "validation_failure" in name_lower or "invalid" in name_lower
         if not is_negative:
@@ -1332,7 +1431,7 @@ def auto_fix_test_type_mismatches(
             if not isinstance(child, ast.Call):
                 continue
             for param_name, required_keys in dict_keys.items():
-                arg_node = call_argument_value(child, param_name, class_map)
+                arg_node = call_argument_value(child, param_name, class_map, function_map, local_types)
                 if arg_node is None:
                     continue
                 if isinstance(arg_node, ast.Dict):
@@ -1415,7 +1514,13 @@ def auto_fix_test_type_mismatches(
             if exact_assertion is None:
                 continue
             field_name, literal_node = exact_assertion
-            visible_literals = visible_field_string_literals(bindings, field_name, class_map)
+            visible_literals = visible_field_string_literals(
+                bindings,
+                field_name,
+                class_map,
+                function_map,
+                local_types,
+            )
             if len(visible_literals) != 1:
                 continue
             replacement_value = visible_literals[0]
@@ -1646,6 +1751,7 @@ def analyze_test_module(
         batch_rules,
         sequence_input_functions,
         function_names,
+        function_map,
         class_map,
         dict_key_rules,
     )
@@ -1653,6 +1759,7 @@ def analyze_test_module(
         tree,
         type_constraint_rules,
         class_map,
+        function_map,
     )
 
     analysis["imported_module_symbols"] = sorted(imported_symbols)

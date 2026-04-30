@@ -1031,6 +1031,7 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
 		set(),
 		{"helper"},
 		{},
+		{},
 	)
 
 	assert payload_violations == [
@@ -1087,6 +1088,174 @@ def test_analyze_test_module_runtime_flags_missing_required_nested_dict_keys_for
 	]
 
 
+def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_positional_function_argument():
+	tree = ast.parse(
+		"def test_get_logs():\n"
+		"    assert get_logs('user-1', {'action': 'create'}) == ('create', None)\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{},
+		{},
+		{},
+		set(),
+		set(),
+		{"get_logs": {"params": ["user_id", "filters"]}},
+		{},
+		{"get_logs": {"filters": ["action", "record_id"]}},
+	)
+
+	assert payload_violations == [
+		"get_logs parameter `filters` missing required dict keys: record_id at line 2"
+	]
+	assert non_batch_calls == []
+
+
+def test_analyze_test_module_runtime_flags_missing_required_fields_for_third_positional_payload_argument():
+	module_code = (
+		"def validate_submission(user_id, region, payload=None):\n"
+		"    required_fields = {'name', 'email'}\n"
+		"    if payload is None:\n"
+		"        return False\n"
+		"    return required_fields.issubset(payload)\n"
+	)
+	test_content = (
+		"from module_under_test import validate_submission\n\n"
+		"def test_case():\n"
+		"    assert validate_submission('user-1', 'eu', {'name': 'Ada'})\n"
+	)
+
+	analysis = analyze_test_module_runtime(
+		test_content,
+		"module_under_test",
+		analyze_python_module(module_code),
+		build_code_behavior_contract(module_code),
+	)
+
+	assert analysis["payload_contract_violations"] == [
+		"validate_submission payload missing required fields: email at line 4"
+	]
+
+
+def test_analyze_test_module_runtime_flags_missing_required_fields_for_third_positional_filter_argument():
+	module_code = (
+		"def get_logs(user_id, region, filters=None):\n"
+		"    required_fields = {'action', 'record_id'}\n"
+		"    if filters is None:\n"
+		"        return []\n"
+		"    return required_fields.issubset(filters)\n"
+	)
+	test_content = (
+		"from module_under_test import get_logs\n\n"
+		"def test_case():\n"
+		"    assert get_logs('user-1', 'eu', {'action': 'create'})\n"
+	)
+
+	analysis = analyze_test_module_runtime(
+		test_content,
+		"module_under_test",
+		analyze_python_module(module_code),
+		build_code_behavior_contract(module_code),
+	)
+
+	assert analysis["payload_contract_violations"] == [
+		"get_logs payload missing required fields: record_id at line 4"
+	]
+
+
+def test_analyze_test_behavior_contracts_flags_missing_required_fields_for_third_positional_method_payload_argument():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    service = Service()\n"
+		"    assert service.validate_submission('user-1', 'eu', {'name': 'Ada'})\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{"validate_submission": ["name", "email"]},
+		{},
+		{},
+		set(),
+		set(),
+		{},
+		{
+			"Service": {
+				"constructor_params": [],
+				"attributes": [],
+				"fields": [],
+				"is_enum": False,
+				"method_signatures": {
+					"validate_submission": {"params": ["user_id", "region", "payload"]},
+				},
+			},
+		},
+	)
+
+	assert payload_violations == [
+		"validate_submission payload missing required fields: email at line 3"
+	]
+	assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_third_positional_method_argument():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    service = Service()\n"
+		"    service.get_logs('user-1', 'eu', {'action': 'create'})\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{},
+		{},
+		{},
+		set(),
+		set(),
+		{},
+		{
+			"Service": {
+				"constructor_params": [],
+				"attributes": [],
+				"fields": [],
+				"is_enum": False,
+				"method_signatures": {
+					"get_logs": {"params": ["user_id", "region", "filters"]},
+				},
+			},
+		},
+		{"get_logs": {"filters": ["action", "record_id"]}},
+	)
+
+	assert payload_violations == [
+		"get_logs parameter `filters` missing required dict keys: record_id at line 3"
+	]
+	assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_flags_unsupported_field_values_for_third_positional_payload_argument():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    score_submission('user-1', 'eu', {'status': 'pending'})\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{},
+		{"score_submission": {"status": ["approved"]}},
+		{},
+		set(),
+		{"score_submission"},
+		{"score_submission": {"params": ["user_id", "region", "payload"]}},
+		{},
+	)
+
+	assert payload_violations == [
+		"score_submission field `status` uses unsupported values: pending at line 2"
+	]
+	assert non_batch_calls == []
+
+
 def test_analyze_test_type_mismatches_reports_only_non_negative_type_mismatches():
 	tree = ast.parse(
 		"def test_case():\n"
@@ -1108,6 +1277,24 @@ def test_analyze_test_type_mismatches_reports_only_non_negative_type_mismatches(
 
 	assert mismatches == [
 		"validate_request passes tuple for `details` (expected dict) at line 2"
+	]
+
+
+def test_analyze_test_type_mismatches_detects_third_positional_payload_argument():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    score_submission('user-1', 'eu', {'details': ['ok']})\n"
+	)
+
+	mismatches = analyze_test_type_mismatches(
+		tree,
+		{"score_submission": {"details": ["dict"]}},
+		{},
+		{"score_submission": {"params": ["user_id", "region", "payload"]}},
+	)
+
+	assert mismatches == [
+		"score_submission passes list for `details` (expected dict) at line 2"
 	]
 
 
@@ -1163,6 +1350,42 @@ def test_auto_fix_test_type_mismatches_normalizes_nested_dict_placeholders_in_po
 	assert "'requester_identity': 'sample'" in fixed
 	assert "'requested_roles': ['sample']" in fixed
 	assert "handle(details=None)" in fixed
+
+
+def test_auto_fix_test_type_mismatches_merges_missing_required_keys_for_positional_function_dict_argument():
+	impl_code = (
+		"def get_logs(user_id, filters=None):\n"
+		"    action = filters.get('action') if isinstance(filters, dict) else None\n"
+		"    record_id = filters.get('record_id') if isinstance(filters, dict) else None\n"
+		"    return action, record_id\n"
+	)
+	test_code = (
+		"def test_get_logs():\n"
+		"    assert get_logs('user-1', {'action': 'create'}) == ('create', None)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "get_logs('user-1', {'action': 'create', 'record_id': 'sample'})" in fixed
+
+
+def test_auto_fix_test_type_mismatches_merges_missing_required_keys_for_third_positional_method_dict_argument():
+	impl_code = (
+		"class Service:\n"
+		"    def get_logs(self, user_id, region, filters=None):\n"
+		"        action = filters.get('action') if isinstance(filters, dict) else None\n"
+		"        record_id = filters.get('record_id') if isinstance(filters, dict) else None\n"
+		"        return action, record_id\n"
+	)
+	test_code = (
+		"def test_get_logs():\n"
+		"    service = Service()\n"
+		"    assert service.get_logs('user-1', 'eu', {'action': 'create'}) == ('create', None)\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "service.get_logs('user-1', 'eu', {'action': 'create', 'record_id': 'sample'})" in fixed
 
 
 def test_auto_fix_test_type_mismatches_adds_required_fields_from_validation_rules():
@@ -1369,6 +1592,68 @@ def test_auto_fix_test_type_mismatches_aligns_exact_audit_field_assertions_with_
 	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
 
 	assert "assert audit_entry.vendor_name == 'Unknown'" in fixed
+
+
+def test_auto_fix_test_type_mismatches_aligns_exact_assertions_with_literals_hidden_in_third_positional_payload_calls():
+	impl_code = (
+		"from dataclasses import dataclass\n\n"
+		"@dataclass\n"
+		"class AuditEntry:\n"
+		"    vendor_name: str\n\n"
+		"class AuditService:\n"
+		"    def __init__(self):\n"
+		"        self._audit_history = []\n\n"
+		"    def record(self, submission):\n"
+		"        self._audit_history.append(AuditEntry(vendor_name=submission.get('vendor_name', 'Unknown')))\n\n"
+		"    def audit_history(self):\n"
+		"        return self._audit_history\n\n"
+		"def build_submission(user_id, region, payload=None):\n"
+		"    return payload or {}\n"
+	)
+	test_code = (
+		"def test_audit_trail():\n"
+		"    service = AuditService()\n"
+		"    submission = build_submission('user-1', 'eu', {'vendor_name': 'TechCorp Inc'})\n"
+		"    service.record(submission)\n"
+		"    audit_entry = service.audit_history()[0]\n"
+		"    assert audit_entry.vendor_name == 'audit_vendor'\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "assert audit_entry.vendor_name == 'TechCorp Inc'" in fixed
+
+
+def test_auto_fix_test_type_mismatches_aligns_exact_assertions_with_literals_hidden_in_third_positional_method_payload_calls():
+	impl_code = (
+		"from dataclasses import dataclass\n\n"
+		"@dataclass\n"
+		"class AuditEntry:\n"
+		"    vendor_name: str\n\n"
+		"class AuditService:\n"
+		"    def __init__(self):\n"
+		"        self._audit_history = []\n\n"
+		"    def record(self, submission):\n"
+		"        self._audit_history.append(AuditEntry(vendor_name=submission.get('vendor_name', 'Unknown')))\n\n"
+		"    def audit_history(self):\n"
+		"        return self._audit_history\n\n"
+		"class SubmissionBuilder:\n"
+		"    def build_submission(self, user_id, region, payload=None):\n"
+		"        return payload or {}\n"
+	)
+	test_code = (
+		"def test_audit_trail():\n"
+		"    service = AuditService()\n"
+		"    builder = SubmissionBuilder()\n"
+		"    submission = builder.build_submission('user-1', 'eu', {'vendor_name': 'TechCorp Inc'})\n"
+		"    service.record(submission)\n"
+		"    audit_entry = service.audit_history()[0]\n"
+		"    assert audit_entry.vendor_name == 'audit_vendor'\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "assert audit_entry.vendor_name == 'TechCorp Inc'" in fixed
 
 
 def test_auto_fix_test_type_mismatches_replaces_placeholder_list_values_with_literal_examples():
@@ -1859,6 +2144,15 @@ def test_test_ast_analysis_helpers_collect_bindings_and_module_symbols_directly(
 	assert isinstance(keyword_batch_call, ast.Call)
 	assert isinstance(payload_argument_for_validation(validation_call, "validate_request"), ast.Name)
 	assert isinstance(payload_argument_for_validation(keyword_batch_call, "process_batch"), ast.Name)
+	third_arg_call = ast.parse("validate_submission('user-1', 'eu', payload)", mode="eval").body
+	assert isinstance(third_arg_call, ast.Call)
+	resolved_payload = payload_argument_for_validation(
+		third_arg_call,
+		"validate_submission",
+		{"validate_submission": {"params": ["user_id", "region", "payload"]}},
+	)
+	assert isinstance(resolved_payload, ast.Name)
+	assert resolved_payload.id == "payload"
 	assert validate_batch_call(
 		batch_call,
 		{"items": ast.List(elts=[ast.Dict(keys=[ast.Constant("name")], values=[ast.Constant("Ada")])])},

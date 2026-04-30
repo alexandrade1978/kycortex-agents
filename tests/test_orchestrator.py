@@ -4120,6 +4120,7 @@ def test_analyze_test_behavior_contracts_reports_payload_value_and_batch_issues(
         set(),
         {"helper"},
         {},
+        {},
     )
 
     assert payload_violations == [
@@ -4149,6 +4150,7 @@ def test_analyze_test_behavior_contracts_ignores_negative_validation_expectation
         set(),
         set(),
         {},
+        {},
     )
 
     assert payload_violations == []
@@ -4172,6 +4174,7 @@ def test_analyze_test_behavior_contracts_ignores_validation_result_invalid_state
         {},
         set(),
         set(),
+        {},
         {},
     )
 
@@ -4205,6 +4208,7 @@ def test_analyze_test_behavior_contracts_allows_partial_invalid_batch_when_resul
         },
         set(),
         {"process_batch"},
+        {},
         {},
     )
 
@@ -4315,6 +4319,7 @@ def test_analyze_test_behavior_contracts_ignores_unresolved_payloads_and_support
         {},
         set(),
         set(),
+        {},
         {},
     )
 

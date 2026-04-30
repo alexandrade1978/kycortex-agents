@@ -917,17 +917,29 @@ class QATesterAgent(BaseAgent):
         except Exception:
             return ""
 
+    @staticmethod
+    def _summary_has_pytest_failure_signal(repair_validation_summary: object) -> bool:
+        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+            return False
+
+        summary_lower = repair_validation_summary.lower()
+        return any(
+            token in summary_lower
+            for token in (
+                "pytest execution: fail",
+                "pytest failure details:",
+                "pytest failed:",
+                "generated test validation failed:",
+            )
+        )
+
     @classmethod
     def _summary_has_exact_status_action_label_assertion_issue(
         cls,
         repair_validation_summary: object,
         content: object = "",
     ) -> bool:
-        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
-            return False
-
-        summary_lower = repair_validation_summary.lower()
-        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+        if not cls._summary_has_pytest_failure_signal(repair_validation_summary):
             return False
 
         for node in cls._failed_test_function_nodes(repair_validation_summary, content):
@@ -980,12 +992,10 @@ class QATesterAgent(BaseAgent):
         repair_validation_summary: object,
         content: object = "",
     ) -> bool:
-        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
+        if not cls._summary_has_pytest_failure_signal(repair_validation_summary):
             return False
 
-        summary_lower = repair_validation_summary.lower()
-        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
-            return False
+        summary_text = cast(str, repair_validation_summary)
 
         full_band_set = {"low", "medium", "high", "critical"}
 
@@ -1000,7 +1010,7 @@ class QATesterAgent(BaseAgent):
 
         for actual_value, expected_values in re.findall(
             r"assert\s+['\"]([^'\"]+)['\"]\s+in\s+\[([^\]]+)\]",
-            repair_validation_summary,
+            summary_text,
             flags=re.IGNORECASE,
         ):
             actual_band = cls._canonical_band_like_label(actual_value)
@@ -1010,7 +1020,7 @@ class QATesterAgent(BaseAgent):
 
         for left_value, right_value in re.findall(
             r"assert\s+['\"]([^'\"]+)['\"]\s*==\s*['\"]([^'\"]+)['\"]",
-            repair_validation_summary,
+            summary_text,
             flags=re.IGNORECASE,
         ):
             left_band = cls._canonical_band_like_label(left_value)
@@ -1134,11 +1144,7 @@ class QATesterAgent(BaseAgent):
         repair_validation_summary: object,
         content: object = "",
     ) -> bool:
-        if not isinstance(repair_validation_summary, str) or not repair_validation_summary.strip():
-            return False
-
-        summary_lower = repair_validation_summary.lower()
-        if "pytest execution: fail" not in summary_lower and "pytest failure details:" not in summary_lower:
+        if not cls._summary_has_pytest_failure_signal(repair_validation_summary):
             return False
 
         score_tokens = ("risk_score", "score")

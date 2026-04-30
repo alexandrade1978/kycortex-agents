@@ -3891,6 +3891,18 @@ class TestBatchAndMethodScaffoldHelpers:
 
 
 class TestAssertionIssueDetectors:
+    def test_detects_exact_status_action_label_assertion_issue_from_terse_pytest_failure_summary(self):
+        summary = "Generated test validation failed: pytest failed: 1 failed, 4 passed in 0.09s"
+        content = (
+            "def test_happy_path():\n"
+            "    assert isinstance(result.outcome, str)\n\n"
+            "def test_risk_scoring():\n"
+            "    assert result.risk_score == 45\n"
+            "    assert result.outcome == 'blocked'\n"
+        )
+
+        assert QATesterAgent._summary_has_exact_status_action_label_assertion_issue(summary, content) is True
+
     def test_detects_exact_band_label_assertion_issues_from_summary_and_failed_tests(self):
         summary_literal = (
             "Generated test validation:\n"

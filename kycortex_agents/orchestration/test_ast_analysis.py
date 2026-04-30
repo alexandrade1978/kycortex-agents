@@ -493,6 +493,25 @@ def extract_literal_dict_keys(
     function_map: Optional[Dict[str, Any]] = None,
     local_types: Optional[Dict[str, str]] = None,
 ) -> Optional[set[str]]:
+    def fallback_keys_from_call(call_node: ast.Call, nested_slice: Optional[ast.expr] = None) -> Optional[set[str]]:
+        for candidate_value in [*call_node.args, *(keyword.value for keyword in call_node.keywords if keyword.arg is not None)]:
+            resolved_candidate = resolve_bound_value(candidate_value, bindings)
+            if not isinstance(resolved_candidate, (ast.Dict, ast.Subscript, ast.Call)):
+                continue
+            nested_node: ast.AST = candidate_value
+            if nested_slice is not None:
+                nested_node = ast.Subscript(value=candidate_value, slice=nested_slice)
+            nested_keys = extract_literal_dict_keys(
+                nested_node,
+                bindings,
+                class_map,
+                function_map,
+                local_types,
+            )
+            if nested_keys is not None:
+                return nested_keys
+        return None
+
     resolved = resolve_bound_value(node, bindings)
     if isinstance(resolved, ast.Dict):
         return {
@@ -530,6 +549,9 @@ def extract_literal_dict_keys(
                 )
                 if nested_keys is not None:
                     return nested_keys
+            fallback_keys = fallback_keys_from_call(source, resolved.slice)
+            if fallback_keys is not None:
+                return fallback_keys
     if isinstance(resolved, ast.Call):
         for candidate_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
             candidate_value = call_argument_value(
@@ -542,6 +564,9 @@ def extract_literal_dict_keys(
             nested_keys = extract_literal_dict_keys(candidate_value, bindings, class_map, function_map, local_types)
             if nested_keys is not None:
                 return nested_keys
+        fallback_keys = fallback_keys_from_call(resolved)
+        if fallback_keys is not None:
+            return fallback_keys
     return None
 
 

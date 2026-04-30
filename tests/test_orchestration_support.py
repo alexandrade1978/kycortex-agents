@@ -1233,6 +1233,31 @@ def test_analyze_test_behavior_contracts_flags_missing_required_fields_for_metho
 	assert non_batch_calls == []
 
 
+def test_analyze_test_behavior_contracts_flags_missing_required_fields_for_builder_nested_payload_binding_without_builder_metadata():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    item = builder.build_item('user-1', 'eu', {'request_id': 'id-1', 'payload': {'name': 'Ada'}})\n"
+		"    validate_submission(item['payload'])\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{"validate_submission": ["name", "email"]},
+		{},
+		{},
+		set(),
+		set(),
+		{"validate_submission": {"params": ["payload"]}},
+		{},
+	)
+
+	assert payload_violations == [
+		"validate_submission payload missing required fields: email at line 4"
+	]
+	assert non_batch_calls == []
+
+
 def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_third_positional_method_argument():
 	tree = ast.parse(
 		"def test_case():\n"
@@ -1295,6 +1320,32 @@ def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_me
 				},
 			},
 		},
+		{"get_logs": {"filters": ["action", "record_id"]}},
+	)
+
+	assert payload_violations == [
+		"get_logs parameter `filters` missing required dict keys: record_id at line 4"
+	]
+	assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_flags_missing_required_dict_keys_for_builder_filter_binding_without_builder_metadata():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    filters = builder.build_filters('user-1', 'eu', {'action': 'create'})\n"
+		"    get_logs(filters=filters)\n"
+	)
+
+	payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+		tree,
+		{},
+		{},
+		{},
+		set(),
+		set(),
+		{"get_logs": {"params": ["filters"]}},
+		{},
 		{"get_logs": {"filters": ["action", "record_id"]}},
 	)
 

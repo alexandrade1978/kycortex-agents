@@ -3071,6 +3071,54 @@ class TestRepairRequestPayloadLiterals:
         assert "'item_sku': 'ELEC-LAPTOP-001'" in updated
         assert "'item_value_usd': 1299.99" in updated
 
+    def test_rewrites_risk_scoring_payloads_for_returns_screening_schema(self, monkeypatch):
+        monkeypatch.setattr(
+            QATesterAgent,
+            "_implementation_required_payload_keys",
+            lambda *args, **kwargs: [
+                "order_reference",
+                "return_reason",
+                "items",
+                "receipt_present",
+                "prior_returns",
+                "timing_days",
+            ],
+        )
+        monkeypatch.setattr(
+            QATesterAgent,
+            "_implementation_non_validation_payload_keys",
+            lambda *args, **kwargs: [],
+        )
+
+        content = (
+            "def test_risk_scoring():\n"
+            "    request = ReturnCase('request-1', 'standard_return', {'order_reference': 'ORD123456', 'return_reason': 'item defective', 'items': [{'sku': 'SKU001', 'category': 'electronics', 'value': 150.0}], 'receipt_present': True, 'prior_returns': 1, 'timing_days': 14}, fixed_time)\n"
+            "    assert result.risk_score > 0.0\n"
+            "    assert 'serial_returns' in result.risk_factors\n"
+            "    assert 'no_receipt' in result.risk_factors\n"
+            "    assert 'high_value_electronics' in result.risk_factors\n"
+        )
+        implementation_code = (
+            "class ReturnCase:\n"
+            "    request_id: str\n"
+            "    request_type: str\n"
+            "    details: dict[str, object]\n"
+            "    timestamp: datetime\n"
+        )
+        contract = "- Exact constructor fields: ReturnCase(request_id, request_type, details, timestamp)"
+
+        updated = QATesterAgent._repair_request_payload_literals(
+            content,
+            implementation_code,
+            contract,
+        )
+
+        assert "'receipt_present': False" in updated
+        assert "'prior_returns': 5" in updated
+        assert "'items': [{'sku': 'ELEC-LAPTOP-001', 'category': 'electronics', 'value': 1299.99}]" in updated
+        assert "receipt_status" not in updated
+        assert "item_value_usd" not in updated
+
     def test_rewrites_validation_failure_and_happy_path_payloads(self, monkeypatch):
         monkeypatch.setattr(
             QATesterAgent,

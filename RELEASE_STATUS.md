@@ -35,7 +35,11 @@ This file is the short repository-owned snapshot of the current release posture 
 - The currently active full-scope rerun at `output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun` then recovered `insurance_claim_triage/ollama`, completed the full `vendor_onboarding_risk/*` family, and completed `returns_abuse_screening/openai` on the same fresh process image.
 - The same live root is no longer blocked on `insurance_claim_triage/ollama`; its current non-clean checkpoint is `returns_abuse_screening/anthropic`, which terminalized `degraded` at `2026-04-29T23:25:05.093925+00:00` with `repair_cycle_count=3` and `task_status_counts={done: 4, failed: 5, skipped: 4}`.
 - The writer stayed alive after that degraded Anthropic lane and has now completed `returns_abuse_screening/ollama` cleanly at `2026-04-29T23:39:35.102322+00:00` with `repair_cycle_count=0` and `task_status_counts={done: 7}`.
-- The same live canonical root then advanced into `access_review_audit`: `openai` completed at `2026-04-29T23:41:03.648071+00:00` with `repair_cycle_count=0`, and `anthropic` completed at `2026-04-29T23:42:40.214969+00:00` with `repair_cycle_count=0`. `access_review_audit/ollama` is now the only remaining lane, but it has not written `project_state.json` yet.
+- The same live canonical root then advanced into `access_review_audit`: `openai` completed at `2026-04-29T23:41:03.648071+00:00` with `repair_cycle_count=0`, and `anthropic` completed at `2026-04-29T23:42:40.214969+00:00` with `repair_cycle_count=0`.
+- `access_review_audit/ollama` then wrote its first persisted checkpoint at `2026-04-29T23:44:47.584386+00:00`, entered repair cycle `1` after `tests` failed, and finally completed at `2026-04-30T00:05:37.695417+00:00` with `phase=completed`, `terminal_outcome=completed`, `repair_cycle_count=1`, `task_status_counts={done: 9}`, `run_result.status=completed`, and `acceptance_reason=all_evaluated_tasks_done`.
+- The canonical root is now fully terminalized at `14` completed cells, `1` degraded cell, `0` active cells, and `0` unstarted cells; the only remaining non-clean checkpoint is `returns_abuse_screening/anthropic`.
+- A new narrow current-head remediation is now locally validated for that sole degraded lane: `qa_tester` now recognizes positive `result.risk_factors` assertions in generated `test_risk_scoring()` cases and rewrites returns-screening payloads onto the implementation's real risk-bearing schema keys (`prior_returns`, `receipt_present`, `items`); the focused `tests/test_qa_tester.py` slice passed around the new regression and adjacent override behavior.
+- The same remediation is now also proven against the exact persisted degraded artifact chain: the failed `tests` and `tests__repair_2` modules from `returns_abuse_screening/anthropic/project_state.json` both rewrite to schema-correct high-risk fixtures and both pass as repaired pytest modules against the persisted implementation artifact.
 - No canary claim or production-readiness claim is attached to the current head.
 - Repository is in excellent operational state for package-level release review.
 - Current-head Phase 16 material is now tracked as a pre-canary evidence rebuild, not as an open or closed canary window.
@@ -123,8 +127,8 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Next Release-Facing Action
 
-1. Capture the first persisted checkpoint for `access_review_audit/ollama` on the still-live canonical root `output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun`.
-2. If that state file does not appear promptly, distinguish provider latency from a dead runner before opening another repair slice.
+1. Publish the validated returns-screening remediation slice and run a fresh focused rerun for `returns_abuse_screening/anthropic` on the current head.
+2. Keep release-candidate review closed until that lane is empirically recovered and the canonical matrix is requalified cleanly.
 3. Only reopen release-candidate review if a subsequent clean canonical rerun proves `15/15` on the current head.
 
 

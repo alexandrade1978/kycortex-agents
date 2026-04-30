@@ -5771,15 +5771,42 @@ Return complete raw Python only."""
             return ""
         return component_name
 
+    @staticmethod
+    def _risk_factor_membership_name(comparison: ast.Compare) -> str:
+        if len(comparison.ops) != 1 or len(comparison.comparators) != 1:
+            return ""
+        if not isinstance(comparison.ops[0], ast.In):
+            return ""
+        if not isinstance(comparison.left, ast.Constant) or not isinstance(comparison.left.value, str):
+            return ""
+        comparator = comparison.comparators[0]
+        if not isinstance(comparator, ast.Attribute) or comparator.attr != "risk_factors":
+            return ""
+        factor_name = comparison.left.value.strip()
+        if factor_name not in {
+            "serial_returns",
+            "no_receipt",
+            "high_value_electronics",
+            "damaged_inconsistency",
+        }:
+            return ""
+        return factor_name
+
     @classmethod
     def _positive_risk_payload_literal_overrides(cls, function_node: ast.AST) -> dict[str, str]:
         positive_components: set[str] = set()
+        positive_risk_factors: set[str] = set()
 
         for child in ast.walk(function_node):
             if not isinstance(child, ast.Assert):
                 continue
             comparison = child.test
             if not isinstance(comparison, ast.Compare) or len(comparison.ops) != 1 or len(comparison.comparators) != 1:
+                continue
+
+            risk_factor_name = cls._risk_factor_membership_name(comparison)
+            if risk_factor_name:
+                positive_risk_factors.add(risk_factor_name)
                 continue
 
             operator = comparison.ops[0]
@@ -5814,6 +5841,18 @@ Return complete raw Python only."""
             literal_overrides["condition_notes"] = '"sealed box with intact packaging"'
         if "final_score" in positive_components and "receipt_status" not in literal_overrides:
             literal_overrides["receipt_status"] = '"missing"'
+        if "serial_returns" in positive_risk_factors:
+            literal_overrides["prior_returns"] = "5"
+        if "no_receipt" in positive_risk_factors:
+            literal_overrides["receipt_present"] = "False"
+        if "high_value_electronics" in positive_risk_factors:
+            literal_overrides["items"] = '[{"sku": "ELEC-LAPTOP-001", "category": "electronics", "value": 1299.99}]'
+        if "damaged_inconsistency" in positive_risk_factors:
+            literal_overrides["return_reason"] = '"damaged in shipping"'
+            literal_overrides.setdefault(
+                "items",
+                '[{"sku": "SKU-LOW-1", "category": "clothing", "value": 25.0}]',
+            )
         return literal_overrides
 
     @classmethod

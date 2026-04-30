@@ -1,7 +1,7 @@
 {
   "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
-  "generated_at": "2026-04-29T23:42:40Z",
-  "bundle_status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_13_completed_1_degraded_and_access_review_ollama_remaining",
+  "generated_at": "2026-04-30T00:18:02Z",
+  "bundle_status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_14_completed_1_degraded_and_no_active_or_unstarted_cells",
   "window_started": false,
   "window_started_at": null,
   "providers": [
@@ -73,22 +73,22 @@
     {
       "provider": "ollama",
       "model": "qwen2.5-coder:7b",
-      "status": "healthy_current_head_live_canonical_root_completed_4_cells_with_access_review_ollama_remaining",
+      "status": "healthy_current_head_live_canonical_root_completed_5_cells_no_ollama_blocker_on_active_root",
       "fresh_canary_health_check": "healthy_current_environment_preflight_2026-04-29T09:47:42Z",
       "evidence": {
         "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun",
-        "latest_completed_source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/returns_abuse_screening/ollama/project_state.json",
-        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/returns_abuse_screening/ollama/run_result.json",
+        "latest_completed_source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/project_state.json",
+        "latest_completed_run_result": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/run_result.json",
         "workflow_phase": "mixed",
         "terminal_outcome": "mixed",
-        "completed_cells_on_provider": 4,
+        "completed_cells_on_provider": 5,
         "failed_cells_on_provider": 0,
         "latest_completed_checkpoint": {
-          "scenario": "returns_abuse_screening",
-          "updated_at": "2026-04-29T23:39:35.102322+00:00",
-          "repair_cycle_count": 0,
+          "scenario": "access_review_audit",
+          "updated_at": "2026-04-30T00:05:37.695417+00:00",
+          "repair_cycle_count": 1,
           "task_status_counts": {
-            "done": 7
+            "done": 9
           },
           "run_result_status": "completed",
           "acceptance_reason": "all_evaluated_tasks_done"
@@ -96,15 +96,18 @@
         "failed_checkpoints": [],
         "current_active_lane": {
           "scenario": "access_review_audit",
-          "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/",
-          "persisted_state_written": false,
-          "workflow_phase": null,
-          "terminal_outcome": null,
-          "updated_at": null,
-          "repair_cycle_count": 0,
-          "task_status_counts": {},
+          "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/project_state.json",
+          "persisted_state_written": true,
+          "workflow_phase": "completed",
+          "terminal_outcome": "completed",
+          "updated_at": "2026-04-30T00:05:37.695417+00:00",
+          "repair_cycle_count": 1,
+          "task_status_counts": {
+            "done": 9
+          },
+          "failed_task_ids": [],
           "pending_task_ids": [],
-          "operational_note": "The live writer has already advanced into `access_review_audit/ollama`, but no project_state.json exists yet for that lane."
+          "operational_note": "No active Ollama lane remains on this canonical root. `access_review_audit/ollama` completed after one repair cycle, and the only remaining non-clean checkpoint on the full root now sits on `returns_abuse_screening/anthropic`."
         },
         "active_focused_rerun": {
           "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_ollama_three_remaining_required_fields_autofix_rerun",
@@ -164,16 +167,16 @@
   "active_full_scope_rerun": {
     "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun",
     "terminal_id": null,
-    "process_id": 2264452,
+    "process_id": null,
     "launch_observed_at": "2026-04-29T22:06:42Z",
-    "backup_gate_checked_at": "2026-04-30 00:24 WEST",
-    "latest_successful_backup_at": "2026-04-30 00:09:03 WEST",
+    "backup_gate_checked_at": "2026-04-30 00:42 WEST",
+    "latest_successful_backup_at": "2026-04-30 00:42:03 WEST",
     "summary": {
       "total_cells": 15,
-      "completed_cells": 13,
+      "completed_cells": 14,
       "failed_cells": 1,
       "active_cells": 0,
-      "remaining_cells": 1
+      "remaining_cells": 0
     },
     "latest_completed_checkpoints": [
       {
@@ -245,6 +248,20 @@
         },
         "run_result_status": "completed",
         "acceptance_reason": "all_evaluated_tasks_done"
+      },
+      {
+        "scenario": "access_review_audit",
+        "provider": "ollama",
+        "persisted_state_written": true,
+        "workflow_phase": "completed",
+        "terminal_outcome": "completed",
+        "updated_at": "2026-04-30T00:05:37.695417+00:00",
+        "repair_cycle_count": 1,
+        "task_status_counts": {
+          "done": 9
+        },
+        "run_result_status": "completed",
+        "acceptance_reason": "all_evaluated_tasks_done"
       }
     ],
     "latest_failed_checkpoint": {
@@ -274,21 +291,33 @@
       "scenario": "access_review_audit",
       "provider": "ollama",
       "source": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun/access_review_audit/ollama/",
-      "persisted_state_written": false,
-      "workflow_phase": null,
+      "persisted_state_written": true,
+      "workflow_phase": "execution",
       "terminal_outcome": null,
-      "updated_at": null,
+      "updated_at": "2026-04-29T23:44:47.584386+00:00",
       "repair_cycle_count": 0,
-      "task_status_counts": {},
-      "completed_task_ids": [],
-      "pending_task_ids": [],
+      "task_status_counts": {
+        "done": 1,
+        "pending": 6
+      },
+      "completed_task_ids": [
+        "arch"
+      ],
+      "pending_task_ids": [
+        "code",
+        "deps",
+        "tests",
+        "review",
+        "docs",
+        "legal"
+      ],
       "code_artifact_exists": false,
       "tests_artifact_exists": false,
       "terminal_started": true,
       "terminal_evidence": [],
       "run_result_status": null,
       "acceptance_reason": null,
-      "operational_note": "The canonical writer survived the VS Code crash and is still alive under PID 2264452, but the original chat terminal handle was lost. The current on-disk frontier has moved beyond `returns_abuse_screening/ollama`; `access_review_audit/ollama` is the only remaining lane and has not yet written persisted state."
+      "operational_note": "The canonical writer survived the VS Code crash and is still alive under PID 2264452, but the original chat terminal handle was lost. The current on-disk frontier is `access_review_audit/ollama` in `phase=execution` after `arch`; the next reliable checkpoint is the outcome of `code`."
     }
   },
   "recent_pre_canary_health_checks": [
@@ -393,5 +422,5 @@
       }
     }
   ],
-  "next_required_update": "Capture the first persisted checkpoint for `access_review_audit/ollama` on `output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun`. `returns_abuse_screening/ollama` is already complete, `access_review_audit/openai` and `anthropic` are already complete, and the next discriminating update is whether the only remaining lane starts cleanly or opens a new repair or degraded path."
+  "next_required_update": "Publish the validated `qa_tester` remediation slice and run a fresh focused rerun for `returns_abuse_screening/anthropic` on `output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun`. The canonical root is fully terminalized; no active writer remains."
 }

@@ -1,6 +1,6 @@
 {
   "candidate_sha": "03d6403b58e5e2365501b144f50f90976dc1311b",
-  "generated_at": "2026-04-30T00:18:02Z",
+  "generated_at": "2026-04-30T00:22:18Z",
   "bundle_status": "live_canonical_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun_with_14_completed_1_degraded_and_no_active_or_unstarted_cells",
   "window_started": false,
   "window_started_at": null,
@@ -34,7 +34,7 @@
     {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001",
-      "status": "degraded_current_head_live_canonical_root_completed_4_cells_with_returns_anthropic_degraded",
+      "status": "mixed_canonical_root_has_historical_degraded_lane_but_fresh_focused_recovery_rerun_completed_cleanly",
       "fresh_canary_health_check": "healthy_current_environment_preflight_2026-04-29T09:47:42Z",
       "evidence": {
         "campaign_root": "output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun",
@@ -67,7 +67,20 @@
             "run_result_status": "completed",
             "acceptance_reason": "evaluated_tasks_incomplete"
           }
-        ]
+        ],
+        "focused_recovery_rerun": {
+          "campaign_root": "output/real_world_complex_matrix_2026_04_30_headf0bbe59_returns_abuse_screening_anthropic_risk_payload_rerun",
+          "scenario": "returns_abuse_screening",
+          "updated_at": "2026-04-30T00:21:50.797912+00:00",
+          "phase": "completed",
+          "terminal_outcome": "completed",
+          "repair_cycle_count": 0,
+          "task_status_counts": {
+            "done": 7
+          },
+          "run_result_status": "completed",
+          "acceptance_reason": "all_evaluated_tasks_done"
+        }
       }
     },
     {
@@ -422,5 +435,5 @@
       }
     }
   ],
-  "next_required_update": "Publish the validated `qa_tester` remediation slice and run a fresh focused rerun for `returns_abuse_screening/anthropic` on `output/real_world_complex_matrix_2026_04_29_head03d6403_full_scope_post_non_ollama_blocker_literal_example_autofix_rerun`. The canonical root is fully terminalized; no active writer remains."
+  "next_required_update": "Launch a fresh canonical full-scope rerun on the published remediation head `f0bbe59` and capture its first persisted checkpoints. The canonical root at `14/15` remains historical evidence only; the focused Anthropic recovery rerun is now complete."
 }

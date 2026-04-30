@@ -1513,8 +1513,8 @@ def extract_required_fields(node: ast.FunctionDef | ast.AsyncFunctionDef) -> lis
         if isinstance(stmt, ast.For):
             if not isinstance(stmt.target, ast.Name) or not isinstance(stmt.iter, ast.Name):
                 continue
-            fields = literal_sequences.get(stmt.iter.id)
-            if not fields:
+            iter_fields = literal_sequences.get(stmt.iter.id)
+            if not iter_fields:
                 continue
             loop_var = stmt.target.id
             for child in ast.walk(stmt):
@@ -1523,7 +1523,7 @@ def extract_required_fields(node: ast.FunctionDef | ast.AsyncFunctionDef) -> lis
                 if not isinstance(child.left, ast.Name) or child.left.id != loop_var:
                     continue
                 if any(isinstance(op, ast.NotIn) for op in child.ops):
-                    return fields
+                    return iter_fields
         if not isinstance(stmt, ast.Call):
             continue
         if (
@@ -1531,9 +1531,9 @@ def extract_required_fields(node: ast.FunctionDef | ast.AsyncFunctionDef) -> lis
             and stmt.func.attr == "issubset"
             and isinstance(stmt.func.value, ast.Name)
         ):
-            fields = literal_sequences.get(stmt.func.value.id)
-            if fields:
-                return fields
+            subset_fields = literal_sequences.get(stmt.func.value.id)
+            if subset_fields:
+                return subset_fields
         if not (isinstance(stmt.func, ast.Name) and stmt.func.id == "all" and stmt.args):
             continue
         generator = stmt.args[0]
@@ -1542,9 +1542,9 @@ def extract_required_fields(node: ast.FunctionDef | ast.AsyncFunctionDef) -> lis
         for comprehension in generator.generators:
             if not isinstance(comprehension.iter, ast.Name):
                 continue
-            fields = literal_sequences.get(comprehension.iter.id)
-            if fields:
-                return fields
+            generator_fields = literal_sequences.get(comprehension.iter.id)
+            if generator_fields:
+                return generator_fields
     return literal_fields
 
 

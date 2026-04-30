@@ -4818,6 +4818,42 @@ def test_validate_batch_call_accepts_complete_direct_items_from_method_builder(t
     ) == []
 
 
+def test_validate_batch_call_accepts_complete_direct_items_from_method_builder_without_builder_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    bindings: dict[str, ast.AST] = {
+        "batch": ast.List(
+            elts=[
+                ast.Name("item", ast.Load()),
+            ]
+        ),
+        "item": ast.Call(
+            func=ast.Attribute(value=ast.Name("builder", ast.Load()), attr="build_item", ctx=ast.Load()),
+            args=[
+                ast.Constant("user-1"),
+                ast.Constant("eu"),
+                ast.Dict(
+                    keys=[ast.Constant("name"), ast.Constant("email")],
+                    values=[ast.Constant("Ada"), ast.Constant("ada@example.com")],
+                ),
+            ],
+            keywords=[],
+        ),
+    }
+    call_node = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("batch")], keywords=[]))
+    batch_rule = {"fields": ["name", "email"], "request_key": None, "wrapper_key": None}
+
+    assert validate_batch_call(
+        call_node,
+        bindings,
+        "process_batch",
+        batch_rule,
+        {},
+        {},
+        {"builder": "SubmissionBuilder"},
+    ) == []
+
+
 def test_validate_batch_call_reports_missing_nested_fields_for_method_builder_items(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)
@@ -4866,6 +4902,50 @@ def test_validate_batch_call_reports_missing_nested_fields_for_method_builder_it
         "process_batch",
         batch_rule,
         class_map,
+        {},
+        {"builder": "SubmissionBuilder"},
+    ) == [
+        "process_batch batch item nested `payload` missing required fields: email at line 1"
+    ]
+
+
+def test_validate_batch_call_reports_missing_nested_fields_for_method_builder_items_without_builder_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    bindings: dict[str, ast.AST] = {
+        "batch": ast.List(
+            elts=[
+                ast.Name("item", ast.Load()),
+            ]
+        ),
+        "item": ast.Call(
+            func=ast.Attribute(value=ast.Name("builder", ast.Load()), attr="build_item", ctx=ast.Load()),
+            args=[
+                ast.Constant("user-1"),
+                ast.Constant("eu"),
+                ast.Dict(
+                    keys=[ast.Constant("request_id"), ast.Constant("payload")],
+                    values=[
+                        ast.Constant("id-1"),
+                        ast.Dict(
+                            keys=[ast.Constant("name")],
+                            values=[ast.Constant("Ada")],
+                        ),
+                    ],
+                ),
+            ],
+            keywords=[],
+        ),
+    }
+    call_node = ast.fix_missing_locations(ast.Call(func=ast.Name("process_batch"), args=[ast.Name("batch")], keywords=[]))
+    batch_rule = {"fields": ["name", "email"], "request_key": "request_id", "wrapper_key": "payload"}
+
+    assert validate_batch_call(
+        call_node,
+        bindings,
+        "process_batch",
+        batch_rule,
+        {},
         {},
         {"builder": "SubmissionBuilder"},
     ) == [

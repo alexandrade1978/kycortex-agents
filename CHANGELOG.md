@@ -10,8 +10,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - Current package version is now `1.0.13a10.dev0` ahead of the next alpha release.
 - The last published and trusted alpha baseline remains `1.0.13a6`.
-- The active unpublished head has requalified locally to the current Beta 1 minimum with deterministic green validation plus fresh same-head empirical evidence.
-- Publication, canary, and go-live remain separately gated; that local Beta 1 result does not publish or promote the head automatically.
+- The current main-branch head has requalified locally to the current Beta 1 minimum with deterministic green validation plus fresh same-head empirical evidence.
+- Publication, canary, and go-live remain separately gated; that local Beta 1 result does not tag or promote the current main-branch head automatically.
 
 ### Added
 
@@ -85,9 +85,9 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 ### Release Readiness Notes
 
 - The next maintenance entry will be recorded here until it is promoted into a versioned release section.
-- The active unpublished head is locally green across deterministic checks, touched-slice regressions, and fresh same-head empirical Beta 1 evidence.
-- The current same-head empirical floor for the unpublished head includes a clean full `5 x 3` `15/15` result plus a fresh clean replay of the previously hardest repaired scenario/provider pair.
-- No release, canary, or production claim is attached automatically to the unpublished head; publication and go-live remain separately gated.
+- The current main-branch head is green across deterministic checks, post-push CI, and fresh same-head empirical Beta 1 evidence.
+- The current same-head empirical floor for the main-branch head includes a clean full `5 x 3` `15/15` result plus a fresh clean replay of the previously hardest repaired scenario/provider pair.
+- No release, canary, or production claim is attached automatically to the current main-branch head; tagging and go-live remain separately gated.
 
 ## 1.0.13a9 - 2026-04-18 (branch-only checkpoint)
 

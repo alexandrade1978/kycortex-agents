@@ -559,11 +559,49 @@ def extract_literal_field_values(
             if isinstance(key_node, ast.Constant) and key_node.value == field_name:
                 return extract_string_literals(value_node, bindings)
         return []
+    if (
+        isinstance(resolved, ast.Subscript)
+        and isinstance(resolved.slice, ast.Constant)
+        and isinstance(resolved.slice.value, str)
+    ):
+        source = resolve_bound_value(resolved.value, bindings)
+        if isinstance(source, ast.Dict):
+            for key_node, value_node in zip(source.keys, source.values):
+                if isinstance(key_node, ast.Constant) and key_node.value == resolved.slice.value:
+                    return extract_literal_field_values(
+                        value_node,
+                        bindings,
+                        field_name,
+                        class_map,
+                        function_map,
+                        local_types,
+                    )
+        if isinstance(source, ast.Call):
+            for nested_payload_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
+                nested_payload = call_argument_value(
+                    source,
+                    nested_payload_name,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if not isinstance(nested_payload, ast.expr):
+                    continue
+                nested_values = extract_literal_field_values(
+                    ast.Subscript(value=nested_payload, slice=resolved.slice),
+                    bindings,
+                    field_name,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if nested_values:
+                    return nested_values
     if isinstance(resolved, ast.Call):
         direct_value = call_argument_value(resolved, field_name, class_map, function_map, local_types)
         if direct_value is not None:
             return extract_string_literals(direct_value, bindings)
-        for nested_payload_name in ("data", "payload", "request", "item", "details"):
+        for nested_payload_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
             nested_payload = call_argument_value(resolved, nested_payload_name, class_map, function_map, local_types)
             if nested_payload is None:
                 continue
@@ -614,8 +652,67 @@ def infer_argument_type(
             if isinstance(key_node, ast.Constant) and key_node.value == field_name:
                 field_value = value_node
                 break
+    elif (
+        isinstance(resolved, ast.Subscript)
+        and isinstance(resolved.slice, ast.Constant)
+        and isinstance(resolved.slice.value, str)
+    ):
+        source = resolve_bound_value(resolved.value, bindings)
+        if isinstance(source, ast.Dict):
+            for key_node, value_node in zip(source.keys, source.values):
+                if isinstance(key_node, ast.Constant) and key_node.value == resolved.slice.value:
+                    return infer_argument_type(
+                        value_node,
+                        bindings,
+                        field_name,
+                        class_map,
+                        function_map,
+                        local_types,
+                    )
+        if isinstance(source, ast.Call):
+            for nested_payload_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
+                nested_payload = call_argument_value(
+                    source,
+                    nested_payload_name,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if not isinstance(nested_payload, ast.expr):
+                    continue
+                nested_type = infer_argument_type(
+                    ast.Subscript(value=nested_payload, slice=resolved.slice),
+                    bindings,
+                    field_name,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if nested_type:
+                    return nested_type
     elif isinstance(resolved, ast.Call):
         field_value = call_argument_value(resolved, field_name, class_map, function_map, local_types)
+        if field_value is None:
+            for nested_payload_name in ("data", "payload", "request", "item", "details", "filter", "filters"):
+                nested_payload = call_argument_value(
+                    resolved,
+                    nested_payload_name,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if nested_payload is None:
+                    continue
+                nested_type = infer_argument_type(
+                    nested_payload,
+                    bindings,
+                    field_name,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if nested_type:
+                    return nested_type
     if field_value is None:
         return ""
     field_value = resolve_bound_value(field_value, bindings)

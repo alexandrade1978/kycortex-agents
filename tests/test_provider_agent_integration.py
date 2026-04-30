@@ -142,6 +142,11 @@ class ProviderBackedAgent(BaseAgent):
         return self.chat("system", task_description)
 
 
+@pytest.fixture(autouse=True)
+def _clear_anthropic_base_url(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+
+
 @pytest.mark.parametrize(
     ("provider_name", "provider", "expected_model", "expected_usage", "expected_timing"),
     [

@@ -9831,7 +9831,7 @@ def test_run_task_allows_generated_tests_to_use_list_for_sequence_function(tmp_p
     assert validation["non_batch_sequence_calls"] == []
 
 
-def test_run_task_fails_qa_tester_when_generated_tests_miss_nested_constructor_payload_fields(tmp_path):
+def test_run_task_normalizes_missing_nested_constructor_payload_fields(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
     project = ProjectState(project_name="Demo", goal="Build demo")
     code_content = (
@@ -9879,19 +9879,20 @@ def test_run_task_fails_qa_tester_when_generated_tests_miss_nested_constructor_p
 
     agent = RecordingAgent(
         "from code_implementation import ComplianceRequest, Service\n\n"
-        "def test_validate_request(service=Service()):\n"
+        "def test_validate_request():\n"
+        "    service = Service()\n"
         "    request = ComplianceRequest(request_id='req-1', data={'key': 'value'})\n"
         "    assert service.validate_request(request) is True\n"
     )
     orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
 
-    with pytest.raises(AgentExecutionError, match=r"payload contract violations"):
-        orchestrator.run_task(project.tasks[1], project)
+    orchestrator.run_task(project.tasks[1], project)
 
     validation = require_test_validation(project.tasks[1])
-    assert validation["payload_contract_violations"] == [
-        "validate_request payload missing required fields: compliance_data at line 5"
-    ]
+    assert project.tasks[1].status == TaskStatus.DONE.value
+    assert "data={'compliance_data': 'sample'}" in project.tasks[1].output
+    assert validation["payload_contract_violations"] == []
+    assert validation["undefined_fixtures"] == []
 
 
 def test_run_task_fails_qa_tester_when_generated_tests_use_unsupported_field_literals(tmp_path):

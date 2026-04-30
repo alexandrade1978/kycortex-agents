@@ -1500,6 +1500,46 @@ def test_analyze_test_type_mismatches_detects_method_builder_filter_binding():
 	]
 
 
+def test_analyze_test_type_mismatches_detects_builder_nested_payload_binding_without_builder_metadata():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    item = builder.build_item('user-1', 'eu', {'request_id': 'id-1', 'payload': {'details': ['ok']}})\n"
+		"    process_nested(item['payload'])\n"
+	)
+
+	mismatches = analyze_test_type_mismatches(
+		tree,
+		{"process_nested": {"details": ["dict"]}},
+		{},
+		{"process_nested": {"params": ["payload"]}},
+	)
+
+	assert mismatches == [
+		"process_nested passes list for `details` (expected dict) at line 4"
+	]
+
+
+def test_analyze_test_type_mismatches_detects_builder_filter_binding_without_builder_metadata():
+	tree = ast.parse(
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    filters = builder.build_filters('user-1', 'eu', {'details': ['ok']})\n"
+		"    get_logs(filters=filters)\n"
+	)
+
+	mismatches = analyze_test_type_mismatches(
+		tree,
+		{"get_logs": {"details": ["dict"]}},
+		{},
+		{"get_logs": {"params": ["filters"]}},
+	)
+
+	assert mismatches == [
+		"get_logs passes list for `details` (expected dict) at line 4"
+	]
+
+
 def test_auto_fix_test_type_mismatches_reuses_existing_dict_variable_and_skips_negative_tests():
 	impl_code = (
 		"class Service:\n"
@@ -1856,6 +1896,24 @@ def test_auto_fix_test_type_mismatches_aligns_exact_assertions_with_literals_hid
 	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
 
 	assert "assert audit_entry.vendor_name == 'TechCorp Inc'" in fixed
+
+
+def test_auto_fix_test_type_mismatches_aligns_exact_assertions_with_literals_hidden_in_builder_payload_subscripts_without_builder_metadata():
+	impl_code = (
+		"def process_nested(payload):\n"
+		"    return {'status': payload['status']}\n"
+	)
+	test_code = (
+		"def test_case():\n"
+		"    builder = SubmissionBuilder()\n"
+		"    item = builder.build_item('user-1', 'eu', {'request_id': 'id-1', 'payload': {'status': 'pending'}})\n"
+		"    result = process_nested(item['payload'])\n"
+		"    assert result['status'] == 'approved'\n"
+	)
+
+	fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+
+	assert "assert result['status'] == 'pending'" in fixed
 
 
 def test_auto_fix_test_type_mismatches_replaces_placeholder_list_values_with_literal_examples():

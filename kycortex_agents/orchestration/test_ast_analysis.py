@@ -553,11 +553,49 @@ def extract_literal_field_values(
     function_map: Optional[Dict[str, Any]] = None,
     local_types: Optional[Dict[str, str]] = None,
 ) -> list[str]:
+    def fallback_field_values_from_call(call_node: ast.Call) -> list[str]:
+        for candidate_node in [*call_node.args, *(keyword.value for keyword in call_node.keywords if keyword.arg is not None)]:
+            resolved_candidate = resolve_bound_value(candidate_node, bindings)
+            if not isinstance(resolved_candidate, (ast.Dict, ast.Subscript, ast.Call)):
+                continue
+            candidate_values = extract_literal_field_values(
+                candidate_node,
+                bindings,
+                field_name,
+                class_map,
+                function_map,
+                local_types,
+            )
+            if candidate_values:
+                return candidate_values
+        return []
+
     resolved = resolve_bound_value(node, bindings)
     if isinstance(resolved, ast.Dict):
         for key_node, value_node in zip(resolved.keys, resolved.values):
             if isinstance(key_node, ast.Constant) and key_node.value == field_name:
                 return extract_string_literals(value_node, bindings)
+        for key_node, value_node in zip(resolved.keys, resolved.values):
+            if not isinstance(key_node, ast.Constant) or key_node.value not in {
+                "data",
+                "payload",
+                "request",
+                "item",
+                "details",
+                "filter",
+                "filters",
+            }:
+                continue
+            nested_values = extract_literal_field_values(
+                value_node,
+                bindings,
+                field_name,
+                class_map,
+                function_map,
+                local_types,
+            )
+            if nested_values:
+                return nested_values
         return []
     if (
         isinstance(resolved, ast.Subscript)
@@ -597,6 +635,9 @@ def extract_literal_field_values(
                 )
                 if nested_values:
                     return nested_values
+            fallback_values = fallback_field_values_from_call(source)
+            if fallback_values:
+                return fallback_values
     if isinstance(resolved, ast.Call):
         direct_value = call_argument_value(resolved, field_name, class_map, function_map, local_types)
         if direct_value is not None:
@@ -615,6 +656,9 @@ def extract_literal_field_values(
             )
             if nested_values:
                 return nested_values
+        fallback_values = fallback_field_values_from_call(resolved)
+        if fallback_values:
+            return fallback_values
     return []
 
 
@@ -643,6 +687,23 @@ def infer_argument_type(
     function_map: Optional[Dict[str, Any]] = None,
     local_types: Optional[Dict[str, str]] = None,
 ) -> str:
+    def fallback_type_from_call(call_node: ast.Call) -> str:
+        for candidate_node in [*call_node.args, *(keyword.value for keyword in call_node.keywords if keyword.arg is not None)]:
+            resolved_candidate = resolve_bound_value(candidate_node, bindings)
+            if not isinstance(resolved_candidate, (ast.Dict, ast.Subscript, ast.Call)):
+                continue
+            candidate_type = infer_argument_type(
+                candidate_node,
+                bindings,
+                field_name,
+                class_map,
+                function_map,
+                local_types,
+            )
+            if candidate_type:
+                return candidate_type
+        return ""
+
     if payload_node is None:
         return ""
     resolved = resolve_bound_value(payload_node, bindings)
@@ -652,6 +713,28 @@ def infer_argument_type(
             if isinstance(key_node, ast.Constant) and key_node.value == field_name:
                 field_value = value_node
                 break
+        if field_value is None:
+            for key_node, value_node in zip(resolved.keys, resolved.values):
+                if not isinstance(key_node, ast.Constant) or key_node.value not in {
+                    "data",
+                    "payload",
+                    "request",
+                    "item",
+                    "details",
+                    "filter",
+                    "filters",
+                }:
+                    continue
+                nested_type = infer_argument_type(
+                    value_node,
+                    bindings,
+                    field_name,
+                    class_map,
+                    function_map,
+                    local_types,
+                )
+                if nested_type:
+                    return nested_type
     elif (
         isinstance(resolved, ast.Subscript)
         and isinstance(resolved.slice, ast.Constant)
@@ -690,6 +773,9 @@ def infer_argument_type(
                 )
                 if nested_type:
                     return nested_type
+            fallback_type = fallback_type_from_call(source)
+            if fallback_type:
+                return fallback_type
     elif isinstance(resolved, ast.Call):
         field_value = call_argument_value(resolved, field_name, class_map, function_map, local_types)
         if field_value is None:
@@ -713,6 +799,9 @@ def infer_argument_type(
                 )
                 if nested_type:
                     return nested_type
+            fallback_type = fallback_type_from_call(resolved)
+            if fallback_type:
+                return fallback_type
     if field_value is None:
         return ""
     field_value = resolve_bound_value(field_value, bindings)

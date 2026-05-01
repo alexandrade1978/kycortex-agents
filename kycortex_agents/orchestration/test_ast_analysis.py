@@ -1325,7 +1325,7 @@ def analyze_test_behavior_contracts(
                     bindings,
                     node_parent_map,
                 )
-                batch_violations = [] if negative_expectation or batch_allows_partial_invalid else validate_batch_call(
+                batch_violations = [] if invalid_outcome_expectation or batch_allows_partial_invalid else validate_batch_call(
                     child,
                     bindings,
                     called_name,

@@ -8798,6 +8798,13 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     for bool_attr in ("valid", "is_valid", "success", "accepted"):
         bool_assert = parse_assert_node(f"assert request.{bool_attr} is False")
         assert assert_expects_invalid_outcome(bool_assert.test, None, "request") is True
+    for str_attr in ("status", "state", "outcome", "result"):
+        for marker in ("Invalid", "Pending", "Rejected", "Failed", "Error", "Reject"):
+            payload_str_assert = parse_assert_node(f"assert payload.{str_attr} == '{marker}'")
+            assert assert_expects_invalid_outcome(payload_str_assert.test, None, "payload") is True
+    for bool_attr in ("valid", "is_valid", "success", "accepted"):
+        payload_bool_assert = parse_assert_node(f"assert payload.{bool_attr} is False")
+        assert assert_expects_invalid_outcome(payload_bool_assert.test, None, "payload") is True
     false_result_assert = parse_assert_node("assert result is False")
     assert assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")

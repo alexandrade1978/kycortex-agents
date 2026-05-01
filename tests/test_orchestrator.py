@@ -8789,6 +8789,15 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     assert assert_expects_invalid_outcome(error_state_assert.test, None, "request") is True
     reject_state_assert = parse_assert_node("assert request.state == 'Reject'")
     assert assert_expects_invalid_outcome(reject_state_assert.test, None, "request") is True
+    for outcome_marker in ("Invalid", "Pending", "Rejected", "Failed", "Error", "Reject"):
+        outcome_assert = parse_assert_node(f"assert request.outcome == '{outcome_marker}'")
+        assert assert_expects_invalid_outcome(outcome_assert.test, None, "request") is True
+    for result_marker in ("Invalid", "Pending", "Rejected", "Failed", "Error", "Reject"):
+        result_assert = parse_assert_node(f"assert request.result == '{result_marker}'")
+        assert assert_expects_invalid_outcome(result_assert.test, None, "request") is True
+    for bool_attr in ("valid", "is_valid", "success", "accepted"):
+        bool_assert = parse_assert_node(f"assert request.{bool_attr} is False")
+        assert assert_expects_invalid_outcome(bool_assert.test, None, "request") is True
     false_result_assert = parse_assert_node("assert result is False")
     assert assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")

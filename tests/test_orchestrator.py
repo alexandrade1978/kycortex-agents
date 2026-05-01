@@ -7641,6 +7641,31 @@ def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_pa
 
         assert call_has_negative_expectation(negative_result_call, result_parent_map_by_node) is True
         assert call_expects_invalid_outcome(result_test_node, followup_result_call, result_parent_map_by_node) is True
+
+    for bool_attr in ("valid", "is_valid", "success", "accepted"):
+        bool_tree = ast.parse(
+            f"def test_invalid_{bool_attr}_case():\n"
+            f"    payload = {{'{bool_attr}': False}}\n"
+            "    with pytest.raises(ValueError):\n"
+            "        validate_request(payload)\n"
+            "    result = validate_request(payload)\n"
+            f"    assert payload.{bool_attr} is False\n"
+        )
+        bool_test_node = bool_tree.body[0]
+        assert isinstance(bool_test_node, ast.FunctionDef)
+        bool_call_nodes = [
+            node
+            for node in ast.walk(bool_test_node)
+            if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+        ]
+        bool_parent_map_by_node = parent_map(bool_tree)
+
+        negative_bool_call = next(node for node in bool_call_nodes if node.lineno == 4)
+        followup_bool_call = next(node for node in bool_call_nodes if node.lineno == 5)
+
+        assert call_has_negative_expectation(negative_bool_call, bool_parent_map_by_node) is True
+        assert call_expects_invalid_outcome(bool_test_node, followup_bool_call, bool_parent_map_by_node) is True
+
     with_node = parse_with_node("with pytest.raises(ValueError):\n    validate_request(data)\n")
     assert with_uses_pytest_raises(with_node) is True
     assert with_uses_pytest_assertion_context(with_node) is True

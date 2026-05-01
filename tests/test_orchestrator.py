@@ -13432,6 +13432,274 @@ def test_run_task_allows_missing_required_fields_for_intentional_pending_status_
     assert project.tasks[1].status == TaskStatus.DONE.value
 
 
+def test_run_task_allows_missing_required_fields_for_intentional_rejected_status_assertion(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, data):\n"
+        "        self.request_id = request_id\n"
+        "        self.data = data\n"
+        "        self.status = 'Rejected'\n\n"
+        "    def validate(self):\n"
+        "        required_fields = {'name', 'amount', 'risk_factor'}\n"
+        "        return all(field in self.data for field in required_fields)\n\n"
+        "def process_request(request):\n"
+        "    if not request.validate():\n"
+        "        return\n"
+        "    request.status = 'Processed'\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, process_request\n\n"
+        "def test_process_request_validation_failure():\n"
+        "    request = ComplianceRequest('req-1', {'name': 'Test', 'amount': 200})\n"
+        "    process_request(request)\n"
+        "    assert request.status == 'Rejected'\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    orchestrator.run_task(project.tasks[1], project)
+
+    validation = require_test_validation(project.tasks[1])
+    assert validation["payload_contract_violations"] == []
+    assert project.tasks[1].status == TaskStatus.DONE.value
+
+
+def test_run_task_allows_missing_required_fields_for_intentional_failed_status_assertion(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, data):\n"
+        "        self.request_id = request_id\n"
+        "        self.data = data\n"
+        "        self.status = 'Failed'\n\n"
+        "    def validate(self):\n"
+        "        required_fields = {'name', 'amount', 'risk_factor'}\n"
+        "        return all(field in self.data for field in required_fields)\n\n"
+        "def process_request(request):\n"
+        "    if not request.validate():\n"
+        "        return\n"
+        "    request.status = 'Processed'\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, process_request\n\n"
+        "def test_process_request_validation_failure():\n"
+        "    request = ComplianceRequest('req-1', {'name': 'Test', 'amount': 200})\n"
+        "    process_request(request)\n"
+        "    assert request.status == 'Failed'\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    orchestrator.run_task(project.tasks[1], project)
+
+    validation = require_test_validation(project.tasks[1])
+    assert validation["payload_contract_violations"] == []
+    assert project.tasks[1].status == TaskStatus.DONE.value
+
+
+def test_run_task_allows_missing_required_fields_for_intentional_error_status_assertion(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, data):\n"
+        "        self.request_id = request_id\n"
+        "        self.data = data\n"
+        "        self.status = 'Error'\n\n"
+        "    def validate(self):\n"
+        "        required_fields = {'name', 'amount', 'risk_factor'}\n"
+        "        return all(field in self.data for field in required_fields)\n\n"
+        "def process_request(request):\n"
+        "    if not request.validate():\n"
+        "        return\n"
+        "    request.status = 'Processed'\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, process_request\n\n"
+        "def test_process_request_validation_failure():\n"
+        "    request = ComplianceRequest('req-1', {'name': 'Test', 'amount': 200})\n"
+        "    process_request(request)\n"
+        "    assert request.status == 'Error'\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    orchestrator.run_task(project.tasks[1], project)
+
+    validation = require_test_validation(project.tasks[1])
+    assert validation["payload_contract_violations"] == []
+    assert project.tasks[1].status == TaskStatus.DONE.value
+
+
+def test_run_task_allows_missing_required_fields_for_intentional_reject_status_assertion(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), timeout_seconds=30.0)
+    project = ProjectState(project_name="Demo", goal="Build demo")
+    code_content = (
+        "class ComplianceRequest:\n"
+        "    def __init__(self, request_id, data):\n"
+        "        self.request_id = request_id\n"
+        "        self.data = data\n"
+        "        self.status = 'Reject'\n\n"
+        "    def validate(self):\n"
+        "        required_fields = {'name', 'amount', 'risk_factor'}\n"
+        "        return all(field in self.data for field in required_fields)\n\n"
+        "def process_request(request):\n"
+        "    if not request.validate():\n"
+        "        return\n"
+        "    request.status = 'Processed'\n"
+    )
+    project.add_task(
+        Task(
+            id="code",
+            title="Implementation",
+            description="Implement the application",
+            assigned_to="code_engineer",
+            status=TaskStatus.DONE.value,
+            output=code_content,
+            output_payload={
+                "summary": "class ComplianceRequest:",
+                "raw_content": code_content,
+                "artifacts": [
+                    {
+                        "name": "code_implementation",
+                        "artifact_type": ArtifactType.CODE.value,
+                        "path": "artifacts/code_implementation.py",
+                        "content": code_content,
+                    }
+                ],
+                "decisions": [],
+                "metadata": {},
+            },
+        )
+    )
+    project.add_task(
+        Task(
+            id="tests",
+            title="Tests",
+            description="Write tests",
+            assigned_to="qa_tester",
+            dependencies=["code"],
+        )
+    )
+
+    agent = RecordingAgent(
+        "from code_implementation import ComplianceRequest, process_request\n\n"
+        "def test_process_request_validation_failure():\n"
+        "    request = ComplianceRequest('req-1', {'name': 'Test', 'amount': 200})\n"
+        "    process_request(request)\n"
+        "    assert request.status == 'Reject'\n"
+    )
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"qa_tester": agent}))
+
+    orchestrator.run_task(project.tasks[1], project)
+
+    validation = require_test_validation(project.tasks[1])
+    assert validation["payload_contract_violations"] == []
+    assert project.tasks[1].status == TaskStatus.DONE.value
+
+
 def test_code_artifact_context_includes_behavior_contract(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     project = ProjectState(project_name="Demo", goal="Build demo")

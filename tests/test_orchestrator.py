@@ -8671,6 +8671,14 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     assert assert_expects_invalid_outcome(invalid_status_assert.test, None, "request") is True
     pending_status_assert = parse_assert_node("assert request.status == 'Pending'")
     assert assert_expects_invalid_outcome(pending_status_assert.test, None, "request") is True
+    rejected_status_assert = parse_assert_node("assert request.status == 'Rejected'")
+    assert assert_expects_invalid_outcome(rejected_status_assert.test, None, "request") is True
+    failed_status_assert = parse_assert_node("assert request.status == 'Failed'")
+    assert assert_expects_invalid_outcome(failed_status_assert.test, None, "request") is True
+    error_status_assert = parse_assert_node("assert request.status == 'Error'")
+    assert assert_expects_invalid_outcome(error_status_assert.test, None, "request") is True
+    reject_status_assert = parse_assert_node("assert request.status == 'Reject'")
+    assert assert_expects_invalid_outcome(reject_status_assert.test, None, "request") is True
     false_result_assert = parse_assert_node("assert result is False")
     assert assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")

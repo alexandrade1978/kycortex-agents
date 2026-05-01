@@ -8680,6 +8680,18 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     assert assert_expects_invalid_outcome(error_status_assert.test, None, "request") is True
     reject_status_assert = parse_assert_node("assert request.status == 'Reject'")
     assert assert_expects_invalid_outcome(reject_status_assert.test, None, "request") is True
+    invalid_state_assert = parse_assert_node("assert request.state == 'Invalid'")
+    assert assert_expects_invalid_outcome(invalid_state_assert.test, None, "request") is True
+    pending_state_assert = parse_assert_node("assert request.state == 'Pending'")
+    assert assert_expects_invalid_outcome(pending_state_assert.test, None, "request") is True
+    rejected_state_assert = parse_assert_node("assert request.state == 'Rejected'")
+    assert assert_expects_invalid_outcome(rejected_state_assert.test, None, "request") is True
+    failed_state_assert = parse_assert_node("assert request.state == 'Failed'")
+    assert assert_expects_invalid_outcome(failed_state_assert.test, None, "request") is True
+    error_state_assert = parse_assert_node("assert request.state == 'Error'")
+    assert assert_expects_invalid_outcome(error_state_assert.test, None, "request") is True
+    reject_state_assert = parse_assert_node("assert request.state == 'Reject'")
+    assert assert_expects_invalid_outcome(reject_state_assert.test, None, "request") is True
     false_result_assert = parse_assert_node("assert result is False")
     assert assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")

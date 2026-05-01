@@ -5058,6 +5058,41 @@ def test_analyze_test_behavior_contracts_ignores_builder_batch_unsupported_value
     assert non_batch_calls == []
 
 
+def test_analyze_test_behavior_contracts_ignores_builder_batch_unsupported_values_when_invalid_success_flag_is_expected_without_builder_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    builder = SubmissionBuilder()\n"
+        "    requests = [\n"
+        "        builder.build_item('user-1', 'eu', {'status': 'approved'}),\n"
+        "        builder.build_item('user-2', 'eu', {'status': 'pending'}),\n"
+        "    ]\n"
+        "    result = process_batch(requests)\n"
+        "    assert not result.success\n"
+    )
+
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+        tree,
+        {},
+        {"process_batch": {"status": ["approved"]}},
+        {
+            "process_batch": {
+                "fields": ["status"],
+                "request_key": None,
+                "wrapper_key": None,
+            }
+        },
+        set(),
+        {"process_batch"},
+        {},
+        {},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
 def test_analyze_test_behavior_contracts_ignores_nested_builder_batch_unsupported_values_when_invalid_status_is_expected_without_builder_metadata(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)
@@ -5350,6 +5385,41 @@ def test_analyze_test_behavior_contracts_ignores_nested_builder_batch_unsupporte
         "    ]\n"
         "    result = process_batch(requests)\n"
         "    assert result.is_valid == False\n"
+    )
+
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+        tree,
+        {},
+        {"process_batch": {"status": ["approved"]}},
+        {
+            "process_batch": {
+                "fields": ["status"],
+                "request_key": "request_id",
+                "wrapper_key": "payload",
+            }
+        },
+        set(),
+        {"process_batch"},
+        {},
+        {},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
+def test_analyze_test_behavior_contracts_ignores_nested_builder_batch_unsupported_values_when_invalid_success_flag_is_expected_without_builder_metadata(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    tree = ast.parse(
+        "def test_case():\n"
+        "    builder = SubmissionBuilder()\n"
+        "    requests = [\n"
+        "        builder.build_item('user-1', 'eu', {'request_id': 'id-1', 'payload': {'status': 'approved'}}),\n"
+        "        builder.build_item('user-2', 'eu', {'request_id': 'id-2', 'payload': {'status': 'pending'}}),\n"
+        "    ]\n"
+        "    result = process_batch(requests)\n"
+        "    assert not result.success\n"
     )
 
     payload_violations, non_batch_calls = analyze_test_behavior_contracts(

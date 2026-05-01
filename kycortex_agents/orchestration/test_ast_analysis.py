@@ -987,6 +987,7 @@ def validate_batch_call(
     class_map: Optional[Dict[str, Any]] = None,
     function_map: Optional[Dict[str, Any]] = None,
     local_types: Optional[Dict[str, str]] = None,
+    field_value_rules: Optional[Dict[str, list[str]]] = None,
 ) -> list[str]:
     violations: list[str] = []
     batch_arg = first_call_argument(node)
@@ -1006,6 +1007,7 @@ def validate_batch_call(
             )
             continue
 
+        value_source: Optional[ast.AST] = item if isinstance(item, ast.AST) else None
         if request_key and request_key not in item_keys:
             violations.append(
                 f"{callable_name} batch item missing required key: {request_key} at line {getattr(item, 'lineno', node.lineno)}"
@@ -1022,7 +1024,7 @@ def validate_batch_call(
                 )
                 continue
             nested_keys = extract_literal_dict_keys(
-                ast.Subscript(value=nested_source, slice=ast.Constant(value=wrapper_key)),
+                ast.copy_location(ast.Subscript(value=nested_source, slice=ast.Constant(value=wrapper_key)), nested_source),
                 bindings,
                 class_map,
                 function_map,
@@ -1038,6 +1040,32 @@ def validate_batch_call(
                 violations.append(
                     f"{callable_name} batch item nested `{wrapper_key}` missing required fields: {', '.join(missing_nested_fields)} at line {getattr(item, 'lineno', node.lineno)}"
                 )
+            value_source = ast.copy_location(
+                ast.Subscript(value=nested_source, slice=ast.Constant(value=wrapper_key)),
+                nested_source,
+            )
+        if field_value_rules and value_source is not None:
+            for field_name, allowed_values in field_value_rules.items():
+                observed_values = extract_literal_field_values(
+                    value_source,
+                    bindings,
+                    field_name,
+                    class_map or {},
+                    function_map,
+                    local_types,
+                )
+                invalid_values = [value for value in observed_values if value not in allowed_values]
+                if invalid_values:
+                    message_context = (
+                        f"batch item nested `{wrapper_key}` field"
+                        if wrapper_key
+                        else "batch item field"
+                    )
+                    violations.append(
+                        f"{callable_name} {message_context} `{field_name}` uses unsupported values: {', '.join(invalid_values)} at line {getattr(item, 'lineno', node.lineno)}"
+                    )
+
+        if wrapper_key:
             continue
 
         missing_fields = [field for field in required_fields if field not in item_keys]
@@ -1305,6 +1333,7 @@ def analyze_test_behavior_contracts(
                     class_map,
                     function_map,
                     local_types,
+                    field_value_rules.get(called_name),
                 )
                 payload_violations.update(batch_violations)
                 continue

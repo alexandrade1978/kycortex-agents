@@ -7546,28 +7546,29 @@ def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional
 def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)
-    tree = ast.parse(
-        "def test_invalid_case():\n"
-        "    payload = {'status': 'invalid'}\n"
-        "    with pytest.raises(ValueError):\n"
-        "        validate_request(payload)\n"
-        "    result = validate_request(payload)\n"
-        "    assert payload.status == 'Invalid'\n"
-    )
-    test_node = tree.body[0]
-    assert isinstance(test_node, ast.FunctionDef)
-    call_nodes = [
-        node
-        for node in ast.walk(test_node)
-        if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
-    ]
-    parent_map_by_node = parent_map(tree)
+    for status_marker in ("Invalid", "Pending", "Rejected", "Failed", "Error", "Reject"):
+        tree = ast.parse(
+            "def test_invalid_case():\n"
+            "    payload = {'status': 'invalid'}\n"
+            "    with pytest.raises(ValueError):\n"
+            "        validate_request(payload)\n"
+            "    result = validate_request(payload)\n"
+            f"    assert payload.status == '{status_marker}'\n"
+        )
+        test_node = tree.body[0]
+        assert isinstance(test_node, ast.FunctionDef)
+        call_nodes = [
+            node
+            for node in ast.walk(test_node)
+            if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+        ]
+        parent_map_by_node = parent_map(tree)
 
-    negative_call = next(node for node in call_nodes if node.lineno == 4)
-    followup_call = next(node for node in call_nodes if node.lineno == 5)
+        negative_call = next(node for node in call_nodes if node.lineno == 4)
+        followup_call = next(node for node in call_nodes if node.lineno == 5)
 
-    assert call_has_negative_expectation(negative_call, parent_map_by_node) is True
-    assert call_expects_invalid_outcome(test_node, followup_call, parent_map_by_node) is True
+        assert call_has_negative_expectation(negative_call, parent_map_by_node) is True
+        assert call_expects_invalid_outcome(test_node, followup_call, parent_map_by_node) is True
     with_node = parse_with_node("with pytest.raises(ValueError):\n    validate_request(data)\n")
     assert with_uses_pytest_raises(with_node) is True
     assert with_uses_pytest_assertion_context(with_node) is True

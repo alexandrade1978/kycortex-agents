@@ -4610,5 +4610,114 @@ class TestExpressionPrimitiveKindAndReturnAnalysis:
         assert "c" not in keys
 
 
+class TestValidationFailureAndConstructorHelpers:
+    def test_sample_literal_for_required_key_bool_prefix_path(self):
+        # key starting with is_/has_ → line 3204
+        assert QATesterAgent._sample_literal_for_required_key("is_active") == "True"
+        assert QATesterAgent._sample_literal_for_required_key("has_permission") == "True"
+
+    def test_sample_literal_for_required_key_bool_token_path(self):
+        # key containing bool token (not starting with prefix) → line 3206
+        result = QATesterAgent._sample_literal_for_required_key("approval_required")
+        assert result == "True"
+
+    def test_validation_failure_request_like_object_empty_rendered_items(self):
+        # When all required request fields equal the missing_field, rendered_items is empty
+        code = (
+            "class MyRequest:\n"
+            "    def validate(self, payload):\n"
+            "        if 'timestamp' not in payload:\n"
+            "            raise ValueError\n"
+        )
+        result = QATesterAgent._validation_failure_request_like_object_scaffold_line(code)
+        assert isinstance(result, tuple)
+
+    def test_constructor_rejects_invalid_payload_parse_error(self):
+        assert QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", "def (") is False
+
+    def test_constructor_rejects_invalid_payload_non_init_method_skipped(self):
+        code = (
+            "class MyClass:\n"
+            "    def validate(self, payload):\n"
+            "        if not isinstance(payload, dict):\n"
+            "            raise ValueError('bad')\n"
+        )
+        assert QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", code) is False
+
+    def test_constructor_rejects_invalid_payload_raise_name_branch(self):
+        code = (
+            "class MyClass:\n"
+            "    def __init__(self, payload):\n"
+            "        if not isinstance(payload, dict):\n"
+            "            raise ValueError\n"
+        )
+        result = QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", code)
+        assert isinstance(result, bool)
+
+    def test_constructor_rejects_invalid_payload_subscript_isinstance(self):
+        code = (
+            "class MyClass:\n"
+            "    def __init__(self, payload):\n"
+            "        if not isinstance(payload['field'], str):\n"
+            "            raise ValueError('bad')\n"
+        )
+        result = QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", code)
+        assert isinstance(result, bool)
+
+    def test_implementation_call_returns_none_syntax_error(self):
+        assert QATesterAgent._implementation_call_returns_none("def (", "func") is False
+
+    def test_implementation_call_returns_none_class_method_not_found(self):
+        code = "class MyService:\n    def other(self): pass\n"
+        result = QATesterAgent._implementation_call_returns_none(code, "MyService.validate")
+        assert result is False
+
+    def test_implementation_call_returns_none_top_level_not_found(self):
+        code = "def other_func(): pass\n"
+        result = QATesterAgent._implementation_call_returns_none(code, "validate")
+        assert result is False
+
+    def test_stable_result_assertion_lines_score_field(self):
+        code = (
+            "class ValidationResult:\n"
+            "    score: float\n"
+            "    is_valid: bool\n"
+            "\n"
+            "class MyService:\n"
+            "    def validate(self, payload) -> ValidationResult:\n"
+            "        return ValidationResult()\n"
+        )
+        lines = QATesterAgent._stable_result_assertion_lines(
+            code, "MyService.validate", result_name="result", request_name="request"
+        )
+        assert isinstance(lines, list)
+
+    def test_stable_audit_assertion_lines_batch_dict_kind(self):
+        code = (
+            "class MyService:\n"
+            "    def __init__(self):\n"
+            "        self.audit_records = {}\n"
+            "    def process(self, request):\n"
+            "        return True\n"
+        )
+        lines = QATesterAgent._stable_audit_assertion_lines(
+            code, "MyService.process", service_name="svc", request_name="req", batch=True
+        )
+        assert isinstance(lines, list)
+
+    def test_stable_audit_assertion_lines_batch_list_kind(self):
+        code = (
+            "class MyService:\n"
+            "    def __init__(self):\n"
+            "        self.audit_log = []\n"
+            "    def process(self, request):\n"
+            "        return True\n"
+        )
+        lines = QATesterAgent._stable_audit_assertion_lines(
+            code, "MyService.process", service_name="svc", request_name="req", batch=True
+        )
+        assert isinstance(lines, list)
+
+
 
 

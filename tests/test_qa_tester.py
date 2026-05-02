@@ -5365,6 +5365,27 @@ class TestNormalizePlaceholderPayloadValues:
         assert isinstance(result, str)
         assert "del other['x']" in result
 
+    def test_validation_failure_delete_nested_subscript_is_ignored(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, details):\n"
+            "        if not isinstance(details, dict):\n"
+            "            raise ValueError('bad details')\n"
+            "        return {'outcome': 'approved'}\n"
+        )
+        content = (
+            "def test_validation_failure():\n"
+            "    payloads = [{'x': 1}]\n"
+            "    del payloads[0]['x']\n"
+            "    svc = V()\n"
+            "    svc.validate(details=None)\n"
+        )
+
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+
+        assert isinstance(result, str)
+        assert "del payloads[0]['x']" in result
+
     def test_validation_failure_expectation_wraps_nonassigned_invalid_submit_call(self):
         impl = (
             "class V:\n"

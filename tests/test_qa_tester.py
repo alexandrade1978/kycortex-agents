@@ -5119,6 +5119,72 @@ class TestNormalizePlaceholderPayloadValues:
         assert "svc.submit(invalid_request)" in result
         assert "assert submit_result['outcome'] == 'blocked'" not in result
 
+    def test_validation_failure_delete_target_filtering_paths(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, details):\n"
+            "        if not isinstance(details, dict):\n"
+            "            return {'outcome': 'blocked'}\n"
+            "        return {'outcome': 'blocked'}\n"
+        )
+        content = (
+            "def test_validation_failure():\n"
+            "    details = {'x': 'value'}\n"
+            "    keep = {'y': 'value'}\n"
+            "    del details, keep['y']\n"
+            "    del details['x'], keep['y']\n"
+        )
+
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+
+        assert isinstance(result, str)
+        assert "del details, keep['y']" in result
+        assert "del details['x'], keep['y']" not in result
+        assert "del keep['y']" in result
+
+    def test_validation_failure_with_guarded_pytest_raises_shapes(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if not isinstance(payload, dict):\n"
+            "            return {'outcome': 'blocked'}\n"
+            "        return {'outcome': 'blocked'}\n"
+        )
+        content = (
+            "def test_validation_failure():\n"
+            "    svc = V()\n"
+            "    with pytest.raises(ValueError), pytest.raises(ValueError):\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with manager:\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with raises(ValueError):\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with pytest.warns(ValueError):\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with other.raises(ValueError):\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with pytest.raises():\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with pytest.raises(TypeError):\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with pytest.raises(ValueError):\n"
+            "        x = 1\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+            "    with pytest.raises(ValueError):\n"
+            "        'noop'\n"
+        )
+
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+
+        assert isinstance(result, str)
+        assert "with pytest.raises(ValueError), pytest.raises(ValueError):" in result
+        assert "with manager:" in result
+        assert "with raises(ValueError):" in result
+        assert "with pytest.warns(ValueError):" in result
+        assert "with other.raises(ValueError):" in result
+        assert "with pytest.raises():" in result
+        assert "with pytest.raises(TypeError):" in result
+
 
 
 

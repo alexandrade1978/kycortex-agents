@@ -7258,3 +7258,17 @@ def test_call_has_negative_expectation_inside_pytest_raises_with_block():
 		if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
 	)
 	assert call_has_negative_expectation(call_node, pm) is True
+
+
+def test_invalid_outcome_subject_matches_name_and_payload_fallback_paths():
+	# Cover direct Name match on result_name (line 1118).
+	result_name_node = ast.parse("result", mode="eval").body
+	assert invalid_outcome_subject_matches(result_name_node, "result", None) is True
+
+	# Cover final payload_name fallback return path (line 1128).
+	payload_attr_node = ast.parse("request.accepted", mode="eval").body
+	assert invalid_outcome_subject_matches(payload_attr_node, None, "request") is True
+
+	# Negative fallback case through the same return expression.
+	other_attr_node = ast.parse("other.accepted", mode="eval").body
+	assert invalid_outcome_subject_matches(other_attr_node, None, "request") is False

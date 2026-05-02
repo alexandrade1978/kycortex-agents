@@ -89,7 +89,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     with_uses_pytest_raises,
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
-from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output, _import_insertion_line, _adaptive_prompt_mode, _module_imports_bare_name, _insert_import_lines, _ensure_explicit_dataclass_import, _callable_accepts_context_argument
+from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output, _import_insertion_line, _adaptive_prompt_mode, _module_imports_bare_name, _insert_import_lines, _ensure_explicit_dataclass_import, _callable_accepts_context_argument, _ensure_typing_annotation_imports
 from kycortex_agents.orchestration import (
     ast_name,
     active_repair_cycle,
@@ -22599,5 +22599,39 @@ def test_validation_runtime_private_helpers_cover_edge_paths(tmp_path):
     assert _callable_accepts_context_argument(lambda **kwargs: None) is True
     assert _callable_accepts_context_argument(lambda x: None) is False
     assert _callable_accepts_context_argument(lambda context: None) is True
+
+
+def test_validation_runtime_async_annotations_and_non_code_artifact_paths(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+
+    # L186-187: visit_AsyncFunctionDef with typing annotations
+    async_code = "async def fetch(x: Optional[str]) -> Optional[int]:\n    pass\n"
+    result_async = _ensure_typing_annotation_imports(async_code)
+    assert "from typing import" in result_async
+    assert "Optional" in result_async
+
+    # L262-263: _callable_accepts_context_argument handles non-inspectable callable (ValueError)
+    # object.__class__ is a descriptor that raises ValueError in inspect.signature
+    assert _callable_accepts_context_argument(object.__class__) is False
+
+    # L243: non-CODE artifact is skipped in _apply_code_content_autofixes loop
+    # Use _ensure_typing_annotation_imports to trigger the autofix path indirectly:
+    # Create AgentOutput with a non-CODE artifact and verify the loop continues past it
+    doc_artifact_code = "@dataclass\nclass Foo:\n    x: Optional[int]\n"
+    output = AgentOutput(
+        summary="test",
+        raw_content=doc_artifact_code,
+        artifacts=[
+            ArtifactRecord(name="notes.md", artifact_type=ArtifactType.DOCUMENT, content=doc_artifact_code),
+            ArtifactRecord(name="foo.py", artifact_type=ArtifactType.CODE, content=doc_artifact_code),
+        ],
+    )
+    normalized = validation_runtime_module._apply_code_content_autofixes(output, doc_artifact_code)
+    # The CODE artifact should be updated, the DOCUMENT one should stay unchanged
+    assert normalized != doc_artifact_code
+    assert output.artifacts[1].content == normalized
+    assert output.artifacts[0].content == doc_artifact_code
+
 
 

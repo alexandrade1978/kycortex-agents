@@ -198,6 +198,44 @@ class TestExpressionText:
         node = ast.parse("result.status", mode="eval").body
         assert QATesterAgent._expression_text(node) == "result.status"
 
+    def test_unparse_failure_returns_empty_string(self, monkeypatch):
+        monkeypatch.setattr(ast, "unparse", lambda _node: (_ for _ in ()).throw(ValueError("boom")))
+        node = ast.parse("value", mode="eval").body
+        assert QATesterAgent._expression_text(node) == ""
+
+
+# ---------------------------------------------------------------------------
+# _summary_has_placeholder_boolean_assertion_issue
+# ---------------------------------------------------------------------------
+
+class TestSummaryHasPlaceholderBooleanAssertionIssue:
+    def test_assuming_comment_is_detected(self):
+        summary = "pytest failure details: assert True"
+        content = "def test_x():\n    # assuming this placeholder is fine\n    assert value"
+        assert QATesterAgent._summary_has_placeholder_boolean_assertion_issue(summary, content) is True
+
+    def test_returns_true_when_summary_matches_and_content_missing(self):
+        summary = "pytest failure details: assert False"
+        assert QATesterAgent._summary_has_placeholder_boolean_assertion_issue(summary, "") is True
+
+
+# ---------------------------------------------------------------------------
+# _summary_has_exact_status_action_label_assertion_issue
+# ---------------------------------------------------------------------------
+
+def test_summary_has_exact_status_action_label_assertion_issue_detects_score_literal_in_audit_assertion():
+    summary = """
+pytest execution: fail
+FAILED tests/test_demo.py::test_audit_log_score_label
+"""
+    content = """
+def test_audit_log_score_label():
+    audit_log = ["score: 0.75"]
+    assert "score: 0.75" in audit_log
+"""
+
+    assert QATesterAgent._summary_has_exact_status_action_label_assertion_issue(summary, content) is True
+
 
 # ---------------------------------------------------------------------------
 # _validation_result_call_is_invalid

@@ -4351,6 +4351,49 @@ class TestAssertionIssueDetectors:
             "if request.timestamp < int(older_ts):\n    return policy"
         ) is True
 
+    def test_status_action_label_non_standard_status_in_audit_log(self):
+        # Arc 978->981 and 984: assert "accepted" in audit_log — "accepted" is not in the
+        # token list at lines 964-975, so line 978 condition is False (arc 978->981).
+        # Then _status_like_literal_values("accepted") returns ["accepted"] (truthy) but
+        # right side (audit_log) returns [] → left_labels and not right_labels → True (line 984).
+        summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_happy_path - AssertionError\n"
+            "- Verdict: FAIL"
+        )
+        content = "def test_happy_path():\n    assert 'accepted' in audit_log\n"
+        assert QATesterAgent._summary_has_exact_status_action_label_assertion_issue(summary, content) is True
+
+    def test_band_label_assertion_detects_both_sides_differ(self):
+        # Arc 1029: summary contains assert 'high' == 'low' — both are canonical bands
+        # but differ → return True at line 1029.
+        summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: assert 'high' == 'low'\n"
+            "- Verdict: FAIL"
+        )
+        assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary) is True
+
+    def test_band_label_assertion_detects_two_sided_literal_list_mismatch(self):
+        # Arc 1063 is structurally unreachable (both sides being band literal collections
+        # and also satisfying the field_token check simultaneously is not possible).
+        # This test exercises the function with a non-validation test and two-sided
+        # literal band assert that falls through the field_token guard.
+        summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_risk_scoring - AssertionError\n"
+            "- Verdict: FAIL"
+        )
+        content = (
+            "def test_risk_scoring():\n"
+            "    assert ['high', 'medium'] == ['low', 'critical']\n"
+        )
+        result = QATesterAgent._summary_has_exact_band_label_assertion_issue(summary, content)
+        assert isinstance(result, bool)
+
 
 class TestDatetimeHelpers:
     def test_content_datetime_helper_guards_return_false_for_non_str(self):

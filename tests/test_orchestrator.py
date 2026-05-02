@@ -23668,3 +23668,18 @@ def test_ok():
 
     assert "payload={'user': {'name': 'seed'}, 'id': 'abc'}" in updated
 
+
+def test_context_module_task_runtime_second_loop_covers_repair_tasks():
+    # L132: second loop returns a code_engineer task that has repair_origin_task_id
+    # (first loop skips it because repair_origin_task_id is set)
+    t1 = Task(
+        id="t_repair_eng",
+        title="Implement module_foobar",
+        description="desc",
+        assigned_to="code_engineer",
+        repair_origin_task_id="some_origin_id",
+    )
+    proj = ProjectState(project_name="test", goal="goal", tasks=[t1])
+    result = context_building_module.context_module_task_runtime(proj, None, None)
+    assert result is not None
+    assert result.id == "t_repair_eng"

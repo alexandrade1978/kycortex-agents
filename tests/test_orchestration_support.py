@@ -7239,3 +7239,22 @@ def test_task_counts_for_acceptance_returns_true_when_origin_not_found():
         )
         result = task_counts_for_acceptance(project, orphan_repair)
         assert result is True
+
+
+def test_call_has_negative_expectation_inside_pytest_raises_with_block():
+	# Line 1110 of test_ast_analysis.py: call inside with pytest.raises(...)
+	# block -> isinstance(parent, ast.With) and with_uses_pytest_raises(parent)
+	# is True -> return True
+	code = (
+		"def test_invalid():\n"
+		"    with pytest.raises(ValueError):\n"
+		"        validate_request({'bad': 'data'})\n"
+	)
+	tree = ast.parse(code)
+	pm = parent_map(tree)
+	call_node = next(
+		node
+		for node in ast.walk(tree)
+		if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+	)
+	assert call_has_negative_expectation(call_node, pm) is True

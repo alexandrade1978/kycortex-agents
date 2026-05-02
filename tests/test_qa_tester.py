@@ -4698,6 +4698,22 @@ class TestValidationFailureAndConstructorHelpers:
         result = QATesterAgent._validation_failure_request_like_object_scaffold_line(code)
         assert isinstance(result, tuple)
 
+    def test_validation_failure_request_like_object_forced_empty_rendered_items(self, monkeypatch):
+        monkeypatch.setattr(
+            QATesterAgent,
+            "_implementation_required_request_fields",
+            classmethod(lambda cls, _code: ["timestamp"]),
+        )
+        monkeypatch.setattr(
+            QATesterAgent,
+            "_validation_failure_missing_request_field",
+            classmethod(lambda cls, _code: "timestamp"),
+        )
+
+        result = QATesterAgent._validation_failure_request_like_object_scaffold_line("class Any: pass")
+
+        assert result == ("", "")
+
     def test_constructor_rejects_invalid_payload_parse_error(self):
         assert QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", "def (") is False
 
@@ -4729,6 +4745,18 @@ class TestValidationFailureAndConstructorHelpers:
         )
         result = QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", code)
         assert isinstance(result, bool)
+
+    def test_constructor_rejects_invalid_payload_compare_guard_then_subscript_check(self):
+        code = (
+            "class MyClass:\n"
+            "    def __init__(self, payload):\n"
+            "        if payload == 1:\n"
+            "            raise ValueError\n"
+            "        if isinstance(payload['field'], str):\n"
+            "            raise ValueError('bad')\n"
+        )
+        result = QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", code)
+        assert result is True
 
     def test_implementation_call_returns_none_syntax_error(self):
         assert QATesterAgent._implementation_call_returns_none("def (", "func") is False

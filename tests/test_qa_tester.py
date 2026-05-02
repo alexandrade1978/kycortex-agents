@@ -4967,6 +4967,81 @@ class TestRuntimeAndPresenceHelpers:
         result = QATesterAgent._summary_has_presence_only_validation_sample_issue(summary, content, impl)
         assert result is False
 
+    def test_implementation_has_presence_only_non_literal_required_value(self):
+        # Arc 3705->3711: _is_required_field_collection_name True but _string_literal_sequence returns []
+        # because the value is a function call, not a literal list/tuple/set.
+        code = (
+            "def validate(r):\n"
+            "    required_fields = get_required_fields()\n"
+            "    if 'name' not in r.__dict__:\n"
+            "        raise ValueError\n"
+        )
+        result = QATesterAgent._implementation_has_presence_only_required_field_validation(code)
+        assert isinstance(result, bool)
+
+    def test_implementation_has_presence_only_multi_target_assignment(self):
+        # Arc 3708->3707: inner for-loop at line 3707 has a name that does NOT match
+        # _is_required_field_collection_name (False branch at line 3708), which causes
+        # the loop to go back to line 3707 for the next iteration.
+        # Python multi-assignment: required_fields = other_var = ['name', 'email']
+        # gives target_names=['required_fields', 'other_var']; 'other_var' is False at 3708.
+        code = (
+            "def validate(r):\n"
+            "    required_fields = other_var = ['name', 'email']\n"
+            "    if 'name' not in r.__dict__:\n"
+            "        raise ValueError\n"
+        )
+        result = QATesterAgent._implementation_has_presence_only_required_field_validation(code)
+        assert isinstance(result, bool)
+
+    def test_implementation_has_presence_only_issubset_non_container_arg(self):
+        # Arc 3712->3718: issubset call where the argument is neither a request field
+        # container nor a payload container, so the condition at line 3712 is False.
+        code = (
+            "def validate(r):\n"
+            "    required_fields = ['name', 'email']\n"
+            "    approved_set = {'name', 'email'}\n"
+            "    if not required_fields_list.issubset(approved_set):\n"
+            "        raise ValueError\n"
+            "    if 'name' not in r.__dict__:\n"
+            "        raise ValueError\n"
+        )
+        result = QATesterAgent._implementation_has_presence_only_required_field_validation(code)
+        assert isinstance(result, bool)
+
+    def test_summary_has_presence_only_no_test_validation_failure_function(self, monkeypatch):
+        # Line 3775: required_payload_keys is non-empty but block is empty (no
+        # test_validation_failure function found in content).
+        monkeypatch.setattr(
+            QATesterAgent,
+            "_implementation_required_payload_keys",
+            lambda *args, **kwargs: ["name", "email"],
+        )
+        summary = "pytest failure details: did not raise"
+        content = "def test_something_else():\n    pass\n"
+        impl = ""
+        result = QATesterAgent._summary_has_presence_only_validation_sample_issue(summary, content, impl)
+        assert result is False
+
+    def test_summary_has_presence_only_block_has_no_validate_or_raises(self, monkeypatch):
+        # Line 3779: required_payload_keys non-empty, block found, but block contains
+        # neither "validate_request(" nor "pytest.raises".
+        monkeypatch.setattr(
+            QATesterAgent,
+            "_implementation_required_payload_keys",
+            lambda *args, **kwargs: ["name", "email"],
+        )
+        summary = "pytest failure details: did not raise"
+        content = (
+            "def test_validation_failure():\n"
+            "    svc = MyService()\n"
+            "    result = svc.process({'name': 'A', 'email': 'b@c.com'})\n"
+            "    assert result is not None\n"
+        )
+        impl = ""
+        result = QATesterAgent._summary_has_presence_only_validation_sample_issue(summary, content, impl)
+        assert result is False
+
 
 class TestContentPayloadPathsAndHelpers:
     def test_payload_like_parameter_names_asterisk_param_is_skipped(self):

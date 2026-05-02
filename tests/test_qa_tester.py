@@ -4328,3 +4328,84 @@ class TestASTPayloadHelpers:
         assert QATesterAgent._class_has_payload_like_field(class_without_payload) is False
 
 
+class TestImplementationAnalysisHelpers:
+    def test_implementation_required_request_fields_syntax_error_and_module_level_validate(self):
+        assert QATesterAgent._implementation_required_request_fields("def (") == []
+        assert QATesterAgent._implementation_required_request_fields("") == []
+
+        impl_module_validate = (
+            "def validate_request(request):\n"
+            "    required_fields = ['company_name', 'contact_email']\n"
+            "    if 'company_name' not in vars(request):\n"
+            "        raise ValueError('missing company_name')\n"
+        )
+        result = QATesterAgent._implementation_required_request_fields(impl_module_validate)
+        assert "company_name" in result
+
+    def test_implementation_required_request_fields_annassign_fields(self):
+        impl_annassign = (
+            "class Service:\n"
+            "    def validate(self, request):\n"
+            "        required_fields: list = ['name', 'email']\n"
+            "        if 'name' not in vars(request):\n"
+            "            raise ValueError('missing name')\n"
+        )
+        result = QATesterAgent._implementation_required_request_fields(impl_annassign)
+        assert "name" in result
+
+    def test_implementation_validate_payload_alias_names_handles_none(self):
+        assert QATesterAgent._implementation_validate_payload_alias_names("def (") == set()
+        assert QATesterAgent._implementation_validate_payload_alias_names("") == set()
+
+    def test_function_payload_alias_names_vararg_kwarg_and_attr_subscript(self):
+        import ast
+
+        # function with vararg and kwarg
+        func_with_vararg = ast.parse(
+            "def validate(*details, **context):\n    pass\n"
+        ).body[0]
+        aliases = QATesterAgent._function_payload_alias_names(func_with_vararg)
+        assert "details" in aliases
+        assert "context" in aliases
+
+        # function with attribute assignment extracting payload attr
+        func_with_attr_assign = ast.parse(
+            "def validate(self, request):\n"
+            "    payload = request.details\n"
+            "    if 'key' not in payload:\n"
+            "        raise ValueError('missing')\n"
+        ).body[0]
+        aliases = QATesterAgent._function_payload_alias_names(func_with_attr_assign)
+        assert "payload" in aliases
+
+        # function with subscript assignment extracting payload attr
+        func_with_sub_assign = ast.parse(
+            "def validate(self, request):\n"
+            "    payload = request['details']\n"
+            "    if 'key' not in payload:\n"
+            "        raise ValueError('missing')\n"
+        ).body[0]
+        aliases = QATesterAgent._function_payload_alias_names(func_with_sub_assign)
+        assert "payload" in aliases
+
+    def test_function_payload_alias_names_subscript_non_payload_key_skipped(self):
+        import ast
+
+        # subscript with key not in payload_attrs → should not add alias
+        func_non_payload_sub = ast.parse(
+            "def validate(self, r):\n"
+            "    x = r['something_else']\n"
+        ).body[0]
+        aliases = QATesterAgent._function_payload_alias_names(func_non_payload_sub)
+        assert "x" not in aliases
+
+        # subscript with non-Constant slice → should not add alias
+        func_non_const_slice = ast.parse(
+            "def validate(self, r):\n"
+            "    x = r[key]\n"
+        ).body[0]
+        aliases = QATesterAgent._function_payload_alias_names(func_non_const_slice)
+        assert "x" not in aliases
+
+
+

@@ -4071,3 +4071,87 @@ class TestAssertionIssueDetectors:
         assert QATesterAgent._implementation_requires_recent_request_timestamp(
             "request_timestamp = request.timestamp\nage = datetime.now() - request_timestamp\nreturn age.total_seconds() <= 86400"
         ) is True
+
+    def test_handles_negative_paths_for_temporal_and_numeric_detectors(self):
+        temporal_summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_happy_path - AssertionError: assert '2026-04-22' == value\n"
+            "- Verdict: FAIL"
+        )
+        temporal_non_eq_content = (
+            "def test_happy_path():\n"
+            "    assert result.timestamp != '2026-04-22'\n"
+        )
+        temporal_validation_failure_content = (
+            "def test_validation_failure():\n"
+            "    assert request.timestamp == '2026-04-22'\n"
+        )
+
+        assert QATesterAgent._summary_has_exact_temporal_value_assertion_issue(None, temporal_non_eq_content) is False
+        assert QATesterAgent._summary_has_exact_temporal_value_assertion_issue(
+            temporal_summary,
+            temporal_non_eq_content,
+        ) is False
+        assert QATesterAgent._summary_has_exact_temporal_value_assertion_issue(
+            temporal_summary.replace("test_happy_path", "test_validation_failure"),
+            temporal_validation_failure_content,
+        ) is False
+
+        numeric_summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_risk_scoring - AssertionError: assert 1.0 == 0.0\n"
+            "- Verdict: FAIL"
+        )
+        numeric_non_eq_content = (
+            "def test_risk_scoring():\n"
+            "    assert result.risk_score > 0.0\n"
+        )
+        numeric_no_token_content = (
+            "def test_risk_scoring():\n"
+            "    assert result.priority == 1.0\n"
+        )
+
+        assert QATesterAgent._summary_has_exact_numeric_score_assertion_issue("", numeric_no_token_content) is False
+        assert QATesterAgent._summary_has_exact_numeric_score_assertion_issue(
+            "Generated test validation: assert x == y",
+            numeric_no_token_content,
+        ) is False
+        assert QATesterAgent._summary_has_exact_numeric_score_assertion_issue(
+            numeric_summary,
+            numeric_non_eq_content,
+        ) is False
+        assert QATesterAgent._summary_has_exact_numeric_score_assertion_issue(
+            numeric_summary,
+            numeric_no_token_content,
+        ) is False
+
+        positive_summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_risk_scoring - AssertionError\n"
+            "- Verdict: FAIL"
+        )
+        positive_gt_literal_left = (
+            "def test_risk_scoring():\n"
+            "    assert 1.0 > result.risk_score\n"
+        )
+        positive_lt_literal_right = (
+            "def test_risk_scoring():\n"
+            "    assert result.score < 2.0\n"
+        )
+
+        assert QATesterAgent._summary_has_positive_numeric_score_assertion_issue("", positive_gt_literal_left) is False
+        assert QATesterAgent._summary_has_positive_numeric_score_assertion_issue(
+            positive_summary,
+            "def test_risk_scoring():\n    assert result.priority > 0\n",
+        ) is False
+        assert QATesterAgent._summary_has_positive_numeric_score_assertion_issue(
+            positive_summary,
+            positive_gt_literal_left,
+        ) is True
+        assert QATesterAgent._summary_has_positive_numeric_score_assertion_issue(
+            positive_summary,
+            positive_lt_literal_right,
+        ) is True

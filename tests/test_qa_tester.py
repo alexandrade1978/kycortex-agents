@@ -4240,3 +4240,91 @@ class TestRequiredFieldHelpers:
         tuple_target_code = ast.parse("all((a, b) in required_fields for (a, b) in pairs)", mode="eval").body
         assert QATesterAgent._all_membership_required_names(tuple_target_code, {}) == ([], None)
 
+
+class TestASTPayloadHelpers:
+    def test_body_affects_validation_result_edge_paths(self):
+        import ast
+
+        # multi-target assign → continue (does not match single-name guard)
+        multi_target = ast.parse("a = b = False").body
+        assert QATesterAgent._body_affects_validation_result(multi_target) is False
+
+        # single-target "is_valid" but value not a False constant → falls through
+        non_false_valid_assign = ast.parse("is_valid = some_function()").body
+        assert QATesterAgent._body_affects_validation_result(non_false_valid_assign) is False
+
+        # Call with func.attr not in {append, extend} → continue
+        remove_call = ast.parse("errors.remove(e)").body
+        assert QATesterAgent._body_affects_validation_result(remove_call) is False
+
+        # Call with append but func.value is Attribute (not Name) → continue
+        attr_append = ast.parse("self.errors.append(e)").body
+        assert QATesterAgent._body_affects_validation_result(attr_append) is False
+
+    def test_is_payload_container_expression_none_guard_and_name_match(self):
+        import ast
+
+        assert QATesterAgent._is_payload_container_expression(None, {"details"}) is False
+
+        details_node = ast.parse("details", mode="eval").body
+        assert QATesterAgent._is_payload_container_expression(details_node, {"details"}) is True
+
+        unmatched_node = ast.parse("result_value", mode="eval").body
+        assert QATesterAgent._is_payload_container_expression(unmatched_node, {"details"}) is False
+
+    def test_is_direct_payload_container_expression_guards_and_name_match(self):
+        import ast
+
+        assert QATesterAgent._is_direct_payload_container_expression(None, {"details"}) is False
+
+        details_name = ast.parse("details", mode="eval").body
+        assert QATesterAgent._is_direct_payload_container_expression(details_name, {"details"}) is True
+
+        other_name = ast.parse("result", mode="eval").body
+        assert QATesterAgent._is_direct_payload_container_expression(other_name, {"details"}) is False
+
+    def test_is_request_field_container_expression_guards_and_paths(self):
+        import ast
+
+        assert QATesterAgent._is_request_field_container_expression(None) is False
+
+        dict_attr = ast.parse("request.__dict__", mode="eval").body
+        assert QATesterAgent._is_request_field_container_expression(dict_attr) is True
+
+        vars_with_arg = ast.parse("vars(request)", mode="eval").body
+        assert QATesterAgent._is_request_field_container_expression(vars_with_arg) is True
+
+        vars_no_arg = ast.parse("vars()", mode="eval").body
+        assert QATesterAgent._is_request_field_container_expression(vars_no_arg) is False
+
+    def test_implementation_required_evidence_items_syntax_error_and_empty(self):
+        assert QATesterAgent._implementation_required_evidence_items("def (") == []
+        assert QATesterAgent._implementation_required_evidence_items("") == []
+
+        impl_no_items = "required_evidence = some_function()\ndef validate(r): pass\n"
+        assert QATesterAgent._implementation_required_evidence_items(impl_no_items) == []
+
+        impl_with_items = (
+            "required_evidence = ['proof_of_identity', 'address_proof']\n"
+            "def validate(r):\n"
+            "    if 'proof_of_identity' not in r.details:\n"
+            "        raise ValueError('missing')\n"
+        )
+        result = QATesterAgent._implementation_required_evidence_items(impl_with_items)
+        assert "proof_of_identity" in result
+
+    def test_class_has_payload_like_field_via_plain_assign(self):
+        import ast
+
+        class_with_assign = ast.parse(
+            "class MyClass:\n    name: str = 'x'\n    details = {}\n"
+        ).body[0]
+        assert isinstance(class_with_assign, ast.ClassDef)
+        assert QATesterAgent._class_has_payload_like_field(class_with_assign) is True
+
+        class_without_payload = ast.parse(
+            "class MyClass:\n    name = 'test'\n    count = 42\n"
+        ).body[0]
+        assert QATesterAgent._class_has_payload_like_field(class_without_payload) is False
+
+

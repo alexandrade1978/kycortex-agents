@@ -5532,3 +5532,25 @@ def test_workflow_status_returns_cancelled_for_finished_cancelled_outcome_when_c
     monkeypatch.setattr(project, "is_workflow_cancelled", lambda: False)
 
     assert project._workflow_status() == WorkflowStatus.CANCELLED
+
+
+def test_public_task_history_entry_returns_empty_dict_for_non_dict(tmp_path):
+    # Line 2729: _public_task_history_entry returns {} when entry is not a dict.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_history_entry("not a dict")
+    assert result == {}
+
+
+def test_public_task_history_returns_empty_list_for_non_list(tmp_path):
+    # Line 2747: _public_task_history returns [] when history is not a list.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_history("not a list")
+    assert result == []

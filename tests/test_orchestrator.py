@@ -109,6 +109,10 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     validate_batch_call,
     with_uses_pytest_assertion_context,
     with_uses_pytest_raises,
+    exact_numeric_assertion,
+    exact_len_assertion,
+    find_contract_overreach_signals,
+    visible_risk_factors_require_positive_score,
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
 from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output, _import_insertion_line, _adaptive_prompt_mode, _module_imports_bare_name, _insert_import_lines, _ensure_explicit_dataclass_import, _callable_accepts_context_argument, _ensure_typing_annotation_imports
@@ -23311,4 +23315,356 @@ def test_exact_field_string_assertion_returns_field_when_left_is_string():
     result = exact_field_string_assertion(assert_node)
     assert result is not None
     assert result[0] == "field_name"
+
+
+# ---------------------------------------------------------------------------
+# exact_numeric_assertion
+# ---------------------------------------------------------------------------
+
+
+def test_exact_numeric_assertion_right_numeric_left_expr():
+    # right is numeric constant, left is expression → return (render_expression(left), right_value)
+    code = "result.score == 0.9"
+    tree = ast.parse(code, mode="eval")
+    result = exact_numeric_assertion(tree.body)
+    assert result is not None
+    assert result[1] == 0.9
+
+
+def test_exact_numeric_assertion_left_numeric_right_expr():
+    # L2194: left is numeric constant, right is expression → return (render_expression(right), left_value)
+    code = "1.5 == result.score"
+    tree = ast.parse(code, mode="eval")
+    result = exact_numeric_assertion(tree.body)
+    assert result is not None
+    assert result[0] == "result.score"
+    assert result[1] == 1.5
+
+
+def test_exact_numeric_assertion_both_non_numeric_returns_none():
+    code = "a == b"
+    tree = ast.parse(code, mode="eval")
+    result = exact_numeric_assertion(tree.body)
+    assert result is None
+
+
+def test_exact_numeric_assertion_not_compare_returns_none():
+    code = "42"
+    tree = ast.parse(code, mode="eval")
+    result = exact_numeric_assertion(tree.body)
+    assert result is None
+
+
+def test_exact_numeric_assertion_not_eq_returns_none():
+    code = "result.score != 0.0"
+    tree = ast.parse(code, mode="eval")
+    result = exact_numeric_assertion(tree.body)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# exact_len_assertion
+# ---------------------------------------------------------------------------
+
+
+def test_exact_len_assertion_left_len_right_int():
+    code = "len(results) == 3"
+    tree = ast.parse(code, mode="eval")
+    result = exact_len_assertion(tree.body)
+    assert result is not None
+    assert result[1] == 3
+
+
+def test_exact_len_assertion_left_len_right_non_int_returns_none():
+    # L2313: is_len_call(left) but right is not int constant
+    code = "len(results) == some_variable"
+    tree = ast.parse(code, mode="eval")
+    result = exact_len_assertion(tree.body)
+    assert result is None
+
+
+def test_exact_len_assertion_right_len_left_int():
+    code = "2 == len(items)"
+    tree = ast.parse(code, mode="eval")
+    result = exact_len_assertion(tree.body)
+    assert result is not None
+    assert result[1] == 2
+
+
+def test_exact_len_assertion_no_len_call_returns_none():
+    code = "a == b"
+    tree = ast.parse(code, mode="eval")
+    result = exact_len_assertion(tree.body)
+    assert result is None
+
+
+def test_exact_len_assertion_not_eq_returns_none():
+    code = "len(results) != 3"
+    tree = ast.parse(code, mode="eval")
+    result = exact_len_assertion(tree.body)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# visible_risk_factors_require_positive_score
+# ---------------------------------------------------------------------------
+
+
+def test_visible_risk_factors_non_constant_key_returns_false():
+    # L2215: dict key is not a string constant → skip
+    code = """
+def test_foo():
+    risks = {var_key: [1, 2]}
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    bindings = collect_local_bindings(func)
+    result = visible_risk_factors_require_positive_score(func, bindings)
+    assert result is False
+
+
+def test_visible_risk_factors_non_collection_value_returns_false():
+    # L2218: key is str constant but value is not List/Tuple/Set → skip
+    code = """
+def test_bar():
+    risks = {'adverse_indicators': 'not_a_list'}
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    bindings = collect_local_bindings(func)
+    result = visible_risk_factors_require_positive_score(func, bindings)
+    assert result is False
+
+
+def test_visible_risk_factors_identity_evidence_empty_returns_true():
+    # L2224-2225: key == 'identity_evidence' and item_count == 0 → True
+    code = """
+def test_baz():
+    risks = {'identity_evidence': []}
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    bindings = collect_local_bindings(func)
+    result = visible_risk_factors_require_positive_score(func, bindings)
+    assert result is True
+
+
+def test_visible_risk_factors_adverse_indicators_non_empty_returns_true():
+    code = """
+def test_ok():
+    risks = {'adverse_indicators': ['fraud']}
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    bindings = collect_local_bindings(func)
+    result = visible_risk_factors_require_positive_score(func, bindings)
+    assert result is True
+
+
+# ---------------------------------------------------------------------------
+# find_contract_overreach_signals — zero-risk path
+# ---------------------------------------------------------------------------
+
+
+def test_find_contract_overreach_signals_zero_score_no_risk_factors_skips():
+    # L2398: is_observable_risk_score_target True but visible_risk_factors_require_positive_score False → continue
+    code = """
+def test_zero():
+    score = compute_score(data)
+    assert score == 0.0
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    bindings = collect_local_bindings(func)
+    result = find_contract_overreach_signals(func, bindings)
+    # No risk factors visible → no signal generated
+    assert result == []
+
+
+def test_find_contract_overreach_signals_zero_score_with_risk_factors_signals():
+    # is_observable_risk_score_target True AND visible_risk_factors_require_positive_score True → signal added
+    # 'score' (bare name) passes is_observable_risk_score_target; result.risk_score does not
+    code = """
+def test_risky():
+    factors = {'adverse_indicators': ['fraud']}
+    score = compute_score(data)
+    assert score == 0.0
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    bindings = collect_local_bindings(func)
+    result = find_contract_overreach_signals(func, bindings)
+    assert any("zero-risk" in s for s in result)
+
+
+# ---------------------------------------------------------------------------
+# analyze_test_behavior_contracts — L1864 path
+# ---------------------------------------------------------------------------
+
+
+def test_analyze_test_behavior_contracts_zero_visible_literals_skips():
+    # L1864: exact_field_string_assertion succeeds but visible_field_string_literals returns 0 items → skip
+    code = """
+def test_check():
+    result = validate_request(data)
+    assert result.status == 'approved'
+"""
+    tree = ast.parse(code)
+    # No class/function_map so visible_field_string_literals returns []
+    violations, non_batch = analyze_test_behavior_contracts(
+        tree,
+        validation_rules={},
+        field_value_rules={},
+        batch_rules={},
+        sequence_input_functions=set(),
+        function_names={"validate_request"},
+        function_map={},
+        class_map={},
+    )
+    assert violations == []
+    assert non_batch == []
+
+
+def test_auto_fix_test_type_mismatches_replaces_string_payload_with_expected_literal():
+    code_content = """
+def validate(payload={'user': {'name': 'seed'}}):
+    return payload['user']['name']
+"""
+    test_content = """
+def test_ok():
+    result = validate(payload='x')
+    assert result.status == 'approved'
+"""
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert "payload={'user': {'name': 'seed'}}" in updated
+
+
+def test_auto_fix_test_type_mismatches_falls_back_for_dict_unpack_missing_required_key():
+    code_content = """
+def validate(payload={'user': {'name': 'seed'}, 'id': 'abc'}):
+    return payload['id'], payload['user']['name']
+"""
+    test_content = """
+def test_ok():
+    extra = {'other': 1}
+    result = validate(payload={**extra, 'user': 'placeholder'})
+    assert result.status == 'approved'
+"""
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert "payload={'id': 'sample', 'user': {'name': 'seed'}}" in updated
+
+
+def test_auto_fix_test_type_mismatches_fills_nested_placeholder_like_dict_with_examples():
+    code_content = """
+def validate(payload={'user': {'name': 'seed'}, 'id': 'abc'}):
+    return payload['id'], payload['user']['name']
+"""
+    test_content = """
+def test_ok():
+    result = validate(payload={'user': {'key': 'value'}})
+    assert result.status == 'approved'
+"""
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert "payload={'user': {'name': 'seed'}, 'id': 'sample'}" in updated
+
+
+def test_auto_fix_test_type_mismatches_falls_back_when_source_segment_is_missing(monkeypatch):
+    original_get_source_segment = ast.get_source_segment
+
+    def fake_get_source_segment(source: str, node: ast.AST, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(node, ast.Constant) and node.value == "placeholder":
+            return None
+        return original_get_source_segment(source, node, *args, **kwargs)
+
+    monkeypatch.setattr(ast, "get_source_segment", fake_get_source_segment)
+
+    code_content = """
+def validate(payload={'user': {'name': 'seed'}, 'id': 'abc'}):
+    return payload['id'], payload['user']['name']
+"""
+    test_content = """
+def test_ok():
+    result = validate(payload={'user': 'placeholder'})
+    assert result.status == 'approved'
+"""
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert "payload={'id': 'sample', 'user': {'name': 'seed'}}" in updated
+
+
+def test_auto_fix_test_type_mismatches_resolves_inline_call_subscript_payload():
+    code_content = """
+def build_payload(data=None):
+    return data or {'user': {'name': 'seed'}}
+
+def validate(payload={'user': {'name': 'seed'}}):
+    return payload['user']['name']
+"""
+    test_content = """
+def test_ok():
+    result = validate(payload=build_payload(data={'user': {'name': 'placeholder'}})['user'])
+    assert result.status == 'approved'
+"""
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert "build_payload(data={'user': {'name': 'placeholder', 'user': {'name': 'seed'}}})['user']" in updated
+
+
+def test_auto_fix_test_type_mismatches_replaces_positional_string_payload_literal():
+    code_content = """
+def validate(payload={'user': {'name': 'seed'}}):
+    return payload['user']['name']
+"""
+    test_content = """
+def test_ok():
+    result = validate('x')
+    assert result.status == 'approved'
+"""
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert "validate({'user': {'name': 'seed'}})" in updated
+
+
+def test_auto_fix_test_type_mismatches_keeps_unpack_dict_literal_when_no_nested_example_match():
+    code_content = """
+def validate(payload={'user': {'key': 'seed'}}):
+    return payload['user']['key']
+"""
+    test_content = """
+def test_ok():
+    extra = {'meta': 1}
+    result = validate(payload={**extra, 'user': {'key': 'value'}})
+    assert result.status == 'approved'
+"""
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert updated == test_content
+
+
+def test_auto_fix_test_type_mismatches_handles_nested_required_dict_without_missing_keys(monkeypatch):
+    code_content = """
+def validate(payload={'user': {'name': 'seed'}, 'id': 'abc'}):
+    return payload['user']['name']
+"""
+    test_content = """
+def test_ok():
+    result = validate(payload={'user': {'name': 'seed'}, 'id': 'abc'})
+    assert result.status == 'approved'
+"""
+
+    monkeypatch.setattr(test_ast_analysis_module, "node_looks_like_placeholder", lambda node: True)
+
+    updated = test_ast_analysis_module.auto_fix_test_type_mismatches(test_content, code_content)
+
+    assert "payload={'user': {'name': 'seed'}, 'id': 'abc'}" in updated
 

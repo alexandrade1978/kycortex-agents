@@ -5414,3 +5414,113 @@ def test_metric_and_presence_helpers_filter_invalid_entries(tmp_path):
     assert project._ordered_task_status_presence({"custom": 1}).get("custom") is True
     assert project._ordered_presence(None) == {}
     assert project._ordered_presence({"": 1, "x": 0, "y": True, "z": 2}) == {"z": True}
+
+
+def test_sync_repair_origin_completion_ignores_non_pending_sibling_repairs(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    origin = Task(id="origin", title="Origin", description="desc", assigned_to="coder")
+    repair = Task(
+        id="repair-1",
+        title="Repair",
+        description="desc",
+        assigned_to="coder",
+        repair_origin_task_id="origin",
+        repair_attempt=1,
+        status=TaskStatus.DONE.value,
+        completed_at="2026-01-01T00:00:00+00:00",
+    )
+    sibling_done = Task(
+        id="repair-2",
+        title="Repair2",
+        description="desc",
+        assigned_to="coder",
+        repair_origin_task_id="origin",
+        status=TaskStatus.DONE.value,
+    )
+    project.tasks.extend([origin, repair, sibling_done])
+
+    project._sync_repair_origin_completion(repair, provider_call=None)
+
+    assert sibling_done.status == TaskStatus.DONE.value
+
+
+def test_internal_provider_health_skips_non_dict_redacted_entry(monkeypatch, tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    monkeypatch.setattr(project_state_module, "_redact_payload", lambda value: "not_a_dict")
+
+    result = project._internal_provider_health({"openai": {"status": "ok"}})
+
+    assert result == {}
+
+
+def test_internal_workflow_telemetry_summary_filters_invalid_provider_health_and_fallback_entries(tmp_path, monkeypatch):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    task = Task(id="t1", title="Task 1", description="desc", assigned_to="coder")
+    task.last_provider_call = {
+        "provider": "openai",
+        "success": True,
+        "usage": {1: 2, "bool_metric": True, "tokens": 10},
+        "provider_health": {
+            "": {"status": "ok"},
+            "anthropic": "bad",
+            "ollama": {"status": "ok", "last_outcome": "healthy"},
+        },
+        "fallback_history": ["bad_entry", {"provider": "fallback", "status": "degraded", "has_error_type": True}],
+    }
+    project.tasks.append(task)
+
+    monkeypatch.setattr(
+        project,
+        "_sorted_numeric_metrics",
+        lambda metrics: {
+            key: project._normalize_metric_number(float(value))
+            for key, value in sorted(metrics.items(), key=lambda item: str(item[0]))
+            if isinstance(key, str) and isinstance(value, (int, float)) and not isinstance(value, bool)
+        },
+    )
+
+    summary = project._internal_workflow_telemetry_summary()
+
+    provider_summary = summary["provider_summary"]["openai"]
+    assert provider_summary["usage"].get("tokens") == 10
+    assert "bool_metric" not in provider_summary["usage"]
+    assert summary["provider_health_summary"]["ollama"]["status_counts"].get("ok") == 1
+    assert summary["fallback_summary"]["entry_count"] == 2
+
+
+def test_repair_history_failed_task_count_returns_zero_when_no_supported_source(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    assert project._repair_history_failed_task_count({"failed_task_count": "x"}) == 0
+
+
+def test_workflow_status_returns_cancelled_for_finished_cancelled_outcome_when_cancel_check_is_bypassed(tmp_path, monkeypatch):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.tasks.append(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+    project.workflow_finished_at = "2026-01-01T00:00:00+00:00"
+    project.terminal_outcome = WorkflowOutcome.CANCELLED.value
+
+    monkeypatch.setattr(project, "is_workflow_cancelled", lambda: False)
+
+    assert project._workflow_status() == WorkflowStatus.CANCELLED

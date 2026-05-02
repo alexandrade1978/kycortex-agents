@@ -4719,5 +4719,101 @@ class TestValidationFailureAndConstructorHelpers:
         assert isinstance(lines, list)
 
 
+class TestRuntimeAndPresenceHelpers:
+    def test_runtime_return_kind_from_summary_unknown_type(self):
+        summary = "exact return-shape attribute assumption ('.x' on 'CustomClass')"
+        result = QATesterAgent._runtime_return_kind_from_summary(summary)
+        assert result == ""
+
+    def test_payload_like_parameter_names_empty_parameter(self):
+        # signature with a positional-only or empty-name param
+        result = QATesterAgent._payload_like_parameter_names("func(, data)")
+        assert isinstance(result, list)
+
+    def test_content_has_incomplete_required_evidence_payload_empty_content(self):
+        impl = (
+            "class Validator:\n"
+            "    def validate(self, payload):\n"
+            "        required = ['id_document', 'address_proof', 'income_statement']\n"
+            "        if not set(required).issubset(set(payload.get('documents', []))):\n"
+            "            raise ValueError\n"
+        )
+        assert QATesterAgent._content_has_incomplete_required_evidence_payload("", impl) is False
+        assert QATesterAgent._content_has_incomplete_required_evidence_payload("   ", impl) is False
+        assert QATesterAgent._content_has_incomplete_required_evidence_payload(None, impl) is False
+
+    def test_content_has_incomplete_required_evidence_payload_syntax_error(self):
+        impl = (
+            "class Validator:\n"
+            "    def validate(self, payload):\n"
+            "        required = ['id_document', 'address_proof', 'income_statement']\n"
+            "        if not set(required).issubset(set(payload.get('documents', []))):\n"
+            "            raise ValueError\n"
+        )
+        assert QATesterAgent._content_has_incomplete_required_evidence_payload("def (broken", impl) is False
+
+    def test_content_has_incomplete_required_payload_empty_and_syntax_error(self):
+        impl = "class V:\n    def validate(self, p):\n        if 'x' not in p: raise ValueError\n"
+        assert QATesterAgent._content_has_incomplete_required_payload_for_valid_paths("", impl) is False
+        assert QATesterAgent._content_has_incomplete_required_payload_for_valid_paths("def (", impl) is False
+
+    def test_content_has_incomplete_required_payload_dict_no_overlap(self):
+        impl = "class V:\n    def validate(self, p):\n        if 'required_field' not in p: raise ValueError\n"
+        content = (
+            "def test_valid_processing():\n"
+            "    svc = V()\n"
+            "    result = svc.validate({'unrelated_key': 1})\n"
+        )
+        result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
+        assert isinstance(result, bool)
+
+    def test_implementation_has_presence_only_required_field_validation_empty(self):
+        assert QATesterAgent._implementation_has_presence_only_required_field_validation("") is False
+        assert QATesterAgent._implementation_has_presence_only_required_field_validation(None) is False
+
+    def test_implementation_has_presence_only_required_field_validation_syntax_error(self):
+        assert QATesterAgent._implementation_has_presence_only_required_field_validation("def (broken") is False
+
+    def test_implementation_has_presence_only_required_field_validation_annassign_branch(self):
+        code = (
+            "class Validator:\n"
+            "    def validate(self, r):\n"
+            "        required: list = ['name', 'email']\n"
+            "        for f in required:\n"
+            "            if f not in r:\n"
+            "                raise ValueError\n"
+        )
+        result = QATesterAgent._implementation_has_presence_only_required_field_validation(code)
+        assert isinstance(result, bool)
+
+    def test_block_mentions_all_required_payload_keys_empty_block(self):
+        assert QATesterAgent._block_mentions_all_required_payload_keys("", ["key1"]) is False
+        assert QATesterAgent._block_mentions_all_required_payload_keys("some block", []) is False
+
+    def test_summary_has_presence_only_validation_no_block(self):
+        summary = (
+            "pytest execution: fail\n"
+            "pytest failure details: assert True is False\n"
+        )
+        impl = "class V:\n    def validate(self, p):\n        required = ['x']\n        if 'x' not in p: raise ValueError\n"
+        content = "def test_validation_failure(): pass\n"
+        result = QATesterAgent._summary_has_presence_only_validation_sample_issue(summary, content, impl)
+        assert isinstance(result, bool)
+
+    def test_contract_line_value_non_string_contract(self):
+        assert QATesterAgent._contract_line_value(42, "label") == ""
+        assert QATesterAgent._contract_line_value(None, "label") == ""
+
+    def test_summary_has_presence_only_validation_no_validate_call_in_block(self):
+        summary = (
+            "pytest execution: fail\n"
+            "pytest failure details: assert True is False\n"
+        )
+        impl = "class V:\n    def validate(self, p):\n        required = ['x']\n        if 'x' not in p: raise ValueError\n"
+        content = "def test_validation_failure():\n    result = do_other_thing({'x': 1})\n"
+        result = QATesterAgent._summary_has_presence_only_validation_sample_issue(summary, content, impl)
+        assert result is False
+
+
 
 

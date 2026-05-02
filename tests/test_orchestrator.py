@@ -7718,6 +7718,24 @@ def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_pa
     assert with_uses_pytest_raises(with_node) is True
     assert with_uses_pytest_assertion_context(with_node) is True
 
+    no_invalid_assert_tree = ast.parse(
+        "def test_no_invalid_outcome():\n"
+        "    payload = {'status': 'pending'}\n"
+        "    with pytest.raises(ValueError):\n"
+        "        validate_request(payload)\n"
+        "    result = validate_request(payload)\n"
+        "    assert result is not None\n"
+    )
+    no_invalid_test_node = no_invalid_assert_tree.body[0]
+    no_invalid_call_nodes = [
+        node
+        for node in ast.walk(no_invalid_test_node)
+        if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+    ]
+    no_invalid_parent_map = parent_map(no_invalid_assert_tree)
+    followup_no_invalid_call = next(node for node in no_invalid_call_nodes if node.lineno == 5)
+    assert call_expects_invalid_outcome(no_invalid_test_node, followup_no_invalid_call, no_invalid_parent_map) is False
+
 
 def test_literal_dict_and_field_value_helpers_cover_subscript_call_and_fallback_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))

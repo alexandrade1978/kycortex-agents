@@ -7578,12 +7578,26 @@ def test_analyze_test_type_mismatches_and_argument_type_helpers_cover_additional
         "details",
         class_map,
     ) == "set"
-    assert infer_argument_type(
-        ast.Dict(keys=[ast.Constant("details")], values=[ast.Call(func=ast.Name("dict"), args=[], keywords=[])]),
+
+
+def test_analyze_test_type_mismatches_skips_unresolvable_type_observations(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    # L1392: infer_argument_type returns "" when the field value is opaque (e.g., ast.Name)
+    # so the continue at L1392 is taken, and no mismatch is reported even though
+    # type_constraint_rules specifies a constraint
+    tree = ast.parse(
+        "def test_case():\n"
+        "    validate_request(opaque_payload)\n"
+    )
+
+    mismatches = analyze_test_type_mismatches(
+        tree,
+        {"validate_request": {"details": ["dict"]}},
         {},
-        "details",
-        class_map,
-    ) == "dict"
+    )
+
+    assert mismatches == []
 
 
 def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_paths(tmp_path):

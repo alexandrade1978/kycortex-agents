@@ -4408,4 +4408,85 @@ class TestImplementationAnalysisHelpers:
         assert "x" not in aliases
 
 
+class TestAnnotationAndCallableHelpers:
+    def test_annotation_name_branches(self):
+        import ast
+
+        assert QATesterAgent._annotation_name(None) == ""
+
+        name_node = ast.parse("MyType", mode="eval").body
+        assert QATesterAgent._annotation_name(name_node) == "MyType"
+
+        attr_node = ast.parse("module.MyType", mode="eval").body
+        assert QATesterAgent._annotation_name(attr_node) == "MyType"
+
+        subscript_no_slice = ast.parse("Optional[str]", mode="eval").body
+        result = QATesterAgent._annotation_name(subscript_no_slice)
+        assert result == "str"
+
+        tuple_node = ast.parse("(int, str)", mode="eval").body
+        result = QATesterAgent._annotation_name(tuple_node)
+        assert result in ("int", "str")
+
+        # Tuple where all elements give empty names (e.g. numeric constants)
+        import ast as _ast
+        empty_tuple = _ast.Tuple(elts=[], ctx=_ast.Load())
+        assert QATesterAgent._annotation_name(empty_tuple) == ""
+
+    def test_call_expression_name_attribute_and_unknown(self):
+        import ast
+
+        attr_call = ast.parse("service.handle_request(r)", mode="eval").body
+        assert QATesterAgent._call_expression_name(attr_call) == "handle_request"
+
+        # func is a subscript (not Name or Attribute) → returns ""
+        unknown_call = _ast_call_with_subscript_func()
+        assert QATesterAgent._call_expression_name(unknown_call) == ""
+
+    def test_nested_callable_ref_edge_paths(self):
+        assert QATesterAgent._nested_callable_ref("", "method") == ""
+        assert QATesterAgent._nested_callable_ref("func", "") == ""
+
+        # no dot in normalized_ref → return call_name
+        result = QATesterAgent._nested_callable_ref("handle_request(r)", "validate")
+        assert result == "validate"
+
+        # class.method form but empty class_name part → return call_name
+        result = QATesterAgent._nested_callable_ref(".method(r)", "validate")
+        assert result == "validate"
+
+    def test_implementation_callable_node_guards(self):
+        assert QATesterAgent._implementation_callable_node("def (", "func") is None
+        assert QATesterAgent._implementation_callable_node("def func(): pass", "") is None
+
+    def test_callable_local_assignment_values_annassign_branch(self):
+        import ast
+
+        func = ast.parse(
+            "def handle():\n"
+            "    x: int = 5\n"
+            "    x = 10\n"
+        ).body[0]
+        values = QATesterAgent._callable_local_assignment_values(func, "x")
+        assert len(values) >= 2
+
+    def test_resolved_callable_return_shapes_empty_and_cycle_guards(self):
+        assert QATesterAgent._resolved_callable_return_shapes("def f(): pass", "") == ([], [])
+        assert QATesterAgent._resolved_callable_return_shapes(
+            "def f(): pass", "f", seen_callable_refs={"f"}
+        ) == ([], [])
+
+
+def _ast_call_with_subscript_func():
+    """Helper: build an ast.Call where func is a Subscript (not Name or Attribute)."""
+    import ast as _ast
+    subscript = _ast.Subscript(
+        value=_ast.Name(id="funcs", ctx=_ast.Load()),
+        slice=_ast.Constant(value=0),
+        ctx=_ast.Load(),
+    )
+    return _ast.Call(func=subscript, args=[], keywords=[])
+
+
+
 

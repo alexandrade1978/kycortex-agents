@@ -3974,6 +3974,41 @@ class TestAssertionIssueDetectors:
         assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary_ast, content_in) is True
         assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary_eq, content_eq) is True
 
+    def test_skips_full_band_in_assertions_and_non_eq_comparators(self):
+        summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_happy_path - AssertionError\n"
+            "- Verdict: FAIL"
+        )
+        content = (
+            "def test_happy_path():\n"
+            "    assert result.risk_band in ['low', 'medium', 'high', 'critical']\n"
+            "    assert result.priority != expected_priority\n"
+            "    assert result.severity == result.classification\n"
+        )
+
+        assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary, content) is False
+
+    def test_detects_band_eq_assertions_when_only_one_side_has_canonical_band_literal(self):
+        summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_happy_path - AssertionError\n"
+            "- Verdict: FAIL"
+        )
+        content_left_band = (
+            "def test_happy_path():\n"
+            "    assert 'critical' == result.severity\n"
+        )
+        content_right_band = (
+            "def test_happy_path():\n"
+            "    assert result.priority == 'high'\n"
+        )
+
+        assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary, content_left_band) is True
+        assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary, content_right_band) is True
+
     def test_detects_exact_temporal_and_numeric_score_assertion_issues(self):
         temporal_summary = (
             "Generated test validation:\n"

@@ -87,16 +87,22 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     collect_test_local_types,
     collect_undefined_local_names,
     comparison_implies_partial_batch_result,
+    dict_literal_source_from_examples,
+    dict_node_missing_required_keys,
+    exact_field_string_assertion,
+    example_value_source_for_key,
     extract_literal_dict_keys,
     extract_literal_field_values,
     extract_literal_list_items,
     extract_parametrize_argument_names,
     extract_string_literals,
+    find_unsupported_mock_assertions,
     function_argument_names,
     infer_argument_type,
     infer_call_result_type,
     int_constant_value,
     len_call_matches_batch_result,
+    node_looks_like_placeholder,
     payload_argument_for_validation,
     parent_map,
     resolve_bound_value,
@@ -23196,4 +23202,113 @@ class Foo:
     assert result is False
 
 
+# --- test_ast_analysis.py: L403-404, L409, L730, L1414, L1429-1433, L1442, L1457-1462 ---
+# --- L1471, L1472, L1484, L1489-1491 ---
+
+
+def test_find_unsupported_mock_assertions_call_form():
+    # L403-404: child is ast.Call where func.attr is in MOCK_ASSERTION_METHODS
+    code = """
+def test_foo():
+    some_var.assert_called_with(1, 2)
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    result = find_unsupported_mock_assertions(func, {}, {})
+    assert any("assert_called_with" in issue for issue in result)
+
+
+def test_find_unsupported_mock_assertions_known_type_skips_issue():
+    # L409: known_type_allows_member → continue (no issue added)
+    class_map = {"SomeClass": {"attributes": {"assert_called_with": "method"}}}
+    local_types = {"some_var": "SomeClass"}
+    code = """
+def test_foo():
+    some_var.assert_called_with(1, 2)
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    result = find_unsupported_mock_assertions(func, local_types, class_map)
+    assert result == []
+
+
+def test_infer_argument_type_fallback_call_returns_empty():
+    # L730: fallback_type_from_call returns "" when no args resolve to a valid type
+    code_snippet = "some_func(plain_string)"
+    tree = ast.parse(code_snippet, mode="eval")
+    call_node = tree.body
+    bindings = {"plain_string": ast.Constant(value="hello")}
+    result = infer_argument_type(call_node, bindings, "some_field", {})
+    assert result == ""
+
+
+def test_example_value_source_for_key_boolean_field():
+    # L1414: key contains 'approved' → returns 'True'
+    result = example_value_source_for_key("is_approved", {})
+    assert result == "True"
+
+
+def test_dict_literal_source_from_examples_with_nested_examples():
+    # L1429-1433: key has nested examples → builds nested dict literal
+    dict_keys = {"mydict": ["outer_key"]}
+    dict_key_examples: dict = {
+        "mydict": {},
+        "outer_key": {"nested1": "val1", "nested2": "val2"},
+    }
+    result = dict_literal_source_from_examples("mydict", dict_keys, dict_key_examples)
+    assert "nested1" in result
+    assert "nested2" in result
+    assert "outer_key" in result
+
+
+def test_dict_node_missing_required_keys_non_dict_node():
+    # L1442: node is not ast.Dict → return True
+    result = dict_node_missing_required_keys(ast.Constant(value="hello"), ["key1"])
+    assert result is True
+
+
+def test_node_looks_like_placeholder_dict_with_key_keys():
+    # L1457-1462: Dict node with 'key' as key → True
+    code = "{'key': 'value'}"
+    tree = ast.parse(code, mode="eval")
+    dict_node = tree.body
+    result = node_looks_like_placeholder(dict_node)
+    assert result is True
+
+
+def test_exact_field_string_assertion_returns_none_for_non_compare():
+    # L1471: test is not Compare → return None
+    code = "assert True"
+    tree = ast.parse(code)
+    assert_node = tree.body[0]
+    result = exact_field_string_assertion(assert_node)
+    assert result is None
+
+
+def test_exact_field_string_assertion_returns_none_for_non_eq_op():
+    # L1472-L1473: Compare but ops not Eq/Is → return None
+    code = "assert result.field in {'a', 'b'}"
+    tree = ast.parse(code)
+    assert_node = tree.body[0]
+    result = exact_field_string_assertion(assert_node)
+    assert result is None
+
+
+def test_exact_field_string_assertion_returns_none_when_no_field_name():
+    # L1484: left is Constant str, right has no observed_field_name → return None
+    code = "assert 'hello' == True"
+    tree = ast.parse(code)
+    assert_node = tree.body[0]
+    result = exact_field_string_assertion(assert_node)
+    assert result is None
+
+
+def test_exact_field_string_assertion_returns_field_when_left_is_string():
+    # L1489-1491: left is Constant str, right is Attribute → return (field_name, left)
+    code = "assert 'hello' == result.field_name"
+    tree = ast.parse(code)
+    assert_node = tree.body[0]
+    result = exact_field_string_assertion(assert_node)
+    assert result is not None
+    assert result[0] == "field_name"
 

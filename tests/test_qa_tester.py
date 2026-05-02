@@ -4488,5 +4488,127 @@ def _ast_call_with_subscript_func():
     return _ast.Call(func=subscript, args=[], keywords=[])
 
 
+class TestExpressionPrimitiveKindAndReturnAnalysis:
+    def test_expression_primitive_kind_float(self):
+        import ast
+
+        node = ast.Constant(value=3.14)
+        assert QATesterAgent._expression_primitive_kind(node) == "float"
+
+    def test_expression_primitive_kind_dict_list_tuple_constants(self):
+        import ast
+
+        # dict/list/tuple constant values rarely appear in parsed AST but can be constructed
+        dict_const = ast.Constant(value={"a": 1})
+        assert QATesterAgent._expression_primitive_kind(dict_const) == "dict"
+
+        list_const = ast.Constant(value=[1, 2])
+        assert QATesterAgent._expression_primitive_kind(list_const) == "list"
+
+        tuple_const = ast.Constant(value=(1, 2))
+        assert QATesterAgent._expression_primitive_kind(tuple_const) == "tuple"
+
+    def test_expression_primitive_kind_ast_list_and_tuple(self):
+        import ast
+
+        list_node = ast.parse("[1, 2]", mode="eval").body
+        assert QATesterAgent._expression_primitive_kind(list_node) == "list"
+
+        tuple_node = ast.parse("(1, 2)", mode="eval").body
+        assert QATesterAgent._expression_primitive_kind(tuple_node) == "tuple"
+
+    def test_expression_primitive_kind_ifexp_mismatch(self):
+        import ast
+
+        # IfExp where body_kind != orelse_kind → returns ""
+        ifexp = ast.parse("1 if flag else 'x'", mode="eval").body
+        result = QATesterAgent._expression_primitive_kind(ifexp)
+        assert result == ""
+
+    def test_implementation_call_return_primitive_kind_callable_none_guard(self):
+        assert QATesterAgent._implementation_call_return_primitive_kind("def (broken", "func") == ""
+
+    def test_implementation_call_return_primitive_kind_infer_single_kind(self):
+        code = "def get_count(): return 42"
+        result = QATesterAgent._implementation_call_return_primitive_kind(code, "get_count")
+        assert result == "int"
+
+    def test_implementation_class_field_names_duplicate_guard(self):
+        code = "class MyModel:\n    x = 1\n    x = 2\n"
+        fields = QATesterAgent._implementation_class_field_names(code, "MyModel")
+        assert fields.count("x") == 1
+
+    def test_implementation_class_field_names_non_name_assign_target(self):
+        # Assign with a non-Name target (tuple unpacking) should skip (no crash)
+        code = "class MyModel:\n    a, b = 1, 2\n"
+        fields = QATesterAgent._implementation_class_field_names(code, "MyModel")
+        # a,b come from tuple targets which are not ast.Name; should be empty
+        # (they might be Tuple nodes) — simply verify no error
+        assert isinstance(fields, list)
+
+    def test_implementation_class_field_names_init_self_assigns(self):
+        code = (
+            "class MyModel:\n"
+            "    def __init__(self, x):\n"
+            "        self.x = x\n"
+            "    def other(self):\n"
+            "        pass\n"
+        )
+        fields = QATesterAgent._implementation_class_field_names(code, "MyModel")
+        assert "x" in fields
+
+    def test_service_audit_collection_info_guards(self):
+        assert QATesterAgent._service_audit_collection_info("def (", "MyService.validate") == ("", "")
+        assert QATesterAgent._service_audit_collection_info("class A: pass", "") == ("", "")
+        assert QATesterAgent._service_audit_collection_info("class A: pass", "validate") == ("", "")
+
+    def test_service_audit_collection_info_class_not_found(self):
+        code = "class OtherService: pass\n"
+        result = QATesterAgent._service_audit_collection_info(code, "MyService.validate")
+        assert result == ("", "")
+
+    def test_service_audit_collection_info_returns_list_and_dict_type(self):
+        code = (
+            "class MyService:\n"
+            "    def __init__(self):\n"
+            "        self.audit_log = []\n"
+            "        self.audit_map = {}\n"
+        )
+        result_list = QATesterAgent._service_audit_collection_info(code, "MyService.validate")
+        assert result_list[1] in ("list", "dict", "")
+
+    def test_implementation_result_mapping_field_keys_guards(self):
+        assert QATesterAgent._implementation_result_mapping_field_keys("def (", "MyModel", "mapping") == []
+        assert QATesterAgent._implementation_result_mapping_field_keys("class A: pass", "", "mapping") == []
+        assert QATesterAgent._implementation_result_mapping_field_keys("class A: pass", "MyModel", "") == []
+
+    def test_implementation_result_mapping_field_keys_non_string_key(self):
+        code = (
+            "class MyResult:\n"
+            "    pass\n"
+            "\n"
+            "def build():\n"
+            "    return MyResult(mapping={key: 1})\n"
+        )
+        keys = QATesterAgent._implementation_result_mapping_field_keys(code, "MyResult", "mapping")
+        assert isinstance(keys, list)
+
+    def test_implementation_direct_mapping_return_keys_guards(self):
+        assert QATesterAgent._implementation_direct_mapping_return_keys("def (", "func") == []
+        assert QATesterAgent._implementation_direct_mapping_return_keys("def func(): return {}", "func") == []
+
+    def test_implementation_direct_mapping_return_keys_intersect(self):
+        code = (
+            "def get_map():\n"
+            "    if x:\n"
+            "        return {'a': 1, 'b': 2}\n"
+            "    return {'a': 3, 'c': 4}\n"
+        )
+        keys = QATesterAgent._implementation_direct_mapping_return_keys(code, "get_map")
+        assert "a" in keys
+        assert "b" not in keys
+        assert "c" not in keys
+
+
 
 

@@ -5037,6 +5037,22 @@ class TestContentPayloadPathsAndHelpers:
         result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
         assert result is False
 
+    def test_content_has_incomplete_required_payload_skips_non_string_dict_keys(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if 'name' not in payload: raise ValueError\n"
+            "        if 'email' not in payload: raise ValueError\n"
+        )
+        content = (
+            "def test_happy_path():\n"
+            "    svc = V()\n"
+            "    result = svc.validate({1: 'Ada', 2: 'ada@example.com'})\n"
+            "    assert result is not None\n"
+        )
+        result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
+        assert result is False
+
 
 class TestRiskFactorAndContentPayloadHelpers:
     def test_risk_factor_membership_name_multiple_ops(self):

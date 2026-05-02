@@ -7305,3 +7305,11 @@ def test_assert_expects_false_left_call_positive_and_negative_paths():
 	assert isinstance(negative_assert.test, ast.Compare)
 	assert isinstance(negative_assert.test.left, ast.Call)
 	assert assert_expects_false(negative_assert, negative_assert.test.left) is False
+
+
+def test_invalid_outcome_marker_matches_non_constant_and_boolean_none_paths():
+	assert invalid_outcome_marker_matches(ast.Name(id="status", ctx=ast.Load())) is False
+	assert invalid_outcome_marker_matches(ast.Constant(False)) is True
+	assert invalid_outcome_marker_matches(ast.Constant(None)) is True
+	assert invalid_outcome_marker_matches(ast.Constant("  ReJeCt  ")) is True
+	assert invalid_outcome_marker_matches(ast.Constant(0)) is False

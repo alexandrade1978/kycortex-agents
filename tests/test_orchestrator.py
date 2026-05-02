@@ -8808,6 +8808,12 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     assert isinstance(false_compare.test, ast.Compare)
     assert isinstance(false_compare.test.comparators[0], ast.Call)
     assert assert_expects_false(false_compare, false_compare.test.comparators[0]) is True
+    not_call_assert = parse_assert_node("assert not validate_request(data)")
+    assert isinstance(not_call_assert.test, ast.UnaryOp)
+    assert assert_expects_false(not_call_assert, not_call_assert.test.operand) is True
+    is_false_assert = parse_assert_node("assert validate_request(data) is False")
+    assert isinstance(is_false_assert.test, ast.Compare)
+    assert assert_expects_false(is_false_assert, is_false_assert.test.left) is True
     plain_assert = parse_assert_node("assert validate_request(data)")
     assert isinstance(plain_assert.test, ast.Call)
     assert assert_expects_false(plain_assert, plain_assert.test) is False

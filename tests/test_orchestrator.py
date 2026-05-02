@@ -8023,6 +8023,9 @@ def test_call_argument_value_handles_keywords_constructors_and_non_name_callable
     assert call_argument_value(attr_call, "payload", class_map) is None
     assert call_argument_value(positional_call, "missing", class_map) is None
     assert call_argument_value(positional_call, "payload", class_map) is None
+    # func is neither Name nor Attribute (e.g. subscript) — hits the else: return None branch
+    subscript_call = ast.Call(func=ast.Subscript(value=ast.Name("handlers"), slice=ast.Constant("build")), args=[ast.Constant("v")], keywords=[])
+    assert call_argument_value(subscript_call, "payload", class_map) is None
 
 
 def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_violations(tmp_path):

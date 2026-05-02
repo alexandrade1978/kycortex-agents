@@ -4815,5 +4815,59 @@ class TestRuntimeAndPresenceHelpers:
         assert result is False
 
 
+class TestContentPayloadPathsAndHelpers:
+    def test_payload_like_parameter_names_asterisk_param_is_skipped(self):
+        # "*" as parameter → _parameter_name("*") == "" → triggers continue at line 3492
+        result = QATesterAgent._payload_like_parameter_names("func(*, payload)")
+        assert "payload" in result
+
+    def test_content_has_incomplete_required_evidence_payload_empty_content(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, p):\n"
+            "        required_evidence = ['id', 'passport', 'proof']\n"
+            "        if not set(required_evidence).issubset(set(p.get('documents', []))):\n"
+            "            raise ValueError\n"
+        )
+        assert QATesterAgent._content_has_incomplete_required_evidence_payload("", impl) is False
+        assert QATesterAgent._content_has_incomplete_required_evidence_payload("  ", impl) is False
+
+    def test_content_has_incomplete_required_evidence_payload_syntax_error(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, p):\n"
+            "        required_evidence = ['id', 'passport', 'proof']\n"
+            "        if not set(required_evidence).issubset(set(p.get('documents', []))):\n"
+            "            raise ValueError\n"
+        )
+        assert QATesterAgent._content_has_incomplete_required_evidence_payload("def (broken", impl) is False
+
+    def test_content_has_incomplete_required_payload_empty_content_with_keys(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if 'name' not in payload: raise ValueError\n"
+            "        if 'email' not in payload: raise ValueError\n"
+        )
+        assert QATesterAgent._content_has_incomplete_required_payload_for_valid_paths("", impl) is False
+        assert QATesterAgent._content_has_incomplete_required_payload_for_valid_paths("def (", impl) is False
+
+    def test_content_has_incomplete_required_payload_dict_no_overlap_with_keys(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if 'name' not in payload: raise ValueError\n"
+            "        if 'email' not in payload: raise ValueError\n"
+        )
+        content = (
+            "def test_valid_processing():\n"
+            "    svc = V()\n"
+            "    result = svc.validate({'unrelated_key': 'value'})\n"
+            "    assert result is not None\n"
+        )
+        result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
+        assert isinstance(result, bool)
+
+
 
 

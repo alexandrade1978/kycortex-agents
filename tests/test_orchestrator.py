@@ -34,14 +34,28 @@ from kycortex_agents.orchestration.module_ast_analysis import (
     build_code_test_targets,
     build_module_run_command,
     comparison_required_field,
+    dict_accessed_keys_from_tree,
+    dict_required_keys_from_tree,
+    example_from_default,
+    expand_local_name_aliases,
     extract_batch_rule,
+    extract_constructor_storage_rule,
     extract_indirect_required_fields,
     extract_lookup_field_rules,
     extract_required_fields,
+    extract_return_type_annotation,
+    extract_score_derivation_rule,
+    extract_valid_literal_examples,
     field_selector_name,
+    infer_dict_key_value_examples,
+    inline_score_helper_expression,
     is_probable_third_party_import,
     parse_behavior_contract,
+    render_score_expression,
     self_assigned_attributes,
+    _example_node_looks_like_placeholder,
+    _example_source_is_placeholder,
+    _record_literal_dict_examples,
 )
 from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
@@ -22632,6 +22646,324 @@ def test_validation_runtime_async_annotations_and_non_code_artifact_paths(tmp_pa
     assert normalized != doc_artifact_code
     assert output.artifacts[1].content == normalized
     assert output.artifacts[0].content == doc_artifact_code
+
+
+def test_module_ast_analysis_cover_edge_paths_batch1():
+    """Cover uncovered lines in module_ast_analysis.py: L217, L765-768."""
+    # L217: classmethod binding adds "cls" prefix
+    classmethod_code = """
+class MyService:
+    @classmethod
+    def create(cls, name: str, value: int) -> 'MyService':
+        return cls()
+"""
+    result = analyze_python_module(classmethod_code)
+    # methods should include "cls" from classmethod binding (L217)
+    assert "create(cls, name, value)" in result["classes"]["MyService"]["methods"]
+
+    # L765-768: literal_examples path in build_code_behavior_contract
+    fixture_code = """
+SAMPLE_PAYLOAD = {"name": "test", "value": 1}
+DEFAULT_CONFIG = {"host": "localhost", "port": 8080}
+
+def process(payload: dict) -> dict:
+    return payload
+"""
+    contract = build_code_behavior_contract(fixture_code)
+    assert "Fixture example patterns:" in contract
+
+
+def test_module_ast_analysis_cover_edge_paths_batch2():
+    """Cover uncovered lines: L802-810 example_from_default, L832 _example_node_looks_like_placeholder,
+    L838-839 _example_source_is_placeholder SyntaxError."""
+    import kycortex_agents.orchestration.module_ast_analysis as mmod
+    from unittest.mock import patch
+
+    # L802-803: ast.List non-empty → ast.unparse raises exception → return "['sample']"
+    list_node = ast.List(elts=[ast.Name(id="x", ctx=ast.Load())], ctx=ast.Load())
+    with patch.object(mmod.ast, "unparse", side_effect=Exception("fail")):
+        result = example_from_default(list_node)
+    assert result == "['sample']"
+
+    # L809-810: ast.Dict non-empty → ast.unparse raises exception → return "{'key': 'value'}"
+    dict_node = ast.parse("{'a': 1}", mode="eval").body
+    assert isinstance(dict_node, ast.Dict)
+    with patch.object(mmod.ast, "unparse", side_effect=Exception("fail")):
+        result = example_from_default(dict_node)
+    assert result == "{'key': 'value'}"
+
+    # L802 normal path - empty list
+    empty_list = ast.List(elts=[], ctx=ast.Load())
+    assert example_from_default(empty_list) == "['sample']"
+
+    # L806 normal path - empty dict
+    empty_dict = ast.Dict(keys=[], values=[])
+    assert example_from_default(empty_dict) == "{'key': 'value'}"
+
+    # L832: _example_node_looks_like_placeholder returns False for non-placeholder type
+    int_node = ast.parse("42", mode="eval").body
+    assert _example_node_looks_like_placeholder(int_node) is False
+
+    # L838-839: _example_source_is_placeholder with SyntaxError
+    assert _example_source_is_placeholder("@@@invalid@@@") is False
+    # valid placeholder
+    assert _example_source_is_placeholder("'sample'") is True
+
+
+def test_module_ast_analysis_cover_edge_paths_batch3():
+    """Cover uncovered lines: L860 L866 _record_literal_dict_examples, L884 infer_dict_key_value_examples."""
+    # L860: non-constant key in dict literal → continue
+    raw: dict = {}
+    non_const_key_dict = ast.parse("{x: 1}", mode="eval").body
+    assert isinstance(non_const_key_dict, ast.Dict)
+    _record_literal_dict_examples("test_dict", non_const_key_dict, raw)
+    assert "test_dict" in raw  # created but no entries from non-const keys
+
+    # L866: nested dict in values recurses
+    nested_code = "mydata = {'outer': {'inner': 1}}"
+    tree = ast.parse(nested_code)
+    result = infer_dict_key_value_examples(tree)
+    assert isinstance(result, dict)
+
+    # L884 infer_dict_key_value_examples: assignment with dict literal
+    code = "config = {'host': 'localhost', 'port': 8080}"
+    tree = ast.parse(code)
+    result = infer_dict_key_value_examples(tree)
+    assert "config" in result
+
+
+def test_module_ast_analysis_cover_edge_paths_batch4():
+    """Cover uncovered lines: L899-901, L917, L951-952 in dict_accessed_keys_from_tree."""
+    # L899: node.func.value is ast.Attribute → var_name = node.func.value.attr
+    code_attr_get = """
+def foo(self):
+    return self.config.get('host', 'localhost')
+"""
+    tree = ast.parse(code_attr_get)
+    result = infer_dict_key_value_examples(tree)
+    assert "config" in result
+
+    # L900-901: node.func.value is ast.Call (neither Name nor Attribute) → var_name="" → continue
+    code_call_get = """
+def foo():
+    return get_dict().get('key', 'default')
+"""
+    tree = ast.parse(code_call_get)
+    result = infer_dict_key_value_examples(tree)
+    assert isinstance(result, dict)
+
+    # L917: non-constant key in top-level ast.Dict → continue (key is variable, not string constant)
+    code_nested = """
+x = {var_key: {"inner_key": "val"}}
+"""
+    tree = ast.parse(code_nested)
+    result = infer_dict_key_value_examples(tree)
+    assert isinstance(result, dict)
+
+    # L951-952: subscript with Attribute value → var_name = node.value.attr
+    code_subscript_attr = """
+def validate(self):
+    if self.data['key'] == 'value':
+        pass
+"""
+    tree = ast.parse(code_subscript_attr)
+    result = dict_accessed_keys_from_tree(tree)
+    assert isinstance(result, dict)
+
+
+def test_module_ast_analysis_cover_edge_paths_batch5():
+    """Cover uncovered lines: L995 dict_required_keys_from_tree, L1031, L1133-1134."""
+    # L995: dict_required_keys_from_tree with non-module tree
+    non_module_tree = ast.parse("x = 1").body[0]  # ast.Assign, not ast.Module
+    result = dict_required_keys_from_tree(non_module_tree)
+    assert result == {}
+
+    # L1031: field without 'dict' in type names → continue (has required fields but non-dict type constraint)
+    code_no_dict = """
+def validate(payload: str) -> None:
+    required_fields = ['name', 'email']
+    for field in required_fields:
+        if field not in payload:
+            raise ValueError()
+    if not isinstance(payload, str):
+        raise TypeError()
+"""
+    tree = ast.parse(code_no_dict)
+    result = dict_required_keys_from_tree(tree)
+    assert isinstance(result, dict)
+
+    # L1133-1134: extract_valid_literal_examples ast.unparse exception → pass (skip that entry)
+    import kycortex_agents.orchestration.module_ast_analysis as mmod_local
+    from unittest.mock import patch as local_patch
+
+    code_valid_ex = "SAMPLE_DATA = {'a': 1}"
+    with local_patch.object(mmod_local.ast, "unparse", side_effect=Exception("fail")):
+        result = extract_valid_literal_examples(code_valid_ex)
+    assert result == {}  # exception swallowed, no entry added
+
+    # Normal path: assignment matching keyword with dict/list
+    code_valid_ex2 = """
+VALID_EXAMPLE = {'name': 'test', 'age': 30}
+SAMPLE_DATA = ['a', 'b', 'c']
+NOT_MATCHING = 'some string'
+"""
+    result = extract_valid_literal_examples(code_valid_ex2)
+    assert "VALID_EXAMPLE" in result
+    assert "SAMPLE_DATA" in result
+    assert "NOT_MATCHING" not in result
+
+
+def test_module_ast_analysis_cover_edge_paths_batch6():
+    """Cover uncovered lines: L1217-1218 extract_return_type_annotation, L1236 extract_constructor_storage_rule."""
+    import kycortex_agents.orchestration.module_ast_analysis as mmod
+    from unittest.mock import patch
+
+    # L1217-1218: ast.unparse on returns raises exception → return ""
+    func_node = ast.parse("def foo() -> int: pass").body[0]
+    assert isinstance(func_node, ast.FunctionDef)
+    with patch.object(mmod.ast, "unparse", side_effect=Exception("fail")):
+        result = extract_return_type_annotation("MyClass", func_node)
+    assert result == ""
+
+    # L1213: function starts with '_' → return ""
+    private_node = ast.parse("def _helper() -> int: pass").body[0]
+    assert isinstance(private_node, ast.FunctionDef)
+    result = extract_return_type_annotation(None, private_node)
+    assert result == ""
+
+    # L1236: constructor_name is empty (complex func expr) → continue
+    code_no_constructor = """
+def process(data):
+    return (lambda x: x)(data=data)
+"""
+    tree = ast.parse(code_no_constructor)
+    func = tree.body[0]
+    result = extract_constructor_storage_rule(func)
+    assert result == ""
+
+
+def test_module_ast_analysis_cover_edge_paths_batch7():
+    """Cover uncovered lines: L1284, L1312, L1322, L1332-1333, L1358, L1372 in score helper functions."""
+    import kycortex_agents.orchestration.module_ast_analysis as mmod
+    from unittest.mock import patch, MagicMock
+
+    real_replacer_class = mmod.AstNameReplacer
+
+    # L1284: expand_local_name_aliases fallback when AstNameReplacer.visit returns non-expr
+    # First AstNameReplacer call (inside loop) must succeed to fill replacements,
+    # second call (for the actual expression) must return non-expr → L1284 hit
+    func_code = "def calc(x):\n    result = x + 1\n    return result\n"
+    func_node = ast.parse(func_code).body[0]
+    expr_node = ast.parse("result", mode="eval").body
+
+    call_count_1284 = [0]
+
+    def factory_1284(*args, **kwargs):
+        call_count_1284[0] += 1
+        if call_count_1284[0] == 1:
+            return real_replacer_class(*args, **kwargs)
+        mock = MagicMock()
+        mock.visit.return_value = None
+        return mock
+
+    with patch.object(mmod, "AstNameReplacer", side_effect=factory_1284):
+        result_expr = expand_local_name_aliases(expr_node, func_node)
+    assert isinstance(result_expr, ast.expr)
+
+    # L1312: keyword.arg not in parameter_names → continue
+    helper_code = "def helper(a, b):\n    return a + b\n"
+    func_map = {"helper": ast.parse(helper_code).body[0]}
+    call_node = ast.parse("helper(1, extra=2)", mode="eval").body
+    assert isinstance(call_node, ast.Call)
+    result = inline_score_helper_expression(call_node, func_map)
+    assert isinstance(result, ast.expr)
+
+    # L1322: inline_score_helper_expression fallback when AstNameReplacer.visit returns non-expr
+    helper_code2 = "def helper2(a):\n    return a + 1\n"
+    func_map2 = {"helper2": ast.parse(helper_code2).body[0]}
+    call_node2 = ast.parse("helper2(score)", mode="eval").body
+
+    def factory_1322(*args, **kwargs):
+        mock = MagicMock()
+        mock.visit.return_value = None
+        return mock
+
+    with patch.object(mmod, "AstNameReplacer", side_effect=factory_1322):
+        result = inline_score_helper_expression(call_node2, func_map2)
+    assert isinstance(result, ast.expr)
+
+    # L1332-1333: render_score_expression exception in ast.unparse → fallback to ast_name
+    simple_expr = ast.parse("1 + 1", mode="eval").body
+    with patch.object(mmod.ast, "unparse", side_effect=Exception("fail")):
+        rendered = render_score_expression(simple_expr, {})
+    assert isinstance(rendered, str)
+
+    # L1358: extract_score_derivation_rule where render returns empty (score assignment found)
+    code_empty_score = "def score_from_data():\n    score = helper()\n    return score\n"
+    func = ast.parse(code_empty_score).body[0]
+    with patch.object(mmod, "render_score_expression", return_value=""):
+        rule = extract_score_derivation_rule(func, {})
+    assert rule == ""
+
+    # L1372: direct return with empty score expression
+    code_score_direct = "def calculate_score(x):\n    return x\n"
+    func = ast.parse(code_score_direct).body[0]
+    with patch.object(mmod, "render_score_expression", return_value=""):
+        rule = extract_score_derivation_rule(func, {})
+    assert rule == ""
+
+
+def test_module_ast_analysis_cover_edge_paths_batch8():
+    """Cover uncovered lines: L1515, L1524, L1541, L1544 in extract_required_fields."""
+    # L1515: for loop target is tuple (not Name) → continue
+    code_tuple_target = """
+def validate(payload):
+    fields = ['a', 'b']
+    for k, v in fields:
+        if k not in payload:
+            raise ValueError()
+"""
+    tree = ast.parse(code_tuple_target)
+    func = tree.body[0]
+    result = extract_required_fields(func)
+    assert isinstance(result, list)
+
+    # L1524: loop var doesn't match left side of compare → continue
+    code_nonmatching_var = """
+def validate(payload):
+    fields = ['a', 'b']
+    for field in fields:
+        if other_var not in payload:
+            raise ValueError()
+"""
+    tree = ast.parse(code_nonmatching_var)
+    func = tree.body[0]
+    result = extract_required_fields(func)
+    assert isinstance(result, list)
+
+    # L1541: all() with non-GeneratorExp arg → continue
+    code_all_no_gen = """
+def validate(payload):
+    fields = ['a', 'b']
+    if all(fields):
+        pass
+"""
+    tree = ast.parse(code_all_no_gen)
+    func = tree.body[0]
+    result = extract_required_fields(func)
+    assert isinstance(result, list)
+
+    # L1544: generator comprehension with non-Name iter → continue
+    code_gen_non_name = """
+def validate(payload):
+    fields = ['a', 'b']
+    if all(f in payload for f in get_fields()):
+        pass
+"""
+    tree = ast.parse(code_gen_non_name)
+    func = tree.body[0]
+    result = extract_required_fields(func)
+    assert isinstance(result, list)
 
 
 

@@ -7496,6 +7496,32 @@ def test_analyze_test_behavior_contracts_ignores_unresolved_payloads_and_support
     assert non_batch_calls == []
 
 
+def test_analyze_test_behavior_contracts_skips_dict_key_rules_when_payload_not_resolvable(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    # dict_key_rules configured but payload argument is an opaque Name — extract_literal_dict_keys
+    # returns None, so the continue at L1290 is taken and no violation is reported
+    tree = ast.parse(
+        "def test_case():\n"
+        "    check_request(opaque_var)\n"
+    )
+
+    payload_violations, non_batch_calls = analyze_test_behavior_contracts(
+        tree,
+        {},
+        {},
+        {},
+        set(),
+        set(),
+        {},
+        {},
+        dict_key_rules={"check_request": {"data": ["name", "email"]}},
+    )
+
+    assert payload_violations == []
+    assert non_batch_calls == []
+
+
 def test_payload_and_binding_resolution_helpers_cover_keyword_and_depth_paths(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)

@@ -4029,6 +4029,23 @@ def test_analyze_test_module_allows_mock_style_assertions_with_explicit_mock_set
     assert analysis["unsupported_mock_assertions"] == []
 
 
+def test_analyze_test_module_allows_mock_style_assertions_with_annassign_patch_setup(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    test_content = (
+        "from unittest.mock import patch, MagicMock\n\n"
+        "def test_patched_logger():\n"
+        "    mock_log: MagicMock = patch('logging.getLogger')\n"
+        "    mock_log.start()\n"
+        "    assert mock_log.call_count == 1\n"
+        "    mock_log.stop()\n"
+    )
+
+    analysis = test_ast_analysis_module.analyze_test_module_runtime(test_content, "module_under_test", {})
+
+    assert analysis["unsupported_mock_assertions"] == []
+
+
 def test_analyze_test_module_flags_reserved_request_fixture_and_missing_fixture_imports(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)

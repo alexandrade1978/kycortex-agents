@@ -8028,6 +8028,27 @@ def test_call_argument_value_handles_keywords_constructors_and_non_name_callable
     assert call_argument_value(subscript_call, "payload", class_map) is None
 
 
+def test_infer_argument_type_returns_empty_for_non_builtin_call_and_subscript_no_nested_type(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+    # L847: field_value is an ast.Call with a non-builtin function — falls through to return ""
+    custom_call = ast.Call(func=ast.Name(id="CustomClass"), args=[], keywords=[])
+    payload_dict = ast.Dict(
+        keys=[ast.Constant("status")],
+        values=[custom_call],
+    )
+    result = infer_argument_type(payload_dict, {}, "status", {})
+    assert result == ""
+
+    # L730: resolved is ast.Subscript with value=ast.Call, but the Call has no recognisable
+    # payload argument that resolves to a nested type — fallback_type_from_call returns "" and
+    # the loop exhausts, hitting return "" at L730
+    inner_call = ast.Call(func=ast.Name(id="get_items"), args=[ast.Constant("x")], keywords=[])
+    subscript_node = ast.Subscript(value=inner_call, slice=ast.Constant(0))
+    result2 = infer_argument_type(subscript_node, {}, "field", {})
+    assert result2 == ""
+
+
 def test_validate_batch_call_reports_non_dict_missing_keys_and_nested_field_violations(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"))
     Orchestrator(config)

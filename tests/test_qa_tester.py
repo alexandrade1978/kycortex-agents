@@ -2974,6 +2974,18 @@ class TestRepairHelperSurfaceBlock:
         assert "helper_alias" in block
         assert "Flagged helper-surface references from validation:" in block
 
+    def test_includes_symbols_section_only_when_usages_absent(self, tmp_path):
+        # Arc 357->362: symbols non-empty, usages empty → if usages: is False
+        agent = _build_agent(tmp_path)
+        block = agent._repair_helper_surface_block(
+            {
+                "repair_helper_surface_symbols": ["my_helper (line 5)"],
+            }
+        )
+        assert "Flagged helper surfaces to remove during repair:" in block
+        assert "my_helper" in block
+        assert "Flagged helper-surface references from validation:" not in block
+
 
 class TestRepairFocusBlock:
     def test_guides_missing_request_field_scaffold(self, monkeypatch):
@@ -3044,6 +3056,123 @@ class TestRepairFocusBlock:
         assert "Do not swap that missing-field case to optional downstream business keys such as risk_score, risk_band" in block
         assert "Every valid happy-path or batch payload must include all required payload keys named by the current validator" in block
         assert "The current validator requires the full evidence set ['ID', 'Address'] before processing" in block
+
+    def test_datetime_undefined_without_direct_import_style_guidance(self, monkeypatch):
+        # Arc 462->467: "datetime" undefined in summary, _implementation_prefers_direct_datetime_import=False
+        _patch_repair_focus_defaults(monkeypatch)
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- name 'datetime' is not defined\n- Verdict: FAIL",
+            "",
+            "",
+        )
+        assert "referenced `datetime` without importing it" in block
+        assert "The implementation already uses `from datetime import datetime`" not in block
+
+    def test_guides_required_request_fields_without_missing_field_detail(self, monkeypatch):
+        # Arc 492->506: required_request_fields non-empty, required_payload_keys empty,
+        # validation_missing_request_field empty → if validation_missing_request_field: is False
+        _patch_repair_focus_defaults(
+            monkeypatch,
+            _implementation_required_request_fields=lambda *args, **kwargs: ["request_id", "details"],
+            _validation_failure_missing_request_field=lambda *args, **kwargs: "",
+        )
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- Verdict: FAIL",
+            "implementation_code",
+            "existing_tests",
+        )
+        assert "The current validator checks top-level request field presence on the request object" in block
+        assert "Keep the request-like object missing" not in block
+
+    def test_guides_missing_request_field_without_scaffold_line(self, monkeypatch):
+        # Arc 497->502: validation_missing_request_field non-empty but validation_request_like_line empty
+        _patch_repair_focus_defaults(
+            monkeypatch,
+            _implementation_required_request_fields=lambda *args, **kwargs: ["request_id", "details"],
+            _validation_failure_missing_request_field=lambda *args, **kwargs: "request_id",
+            _validation_failure_request_like_object_scaffold_line=lambda *args, **kwargs: ("", ""),
+        )
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- Verdict: FAIL",
+            "implementation_code",
+            "existing_tests",
+        )
+        assert "The current validator checks top-level request field presence on the request object" in block
+        assert "Keep the request-like object missing `request_id` exactly as shown" in block
+        assert "Keep the constructor-free invalid object line exactly as scaffolded" not in block
+
+    def test_presence_only_sample_issue_without_payload_keys(self, monkeypatch):
+        # Arc 592->597: presence_only_validation_sample_issue=True, required_payload_keys empty
+        _patch_repair_focus_defaults(
+            monkeypatch,
+            _summary_has_presence_only_validation_sample_issue=lambda *args, **kwargs: True,
+        )
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- Verdict: FAIL",
+            "",
+            "",
+        )
+        assert "omit at least one required field or choose another input" in block
+        assert "only requires the presence of" not in block
+
+    def test_presence_only_sample_issue_with_payload_keys_but_no_omitted_key(self, monkeypatch):
+        # Arc 597->602: presence_only_validation_sample_issue=True, required_payload_keys non-empty,
+        # validation_omitted_payload_key empty → if validation_omitted_payload_key: is False
+        _patch_repair_focus_defaults(
+            monkeypatch,
+            _summary_has_presence_only_validation_sample_issue=lambda *args, **kwargs: True,
+            _implementation_required_payload_keys=lambda *args, **kwargs: ["name", "email"],
+        )
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- Verdict: FAIL",
+            "",
+            "",
+        )
+        assert "only requires the presence of" in block
+        assert "scaffolded omission on the validator-required key" not in block
+
+    def test_presence_only_non_validation_keys_without_required_keys(self, monkeypatch):
+        # Arc 608->614: non_validation_payload_keys non-empty, required_payload_keys empty
+        _patch_repair_focus_defaults(
+            monkeypatch,
+            _summary_has_presence_only_validation_sample_issue=lambda *args, **kwargs: True,
+            _implementation_non_validation_payload_keys=lambda *args, **kwargs: ["risk_score", "risk_band"],
+        )
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- Verdict: FAIL",
+            "",
+            "",
+        )
+        assert "Do not swap that missing-field case to optional downstream business keys" in block
+        assert "remains validation-valid here" not in block
+
+    def test_payload_runtime_issue_without_named_payload_keys(self, monkeypatch):
+        # Arc 618->624: required_payload_runtime_issue=True, required_payload_keys empty
+        _patch_repair_focus_defaults(
+            monkeypatch,
+            _summary_has_required_payload_runtime_issue=lambda *args, **kwargs: True,
+        )
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- Verdict: FAIL",
+            "",
+            "",
+        )
+        assert "Do not keep partial payloads in supposedly valid scenarios" in block
+        assert "Every valid happy-path or batch payload must include" not in block
+
+    def test_evidence_runtime_issue_without_named_evidence_items(self, monkeypatch):
+        # Arc 628->634: required_evidence_runtime_issue=True, required_evidence_items empty (default)
+        _patch_repair_focus_defaults(
+            monkeypatch,
+            _summary_has_required_evidence_runtime_issue=lambda *args, **kwargs: True,
+        )
+        block = QATesterAgent._repair_focus_block(
+            "Generated test validation:\n- Verdict: FAIL",
+            "",
+            "",
+        )
+        assert "Keep risk-scoring, audit-trail, happy-path, and batch scenarios fully valid" in block
+        assert "The current validator requires the full evidence set" not in block
 
 
 class TestRepairRequestPayloadLiterals:

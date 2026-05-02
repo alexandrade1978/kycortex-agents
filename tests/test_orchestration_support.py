@@ -7291,3 +7291,17 @@ def test_call_has_negative_expectation_assert_path_and_orphan_parent_map():
 
 	# Cover parent-not-found early return path (line 1104).
 	assert call_has_negative_expectation(call_node, {}) is False
+
+
+def test_assert_expects_false_left_call_positive_and_negative_paths():
+	positive_assert = ast.parse("assert validate_request(data) == False").body[0]
+	assert isinstance(positive_assert, ast.Assert)
+	assert isinstance(positive_assert.test, ast.Compare)
+	assert isinstance(positive_assert.test.left, ast.Call)
+	assert assert_expects_false(positive_assert, positive_assert.test.left) is True
+
+	negative_assert = ast.parse("assert validate_request(data) > 0").body[0]
+	assert isinstance(negative_assert, ast.Assert)
+	assert isinstance(negative_assert.test, ast.Compare)
+	assert isinstance(negative_assert.test.left, ast.Call)
+	assert assert_expects_false(negative_assert, negative_assert.test.left) is False

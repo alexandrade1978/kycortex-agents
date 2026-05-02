@@ -4155,3 +4155,88 @@ class TestAssertionIssueDetectors:
             positive_summary,
             positive_lt_literal_right,
         ) is True
+
+
+class TestDatetimeHelpers:
+    def test_content_datetime_helper_guards_return_false_for_non_str(self):
+        assert QATesterAgent._content_has_direct_datetime_import(None) is False
+        assert QATesterAgent._content_has_direct_datetime_import("") is False
+        assert QATesterAgent._content_has_datetime_module_import(None) is False
+        assert QATesterAgent._content_has_datetime_module_import("") is False
+        assert QATesterAgent._content_has_bare_datetime_reference(None) is False
+        assert QATesterAgent._content_has_bare_datetime_reference("") is False
+        assert QATesterAgent._content_has_direct_datetime_reference(None) is False
+        assert QATesterAgent._content_has_direct_datetime_reference("") is False
+
+    def test_content_datetime_helpers_match_positive_patterns(self):
+        direct_import = "from datetime import datetime, timezone\n"
+        module_import = "import datetime\n"
+        bare_ref = "dt = datetime(2026, 1, 1)\n"
+        direct_ref = "ts = datetime.now()\n"
+
+        assert QATesterAgent._content_has_direct_datetime_import(direct_import) is True
+        assert QATesterAgent._content_has_direct_datetime_import(module_import) is False
+        assert QATesterAgent._content_has_datetime_module_import(module_import) is True
+        assert QATesterAgent._content_has_datetime_module_import(direct_import) is False
+        assert QATesterAgent._content_has_bare_datetime_reference(bare_ref) is True
+        assert QATesterAgent._content_has_bare_datetime_reference(module_import) is False
+        assert QATesterAgent._content_has_direct_datetime_reference(direct_ref) is True
+        assert QATesterAgent._content_has_direct_datetime_reference(module_import) is False
+
+    def test_missing_datetime_import_issue_with_content_having_import_returns_false(self):
+        summary = "Undefined local names: datetime"
+        content_with_import = "from datetime import datetime\ndt = datetime(2026, 1, 1)\n"
+        content_bare_no_import = "dt = datetime(2026, 1, 1)\n"
+        content_no_ref = "result = service.handle_request(request)\n"
+
+        assert QATesterAgent._summary_has_missing_datetime_import_issue("") is False
+        assert QATesterAgent._summary_has_missing_datetime_import_issue("no datetime issue") is False
+        assert QATesterAgent._summary_has_missing_datetime_import_issue(summary) is True
+        assert QATesterAgent._summary_has_missing_datetime_import_issue(summary, content_with_import) is False
+        assert QATesterAgent._summary_has_missing_datetime_import_issue(summary, content_bare_no_import) is True
+        assert QATesterAgent._summary_has_missing_datetime_import_issue(summary, content_no_ref) is False
+
+    def test_implementation_prefers_datetime_module_import_branches(self):
+        direct_import_impl = "from datetime import datetime\n\ndef handle(r):\n    return datetime.now()\n"
+        module_import_impl = "import datetime\n\ndef handle(r):\n    return datetime.datetime.now()\n"
+        dt_datetime_ref = "def handle(r):\n    return datetime.datetime.now()\n"
+        dt_timezone_ref = "def handle(r):\n    return datetime.timezone.utc\n"
+
+        assert QATesterAgent._implementation_prefers_datetime_module_import("") is False
+        assert QATesterAgent._implementation_prefers_datetime_module_import(None) is False
+        assert QATesterAgent._implementation_prefers_datetime_module_import(direct_import_impl) is False
+        assert QATesterAgent._implementation_prefers_datetime_module_import(module_import_impl) is True
+        assert QATesterAgent._implementation_prefers_datetime_module_import(dt_datetime_ref) is True
+        assert QATesterAgent._implementation_prefers_datetime_module_import(dt_timezone_ref) is True
+
+
+class TestRequiredFieldHelpers:
+    def test_is_required_field_collection_name_guards_and_patterns(self):
+        assert QATesterAgent._is_required_field_collection_name("") is False
+        assert QATesterAgent._is_required_field_collection_name("optional_fields") is False
+        assert QATesterAgent._is_required_field_collection_name("required_fields") is True
+        assert QATesterAgent._is_required_field_collection_name("required_keys") is True
+        assert QATesterAgent._is_required_field_collection_name("required_payload_keys") is True
+        assert QATesterAgent._is_required_field_collection_name("required_something_else") is False
+
+    def test_is_required_evidence_collection_name(self):
+        assert QATesterAgent._is_required_evidence_collection_name("required_documents") is True
+        assert QATesterAgent._is_required_evidence_collection_name("required_evidence") is True
+        assert QATesterAgent._is_required_evidence_collection_name("documents") is False
+        assert QATesterAgent._is_required_evidence_collection_name("") is False
+
+    def test_all_membership_required_names_guard_exits(self):
+        import ast
+
+        # Not an `all()` call
+        non_all = ast.parse("x in collection", mode="eval").body
+        assert QATesterAgent._all_membership_required_names(non_all, {}) == ([], None)
+
+        # `all()` with multiple generators
+        multi_gen = ast.parse("all(f in required_fields and g in required_keys for f in x for g in y)", mode="eval").body
+        assert QATesterAgent._all_membership_required_names(multi_gen, {}) == ([], None)
+
+        # `all()` with tuple target instead of Name
+        tuple_target_code = ast.parse("all((a, b) in required_fields for (a, b) in pairs)", mode="eval").body
+        assert QATesterAgent._all_membership_required_names(tuple_target_code, {}) == ([], None)
+

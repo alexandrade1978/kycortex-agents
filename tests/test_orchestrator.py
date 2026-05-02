@@ -61,6 +61,8 @@ from kycortex_agents.orchestration.repair_analysis import (
     dataclass_default_order_repair_examples,
     missing_import_nameerror_details,
     plain_class_field_default_factory_details,
+    class_field_uses_empty_default,
+    test_requires_non_empty_result_field,
 )
 from kycortex_agents.orchestration.repair_test_analysis import (
     qa_repair_should_reuse_failed_test_artifact,
@@ -147,8 +149,10 @@ from kycortex_agents.orchestration import (
 )
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.anthropic_provider import AnthropicProvider
+from kycortex_agents.providers.model_capabilities import ModelCapabilities
 from kycortex_agents.providers.ollama_provider import OllamaProvider
 from kycortex_agents.providers.openai_provider import OpenAIProvider
+from kycortex_agents.orchestration.model_adaptive_policy import _select_mode_from_budget_and_capability
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, FailureCategory, TaskStatus, WorkflowOutcome, WorkflowStatus
 
 
@@ -22964,6 +22968,232 @@ def validate(payload):
     func = tree.body[0]
     result = extract_required_fields(func)
     assert isinstance(result, list)
+
+
+# --- model_adaptive_policy: L100-104 coverage ---
+
+
+def test_select_mode_context_window_large_returns_rich():
+    # L100-101: context_window >= 200_000 → return "rich"
+    caps = ModelCapabilities(provider="openai", context_window=200_000)
+    result = _select_mode_from_budget_and_capability(
+        default_mode="balanced",
+        compact_threshold_tokens=1000,
+        max_tokens=3000,
+        capabilities=caps,
+    )
+    assert result == "rich"
+
+
+def test_select_mode_max_tokens_large_returns_rich():
+    # L102-103: max_tokens >= 6000 → return "rich"
+    caps = ModelCapabilities(provider="openai", context_window=8192)
+    result = _select_mode_from_budget_and_capability(
+        default_mode="balanced",
+        compact_threshold_tokens=1000,
+        max_tokens=6000,
+        capabilities=caps,
+    )
+    assert result == "rich"
+
+
+def test_select_mode_fallback_returns_normalized_default():
+    # L104: return normalized_default_mode (no special threshold hit)
+    caps = ModelCapabilities(provider="openai", context_window=8192)
+    result = _select_mode_from_budget_and_capability(
+        default_mode="balanced",
+        compact_threshold_tokens=1000,
+        max_tokens=2000,
+        capabilities=caps,
+    )
+    assert result == "balanced"
+
+
+# --- validation_reporting: L217-218 and L250 coverage ---
+
+
+def test_build_code_validation_summary_invalid_dataclass_field_usages():
+    # L217-218: 'invalid_dataclass_field_usages' key present in code_analysis
+    summary = build_code_validation_summary(
+        {
+            "syntax_ok": True,
+            "third_party_imports": [],
+            "invalid_dataclass_field_usages": ["SomeClass.field_name"],
+        },
+        "",
+    )
+    assert "Non-dataclass field(...) usages" in summary
+    assert "SomeClass.field_name" in summary
+
+
+def test_build_repair_validation_summary_non_dict_validation():
+    # L250: validation is not a dict → return fallback_message
+    class FakeTask:
+        last_error = "some error message"
+        output = "output text"
+
+    result = build_repair_validation_summary(FakeTask(), "code_validation", "not_a_dict")
+    assert result == "some error message"
+
+
+# --- context_building: L132, L169, L198, L201 coverage ---
+
+
+def test_context_module_task_runtime_returns_code_engineer_task_from_project():
+    # L132: returns code_engineer task with default_module_name from project.tasks
+    t1 = Task(id="t_eng", title="Implement module_foobar", description="desc", assigned_to="code_engineer")
+    proj = ProjectState(project_name="test", goal="goal", tasks=[t1])
+    result = context_building_module.context_module_task_runtime(proj, None, None)
+    assert result is not None
+    assert result.id == "t_eng"
+
+
+def test_code_artifact_context_runtime_breaks_on_non_code_engineer_origin():
+    # L169: break in origin_task loop when origin is not code_engineer
+    t_repair = Task(
+        id="t_repair",
+        title="Implement module_repbaz",
+        description="desc",
+        assigned_to="code_engineer",
+        repair_origin_task_id="t_origin",
+        output="def repbaz(): pass",
+    )
+    t_origin = Task(id="t_origin", title="Origin task", description="desc", assigned_to="qa_tester")
+    proj = ProjectState(project_name="test", goal="goal", tasks=[t_repair, t_origin])
+    result = context_building_module.code_artifact_context_runtime(t_repair, proj)
+    assert isinstance(result, dict)
+    assert "module_name" in result
+
+
+def test_code_artifact_context_runtime_uses_raw_content_fallback():
+    # L198: code_content set from output_payload['raw_content'] when output is empty
+    t = Task(
+        id="t_raw",
+        title="Implement module_rawfoo",
+        description="desc",
+        assigned_to="code_engineer",
+        output="",
+        output_payload={"raw_content": "def rawfoo(): pass"},
+    )
+    proj = ProjectState(project_name="test", goal="goal", tasks=[t])
+    result = context_building_module.code_artifact_context_runtime(t, proj)
+    assert isinstance(result, dict)
+    assert "module_name" in result
+
+
+def test_code_artifact_context_runtime_returns_empty_when_no_code():
+    # L201: return {} when code_content is empty string
+    t = Task(
+        id="t_nocode",
+        title="Implement module_nocode",
+        description="desc",
+        assigned_to="code_engineer",
+        output="",
+    )
+    result = context_building_module.code_artifact_context_runtime(t)
+    assert result == {}
+
+
+# --- validation_analysis: L278, L280, L285, L392 coverage ---
+
+
+def test_pytest_contract_overreach_signals_skips_non_action_collection():
+    # L278: 'action' not in collection_name → continue
+    test_exec = {
+        "stdout": (
+            "FAILED test_foo.py::test_bar\n"
+            "E   AssertionError: assert 'some_key' in {action_id='some_id' x}= <SomeObj>.some_map\n"
+            "AssertionError: assert 'some_key' in {action_id='some_id' x}= <SomeObj>.some_map\n"
+        ),
+    }
+    result = pytest_contract_overreach_signals(test_exec)
+    assert result == []
+
+
+def test_pytest_contract_overreach_signals_skips_when_asserted_key_equals_action_id():
+    # L280: asserted_key == action_id → continue
+    test_exec = {
+        "stdout": (
+            "FAILED test_foo.py::test_bar\n"
+            "E   AssertionError: assert 'create' in {action_id='create' x}= <SomeObj>.action_map\n"
+            "AssertionError: assert 'create' in {action_id='create' x}= <SomeObj>.action_map\n"
+        ),
+    }
+    result = pytest_contract_overreach_signals(test_exec)
+    assert result == []
+
+
+def test_pytest_contract_overreach_signals_deduplicates_repeated_signal():
+    # L284-285: same signal seen twice → second occurrence skipped
+    overreach_line = "AssertionError: assert 'create' in {action_id='submit' x}= <SomeObj>.action_map"
+    test_exec = {
+        "stdout": (
+            f"FAILED test_foo.py::test_bar\n"
+            f"E   {overreach_line}\n"
+            f"{overreach_line}\n"
+            f"{overreach_line}\n"
+        ),
+    }
+    result = pytest_contract_overreach_signals(test_exec)
+    assert len(result) == 1
+
+
+def test_validation_has_only_warnings_returns_false_when_test_analysis_not_dict():
+    # L392: test_analysis is not a dict → return False
+    result = validation_has_only_warnings({"test_analysis": "not_a_dict"})
+    assert result is False
+
+
+# --- repair_analysis: L218, L751, L799, L802 coverage ---
+
+
+def test_dataclass_default_order_repair_examples_skips_non_name_annassign_target():
+    # L218: AnnAssign target is Attribute (not Name) → continue, still processes valid fields
+    code = """
+import dataclasses
+
+@dataclasses.dataclass
+class Foo:
+    a.b: int = 5
+    x: int = 1
+    y: str
+"""
+    result = dataclass_default_order_repair_examples(code)
+    assert any("Foo" in r for r in result)
+    assert any("y" in r for r in result)
+
+
+def test_test_requires_non_empty_result_field_continue_on_non_compare_assert():
+    # L751: assert statement where test is neither Attribute nor Compare → continue
+    code = """
+def test_something():
+    assert True
+"""
+    tree = ast.parse(code)
+    func = tree.body[0]
+    result = test_requires_non_empty_result_field(func, "some_field")
+    assert result is False
+
+
+def test_class_field_uses_empty_default_skips_non_name_annassign_target():
+    # L799: AnnAssign with Attribute target → skip; still finds x
+    code = """
+class Foo:
+    a.b: int = None
+    x: str = None
+"""
+    result = class_field_uses_empty_default(code, "Foo", "x")
+    assert result is True
+
+
+def test_class_field_uses_empty_default_returns_false_when_field_not_found():
+    # L802: all AnnAssign statements exhausted without matching field → return False
+    code = """
+class Foo:
+    x: str = None
+"""
+    result = class_field_uses_empty_default(code, "Foo", "nonexistent_field")
+    assert result is False
 
 
 

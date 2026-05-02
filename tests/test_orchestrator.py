@@ -7690,6 +7690,30 @@ def test_negative_expectation_helpers_cover_pytest_raises_and_invalid_outcome_pa
         assert call_has_negative_expectation(negative_none_call, none_parent_map_by_node) is True
         assert call_expects_invalid_outcome(none_test_node, followup_none_call, none_parent_map_by_node) is True
 
+    for bool_attr in ("valid", "is_valid", "success", "accepted"):
+        not_tree = ast.parse(
+            f"def test_not_{bool_attr}_case():\n"
+            f"    payload = {{'{bool_attr}': False}}\n"
+            "    with pytest.raises(ValueError):\n"
+            "        validate_request(payload)\n"
+            "    result = validate_request(payload)\n"
+            f"    assert not payload.{bool_attr}\n"
+        )
+        not_test_node = not_tree.body[0]
+        assert isinstance(not_test_node, ast.FunctionDef)
+        not_call_nodes = [
+            node
+            for node in ast.walk(not_test_node)
+            if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+        ]
+        not_parent_map_by_node = parent_map(not_tree)
+
+        negative_not_call = next(node for node in not_call_nodes if node.lineno == 4)
+        followup_not_call = next(node for node in not_call_nodes if node.lineno == 5)
+
+        assert call_has_negative_expectation(negative_not_call, not_parent_map_by_node) is True
+        assert call_expects_invalid_outcome(not_test_node, followup_not_call, not_parent_map_by_node) is True
+
     with_node = parse_with_node("with pytest.raises(ValueError):\n    validate_request(data)\n")
     assert with_uses_pytest_raises(with_node) is True
     assert with_uses_pytest_assertion_context(with_node) is True
@@ -8835,6 +8859,12 @@ def test_batch_result_helpers_cover_reverse_comparisons_and_fallback_cases(tmp_p
     for bool_attr in ("valid", "is_valid", "success", "accepted"):
         payload_none_assert = parse_assert_node(f"assert payload.{bool_attr} is None")
         assert assert_expects_invalid_outcome(payload_none_assert.test, None, "payload") is True
+    for bool_attr in ("valid", "is_valid", "success", "accepted"):
+        req_not_assert = parse_assert_node(f"assert not request.{bool_attr}")
+        assert assert_expects_invalid_outcome(req_not_assert.test, None, "request") is True
+    for bool_attr in ("valid", "is_valid", "success", "accepted"):
+        payload_not_assert = parse_assert_node(f"assert not payload.{bool_attr}")
+        assert assert_expects_invalid_outcome(payload_not_assert.test, None, "payload") is True
     false_result_assert = parse_assert_node("assert result is False")
     assert assert_expects_invalid_outcome(false_result_assert.test, "result", None) is True
     with_node = parse_with_node("with context_manager:\n    validate_request(data)\n")

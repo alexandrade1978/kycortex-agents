@@ -6,6 +6,7 @@ from typing import Any, cast
 import pytest
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
+from kycortex_agents.memory import project_state as project_state_module
 from kycortex_agents.memory.project_state import PROJECT_STATE_SCHEMA_VERSION, ProjectState, Task
 from kycortex_agents.memory.state_store import resolve_state_store
 from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, DecisionRecord, FailureCategory, TaskStatus, WorkflowOutcome, WorkflowStatus
@@ -5125,6 +5126,87 @@ def test_create_budget_decomposition_task_existing_updates(tmp_path):
     repair_context2 = {"cycle": 1, "reason": "updated"}
     result = project._create_budget_decomposition_task("t1", repair_context2)
     assert result is not None
+
+
+def test_create_budget_decomposition_task_returns_none_when_source_task_missing(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    result = project._create_budget_decomposition_task("missing", {"cycle": 1})
+
+    assert result is None
+
+
+def test_create_budget_decomposition_task_returns_none_for_non_positive_cycle(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.add_task(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+
+    result = project._create_budget_decomposition_task("t1", {"cycle": 0})
+
+    assert result is None
+
+
+def test_pending_repair_is_still_required_false_without_origin_task_id(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    task = Task(id="repair", title="Repair", description="desc", assigned_to="coder")
+
+    assert project._pending_repair_is_still_required(task) is False
+
+
+def test_pending_repair_is_still_required_false_when_source_failure_task_missing(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    task = Task(
+        id="repair",
+        title="Repair",
+        description="desc",
+        assigned_to="coder",
+        repair_origin_task_id="origin",
+        repair_context={"source_failure_task_id": "missing"},
+    )
+
+    assert project._pending_repair_is_still_required(task) is False
+
+
+def test_migrate_persisted_state_rejects_non_dict_payload():
+    with pytest.raises(StatePersistenceError, match="Project state data is invalid"):
+        ProjectState._migrate_persisted_state([], "state.json")
+
+
+def test_migrate_persisted_state_rejects_schema_version_below_legacy():
+    with pytest.raises(StatePersistenceError, match="schema version is invalid"):
+        ProjectState._migrate_persisted_state({"schema_version": -1}, "state.json")
+
+
+def test_migrate_persisted_state_rejects_missing_migration_path(monkeypatch):
+    monkeypatch.setattr(project_state_module, "_PROJECT_STATE_SCHEMA_MIGRATIONS", {})
+    with pytest.raises(StatePersistenceError, match="has no migration path"):
+        ProjectState._migrate_persisted_state({"schema_version": 0}, "state.json")
+
+
+def test_migrate_persisted_state_rejects_non_advancing_migration(monkeypatch):
+    def _stuck_migration(data: dict[str, Any]) -> dict[str, Any]:
+        migrated = dict(data)
+        migrated["schema_version"] = 0
+        return migrated
+
+    monkeypatch.setattr(project_state_module, "_PROJECT_STATE_SCHEMA_MIGRATIONS", {0: _stuck_migration})
+    with pytest.raises(StatePersistenceError, match="did not advance the version"):
+        ProjectState._migrate_persisted_state({"schema_version": 0}, "state.json")
 
 
 def test_override_task_missing_returns_false(tmp_path):

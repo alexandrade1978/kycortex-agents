@@ -726,6 +726,16 @@ class TestPayloadExpressionHelpers:
             aliases,
         ) is False
 
+        # Arc 1636: node is None → return False immediately
+        assert QATesterAgent._expression_references_payload_value(None, aliases) is False
+
+        # Arc 1640->1645: ast.Call with Attribute func that is NOT .get → condition at
+        # line 1640 is False (func.attr == "get" is False), jumps to line 1645.
+        assert QATesterAgent._expression_references_payload_value(
+            ast.parse("payload.values()", mode="eval").body,
+            aliases,
+        ) is False
+
 
 class TestPayloadGuardHelpers:
     def test_detects_nested_payload_value_guards(self):
@@ -795,6 +805,59 @@ class TestPayloadGuardHelpers:
             literal_compare,
             QATesterAgent._ast_parent_map(literal_func),
         ) is False
+
+    def test_loop_iterated_required_names_exits_when_no_for_in_parent_chain(self):
+        # Arc 1693->1706: while loop exits when the compare node is not in parent_map
+        # (using a standalone node not part of the function used to build parent_map).
+        func = _parse_func(
+            "def validate(details):\n"
+            "    x = y not in details\n"
+        )
+        # A standalone compare with Name left, not in the parent_map built from func.
+        standalone_compare = ast.parse("field not in details", mode="eval").body
+        result = QATesterAgent._loop_iterated_required_names(
+            standalone_compare,
+            QATesterAgent._ast_parent_map(func),
+            {},
+        )
+        assert result == []
+
+    def test_loop_iterated_required_names_skips_for_with_mismatched_target(self):
+        # Arc 1696->1704: For loop found in parent chain but target id != compare left id.
+        # The compare uses 'field' but the for loop iterates 'item'.
+        func = _parse_func(
+            "def validate(details):\n"
+            "    for item in details:\n"
+            "        if field not in details:\n"
+            "            pass\n"
+        )
+        # Find the 'field not in details' compare node.
+        compare_node = None
+        for node in ast.walk(func):
+            if isinstance(node, ast.Compare) and isinstance(node.left, ast.Name) and node.left.id == 'field':
+                compare_node = node
+                break
+        assert compare_node is not None
+        result = QATesterAgent._loop_iterated_required_names(
+            compare_node,
+            QATesterAgent._ast_parent_map(func),
+            {},
+        )
+        assert result == []
+
+    def test_presence_check_branch_affects_validation_returns_false_when_no_if(self):
+        # Arc 1719: _presence_check_branch_affects_validation returns False when the
+        # compare node is not in the parent_map (while loop exits immediately).
+        func = _parse_func(
+            "def validate(details):\n"
+            "    x = y not in details\n"
+        )
+        standalone_compare = ast.parse("field not in details", mode="eval").body
+        result = QATesterAgent._presence_check_branch_affects_validation(
+            standalone_compare,
+            QATesterAgent._ast_parent_map(func),
+        )
+        assert result is False
 
     def test_extracts_required_evidence_items_from_assignments_and_annotations(self):
         assert QATesterAgent._implementation_required_evidence_items("") == []
@@ -4376,6 +4439,17 @@ class TestAssertionIssueDetectors:
         )
         assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary) is True
 
+    def test_temporal_check_continues_loop_on_non_temporal_assert(self):
+        # Arc 1103->1093: the inner for-loop at line 1093 continues when line 1103's
+        # condition is False (assert has Eq compare but neither side is a temporal token).
+        summary = "Generated test validation: assert '2026-04-22' == value\n- Verdict: FAIL"
+        content = (
+            "def test_happy_path():\n"
+            "    assert result.score == 42\n"
+        )
+        result = QATesterAgent._summary_has_exact_temporal_value_assertion_issue(summary, content)
+        assert result is False
+
     def test_band_label_assertion_detects_two_sided_literal_list_mismatch(self):
         # Arc 1063 is structurally unreachable (both sides being band literal collections
         # and also satisfying the field_token check simultaneously is not possible).
@@ -4447,6 +4521,18 @@ class TestDatetimeHelpers:
         assert QATesterAgent._implementation_prefers_datetime_module_import(dt_datetime_ref) is True
         assert QATesterAgent._implementation_prefers_datetime_module_import(dt_timezone_ref) is True
 
+    def test_implementation_prefers_direct_datetime_import_non_string(self):
+        # Arc 1414: _implementation_prefers_direct_datetime_import returns False for non-string
+        assert QATesterAgent._implementation_prefers_direct_datetime_import(None) is False
+        assert QATesterAgent._implementation_prefers_direct_datetime_import("") is False
+        assert QATesterAgent._implementation_prefers_direct_datetime_import(42) is False
+
+    def test_datetime_like_parameter_names_skips_empty_parameter_name(self):
+        # Arc 1442: _datetime_like_parameter_names skips parameters whose _parameter_name
+        # returns empty string (e.g., "*" or "**" parameters).
+        result = QATesterAgent._datetime_like_parameter_names("func(*, timestamp)")
+        assert "timestamp" in result
+
 
 class TestRequiredFieldHelpers:
     def test_is_required_field_collection_name_guards_and_patterns(self):
@@ -4477,6 +4563,15 @@ class TestRequiredFieldHelpers:
         # `all()` with tuple target instead of Name
         tuple_target_code = ast.parse("all((a, b) in required_fields for (a, b) in pairs)", mode="eval").body
         assert QATesterAgent._all_membership_required_names(tuple_target_code, {}) == ([], None)
+
+        # Arc 1524: all() with field_names found but generator element is NOT x in container
+        # (uses != instead of in), so the guard at line 1516 triggers.
+        non_in_gen = ast.parse("all(f != '' for f in required_fields)", mode="eval").body
+        result = QATesterAgent._all_membership_required_names(
+            non_in_gen,
+            {"required_fields": ["name", "email"]},
+        )
+        assert result == ([], None)
 
 
 class TestASTPayloadHelpers:
@@ -4644,6 +4739,11 @@ class TestImplementationAnalysisHelpers:
         ).body[0]
         aliases = QATesterAgent._function_payload_alias_names(func_non_const_slice)
         assert "x" not in aliases
+
+    def test_implementation_required_payload_keys_returns_empty_on_syntax_error(self):
+        # Arc 1754: _parse_implementation_tree returns None for syntax error code
+        # → _implementation_required_payload_keys returns [] at line 1754.
+        assert QATesterAgent._implementation_required_payload_keys("def (broken syntax") == []
 
 
 class TestAnnotationAndCallableHelpers:
@@ -5213,6 +5313,27 @@ class TestRuntimeAndPresenceHelpers:
         impl = ""
         result = QATesterAgent._summary_has_presence_only_validation_sample_issue(summary, content, impl)
         assert result is False
+
+    def test_validation_side_effect_returns_true_when_summary_is_blank(self):
+        # Arc 1270: _summary_has_validation_side_effect_without_workflow_call_issue
+        # returns True when repair_validation_summary is not a str (or blank).
+        # Requires: block has validate_request(, no workflow call, has side-effect token.
+        content = (
+            "def test_validation_failure():\n"
+            "    service.validate_request(request)\n"
+            "    log = service.get_audit_log()\n"
+            "    assert log\n"
+        )
+        result = QATesterAgent._summary_has_validation_side_effect_without_workflow_call_issue(
+            None,
+            content,
+        )
+        assert result is True
+
+    def test_is_helper_alias_like_name_empty_name_returns_false(self):
+        # Arc 1278: _is_helper_alias_like_name with empty name → normalized is empty → return False
+        assert QATesterAgent._is_helper_alias_like_name("") is False
+        assert QATesterAgent._is_helper_alias_like_name("   ") is False
 
 
 class TestContentPayloadPathsAndHelpers:

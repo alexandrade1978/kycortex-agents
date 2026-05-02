@@ -5205,6 +5205,79 @@ class TestNormalizePlaceholderPayloadValues:
         assert "with pytest.raises():" in result
         assert "with pytest.raises(TypeError):" in result
 
+    def test_validation_failure_delete_is_unchanged_without_isinstance_guard(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, details):\n"
+            "        if details is None:\n"
+            "            return {'outcome': 'blocked'}\n"
+            "        return {'outcome': 'approved'}\n"
+        )
+        content = (
+            "def test_validation_failure():\n"
+            "    other = {'x': 1}\n"
+            "    del other['x']\n"
+            "    svc = V()\n"
+            "    svc.validate(details=None)\n"
+        )
+
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+
+        assert isinstance(result, str)
+        assert "del other['x']" in result
+
+    def test_validation_failure_with_assign_body_is_not_rewritten(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if not isinstance(payload, dict):\n"
+            "            return {'outcome': 'blocked'}\n"
+            "        return {'outcome': 'approved'}\n"
+        )
+        content = (
+            "def test_validation_failure():\n"
+            "    svc = V()\n"
+            "    with pytest.raises(ValueError):\n"
+            "        observed = svc.validate(payload={'x': 'value'})\n"
+        )
+
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+
+        assert isinstance(result, str)
+        assert "with pytest.raises(ValueError):" in result
+        assert "observed = svc.validate(payload=None)" in result
+        assert "try:" not in result
+
+    def test_validation_failure_expectation_rewrites_attribute_is_valid_and_wrapped_assignment(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, request):\n"
+            "        if request is None:\n"
+            "            raise ValueError('bad request')\n"
+            "        return type('R', (), {'is_valid': True})()\n"
+            "\n"
+            "    def submit(self, request):\n"
+            "        return {'outcome': 'blocked'}\n"
+        )
+        content = (
+            "def test_validation_failure():\n"
+            "    svc = V()\n"
+            "    invalid_request = None\n"
+            "    validation_result = svc.validate(invalid_request)\n"
+            "    assert validation_result.is_valid == True\n"
+            "    submit_result = svc.submit(invalid_request)\n"
+            "    assert submit_result['outcome'] == 'blocked'\n"
+        )
+
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+
+        assert isinstance(result, str)
+        assert "assert validation_result.is_valid == False" in result
+        assert "with pytest.raises(ValueError):" in result
+        assert "svc.submit(invalid_request)" in result
+        assert "submit_result =" not in result
+        assert "assert submit_result['outcome'] == 'blocked'" not in result
+
 
 
 

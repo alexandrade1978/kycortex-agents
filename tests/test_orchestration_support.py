@@ -7272,3 +7272,22 @@ def test_invalid_outcome_subject_matches_name_and_payload_fallback_paths():
 	# Negative fallback case through the same return expression.
 	other_attr_node = ast.parse("other.accepted", mode="eval").body
 	assert invalid_outcome_subject_matches(other_attr_node, None, "request") is False
+
+
+def test_call_has_negative_expectation_assert_path_and_orphan_parent_map():
+	tree = ast.parse(
+		"def test_invalid():\n"
+		"    assert validate_request(payload) is False\n"
+	)
+	pm = parent_map(tree)
+	call_node = next(
+		node
+		for node in ast.walk(tree)
+		if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+	)
+
+	# Cover assert-based negative expectation path (line 1106).
+	assert call_has_negative_expectation(call_node, pm) is True
+
+	# Cover parent-not-found early return path (line 1104).
+	assert call_has_negative_expectation(call_node, {}) is False

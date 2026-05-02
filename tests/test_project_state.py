@@ -5256,3 +5256,161 @@ def test_redacted_execution_event_non_dict_details(tmp_path):
     for event_name in event_names:
         result = project._redacted_execution_event({"event": event_name, "details": "not_a_dict"})
         assert isinstance(result, dict), f"Failed for event {event_name}"
+
+
+def test_progress_summary_falls_back_when_workflow_definition_error(tmp_path, monkeypatch):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.add_task(Task(id="t1", title="Task 1", description="desc", assigned_to="coder"))
+
+    def _raise_definition_error() -> list[Task]:
+        raise WorkflowDefinitionError("invalid dependencies")
+
+    monkeypatch.setattr(project, "runnable_tasks", _raise_definition_error)
+
+    summary = project._progress_summary({TaskStatus.PENDING.value: 1})
+
+    assert summary["has_runnable_tasks"] is False
+    assert summary["has_blocked_tasks"] is True
+
+
+def test_internal_repair_summary_ignores_invalid_entries_and_collects_counts(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.repair_cycle_count = 1
+    project.repair_max_cycles = 3
+    project.repair_history = [
+        "invalid",
+        {
+            "reason": "provider timeout",
+            "failure_category": "validation",
+            "failed_task_ids": ["task-1", "", 42],
+        },
+    ]
+
+    summary = project._internal_repair_summary()
+
+    assert summary["history_count"] == 1
+    assert summary["failed_task_count"] == 1
+    assert summary["failure_category_counts"] == {"validation": 1}
+    assert summary["reason_counts"]
+
+
+def test_internal_provider_health_filters_invalid_provider_entries(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    provider_health = {
+        "": {"ok": 1},
+        "openai": "invalid",
+        "anthropic": {"api_key": "secret", "status": "ok"},
+    }
+
+    internal = project._internal_provider_health(provider_health)
+
+    assert "anthropic" in internal
+    assert "openai" not in internal
+    assert "" not in internal
+
+
+def test_public_workflow_resumed_details_caps_unique_task_count_to_task_count(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    details = project._public_workflow_resumed_details({"task_count": 1, "unique_task_count": 5})
+
+    assert details["has_resumed_tasks"] is True
+    assert "has_multiple_unique_tasks" not in details
+
+
+def test_public_workflow_cancelled_and_replayed_details_from_raw_counts(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    cancelled = project._public_workflow_cancelled_details(
+        {"terminal_outcome": "cancelled", "cancelled_task_count": 2}
+    )
+    replayed = project._public_workflow_replayed_details(
+        {"replayed_task_count": 2, "removed_task_count": 0}
+    )
+
+    assert cancelled["has_cancelled_tasks"] is True
+    assert cancelled["has_multiple_cancelled_tasks"] is True
+    assert replayed["has_replayed_tasks"] is True
+    assert replayed["has_multiple_replayed_tasks"] is True
+
+
+def test_public_task_repair_failure_details_sets_none_error_type_when_not_string(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    details = project._public_task_repair_failure_details(
+        {"error_type": 123, "error_category": "validation", "repair_task_id": "repair-1"},
+        minimize_error_type=False,
+    )
+
+    assert "error_type" in details
+    assert details["error_type"] is None
+    assert details["has_error_category"] is True
+    assert details["has_repair_task"] is True
+
+
+def test_acceptance_and_repair_count_helpers_use_numeric_fallback(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    acceptance_count = project._acceptance_task_count(
+        {"evaluated_task_count": 3},
+        "evaluated_task_ids",
+        "evaluated_task_count",
+    )
+    failed_count = project._repair_history_failed_task_count({"failed_task_count": 2})
+
+    assert acceptance_count == 3
+    assert failed_count == 2
+
+
+def test_metric_and_presence_helpers_filter_invalid_entries(tmp_path):
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+
+    assert project._metric_key_presence(None) == {}
+    assert project._metric_key_presence({"": 1, "ok": True, "count": 2}) == {"count": True}
+    assert project._sorted_count_map({"": 1, "a": True, "b": 0, "c": 2.3}) == {"c": 2}
+
+    assert project._internal_metric_distribution([]) == {
+        "count": 0,
+        "total": 0,
+        "min": 0,
+        "max": 0,
+        "avg": 0,
+    }
+    assert project._normalize_metric_number(1.2345) == 1.234
+
+    assert project._ordered_task_status_presence({"custom": 1}).get("custom") is True
+    assert project._ordered_presence(None) == {}
+    assert project._ordered_presence({"": 1, "x": 0, "y": True, "z": 2}) == {"z": True}

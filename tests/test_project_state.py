@@ -5492,6 +5492,14 @@ def test_internal_workflow_telemetry_summary_filters_invalid_provider_health_and
         },
     )
 
+    original_accumulate = project._accumulate_numeric_metrics
+
+    def _inject_bool_metric(target: dict[str, float], metrics: dict[str, Any]) -> None:
+        original_accumulate(target, metrics)
+        target["bool_metric"] = True  # type: ignore[assignment]
+
+    monkeypatch.setattr(project, "_accumulate_numeric_metrics", _inject_bool_metric)
+
     summary = project._internal_workflow_telemetry_summary()
 
     provider_summary = summary["provider_summary"]["openai"]

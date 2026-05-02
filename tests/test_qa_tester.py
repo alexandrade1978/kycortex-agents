@@ -4758,6 +4758,33 @@ class TestValidationFailureAndConstructorHelpers:
         result = QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", code)
         assert result is True
 
+    def test_constructor_rejects_invalid_payload_subscript_value_fallback_path(self, monkeypatch):
+        code = (
+            "class MyClass:\n"
+            "    def __init__(self, payload):\n"
+            "        if isinstance(payload['field'], str):\n"
+            "            raise ValueError\n"
+        )
+
+        original = QATesterAgent._is_payload_container_expression
+
+        def _patched(cls, expression, payload_alias_names):
+            rendered = QATesterAgent._expression_text(expression)
+            if rendered == "payload['field']":
+                return False
+            if rendered == "payload":
+                return True
+            return original(expression, payload_alias_names)
+
+        monkeypatch.setattr(
+            QATesterAgent,
+            "_is_payload_container_expression",
+            classmethod(_patched),
+        )
+
+        result = QATesterAgent._constructor_rejects_invalid_payload("MyClass(payload)", code)
+        assert result is True
+
     def test_implementation_call_returns_none_syntax_error(self):
         assert QATesterAgent._implementation_call_returns_none("def (", "func") is False
 
@@ -4993,6 +5020,22 @@ class TestContentPayloadPathsAndHelpers:
         )
         result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
         assert isinstance(result, bool)
+
+    def test_content_has_incomplete_required_payload_returns_false_when_dict_has_full_required_set(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if 'name' not in payload: raise ValueError\n"
+            "        if 'email' not in payload: raise ValueError\n"
+        )
+        content = (
+            "def test_happy_path():\n"
+            "    svc = V()\n"
+            "    result = svc.validate({'name': 'Ada', 'email': 'ada@example.com'})\n"
+            "    assert result is not None\n"
+        )
+        result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
+        assert result is False
 
 
 class TestRiskFactorAndContentPayloadHelpers:

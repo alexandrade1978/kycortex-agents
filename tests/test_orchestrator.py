@@ -22549,49 +22549,6 @@ class TestBuildTestValidationSummarySeverity:
         assert "Verdict: PASS" in summary
         assert "warnings" not in summary.split("Verdict:")[-1]
 
-def test_import_insertion_line_handles_shebang_coding_comment_and_future_imports(tmp_path):
-    """Test _import_insertion_line paths:
-    - L129-130: shebang or coding comment
-    - L138-141: docstring as first statement
-    - L145-148: __future__ imports
-    """
-    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
-    Orchestrator(config)
-
-    # L129-130: shebang and coding comment path
-    shebang_code = (
-        "#!/usr/bin/env python3\n"
-        "# -*- coding: utf-8 -*-\n"
-        "def foo():\n"
-        "    pass\n"
-    )
-    tree_with_shebang = ast.parse(shebang_code)
-    insert_pos = _import_insertion_line(shebang_code, tree_with_shebang)
-    # Should skip shebang/coding and return after docstring (if any) or after preamble
-    assert insert_pos >= 2
-
-    # L138-141: docstring as first statement
-    docstring_code = (
-        '"""Module docstring."""\n'
-        "def bar():\n"
-        "    pass\n"
-    )
-    tree_with_docstring = ast.parse(docstring_code)
-    insert_pos_doc = _import_insertion_line(docstring_code, tree_with_docstring)
-    # Should skip docstring and return position after it
-    assert insert_pos_doc >= 1
-
-    # L145-148: __future__ import path
-    future_code = (
-        "from __future__ import annotations\n"
-        "def baz():\n"
-        "    pass\n"
-    )
-    tree_with_future = ast.parse(future_code)
-    insert_pos_future = _import_insertion_line(future_code, tree_with_future)
-    # Should skip __future__ import
-    assert insert_pos_future >= 1
-
 
 def test_import_insertion_line_handles_shebang_coding_comment_and_future_imports(tmp_path):
     """Test _import_insertion_line paths: L129-130 shebang/coding, L138-141 docstring, L145-148 __future__."""

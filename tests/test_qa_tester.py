@@ -4156,6 +4156,72 @@ class TestAssertionIssueDetectors:
             positive_lt_literal_right,
         ) is True
 
+    def test_detector_continue_paths_and_timestamp_regex_requirement(self):
+        summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests_test.py::test_risk_scoring - AssertionError\n"
+            "- Verdict: FAIL"
+        )
+
+        # band summary list without quoted values -> no extracted values
+        summary_no_quoted_band_list = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: assert 'high' in [low, medium]\n"
+            "- Verdict: FAIL"
+        )
+        assert QATesterAgent._summary_has_exact_band_label_assertion_issue(summary_no_quoted_band_list) is False
+
+        # compare nodes with multiple comparators should be skipped by temporal/numeric detectors
+        temporal_chain_content = (
+            "def test_happy_path():\n"
+            "    assert '2026-04-22' == result.timestamp == '2026-04-23'\n"
+        )
+        assert QATesterAgent._summary_has_exact_temporal_value_assertion_issue(
+            "Generated test validation: assert '2026-04-22' == value",
+            temporal_chain_content,
+        ) is False
+
+        numeric_chain_content = (
+            "def test_risk_scoring():\n"
+            "    assert 1.0 == result.risk_score == expected_score\n"
+        )
+        assert QATesterAgent._summary_has_exact_numeric_score_assertion_issue(
+            "Generated test validation: assert 1.0 == 0.0",
+            numeric_chain_content,
+        ) is False
+
+        numeric_symbolic_eq_content = (
+            "def test_risk_scoring():\n"
+            "    assert result.risk_score == expected_score\n"
+        )
+        assert QATesterAgent._summary_has_exact_numeric_score_assertion_issue(
+            "Generated test validation: assert 1.0 == 0.0",
+            numeric_symbolic_eq_content,
+        ) is False
+
+        positive_gt_negative_threshold = (
+            "def test_risk_scoring():\n"
+            "    assert result.risk_score > -1.0\n"
+        )
+        positive_lt_negative_threshold = (
+            "def test_risk_scoring():\n"
+            "    assert result.score < -2.0\n"
+        )
+        assert QATesterAgent._summary_has_positive_numeric_score_assertion_issue(
+            summary,
+            positive_gt_negative_threshold,
+        ) is False
+        assert QATesterAgent._summary_has_positive_numeric_score_assertion_issue(
+            summary,
+            positive_lt_negative_threshold,
+        ) is False
+
+        assert QATesterAgent._implementation_requires_recent_request_timestamp(
+            "if request.timestamp < int(older_ts):\n    return policy"
+        ) is True
+
 
 class TestDatetimeHelpers:
     def test_content_datetime_helper_guards_return_false_for_non_str(self):

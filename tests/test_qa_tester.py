@@ -4692,6 +4692,20 @@ class TestValidationFailureAndConstructorHelpers:
         )
         assert isinstance(lines, list)
 
+    def test_stable_result_assertion_lines_audit_logs_field(self):
+        code = (
+            "class ValidationResult:\n"
+            "    audit_logs: list[dict[str, object]]\n"
+            "\n"
+            "class MyService:\n"
+            "    def validate(self, payload) -> ValidationResult:\n"
+            "        return ValidationResult()\n"
+        )
+        lines = QATesterAgent._stable_result_assertion_lines(
+            code, "MyService.validate", result_name="result", request_name="request"
+        )
+        assert "assert len(result.audit_logs) > 0" in lines
+
     def test_stable_audit_assertion_lines_batch_dict_kind(self):
         code = (
             "class MyService:\n"
@@ -4892,6 +4906,12 @@ class TestRiskFactorAndContentPayloadHelpers:
         import ast
 
         cmp = ast.parse("'unknown_factor' in x.risk_factors", mode="eval").body
+        assert QATesterAgent._risk_factor_membership_name(cmp) == ""
+
+    def test_risk_factor_membership_name_non_string_left_operand(self):
+        import ast
+
+        cmp = ast.parse("1 in x.risk_factors", mode="eval").body
         assert QATesterAgent._risk_factor_membership_name(cmp) == ""
 
     def test_positive_risk_payload_overrides_damaged_inconsistency(self):

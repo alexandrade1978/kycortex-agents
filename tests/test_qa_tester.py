@@ -4869,5 +4869,81 @@ class TestContentPayloadPathsAndHelpers:
         assert isinstance(result, bool)
 
 
+class TestRiskFactorAndContentPayloadHelpers:
+    def test_risk_factor_membership_name_multiple_ops(self):
+        import ast
+
+        cmp = ast.parse("a < b < c", mode="eval").body
+        assert QATesterAgent._risk_factor_membership_name(cmp) == ""
+
+    def test_risk_factor_membership_name_not_in_op(self):
+        import ast
+
+        cmp = ast.parse("'no_receipt' not in x.risk_factors", mode="eval").body
+        assert QATesterAgent._risk_factor_membership_name(cmp) == ""
+
+    def test_risk_factor_membership_name_wrong_attr(self):
+        import ast
+
+        cmp = ast.parse("'no_receipt' in x.other_factors", mode="eval").body
+        assert QATesterAgent._risk_factor_membership_name(cmp) == ""
+
+    def test_risk_factor_membership_name_unknown_factor(self):
+        import ast
+
+        cmp = ast.parse("'unknown_factor' in x.risk_factors", mode="eval").body
+        assert QATesterAgent._risk_factor_membership_name(cmp) == ""
+
+    def test_positive_risk_payload_overrides_damaged_inconsistency(self):
+        import ast
+
+        code = (
+            "def test_high_risk():\n"
+            "    assert 'damaged_inconsistency' in svc.risk_factors\n"
+        )
+        func_node = ast.parse(code).body[0]
+        overrides = QATesterAgent._positive_risk_payload_literal_overrides(func_node)
+        assert "return_reason" in overrides
+
+    def test_content_has_incomplete_required_payload_loop_back_and_no_overlap(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if 'name' not in payload: raise ValueError\n"
+            "        if 'email' not in payload: raise ValueError\n"
+        )
+        # Two test functions: first has no dict overlap, second also has no overlap
+        content = (
+            "def test_valid_processing():\n"
+            "    svc = V()\n"
+            "    result = svc.validate({'unrelated': 1})\n"
+            "    assert result\n"
+            "\n"
+            "def test_valid_processing_alt():\n"
+            "    svc = V()\n"
+            "    result = svc.validate({'other': 2})\n"
+            "    assert result\n"
+        )
+        result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
+        assert isinstance(result, bool)
+
+    def test_content_has_incomplete_required_payload_complete_dict_continues(self):
+        impl = (
+            "class V:\n"
+            "    def validate(self, payload):\n"
+            "        if 'name' not in payload: raise ValueError\n"
+            "        if 'email' not in payload: raise ValueError\n"
+        )
+        # Dict contains ALL required keys → required_payload_set.issubset(dict_keys) is True → continue (3637->3627)
+        content = (
+            "def test_valid_processing():\n"
+            "    svc = V()\n"
+            "    result = svc.validate({'name': 'John', 'email': 'j@x.com'})\n"
+            "    assert result\n"
+        )
+        result = QATesterAgent._content_has_incomplete_required_payload_for_valid_paths(content, impl)
+        assert result is False
+
+
 
 

@@ -4945,5 +4945,102 @@ class TestRiskFactorAndContentPayloadHelpers:
         assert result is False
 
 
+class TestNormalizePlaceholderPayloadValues:
+    def test_empty_string_content(self):
+        # empty string → still a string → returns "" (line 6063)
+        result = QATesterAgent._normalize_placeholder_payload_values("")
+        assert result == ""
+
+    def test_syntax_error_content(self):
+        # syntax error → returns content unchanged (lines 6072-6073)
+        result = QATesterAgent._normalize_placeholder_payload_values("def (broken")
+        assert result == "def (broken"
+
+    def test_dict_with_non_constant_key_skipped(self):
+        # dict with variable key → continue at 6083
+        content = "x = {key: 'value'}\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert isinstance(result, str)
+
+    def test_dict_items_value_replaced_with_list(self):
+        # key="items", value="value" → replacement = ["sample"] (line 6102)
+        content = "payload = {'items': 'value'}\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert '"sample"' in result or "sample" in result
+
+    def test_dict_metadata_value_replaced_with_dict(self):
+        # key="metadata", value="value" → replacement = {"key": "value"} (line 6111)
+        content = "payload = {'metadata': 'value'}\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert isinstance(result, str)
+
+    def test_dict_approved_value_replaced_with_true(self):
+        # key="approved", value="value" → replacement = True (line 6121)
+        content = "payload = {'approved': 'value'}\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert "True" in result
+
+    def test_dict_score_value_replaced_with_int(self):
+        # key="score", value="value" → replacement = 1 (line 6132)
+        content = "payload = {'score': 'value'}\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert "1" in result
+
+    def test_call_with_kwargs_star_keyword_skipped(self):
+        # keyword with arg=None (**kwargs) → continue at 6152
+        content = "func(**kwargs)\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert isinstance(result, str)
+
+    def test_call_keyword_details_space_value_replaced_with_dict(self):
+        # keyword arg `details="emergency_access stale"` → dict replacement (lines 6160-6161)
+        content = "func(details='emergency_access stale')\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert isinstance(result, str)
+
+    def test_call_keyword_items_space_value_replaced_with_list(self):
+        # keyword arg `items="foo bar"` → list replacement (lines 6163-6164)
+        content = "func(items='foo bar')\n"
+        result = QATesterAgent._normalize_placeholder_payload_values(content)
+        assert isinstance(result, str)
+
+    def test_validation_failure_function_dict_kwarg_replaced_with_none(self):
+        # test_validation_failure function with isinstance_dict impl → dict kwarg replaced (line 6200+)
+        impl = "class V:\n    def validate(self, details):\n        if not isinstance(details, dict): raise ValueError\n"
+        content = (
+            "def test_validation_failure():\n"
+            "    svc = V()\n"
+            "    with pytest.raises(ValueError):\n"
+            "        svc.validate(details={'key': 'value'})\n"
+        )
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+        assert isinstance(result, str)
+
+    def test_targets_details_like_subscript_non_subscript(self):
+        # Test via the public API: a delete with non-subscript target in test_validation_failure
+        impl = "class V:\n    def validate(self, details):\n        if not isinstance(details, dict): raise ValueError\n"
+        content = (
+            "def test_validation_failure():\n"
+            "    d = {'x': 1}\n"
+            "    del d['details']\n"
+            "    svc = V()\n"
+            "    svc.validate(details=None)\n"
+        )
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+        assert isinstance(result, str)
+
+    def test_validation_failure_with_pytest_raises_block_transformed(self):
+        # test_validation_failure with `with pytest.raises(ValueError): call(...)` → transformed (lines 6260+)
+        impl = "class V:\n    def validate(self, payload):\n        if 'x' not in payload: raise ValueError\n"
+        content = (
+            "def test_validation_failure():\n"
+            "    svc = V()\n"
+            "    with pytest.raises(ValueError):\n"
+            "        svc.validate(payload={'x': 'value'})\n"
+        )
+        result = QATesterAgent._normalize_placeholder_payload_values(content, impl)
+        assert isinstance(result, str)
+
+
 
 

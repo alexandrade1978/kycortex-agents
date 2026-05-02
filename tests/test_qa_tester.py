@@ -4798,6 +4798,24 @@ class TestValidationFailureAndConstructorHelpers:
         )
         assert isinstance(lines, list)
 
+    def test_stable_audit_assertion_lines_batch_list_with_request_id_records(self):
+        code = (
+            "class AuditRecord:\n"
+            "    request_id: str\n"
+            "\n"
+            "class MyService:\n"
+            "    def __init__(self):\n"
+            "        self.audit_log = []\n"
+            "    def process(self, request):\n"
+            "        self.audit_log.append(AuditRecord())\n"
+            "        return True\n"
+        )
+        lines = QATesterAgent._stable_audit_assertion_lines(
+            code, "MyService.process", service_name="svc", request_name="req", batch=True
+        )
+        assert "assert svc.audit_log[0].request_id == requests[0].request_id" in lines
+        assert "assert svc.audit_log[-1].request_id == requests[-1].request_id" in lines
+
 
 class TestRuntimeAndPresenceHelpers:
     def test_runtime_return_kind_from_summary_unknown_type(self):

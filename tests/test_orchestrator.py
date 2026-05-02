@@ -89,7 +89,7 @@ from kycortex_agents.orchestration.test_ast_analysis import (
     with_uses_pytest_raises,
 )
 from kycortex_agents.orchestration.sandbox_runtime import build_generated_test_env, build_sandbox_preexec_fn, sanitize_generated_filename
-from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output, _import_insertion_line
+from kycortex_agents.orchestration.validation_runtime import summarize_pytest_output, _import_insertion_line, _adaptive_prompt_mode, _module_imports_bare_name, _insert_import_lines, _ensure_explicit_dataclass_import, _callable_accepts_context_argument
 from kycortex_agents.orchestration import (
     ast_name,
     active_repair_cycle,
@@ -22572,3 +22572,32 @@ def test_import_insertion_line_handles_shebang_coding_comment_and_future_imports
     tree_future = ast.parse(future_code)
     insert_future = _import_insertion_line(future_code, tree_future)
     assert insert_future >= 1
+
+
+def test_validation_runtime_private_helpers_cover_edge_paths(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    Orchestrator(config)
+
+    # L103: _adaptive_prompt_mode returns None when mode is not a valid string
+    assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": None}}) is None
+    assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": "   "}}) is None
+
+    # L112: _module_imports_bare_name returns True on wildcard import
+    wildcard_tree = ast.parse("from typing import *")
+    assert _module_imports_bare_name(wildcard_tree, "typing", "Optional") is True
+
+    # L156: _insert_import_lines returns original content when import_lines is empty
+    simple_code = "def foo(): pass\n"
+    simple_tree = ast.parse(simple_code)
+    assert _insert_import_lines(simple_code, [], simple_tree) == simple_code
+
+    # L211-212: SyntaxError path in _ensure_explicit_dataclass_import
+    invalid_code = "@dataclass\nclass Foo(object: @@@"
+    assert _ensure_explicit_dataclass_import(invalid_code) == invalid_code
+
+    # L262-263 and L266: _callable_accepts_context_argument paths
+    assert _callable_accepts_context_argument(lambda **kwargs: None) is True
+    assert _callable_accepts_context_argument(lambda x: None) is False
+    assert _callable_accepts_context_argument(lambda context: None) is True
+
+

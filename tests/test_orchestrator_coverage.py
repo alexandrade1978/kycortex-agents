@@ -421,6 +421,10 @@ class TestPythonImportRoots:
     def test_non_string(self):
         assert python_import_roots(42) == set()
 
+    def test_syntax_error_returns_empty_set(self):
+        # Lines 112-113 of ast_tools.py: SyntaxError during parse → return set()
+        assert python_import_roots("def broken_syntax(") == set()
+
 
 # ---------------------------------------------------------------------------
 # _known_type_allows_member  (12 missed)

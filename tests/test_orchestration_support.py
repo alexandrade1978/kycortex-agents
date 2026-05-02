@@ -346,6 +346,7 @@ from kycortex_agents.orchestration.workflow_acceptance import (
 	evaluate_workflow_acceptance,
 	observed_failure_categories,
 	task_acceptance_lists,
+	task_counts_for_acceptance,
 )
 from kycortex_agents.memory.project_state import ProjectState, Task
 
@@ -7193,3 +7194,48 @@ def test_module_ast_analysis_inline_score_helper_keyword_handling_directly():
 	result = inline_score_helper_expression(call_with_kw, {"compute": helper_with_param})
 	# Should inline x → value, giving "value * 2"
 	assert result is not call_with_kw
+
+def test_failed_artifact_content_falls_back_to_output_when_raw_content_not_string():
+        # Line 45 of artifacts.py: artifacts list is exhausted without a match
+        # and raw_content is absent (None), so the function returns `output`.
+        result = failed_artifact_content(
+                "fallback_output",
+                {"artifacts": [{"artifact_type": ArtifactType.CODE.value, "content": ""}]},
+                ArtifactType.CODE,
+        )
+        assert result == "fallback_output"
+
+
+def test_build_runtime_only_test_repair_lines_score_email_name_hint():
+        # Line 74 of repair_test_runtime.py: "score ==" AND ("name"/"email"/"@")
+        # in failed_content_lower triggers the email/name-score hint line.
+        lines = build_runtime_only_test_repair_lines(
+                summary_lower=(
+                        "pytest execution: fail\n"
+                        "assertionerror: assert 0.4 == 0.1 because score mismatch"
+                ),
+                failed_content_lower="score == email and user_name matters here",
+                imported_module_symbols=[],
+                unknown_module_symbols=[],
+                previous_member_calls={},
+                previous_constructor_keywords={},
+                required_evidence_runtime_issue=False,
+                required_evidence_items=[],
+        )
+        assert any("hand-count" in line for line in lines)
+
+
+def test_task_counts_for_acceptance_returns_true_when_origin_not_found():
+        # Line 15 of workflow_acceptance.py: repair_origin_task_id is set but the
+        # origin task does not exist in the project → returns True.
+        project = ProjectState(project_name="Demo", goal="Build demo")
+        orphan_repair = Task(
+                id="code__repair_orphan",
+                title="Orphan repair",
+                description="Orphan",
+                assigned_to="code_engineer",
+                repair_origin_task_id="missing_code_task",
+                status=TaskStatus.DONE.value,
+        )
+        result = task_counts_for_acceptance(project, orphan_repair)
+        assert result is True

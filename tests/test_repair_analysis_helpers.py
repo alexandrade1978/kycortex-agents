@@ -558,3 +558,9 @@ def test_invalid_outcome_ast_helpers_cover_private_field_and_return_detection():
 		"    return ReviewOutcome(outcome='invalid')\n",
 		"audit_log",
 	) == ("ReviewOutcome(outcome='invalid')", True)
+def test_class_field_uses_empty_default_class_found_no_matching_annassign():
+        # Line 799 of repair_analysis.py: class IS found in the tree, but its body
+        # has no AnnAssign for the requested field_name, so the inner for loop
+        # exhausts and reaches the return False after it.
+        code = "class ReviewOutcome:\n    x = 1\n"
+        assert class_field_uses_empty_default(code, "ReviewOutcome", "audit_log") is False

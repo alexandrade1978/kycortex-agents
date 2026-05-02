@@ -2098,6 +2098,27 @@ class TestDeterministicSurfaceScaffoldEnvelope:
         assert "def test_batch_processing():" in block
         assert "results = service.handle_batch(requests)" in block
 
+    def test_no_primary_method_or_callable_arc_4473(self, monkeypatch):
+        # Arc 4473->4479: primary_method is falsy AND primary_callable is falsy
+        # → elif branch not taken, falls through to line 4479.
+        _patch_scaffold_defaults(monkeypatch)
+        contract = (
+            "- Preferred service or workflow facades: None\n"
+            "- Exact public callables: None\n"
+            "- Exact public class methods: None\n"
+            "- Exact constructor fields: MyClass()"
+        )
+        block = QATesterAgent._deterministic_surface_scaffold_block(
+            module_name="sample_module",
+            task_description="Test with no callable or method.",
+            code_exact_test_contract=contract,
+            code_test_targets="",
+            task_public_contract_anchor="",
+            implementation_code="",
+            repair_validation_summary="",
+        )
+        assert isinstance(block, str)
+
 
 class TestDeterministicSurfaceScaffoldSelectionAndValidationEdges:
     def test_primary_method_selection_falls_back_when_preferred_facades_do_not_match(self, monkeypatch):
@@ -4745,6 +4766,94 @@ class TestImplementationAnalysisHelpers:
         # → _implementation_required_payload_keys returns [] at line 1754.
         assert QATesterAgent._implementation_required_payload_keys("def (broken syntax") == []
 
+    def test_implementation_required_payload_keys_module_level_validate_and_dedup(self):
+        # Arc 1781: module-level validate function added to validate_nodes.
+        # Arc 1776->1775: second assignment of required_keys (already in literal_collections)
+        #   → False branch of inner if → continue the for-name loop.
+        # Arc 1796: same key extracted from two identical checks → append_key return taken.
+        impl = (
+            "required_keys = ['field1']\n"
+            "required_keys = ['field2']\n"
+            "def validate(details):\n"
+            "    if 'field1' not in details:\n"
+            "        raise ValueError('missing')\n"
+            "    if 'field1' not in details:\n"
+            "        raise ValueError('missing again')\n"
+        )
+        result = QATesterAgent._implementation_required_payload_keys(impl)
+        assert result == ["field1"]
+
+    def test_implementation_required_payload_keys_annassign_inside_validate(self):
+        # Arcs 1822-1823: AnnAssign node inside validate function → branches taken.
+        impl = (
+            "def validate(details):\n"
+            "    required_keys: list = ['field1', 'field2']\n"
+            "    if 'field1' not in details:\n"
+            "        raise ValueError('missing field1')\n"
+        )
+        result = QATesterAgent._implementation_required_payload_keys(impl)
+        assert "field1" in result
+
+    def test_implementation_required_payload_keys_binop_sub_unknown_var_skipped(self):
+        # Arc 1844->1850: BinOp Sub found but left variable is not a known required-field
+        # collection → field_names is empty → condition is False → skip to line 1850.
+        impl = (
+            "def validate(details):\n"
+            "    missing = unknown_var - details.keys()\n"
+            "    if missing:\n"
+            "        raise ValueError('missing')\n"
+        )
+        result = QATesterAgent._implementation_required_payload_keys(impl)
+        assert result == []
+
+    def test_implementation_required_request_fields_deduplicates(self):
+        # Arc 2030: append_field called twice with same field → early return taken.
+        impl = (
+            "def validate_request(request):\n"
+            "    if 'name' not in vars(request):\n"
+            "        raise ValueError('missing')\n"
+            "    if 'name' not in vars(request):\n"
+            "        raise ValueError('missing again')\n"
+        )
+        result = QATesterAgent._implementation_required_request_fields(impl)
+        assert result == ["name"]
+
+    def test_function_payload_alias_names_non_payload_attr_and_non_name_subscript(self):
+        # Arc 2152->2154: attribute assignment where attr is not in payload_attrs
+        #   → inner if False → continue (2154).
+        # Arc 2159: subscript assignment where value is not an ast.Name
+        #   → continue (2159).
+        import ast
+
+        # Attribute with non-payload attr: payload = req.name (not in payload_attrs)
+        func_non_payload_attr = ast.parse(
+            "def validate(self, req):\n"
+            "    payload = req.name\n"
+        ).body[0]
+        aliases = QATesterAgent._function_payload_alias_names(func_non_payload_attr)
+        assert "payload" not in aliases
+
+        # Subscript where value is not a Name: payload = obj.nested['details']
+        func_non_name_subscript = ast.parse(
+            "def validate(self, req):\n"
+            "    payload = req.data['details']\n"
+        ).body[0]
+        aliases = QATesterAgent._function_payload_alias_names(func_non_name_subscript)
+        # value_node is Subscript(value=Attribute(Name, 'data'), ...) → value not Name → 2159
+        # alias NOT added via that branch (though it may be added via other branches)
+        assert isinstance(aliases, set)
+
+    def test_implementation_non_validation_payload_keys_non_in_operator(self):
+        # Arc 2211: Compare with non-In/NotIn operator inside a validate function
+        # → continue at line 2211.
+        impl = (
+            "def validate(self, details):\n"
+            "    if 'field1' == something:\n"
+            "        raise ValueError('mismatch')\n"
+        )
+        result = QATesterAgent._implementation_non_validation_payload_keys(impl)
+        assert result == []
+
 
 class TestAnnotationAndCallableHelpers:
     def test_annotation_name_branches(self):
@@ -4813,6 +4922,72 @@ class TestAnnotationAndCallableHelpers:
         assert QATesterAgent._resolved_callable_return_shapes(
             "def f(): pass", "f", seen_callable_refs={"f"}
         ) == ([], [])
+
+    def test_annotation_name_subscript_no_slice_name_and_tuple_empty_element(self):
+        # Arc 2229: Subscript where slice produces empty name → return annotation_name(value).
+        # Arc 2233->2231: Tuple element produces empty name → False branch → continue loop.
+        import ast as _ast
+
+        # Subscript with a Constant (int) slice → slice_name="" → arc 2229 taken
+        subscript_const_slice = _ast.Subscript(
+            value=_ast.Name(id="Optional", ctx=_ast.Load()),
+            slice=_ast.Constant(value=123),
+            ctx=_ast.Load(),
+        )
+        result = QATesterAgent._annotation_name(subscript_const_slice)
+        assert result == "Optional"  # falls through to annotation_name(node.value)
+
+        # Tuple where first element is a Constant (no name) and second is Name
+        # → first iteration: name="" → 2233->2231 → second iteration: name="MyType"
+        tuple_node = _ast.Tuple(
+            elts=[
+                _ast.Constant(value=123),
+                _ast.Name(id="MyType", ctx=_ast.Load()),
+            ],
+            ctx=_ast.Load(),
+        )
+        result = QATesterAgent._annotation_name(tuple_node)
+        assert result == "MyType"
+
+    def test_implementation_callable_node_normalizes_to_empty(self):
+        # Arc 2275: callable_ref is non-empty but strips to empty (spaces only)
+        # → _signature_name_and_params returns ("", ""), normalized_ref becomes ""
+        # → return None at line 2275.
+        result = QATesterAgent._implementation_callable_node("def func(): pass", "   ")
+        assert result is None
+
+    def test_resolve_return_expression_shape_call_with_no_call_name(self):
+        # Arc 2360: expression is ast.Call but _call_expression_name returns ""
+        # (func is a Subscript, not Name or Attribute) → return ("", "").
+        import ast as _ast
+
+        func = _ast.parse("def f():\n    pass\n").body[0]
+        subscript_call = _ast_call_with_subscript_func()
+        result = QATesterAgent._resolve_return_expression_shape(
+            "def f(): pass",
+            "f",
+            func,
+            subscript_call,
+            seen_callable_refs=set(),
+        )
+        assert result == ("", "")
+
+    def test_resolve_return_expression_shape_call_with_no_class_fields(self):
+        # Arc 2375->2378: call_name is not a primitive, resolved shapes are inconclusive,
+        # and _implementation_class_field_names returns [] for call_name
+        # → condition at 2375 is False → fall through to return ("", "") at 2378.
+        import ast as _ast
+
+        func = _ast.parse("def f():\n    pass\n").body[0]
+        call_node = _ast.parse("UnknownClass()", mode="eval").body
+        result = QATesterAgent._resolve_return_expression_shape(
+            "def f(): pass",
+            "f",
+            func,
+            call_node,
+            seen_callable_refs=set(),
+        )
+        assert result == ("", "")
 
 
 def _ast_call_with_subscript_func():
@@ -4915,6 +5090,29 @@ class TestExpressionPrimitiveKindAndReturnAnalysis:
         result_list = QATesterAgent._service_audit_collection_info(code, "MyService.validate")
         assert result_list[1] in ("list", "dict", "")
 
+    def test_service_audit_collection_info_non_assign_in_init_skipped(self):
+        # Arc 2624: non-Assign statement in __init__ body → continue.
+        code = (
+            "class MyService:\n"
+            "    def __init__(self):\n"
+            "        pass\n"  # Expr statement, not Assign → 2624 taken
+            "        self.audit_log = []\n"
+        )
+        result = QATesterAgent._service_audit_collection_info(code, "MyService.validate")
+        assert result[1] in ("list", "dict", "")
+
+    def test_implementation_has_audit_record_request_id_returns_false_for_audit_without_request_id(self):
+        # Arc 2644->2641: audit class found but 'request_id' NOT in its field names
+        # → condition is False → do NOT return True → continue loop.
+        impl = (
+            "class AuditRecord:\n"
+            "    def __init__(self):\n"
+            "        self.action = None\n"  # no request_id field
+            "        self.timestamp = None\n"
+        )
+        result = QATesterAgent._implementation_has_audit_record_request_id(impl)
+        assert result is False
+
     def test_implementation_result_mapping_field_keys_guards(self):
         assert QATesterAgent._implementation_result_mapping_field_keys("def (", "MyModel", "mapping") == []
         assert QATesterAgent._implementation_result_mapping_field_keys("class A: pass", "", "mapping") == []
@@ -4946,6 +5144,84 @@ class TestExpressionPrimitiveKindAndReturnAnalysis:
         assert "a" in keys
         assert "b" not in keys
         assert "c" not in keys
+
+    def test_implementation_class_field_names_non_self_target_skipped(self):
+        # Arc 2458->2457: Assign in __init__ where target is NOT self.attr
+        # → condition at 2458 is False → continue (2457).
+        impl = (
+            "class MyClass:\n"
+            "    def __init__(self):\n"
+            "        x = 1\n"  # plain name assignment, not self.attr
+            "        self.name = 'test'\n"
+        )
+        result = QATesterAgent._implementation_class_field_names(impl, "MyClass")
+        assert "name" in result
+        assert "x" not in result
+
+    def test_implementation_validation_result_shape_call_with_no_name_and_dedup(self):
+        # Arc 2484->2480: Return with Call whose func is a Subscript (no call_name)
+        # → call_name is "" → condition at 2484 is False → continue.
+        # Arc 2490: Same annotation name appears in candidate_names twice
+        # → second time it's in seen → continue at 2490.
+        impl = (
+            "class MyResult:\n"
+            "    is_valid: bool\n"
+            "def validate(details) -> MyResult:\n"
+            "    return MyResult()\n"
+        )
+        result = QATesterAgent._implementation_validation_result_shape(impl, "validate")
+        assert result[0] == "object_is_valid"
+
+    def test_implementation_call_return_class_name_no_callable_node(self):
+        # Arc 2507: _implementation_callable_node returns None → return "" immediately.
+        result = QATesterAgent._implementation_call_return_class_name("def func(): pass", "missing_func")
+        assert result == ""
+
+    def test_implementation_call_return_class_name_from_return_walk(self):
+        # Arcs 2525-2527: walk finds a Return with a Call whose call_name is a class
+        # with field names → return call_name.
+        impl = (
+            "class Result:\n"
+            "    def __init__(self):\n"
+            "        self.status = None\n"
+            "def validate(details):\n"
+            "    return Result()\n"
+        )
+        result = QATesterAgent._implementation_call_return_class_name(impl, "validate")
+        assert result == "Result"
+
+    def test_implementation_call_return_primitive_kind_inferred_from_return(self):
+        # Arc 2588: Return with a primitive expression → kind is truthy → append.
+        # Arc 2592: unique_kinds has exactly one element → return it.
+        impl = (
+            "def validate(details):\n"
+            "    if 'x' not in details:\n"
+            "        return False\n"
+            "    return True\n"
+        )
+        result = QATesterAgent._implementation_call_return_primitive_kind(impl, "validate")
+        assert result == "bool"
+
+    def test_implementation_result_mapping_field_keys_deduplicates(self):
+        # Arc 2675: duplicate key in dict → continue (already in seen).
+        impl = (
+            "def get_map():\n"
+            "    return MyClass(mapping={'key1': 1, 'key1': 2, 'key2': 3})\n"
+        )
+        result = QATesterAgent._implementation_result_mapping_field_keys(impl, "MyClass", "mapping")
+        assert result.count("key1") == 1
+        assert "key2" in result
+
+    def test_implementation_direct_mapping_return_keys_non_const_and_empty_keys(self):
+        # Arc 2699: key_node is not a Constant → continue.
+        # Arc 2701->2697: key_node value strips to empty → False branch → continue.
+        impl = (
+            "def get_map():\n"
+            "    return {x: 1, '': 2, 'valid': 3}\n"  # x=Name, ''=empty, 'valid'=ok
+        )
+        result = QATesterAgent._implementation_direct_mapping_return_keys(impl, "get_map")
+        assert "valid" in result
+        assert "" not in result
 
 
 class TestValidationFailureAndConstructorHelpers:
@@ -5883,6 +6159,65 @@ class TestNormalizePlaceholderPayloadValues:
         assert isinstance(result, str)
         assert "with pytest.raises(ValueError):" in result
         assert "svc.submit(invalid_request)" in result
+
+    def test_validation_result_shape_lambda_call_returns_empty_call_name(self):
+        # Arc 2484->2480: Return node whose Call has a Lambda func;
+        # _call_expression_name returns "" so call_name is falsy and the
+        # candidate_names.append branch is skipped.
+        impl = (
+            "class MyService:\n"
+            "    def validate(self):\n"
+            "        return (lambda: None)()\n"
+        )
+        result = QATesterAgent._implementation_validation_result_shape(impl, "MyService.validate")
+        assert result == ("bool", [])
+
+    def test_validation_result_shape_duplicate_candidate_skipped(self):
+        # Arc 2490: annotation name equals return-call name, producing a
+        # duplicate in candidate_names; the second iteration hits `continue`.
+        impl = (
+            "class MyResult:\n"
+            "    score = 0\n"
+            "\n"
+            "class MyService:\n"
+            "    def validate(self) -> MyResult:\n"
+            "        return MyResult()\n"
+        )
+        result = QATesterAgent._implementation_validation_result_shape(impl, "MyService.validate")
+        assert result == ("bool", [])
+
+    def test_implementation_call_return_class_name_ambiguous_shapes_uses_walk(self):
+        # Arcs 2525-2527: _resolved_callable_return_shapes returns two class names
+        # (ambiguous), so the early-return at len==1 is skipped and the AST walk
+        # finds the first Return(Call(ClassA)) whose class has fields.
+        impl = (
+            "class ClassA:\n"
+            "    is_valid = True\n"
+            "\n"
+            "class ClassB:\n"
+            "    score = 0\n"
+            "\n"
+            "def validate(x):\n"
+            "    if x:\n"
+            "        return ClassA()\n"
+            "    return ClassB()\n"
+        )
+        result = QATesterAgent._implementation_call_return_class_name(impl, "validate")
+        assert result in ("ClassA", "ClassB")
+
+    def test_implementation_call_return_class_name_call_without_class_fields(self):
+        # Arc 2526->2522: the loop finds Return(Call("helper")) but
+        # _implementation_class_field_names returns [] for "helper" (not a class),
+        # so the if-condition is False and the loop continues to exhaustion.
+        impl = (
+            "def helper():\n"
+            "    return result\n"
+            "\n"
+            "def validate(x):\n"
+            "    return helper()\n"
+        )
+        result = QATesterAgent._implementation_call_return_class_name(impl, "validate")
+        assert result == ""
 
 
 

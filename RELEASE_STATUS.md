@@ -4,32 +4,33 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Current Snapshot
 
-- Package version in `pyproject.toml`: `1.0.13a10.dev0`
-- Latest released version: `1.0.13a6`
-- Latest published release: `1.0.13a6`
-- Latest published tag: `v1.0.13a6`
+- Package version in `pyproject.toml`: `1.0.13a10`
+- Latest released version: `1.0.13a10`
+- Latest published release: `1.0.13a10`
+- Latest published tag: `v1.0.13a10`
 - Current branch for release preparation: `main`
-- Current main-branch head: `896bcf1`
-- Release publish action: no release flow is in progress.
+- Current main-branch head: `8998d03` (pre-tag; will update after release commit)
+- Release publish action: release `v1.0.13a10` in progress.
 
 ## Current Posture
 
-- Published package baseline remains `v1.0.13a6`.
-- Current main-branch head `896bcf1` is green on the repository CI, but it is not yet a tagged or released package candidate.
-- The current line still satisfies the local Beta 1 minimum as an internal checkpoint; that does not automatically open release, canary, or go-live posture.
-- Release-candidate review is not open.
+- Published package baseline is `v1.0.13a10`.
+- This release contains the orchestrator refactor (owner-module migration) and a comprehensive test coverage campaign reaching 99.19% statement coverage.
+- The current line satisfies the local Beta 1 minimum as an internal checkpoint; that does not automatically open canary or go-live posture.
+- Release-candidate review is not open for further versions yet.
 
 ## Repository Release Gate
 
-- The deterministic repository release gate is green on `896bcf1`.
-- The latest post-push `mypy` and coverage remediation is included in that green branch state.
-- No release workflow is currently in progress.
+- The deterministic repository release gate is green on `8998d03`.
+- `ruff`, `mypy`, and the full pytest suite (2474 tests) are clean.
+- Coverage: 99.19% (2 dead-code statement misses accepted).
+- No release workflow is currently in progress beyond `v1.0.13a10` tagging.
 
 ## Next Release-Facing Action
 
-1. Decide whether to open release-candidate review for `896bcf1` or keep it as a branch-only checkpoint.
-2. If publication is approved, run `RELEASE.md` end-to-end on the same head.
-3. Keep canary and go-live decisions separately gated beyond this branch state.
+1. Push `v1.0.13a10` tag and confirm CI release workflow.
+2. Decide whether to open Phase 16 canary admission on the current head.
+3. Keep canary and go-live decisions separately gated beyond this release state.
 
 ## Canonical References
 

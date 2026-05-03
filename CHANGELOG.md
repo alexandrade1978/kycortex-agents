@@ -6,12 +6,21 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-### Refactor Reset
+- No changes pending.
 
-- Current package version is now `1.0.13a10.dev0` ahead of the next alpha release.
-- The last published and trusted alpha baseline remains `1.0.13a6`.
-- The current main-branch head has requalified locally to the current Beta 1 minimum with deterministic green validation plus fresh same-head empirical evidence.
-- Publication, canary, and go-live remain separately gated; that local Beta 1 result does not tag or promote the current main-branch head automatically.
+## 1.0.13a10 - 2026-05-04
+
+Version `1.0.13a10` is now the released alpha package baseline.
+
+### Coverage Campaign
+
+- Test suite expanded from ~91% to **99.19% statement coverage** (2474 tests, 15069 statements).
+- Remaining 2 statement misses are structurally dead code in nested closures; all real statement misses are now covered.
+
+### Orchestrator Refactor
+
+- Deterministic orchestration logic migrated to owner modules under `kycortex_agents/orchestration/`; `Orchestrator` is now a thin public runtime shell.
+- Public control surface retained: `pause_workflow`, `resume_workflow`, `cancel_workflow`, `skip_task`, `override_task`, `replay_workflow`, `run_task`, `execute_workflow`.
 
 ### Added
 

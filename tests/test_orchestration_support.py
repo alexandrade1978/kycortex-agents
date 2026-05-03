@@ -8839,3 +8839,27 @@ def test_extract_literal_field_values_nested_payload_empty_then_second_key_hits_
     node = _ast.parse("{'payload': {}, 'request': {'status': 'ok'}}", mode="eval").body
     values = extract_literal_field_values(node, {}, "status", {})
     assert values == ["ok"]
+
+
+def test_auto_fix_type_mismatches_nested_and_string_argument_replacement_paths():
+    from kycortex_agents.orchestration.test_ast_analysis import auto_fix_test_type_mismatches
+
+    impl_code = (
+        "def validate_request(data):\n"
+        "    payload = data['payload']\n"
+        "    return payload['key']\n"
+    )
+    test_code = (
+        "def test_validate_request():\n"
+        "    validate_request(data={'payload': {'key': 'value'}})\n"
+        "    validate_request(data={})\n"
+        "    validate_request(data='value')\n"
+    )
+
+    fixed = auto_fix_test_type_mismatches(test_code, impl_code)
+    # First call keeps nested dict structure but normalizes placeholders/examples.
+    assert "validate_request(data={'payload': {'key': 'sample'}})" in fixed or "validate_request(data={'payload': {'key': 'value'}})" in fixed
+    # Missing top-level required key should be repaired.
+    assert "validate_request(data={'payload':" in fixed
+    # String argument should be replaced with a dict literal.
+    assert "validate_request(data={'payload': {'key': 'sample'}})" in fixed

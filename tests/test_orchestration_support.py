@@ -7631,3 +7631,39 @@ def test_validate_batch_call_field_value_rules_invalid_values():
         field_value_rules={"type": ["valid_type", "other_type"]},
     )
     assert any("batch item field `type` uses unsupported values" in v and "invalid_type" in v for v in violations)
+
+
+def test_function_argument_names_vararg_kwarg_and_collect_parametrized_skip_paths():
+    import ast as _ast
+
+    # function_argument_names: *args and **kwargs (lines 105, 107)
+    fn_vararg = _ast.parse("def test_fn(a, b, *args, **kwargs): pass").body[0]
+    assert isinstance(fn_vararg, _ast.FunctionDef)
+    names = function_argument_names(fn_vararg)
+    assert "args" in names
+    assert "kwargs" in names
+    assert "a" in names and "b" in names
+
+    # collect_parametrized_argument_names: decorator not a Call → continue (line 116)
+    fn_name_decorator = _ast.parse(
+        "@some_marker\n"
+        "def test_fn2(x): pass"
+    ).body[0]
+    assert isinstance(fn_name_decorator, _ast.FunctionDef)
+    assert collect_parametrized_argument_names(fn_name_decorator) == set()
+
+    # collect_parametrized_argument_names: func.attr != "parametrize" → continue (line 119)
+    fn_non_param = _ast.parse(
+        "@pytest.mark.skip(reason='todo')\n"
+        "def test_fn3(x): pass"
+    ).body[0]
+    assert isinstance(fn_non_param, _ast.FunctionDef)
+    assert collect_parametrized_argument_names(fn_non_param) == set()
+
+    # collect_parametrized_argument_names: parent is not mark (e.g., module.parametrize) → continue (line 125)
+    fn_non_mark = _ast.parse(
+        "@other.parametrize('x', [1, 2])\n"
+        "def test_fn4(x): pass"
+    ).body[0]
+    assert isinstance(fn_non_mark, _ast.FunctionDef)
+    assert collect_parametrized_argument_names(fn_non_mark) == set()

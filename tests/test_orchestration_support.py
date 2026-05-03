@@ -6819,16 +6819,19 @@ def test_quick_win_context_building_build_agent_view_artifacts_skips_non_string_
 	assert result[0].name == "impl.py"
 
 
-def test_quick_win_providers_base_covers_tuple_and_non_dict_edge_cases_directly():
+def test_quick_win_providers_base_covers_tuple_and_non_dict_edge_cases_directly(monkeypatch):
+	import kycortex_agents.providers.base as base_module
 	from kycortex_agents.providers.base import sanitize_provider_call_metadata, redact_sensitive_data
 
 	# Line 85: tuple input to redact_sensitive_data
 	result = redact_sensitive_data(("a", "b", "c"))
 	assert isinstance(result, tuple)
 
-	# Line 94: sanitize_provider_call_metadata when dict() result is not a dict
-	# Note: redact_sensitive_data(dict(x)) returns a dict, so we can't easily reach line 94
-	# Instead test sanitize_provider_call_metadata with attempt_history having non-dict entries
+	# Line 94: force sanitize_provider_call_metadata to receive a non-dict from redaction
+	monkeypatch.setattr(base_module, "redact_sensitive_data", lambda _: [])
+	assert sanitize_provider_call_metadata({"token": "secret"}) == {}
+	monkeypatch.setattr(base_module, "redact_sensitive_data", redact_sensitive_data)
+
 	# Lines 118-119: attempt_history entry that is not a dict
 	pc = {"attempt_history": ["not_a_dict_entry", {"backoff": 0.5}]}
 	sanitized = sanitize_provider_call_metadata(pc)

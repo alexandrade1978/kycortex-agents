@@ -7753,3 +7753,83 @@ def test_infer_argument_type_none_payload_set_value_and_unknown_call_paths():
     name_node = _ast.parse("payload", mode="eval").body
     result_name = infer_argument_type(name_node, {}, "status", {})
     assert result_name == ""
+
+
+def test_extract_parametrize_arg_names_list_tuple_and_unknown_argnames():
+    import ast as _ast
+
+    # extract_parametrize_argument_names: argnames_node is ast.List (lines 139-146)
+    list_param_decorator = _ast.parse(
+        "@pytest.mark.parametrize(['x', 'y'], [(1, 2)])\n"
+        "def test_fn(x, y): pass"
+    ).body[0]
+    assert isinstance(list_param_decorator, _ast.FunctionDef)
+    dec_call = list_param_decorator.decorator_list[0]
+    assert isinstance(dec_call, _ast.Call)
+    result_list = extract_parametrize_argument_names(dec_call)
+    assert result_list == {"x", "y"}
+
+    # extract_parametrize_argument_names: argnames_node is something else → return set() (line 147)
+    bad_dec = _ast.fix_missing_locations(
+        _ast.Call(
+            func=_ast.Attribute(value=_ast.Attribute(value=_ast.Name("pytest"), attr="mark"), attr="parametrize"),
+            args=[_ast.List(elts=[_ast.Constant(42)], ctx=_ast.Load())],  # non-string elements
+            keywords=[],
+        )
+    )
+    # List with non-string Constant elements → the set comprehension will skip non-str elements → empty set
+    result_bad = extract_parametrize_argument_names(bad_dec)
+    assert isinstance(result_bad, set)
+
+    # extract_parametrize_argument_names: argnames_node from keyword but none matches → set() (lines 133->137, 147)
+    no_match_dec = _ast.fix_missing_locations(
+        _ast.Call(
+            func=_ast.Attribute(value=_ast.Attribute(value=_ast.Name("pytest"), attr="mark"), attr="parametrize"),
+            args=[],
+            keywords=[_ast.keyword(arg="argvalues", value=_ast.List(elts=[], ctx=_ast.Load()))],
+        )
+    )
+    result_no_match = extract_parametrize_argument_names(no_match_dec)
+    assert result_no_match == set()
+
+
+def test_collect_local_name_bindings_aug_for_with_except_namedexpr_comprehension_import():
+    import ast as _ast
+
+    # collect_local_name_bindings: covers AugAssign (181), For (185), With (188->187+191),
+    # ExceptHandler (191), NamedExpr (193), comprehension (195), ImportFrom (198->197)
+    fn = _ast.parse(
+        "def test_fn(a):\n"
+        "    a += 1\n"                                    # AugAssign → 183
+        "    for i in range(3):\n"                        # For → 185
+        "        pass\n"
+        "    with ctx() as alias:\n"                      # With optional_vars → 188-189
+        "        pass\n"
+        "    try:\n"
+        "        pass\n"
+        "    except ValueError as exc:\n"                 # ExceptHandler.name → 191
+        "        pass\n"
+        "    result = [x for x in items]\n"              # comprehension (walked) → 195
+        "    from os import path as ospath\n"             # ImportFrom → 197-198
+    ).body[0]
+    assert isinstance(fn, _ast.FunctionDef)
+    names = collect_local_name_bindings(fn)
+    assert "a" in names
+    assert "i" in names
+    assert "alias" in names
+    assert "exc" in names
+    assert "ospath" in names
+
+    # iter_relevant_test_body_nodes: child is nested FunctionDef → continue (line 154)
+    from kycortex_agents.orchestration.test_ast_analysis import iter_relevant_test_body_nodes
+    fn_nested = _ast.parse(
+        "def test_outer():\n"
+        "    def helper():\n"
+        "        return 1\n"
+        "    x = helper()\n"
+    ).body[0]
+    assert isinstance(fn_nested, _ast.FunctionDef)
+    nodes = list(iter_relevant_test_body_nodes(fn_nested))
+    # helper() FunctionDef should NOT appear in iterated nodes (skipped by line 154)
+    helper_fn_nodes = [n for n in nodes if isinstance(n, _ast.FunctionDef) and n.name == "helper"]
+    assert helper_fn_nodes == []

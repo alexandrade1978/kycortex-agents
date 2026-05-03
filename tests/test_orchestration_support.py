@@ -8025,3 +8025,148 @@ def test_analyze_test_module_fixture_test_without_assertions_and_class_arity():
     assert any("ServiceClass" in m for m in result["constructor_arity_mismatches"])
     # fixture count includes my_fixture
     assert result["fixture_count"] >= 1
+
+
+def test_analyze_test_module_reserved_fixture_parametrized_arg_class_member_range_arity():
+    # Covers: reserved_fixture_name_matches (1973), parametrized arg skip (1981->1980),
+    # class member ref via imported symbol (2013-2019), range arity mismatch (2066)
+    test_code = (
+        "import pytest\n"
+        "from my_module import ServiceClass\n"
+        "\n"
+        "@pytest.fixture\n"
+        "def request():\n"
+        "    return ServiceClass()\n"
+        "\n"
+        "@pytest.mark.parametrize('x,y', [(1, 2)])\n"
+        "def test_with_params(x, y):\n"
+        "    # x and y are parametrized, should NOT appear in referenced_fixtures\n"
+        "    _ = ServiceClass.unknown_attr\n"
+        "    assert x < y\n"
+        "\n"
+        "def test_range_ctor():\n"
+        "    svc = ServiceClass(1, 2, 3, 4, 5)\n"
+        "    assert svc\n"
+    )
+    class_map = {
+        "ServiceClass": {
+            "constructor_params": ["a", "b", "c"],
+            "constructor_min_args": 1,
+            "constructor_max_args": 3,
+            "attributes": ["status"],
+            "fields": ["id"],
+            "method_signatures": {},
+            "is_enum": False,
+        }
+    }
+    from kycortex_agents.orchestration.test_ast_analysis import analyze_test_module
+    result = analyze_test_module(
+        test_code,
+        "my_module",
+        {"ServiceClass"},
+        set(),
+        {},
+        class_map,
+        set(),
+        set(),
+        {},
+        {},
+        {},
+        set(),
+        {},
+        {"request"},   # reserved_fixture_names contains "request"
+        set(),
+    )
+    assert result["syntax_ok"] is True
+    # reserved fixture "request" matched
+    assert any("request" in r for r in result["reserved_fixture_names"])
+    # invalid member ref ServiceClass.unknown_attr
+    assert any("ServiceClass" in r for r in result["invalid_member_references"])
+    # range arity mismatch (expects 1-3, test uses 5)
+    assert any("ServiceClass" in m for m in result["constructor_arity_mismatches"])
+
+
+def test_visible_risk_factors_non_constant_key_and_non_sequence_value():
+    # Covers: continue when key_node is not Constant str (2215)
+    # and continue when resolved_value is not List/Tuple/Set (2218)
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import (
+        visible_risk_factors_require_positive_score,
+        collect_local_bindings,
+    )
+    # Dict with non-constant key (variable) and Dict with constant key but constant value
+    fn_tree = _ast.parse(
+        "def test_mixed():\n"
+        "    key_var = 'adverse_indicators'\n"
+        "    payload = {key_var: [1, 2], 'other_key': 'string_value'}\n"
+        "    do_something(payload)\n"
+    )
+    fn = fn_tree.body[0]
+    bindings = collect_local_bindings(fn)
+    # key_var is not Constant → continue (2215)
+    # 'other_key': 'string_value' → resolved_value is Constant (not List) → continue (2218)
+    result = visible_risk_factors_require_positive_score(fn, bindings)
+    # Neither branch triggers a True → returns False
+    assert result is False
+
+
+def test_exact_len_assertion_right_len_non_int_left():
+    # Covers line 2313: is_len_call(right) is True but int_constant_value(left) is None
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import exact_len_assertion
+    # "some_var == len(items)" where left is a Name, not an int constant
+    compare_node = _ast.parse("some_var == len(items)", mode="eval").body
+    assert exact_len_assertion(compare_node) is None
+
+
+def test_with_uses_pytest_raises_non_call_context_and_name_func():
+    # Covers 2429: continue when context_expr is not a Call
+    # Covers 2431->2435: when func IS a Name (called_name is not None, skip the import block)
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import with_uses_pytest_raises
+
+    # Non-call context_expr: `with some_var:` → context_expr is Name, not Call → continue (2429)
+    with_non_call = _ast.parse(
+        "with some_ctx_manager:\n"
+        "    pass\n"
+    ).body[0]
+    assert with_uses_pytest_raises(with_non_call) is False
+
+    # func IS a Name called 'raises': `with raises(ValueError):` → called_name='raises'
+    # → `if called_name is None:` is False (2431->2435) → returns True
+    with_plain_raises = _ast.parse(
+        "with raises(ValueError):\n"
+        "    do_something()\n"
+    ).body[0]
+    assert with_uses_pytest_raises(with_plain_raises) is True
+
+
+def test_count_test_assertion_like_checks_mock_attr_on_non_mock_target():
+    # Covers 2479->2459: mock assertion attr present but target is not a mock
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import count_test_assertion_like_checks
+    # "regular_svc.assert_called_once_with()" — regular_svc is not a mock binding
+    fn_code = (
+        "def test_non_mock():\n"
+        "    regular_svc = SomeService()\n"
+        "    regular_svc.assert_called_once_with()\n"
+    )
+    fn = _ast.parse(fn_code).body[0]
+    # supports_mock_assertion_target will be False for regular_svc → 2479->2459 → no increment
+    count = count_test_assertion_like_checks(fn)
+    # Only no assertions counted (regular_svc is not a mock)
+    assert count == 0
+
+
+def test_collect_module_defined_names_non_matching_stmt():
+    # Covers 2420->2410: stmt that is not FunctionDef/ClassDef/Import/Assign/AnnAssign
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import collect_module_defined_names
+    # Module with an Expr statement (not matched by any branch)
+    tree = _ast.parse(
+        "x = 1\n"           # Assign → matched
+        "print('hello')\n"  # Expr → NOT matched → 2420->2410 (falls through all branches)
+    )
+    result = collect_module_defined_names(tree)
+    assert "x" in result
+    assert "print" not in result

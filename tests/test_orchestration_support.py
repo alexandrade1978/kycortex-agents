@@ -7323,3 +7323,28 @@ def test_assert_expects_invalid_outcome_non_eq_and_swapped_compare_paths():
 
     wrong_marker_node = ast.parse("'ok' == result.status", mode="eval").body
     assert assert_expects_invalid_outcome(wrong_marker_node, "result", None) is False
+
+def test_assigned_name_for_call_annassign_and_none_paths():
+    ann_tree = ast.parse(
+        "def test_invalid():\n"
+        "    result: dict = validate_request(payload)\n"
+    )
+    ann_pm = parent_map(ann_tree)
+    ann_call = next(
+        node
+        for node in ast.walk(ann_tree)
+        if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+    )
+    assert assigned_name_for_call(ann_call, ann_pm) == "result"
+
+    expr_tree = ast.parse(
+        "def test_invalid():\n"
+        "    validate_request(payload)\n"
+    )
+    expr_pm = parent_map(expr_tree)
+    expr_call = next(
+        node
+        for node in ast.walk(expr_tree)
+        if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+    )
+    assert assigned_name_for_call(expr_call, expr_pm) is None

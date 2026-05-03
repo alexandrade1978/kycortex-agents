@@ -8982,3 +8982,38 @@ def test_auto_fix_type_mismatches_nested_key_complete_and_positional_string_arg_
 		dict_key_extractor=lambda _: {"data": ["status"]},
 	)
 	assert "{'status': 'sample'}" in fixed_positional
+
+
+def test_auto_fix_type_mismatches_merged_dict_missing_pairs_empty_branch(monkeypatch):
+	import kycortex_agents.orchestration.test_ast_analysis as taa
+
+	original = taa.dict_literal_source_from_examples
+	monkeypatch.setattr(taa, "dict_literal_source_from_examples", lambda *_args, **_kwargs: "{}")
+
+	impl_code = "def validate_request(data):\n    return data.get('status')\n"
+	test_code = "def test_validate_request():\n    validate_request(data={'status': 'value'})\n"
+
+	fixed = taa.auto_fix_test_type_mismatches(
+		test_code,
+		impl_code,
+		dict_key_extractor=lambda _: {"data": ["status", "kind"]},
+	)
+
+	assert fixed == test_code.replace("'value'", "'sample'")
+	assert "'kind'" not in fixed
+	assert taa.dict_literal_source_from_examples is not original
+
+
+def test_auto_fix_type_mismatches_string_argument_without_expected_literal_keeps_original_call():
+	from kycortex_agents.orchestration.test_ast_analysis import auto_fix_test_type_mismatches
+
+	impl_code = "def validate_request(data):\n    return data\n"
+	test_code = "def test_validate_request():\n    validate_request('value')\n"
+
+	fixed = auto_fix_test_type_mismatches(
+		test_code,
+		impl_code,
+		dict_key_extractor=lambda _: {"data": []},
+	)
+
+	assert fixed == test_code

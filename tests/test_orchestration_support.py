@@ -8859,3 +8859,126 @@ def test_auto_fix_type_mismatches_nested_and_string_argument_replacement_paths()
     assert "validate_request(data={'payload':" in fixed
     # String argument should be replaced with a dict literal.
     assert "validate_request(data={'payload': {'key': 'sample'}})" in fixed
+
+
+
+def test_auto_fix_type_mismatches_editable_dict_node_subscript_over_dict_and_non_string_key_branches():
+	from kycortex_agents.orchestration.test_ast_analysis import auto_fix_test_type_mismatches
+
+	impl_code = "def validate_request(data):\n    return data\n"
+
+	# editable_dict_node subscript-over-dict: bindings have inner={} and outer={'request': inner}
+	# recursive call returns inner dict (non-None) -> covers 1709->1712
+	# replacement_source truthy -> append and continue -> covers 1784->1792
+	test_subscript = (
+		"def test_validate_request():\n"
+		"    inner = {}\n"
+		"    outer = {'request': inner}\n"
+		"    validate_request(data=outer['request'])\n"
+	)
+	fixed_subscript = auto_fix_test_type_mismatches(
+		test_subscript,
+		impl_code,
+		dict_key_extractor=lambda _: {"data": ["status"]},
+	)
+	assert "{'status': 'sample'}" in fixed_subscript
+
+	# non-string-constant key: {0: 'value'} forces merged_dict_literal_source to iterate
+	# key_node=Constant(0) where isinstance(0, str) is False -> covers 1665->1678
+	test_int_key = "def test_validate_request():\n    validate_request(data={0: 'value'})\n"
+	fixed_int_key = auto_fix_test_type_mismatches(
+		test_int_key,
+		impl_code,
+		dict_key_extractor=lambda _: {"data": ["status"]},
+	)
+	assert "'status': 'sample'" in fixed_int_key
+
+
+def test_auto_fix_type_mismatches_subscript_over_call_and_plain_call_fallback_paths():
+	from kycortex_agents.orchestration.test_ast_analysis import auto_fix_test_type_mismatches
+
+	impl_code = (
+		"def validate_request(data):\n"
+		"    return data\n"
+		"\n"
+		"def factory(payload):\n"
+		"    return payload\n"
+		"\n"
+		"def get_data():\n"
+		"    return {}\n"
+	)
+	# subscript-over-dict loop exhausts (no matching key) then isinstance(Call) False:
+	# container = {'other': {}} -> outer['missing'] -> key 'other' != 'missing' -> loop exits
+	# covers 1709->1712 (dict for-loop exhausted) and 1712->1735 (not a Call -> return None)
+	#
+	# subscript-over-call with first candidate returning a Name (editable_dict_node=None),
+	# then fallback loop finds a dict value matching the slice key:
+	# factory(payload=unbound_var, other={'request': {}})['request']
+	# candidate 'payload' -> Name('unbound_var') -> nested_dict=None -> covers 1722->1713 (loop continues)
+	# fallback: keyword 'other' has value {'request': {}} -> Subscript resolves -> non-None
+	# covers 1733->1724 (fallback returns non-None)
+	#
+	# subscript-over-call with empty call: get_data()['status']
+	# no params -> all candidates fail -> args empty -> covers 1735 (return None)
+	#
+	# plain call with nested call arg: process(make_item())
+	# fallback arg=Call(make_item) -> inner editable_dict_node returns None
+	# covers 1747->1742 (loop continues) and 1742->1749 (loop exhausts -> return None)
+	test_code = (
+		"def test_dict_no_match():\n"
+		"    container = {'other': {}}\n"
+		"    validate_request(data=container['missing'])\n"
+		"\n"
+		"def test_from_factory():\n"
+		"    validate_request(data=factory(payload=unbound_var, other={'other': {}}, more={'request': {}})['request'])\n"
+		"\n"
+		"def test_from_getter():\n"
+		"    validate_request(data=get_data()['status'])\n"
+		"\n"
+		"def test_plain_call():\n"
+		"    validate_request(data=process(make_item()))\n"
+	)
+	fixed = auto_fix_test_type_mismatches(
+		test_code,
+		impl_code,
+		dict_key_extractor=lambda _: {"data": ["status"]},
+	)
+	assert isinstance(fixed, str)
+
+
+def test_auto_fix_type_mismatches_nested_key_complete_and_positional_string_arg_paths():
+	from kycortex_agents.orchestration.test_ast_analysis import auto_fix_test_type_mismatches
+
+	# nested key where value already has all required nested keys AND is a placeholder dict
+	# dict_keys = {'data': ['payload'], 'payload': ['key']}
+	# dict_node = {'payload': {'key': 'sample'}} -> payload present -> no top-level replacement
+	# for loop at 1794: key='payload', nested_required_keys=['key']
+	# dict_node_missing_required_keys({'key': 'sample'}, ['key']) -> False (key present)
+	# direct_example from dict_key_examples['data']['payload'] (from impl .get default)
+	# node_looks_like_placeholder({'key': 'sample'}) -> True (all keys are 'key', value is placeholder)
+	# -> covers 1814-1821
+	impl_nested = (
+		"def validate_request(data):\n"
+		"    payload = data.get('payload', {'key': 'default_key'})\n"
+		"    return payload.get('key')\n"
+	)
+	test_nested = "def test_validate_request():\n    validate_request(data={'payload': {'key': 'sample'}})\n"
+	fixed_nested = auto_fix_test_type_mismatches(
+		test_nested,
+		impl_nested,
+		dict_key_extractor=lambda _: {"data": ["payload"], "payload": ["key"]},
+	)
+	assert "'key': 'default_key'" in fixed_nested
+
+	# positional string arg: validate_request('value') bypasses first regex pass (no 'data=...')
+	# second AST pass: function_map provides positional param 'data' -> Constant('value')
+	# editable_dict_node returns None -> elif isinstance(Constant, ast.Constant) True
+	# replacement_source = expected_dict_literals['data'] (truthy) -> append -> covers 1838->1771
+	impl_simple = "def validate_request(data):\n    return data\n"
+	test_positional = "def test_validate_request():\n    validate_request('value')\n"
+	fixed_positional = auto_fix_test_type_mismatches(
+		test_positional,
+		impl_simple,
+		dict_key_extractor=lambda _: {"data": ["status"]},
+	)
+	assert "{'status': 'sample'}" in fixed_positional

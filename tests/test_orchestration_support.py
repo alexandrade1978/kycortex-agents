@@ -7667,3 +7667,40 @@ def test_function_argument_names_vararg_kwarg_and_collect_parametrized_skip_path
     ).body[0]
     assert isinstance(fn_non_mark, _ast.FunctionDef)
     assert collect_parametrized_argument_names(fn_non_mark) == set()
+
+
+def test_is_mock_factory_patch_non_call_and_known_type_allows_member_and_annassign_collect_types():
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import known_type_allows_member
+
+    # is_mock_factory_call: non-Call node → return False (line 270)
+    assert is_mock_factory_call(_ast.Name("Mock")) is False
+
+    # is_patch_call: non-Call node → return False (line 287)
+    assert is_patch_call(_ast.Name("patch")) is False
+
+    # known_type_allows_member: owner_type not in class_map, owner_name is in class_map (line 256-257)
+    attr_node = _ast.parse("svc.validate", mode="eval").body
+    assert isinstance(attr_node, _ast.Attribute)
+    class_map_svc = {"svc": {"attributes": ["validate"], "fields": [], "method_signatures": {}}}
+    assert known_type_allows_member(attr_node, {}, class_map_svc) is True
+
+    # known_type_allows_member: owner_type not in class_map and owner_name also not in class_map → False (line 258)
+    attr_unknown = _ast.parse("unknown.method", mode="eval").body
+    assert isinstance(attr_unknown, _ast.Attribute)
+    assert known_type_allows_member(attr_unknown, {}, {}) is False
+
+    # collect_test_local_types: AnnAssign path (lines 239-243)
+    fn_ann = _ast.parse(
+        "def test_fn():\n"
+        "    svc: ServiceClass = ServiceClass()\n"
+    ).body[0]
+    assert isinstance(fn_ann, _ast.FunctionDef)
+    types = collect_test_local_types(
+        fn_ann,
+        {"ServiceClass": {"constructor_params": []}},
+        {"ServiceClass": {"return_type": "ServiceClass"}},
+        infer_call_result_type,
+    )
+    # We just verify it doesn't raise and returns a dict
+    assert isinstance(types, dict)

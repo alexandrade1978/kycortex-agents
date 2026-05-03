@@ -235,6 +235,44 @@ def test_provider_runtime_config_can_target_specific_provider_model(tmp_path):
     assert runtime.timeout_seconds == 30.0
 
 
+def test_provider_runtime_config_rejects_provider_without_configured_models(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        llm_model="gpt-4o",
+    )
+
+    with pytest.raises(
+        ConfigValidationError,
+        match="No configured models found for provider: anthropic",
+    ):
+        config.provider_runtime_config("anthropic")
+
+
+def test_provider_model_execution_plan_deduplicates_pairs_from_provider_model_sources(tmp_path, monkeypatch):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="openai",
+        llm_model="gpt-4o",
+        provider_fallback_order=("anthropic",),
+        provider_fallback_models={"anthropic": "claude-3-5-sonnet"},
+    )
+
+    def fake_models_for_provider(provider_name: str) -> tuple[str, ...]:
+        if provider_name == "openai":
+            return ("gpt-4o", "gpt-4o")
+        if provider_name == "anthropic":
+            return ("claude-3-5-sonnet", "claude-3-5-sonnet")
+        return ()
+
+    monkeypatch.setattr(config, "models_for_provider", fake_models_for_provider)
+
+    assert config.provider_model_execution_plan() == [
+        ("openai", "gpt-4o"),
+        ("anthropic", "claude-3-5-sonnet"),
+    ]
+
+
 def test_config_rejects_invalid_temperature(tmp_path):
     with pytest.raises(ConfigValidationError, match="temperature must be between 0 and 2"):
         KYCortexConfig(output_dir=str(tmp_path / "output"), temperature=2.5)
@@ -286,6 +324,17 @@ def test_config_rejects_invalid_adaptive_prompt_override_mode(tmp_path):
         KYCortexConfig(
             output_dir=str(tmp_path / "output"),
             adaptive_prompt_mode_overrides={"openai:gpt-5": "fast"},
+        )
+
+
+def test_config_rejects_invalid_adaptive_prompt_override_provider_key_with_colon(tmp_path):
+    with pytest.raises(
+        ConfigValidationError,
+        match="adaptive_prompt_mode_overrides contains invalid key: custom:model",
+    ):
+        KYCortexConfig(
+            output_dir=str(tmp_path / "output"),
+            adaptive_prompt_mode_overrides={"custom:model": "rich"},
         )
 
 

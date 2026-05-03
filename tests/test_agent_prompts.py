@@ -6,6 +6,7 @@ import pytest
 from kycortex_agents.agents.architect import ArchitectAgent
 from kycortex_agents.agents.code_engineer import (
     CodeEngineerAgent,
+    _adaptive_prompt_mode,
     _low_budget_code_section,
     _budget_compaction_line_target,
     _compact_task_constraints_block,
@@ -221,6 +222,19 @@ def test_code_engineer_helper_functions_cover_empty_and_mid_budget_edges():
     assert _split_repair_task_description("") == ("", "")
     assert _repair_literal_replacement_hint(cast(str, None)) is None
     assert _repair_quoted_broken_line_hint(cast(str, None)) == ""
+
+
+def test_code_engineer_adaptive_prompt_mode_and_compact_constraints_fallbacks():
+    class StripPassesButContentIsWhitespace(str):
+        def strip(self, chars=None):  # type: ignore[override]
+            return "marker"
+
+    assert _adaptive_prompt_mode("not a dict") is None
+    assert _adaptive_prompt_mode({"adaptive_prompt_policy": "invalid"}) is None
+    assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": None}}) is None
+    assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": "   "}}) is None
+    assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": " Compact "}}) == "compact"
+    assert _compact_task_constraints_block(StripPassesButContentIsWhitespace("   ")) == ""
 
 
 def test_code_engineer_low_budget_section_respects_adaptive_mode():

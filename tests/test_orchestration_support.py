@@ -7897,3 +7897,63 @@ def test_infer_expression_type_call_and_none_and_infer_call_no_method_dict():
     assert isinstance(fn_exact, _ast.FunctionDef)
     _, mismatches_exact = analyze_typed_test_member_usage(fn_exact, {"svc": "ServiceX"}, class_map_exact)
     assert any("expects 1 args but test uses 3" in m for m in mismatches_exact)
+
+
+def test_ast_analysis_dict_literal_and_field_assertion_helpers():
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import (
+        example_value_source_for_key,
+        dict_literal_source_from_examples,
+        dict_node_missing_required_keys,
+        node_looks_like_placeholder,
+        exact_field_string_assertion,
+    )
+
+    # example_value_source_for_key: "approved" token → return "True" (line 1414)
+    assert example_value_source_for_key("is_approved", {}) == "True"
+    assert example_value_source_for_key("enabled_flag", {}) == "True"
+
+    # dict_literal_source_from_examples: nested_examples path (lines 1429-1433)
+    nested_keys = {"request": ["name", "type"]}
+    nested_examples = {"request": {"name": "'sample'", "type": "'test_type'"}}
+    result = dict_literal_source_from_examples("outer", {"outer": ["request"]}, nested_examples)
+    assert "request" in result
+    assert "{" in result  # nested dict was constructed
+
+    # dict_node_missing_required_keys: node is not a Dict → return True (line 1442)
+    name_node = _ast.parse("payload", mode="eval").body
+    assert dict_node_missing_required_keys(name_node, ["name"]) is True
+
+    # node_looks_like_placeholder: Dict with all "key" keys → True (lines 1457-1462)
+    placeholder_dict = _ast.parse("{'key': 'sample'}", mode="eval").body
+    assert node_looks_like_placeholder(placeholder_dict) is True
+
+    # node_looks_like_placeholder: Dict with non-"key" key → False
+    non_placeholder = _ast.parse("{'name': 'Alice'}", mode="eval").body
+    assert node_looks_like_placeholder(non_placeholder) is False
+
+    # exact_field_string_assertion: not a Compare → return None (line 1471)
+    name_assert = _ast.parse("assert result", mode="single").body[0]
+    assert isinstance(name_assert, _ast.Assert)
+    name_result = exact_field_string_assertion(name_assert)
+    assert name_result is None
+
+    # exact_field_string_assertion: Compare but op is not Eq or Is → return None (line 1473)
+    lt_assert = _ast.parse("assert result.status < 5", mode="single").body[0]
+    assert isinstance(lt_assert, _ast.Assert)
+    assert exact_field_string_assertion(lt_assert) is None
+
+    # exact_field_string_assertion: left is string, right has field_name → return tuple (lines 1489-1491)
+    str_left = _ast.parse("assert 'active' == result.status", mode="single").body[0]
+    assert isinstance(str_left, _ast.Assert)
+    res_left = exact_field_string_assertion(str_left)
+    assert res_left is not None
+    assert res_left[0] == "status"
+
+    # exact_field_string_assertion: right is string, left has field_name → return tuple (line 1494->1496)
+    # (already covered by the standard path, but let's check subscript left too)
+    subscript_left = _ast.parse("assert result['status'] == 'active'", mode="single").body[0]
+    assert isinstance(subscript_left, _ast.Assert)
+    res_sub = exact_field_string_assertion(subscript_left)
+    assert res_sub is not None
+    assert res_sub[0] == "status"

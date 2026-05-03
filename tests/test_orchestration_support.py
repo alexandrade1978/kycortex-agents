@@ -8687,3 +8687,89 @@ def test_auto_fix_type_mismatches_helper_func_is_false_and_dict_var_assigned():
     # test_positive_but_is_false is skipped (is_negative=True)
     # test_normal: line with dict_assigned_var data → replacement="data" (1626->1625)
     assert isinstance(result, str)
+
+
+def test_payload_argument_for_validation_keyword_fallback_branch_with_monkeypatched_argument_lookup(monkeypatch):
+    import ast as _ast
+    import kycortex_agents.orchestration.test_ast_analysis as taa
+
+    # Force the parameter-name probe loop to miss so execution reaches the keyword fallback loop (976-978).
+    monkeypatch.setattr(taa, "call_argument_value", lambda *args, **kwargs: None)
+    call_node = _ast.parse("my_func(payload={'status': 'ok'})", mode="eval").body
+    assert isinstance(call_node, _ast.Call)
+    result = taa.payload_argument_for_validation(call_node, "my_func")
+    assert isinstance(result, _ast.Dict)
+
+
+def test_validate_batch_call_wrapper_resolution_fallback_paths_and_value_rule_no_invalids(monkeypatch):
+    import ast as _ast
+    import kycortex_agents.orchestration.test_ast_analysis as taa
+
+    call_node = _ast.parse("process_batch(items)", mode="eval").body
+    assert isinstance(call_node, _ast.Call)
+
+    # Drive 1019-1020 via non-expr item + expr resolved_item.
+    synthetic_item = object()
+    monkeypatch.setattr(taa, "extract_literal_list_items", lambda *_args, **_kwargs: [synthetic_item])
+    monkeypatch.setattr(taa, "extract_literal_dict_keys", lambda *_args, **_kwargs: ["request"])
+    monkeypatch.setattr(
+        taa,
+        "resolve_bound_value",
+        lambda node, bindings: _ast.Name(id="resolved", ctx=_ast.Load()) if node is synthetic_item else node,
+    )
+    violations_expr_resolve = taa.validate_batch_call(
+        call_node,
+        {},
+        "process_batch",
+        {"fields": [], "request_key": None, "wrapper_key": "request"},
+    )
+    assert violations_expr_resolve == []
+
+    # Drive 1022-1025 by keeping both item and resolved_item as non-expr while item_keys is present.
+    monkeypatch.setattr(taa, "resolve_bound_value", lambda node, bindings: object() if node is synthetic_item else node)
+    violations_missing_nested_source = taa.validate_batch_call(
+        call_node,
+        {},
+        "process_batch",
+        {"fields": ["status"], "request_key": None, "wrapper_key": "request"},
+    )
+    assert any("missing nested payload `request`" in violation for violation in violations_missing_nested_source)
+
+    # Cover 1058->1048: invalid_values is empty, so the branch is not taken.
+    plain_call = _ast.parse("process_batch([{'type': 'valid_type'}])", mode="eval").body
+    assert isinstance(plain_call, _ast.Call)
+    violations_no_invalid = taa.validate_batch_call(
+        plain_call,
+        {},
+        "process_batch",
+        {"fields": [], "request_key": None, "wrapper_key": None},
+        field_value_rules={"type": ["valid_type"]},
+    )
+    assert violations_no_invalid == []
+
+
+def test_call_has_negative_expectation_none_node_reaches_terminal_false():
+    from kycortex_agents.orchestration.test_ast_analysis import call_has_negative_expectation
+
+    # Runtime path coverage: while-loop skipped when current starts as None, returning line 1110.
+    assert call_has_negative_expectation(None, {}) is False
+
+
+def test_auto_fix_type_mismatches_required_key_already_present_branch(monkeypatch):
+    from kycortex_agents.orchestration.test_ast_analysis import auto_fix_test_type_mismatches
+
+    impl_code = "def validate_request(data):\n    return bool(data.get('status'))\n"
+    test_code = "def test_validate_request():\n    validate_request(data='pending')\n"
+
+    monkeypatch.setattr(
+        "kycortex_agents.orchestration.module_ast_analysis.dict_required_keys_from_tree",
+        lambda _tree: {"data": ["status"]},
+    )
+
+    # dict_key_extractor already contains the same key, exercising 1556->1555.
+    fixed = auto_fix_test_type_mismatches(
+        test_code,
+        impl_code,
+        dict_key_extractor=lambda _tree: {"data": ["status"]},
+    )
+    assert "validate_request(data={'status': 'sample'})" in fixed

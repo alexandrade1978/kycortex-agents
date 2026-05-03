@@ -5202,6 +5202,25 @@ class TestExpressionPrimitiveKindAndReturnAnalysis:
         result = QATesterAgent._implementation_call_return_primitive_kind(impl, "validate")
         assert result == "bool"
 
+    def test_implementation_call_return_primitive_kind_infer_via_nested_function_return(self):
+        # Lines 2588 and 2592: force _resolved_callable_return_shapes to return
+        # len(primitive_kinds) > 1 by including a nested function whose call return
+        # is resolved by _resolve_return_expression_shape (→ "int") but not by
+        # _expression_primitive_kind directly (ast.Call → "").  The outer literal
+        # return (True → "bool") is the only kind captured by the walk in
+        # _implementation_call_return_primitive_kind, producing unique_kinds=["bool"].
+        impl = (
+            "def make_value():\n"
+            "    return 42\n"
+            "\n"
+            "def outer(x):\n"
+            "    def inner():\n"
+            "        return make_value()\n"
+            "    return True\n"
+        )
+        result = QATesterAgent._implementation_call_return_primitive_kind(impl, "outer")
+        assert result == "bool"
+
     def test_implementation_result_mapping_field_keys_deduplicates(self):
         # Arc 2675: duplicate key in dict → continue (already in seen).
         impl = (

@@ -148,6 +148,15 @@ class TestTestValidationHasOnlyWarnings:
         validation = {"test_analysis": {"syntax_ok": True}}
         assert validation_has_only_warnings(validation) is False
 
+    def test_test_analysis_not_a_dict(self, orch, monkeypatch):
+        # Line 392: test_analysis is not a dict → return False
+        # validation_has_blocking_issues also returns True for non-dict test_analysis,
+        # so monkeypatch it to return False to let control reach line 392.
+        import kycortex_agents.orchestration.validation_analysis as va_module
+        monkeypatch.setattr(va_module, "validation_has_blocking_issues", lambda _v: False)
+        validation = {"test_analysis": "not_a_dict"}
+        assert validation_has_only_warnings(validation) is False
+
 
 # ---------------------------------------------------------------------------
 # _ast_is_empty_literal  (11 missed)

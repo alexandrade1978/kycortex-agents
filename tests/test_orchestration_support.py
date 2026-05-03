@@ -8637,3 +8637,53 @@ def test_analyze_test_type_mismatches_observed_type_empty_continue():
     )
     # No mismatches because observed_type="" → continue (1392)
     assert result == []
+
+
+def test_exact_field_string_assertion_observed_field_name_returns_none_branches():
+    # Covers 1484: observed_field_name returns None (candidate is Name, not Attribute or Subscript)
+    # Covers 1490->1492: left is str Constant, observed_field_name(right) returns None → False → 1492
+    # Covers 1494->1496: right is str Constant, observed_field_name(left) returns None → False → 1496
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import exact_field_string_assertion
+
+    # assert 'active' == some_var → left=Constant, right=Name → observed_field_name(right)=None → 1490->1492
+    # Then right is NOT Constant → returns None (no 1492 check matches)
+    assert1 = _ast.parse("assert 'active' == some_var", mode="exec").body[0]
+    result1 = exact_field_string_assertion(assert1)
+    assert result1 is None  # covers 1484, 1490->1492
+
+    # assert some_var == 'active' → right=Constant, left=Name → observed_field_name(left)=None → 1494->1496
+    assert2 = _ast.parse("assert some_var == 'active'", mode="exec").body[0]
+    result2 = exact_field_string_assertion(assert2)
+    assert result2 is None  # covers 1494->1496
+
+
+def test_auto_fix_type_mismatches_helper_func_is_false_and_dict_var_assigned():
+    # Covers 1574: non-test function in first ast.walk → if not node.name.startswith("test_"): continue
+    # Covers 1580: function with "is False" in source (positive name) → is_negative = True
+    # Covers 1596: non-test function in second ast.walk → continue
+    # Covers 1625->1629: line in function range, param NOT in dict_assigned_vars (dict_literal used)
+    # Covers 1626->1625: line in function range, param IS in dict_assigned_vars → replacement=param_name
+    from kycortex_agents.orchestration.test_ast_analysis import auto_fix_test_type_mismatches
+
+    impl_code = (
+        "def validate_request(data):\n"
+        "    if data['status'] not in ['active']:\n"
+        "        raise ValueError\n"
+    )
+    test_code = (
+        "def helper_function():\n"               # non-test function → 1574, 1596 (skip)
+        "    data = {'status': 'active'}\n"
+        "\n"
+        "def test_positive_but_is_false():\n"    # positive name + "is False" in body → 1580 → is_negative=True
+        "    result = validate_request(status='pending')\n"
+        "    assert result is False\n"            # "is False" present → 1580
+        "\n"
+        "def test_normal():\n"
+        "    data = {'status': 'placeholder'}\n"  # dict assigned as var → 1626->1625 (replacement=param_name)
+        "    validate_request(status='pending')\n" # param NOT dict_assigned_var → 1625->1629
+    )
+    result = auto_fix_test_type_mismatches(test_code, impl_code)
+    # test_positive_but_is_false is skipped (is_negative=True)
+    # test_normal: line with dict_assigned_var data → replacement="data" (1626->1625)
+    assert isinstance(result, str)

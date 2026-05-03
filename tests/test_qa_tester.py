@@ -1596,6 +1596,15 @@ class TestSelectionAndFixedTimeHelpers:
         assert QATesterAgent._compact_task_constraints_block(
             "Public contract anchor:\n- Public facade: ReviewService"
         ) == "Task constraints summary:\n- Public contract anchor: - Public facade: ReviewService"
+
+        # Line 3961: both re.sub calls strip to empty — use str subclass that
+        # overrides .strip() to return a truthy marker so the first guard passes,
+        # but the actual content is all-whitespace so re.sub → " " → .strip() → ""
+        class _StripMarker(str):
+            def strip(self, chars=None):  # type: ignore[override]
+                return "marker"
+
+        assert QATesterAgent._compact_task_constraints_block(_StripMarker("   ")) == ""
         assert QATesterAgent._task_public_contract_anchor_block(None) == ""
         assert QATesterAgent._snake_case_name("") == "value"
         assert QATesterAgent._snake_case_name("HTTPRequest") == "http_request"
@@ -4488,6 +4497,26 @@ class TestAssertionIssueDetectors:
         )
         result = QATesterAgent._summary_has_exact_band_label_assertion_issue(summary, content)
         assert isinstance(result, bool)
+
+    def test_band_label_assertion_both_sides_band_literals_with_field_token_text(self, monkeypatch):
+        # Line 1063: left_bands and right_bands both non-empty and different sets.
+        # Requires _expression_text to return text containing a field token, which
+        # can't happen naturally for pure band literals → monkeypatch.
+        import kycortex_agents.agents.qa_tester as qa_module
+        monkeypatch.setattr(
+            qa_module.QATesterAgent,
+            "_expression_text",
+            staticmethod(lambda node: "risk_level_score"),
+        )
+        summary = (
+            "Generated test validation:\n"
+            "- Pytest execution: FAIL\n"
+            "- Pytest failure details: FAILED tests.py::test_risk - AssertionError\n"
+            "- Verdict: FAIL"
+        )
+        content = "def test_risk():\n    assert ['high'] == ['medium']\n"
+        result = QATesterAgent._summary_has_exact_band_label_assertion_issue(summary, content)
+        assert result is True
 
 
 class TestDatetimeHelpers:

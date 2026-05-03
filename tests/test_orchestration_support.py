@@ -9023,3 +9023,68 @@ def test_auto_fix_type_mismatches_string_argument_without_expected_literal_keeps
 	)
 
 	assert fixed == test_code
+
+
+def test_quick_win_project_state_legacy_acceptance_source_upgrade_directly():
+	# Lines 2832-2834 in project_state.py: inside _public_workflow_finished_details,
+	# the branch where workflow_telemetry is a dict and acceptance_summary is a dict.
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	details = {
+		"workflow_telemetry": {
+			"acceptance_summary": {"verdict": "approved", "score": 0.9},
+		},
+		"acceptance_evaluation": None,
+		"acceptance_policy": "standard",
+	}
+	result = project._public_workflow_finished_details(details)
+	# acceptance_source was replaced by legacy_acceptance_summary dict
+	assert isinstance(result, dict)
+
+
+def test_quick_win_repair_analysis_empty_rendered_arguments_guard_directly(monkeypatch):
+	# Line 534 in repair_analysis.py: `if not rendered_arguments: return None`
+	# Dead code guard — only reachable when class_fields is truthy but yields nothing.
+	import kycortex_agents.orchestration.repair_analysis as ra_module
+
+	class _TruthyEmpty(list):
+		def __bool__(self) -> bool:
+			return True
+
+	monkeypatch.setattr(
+		ra_module,
+		"class_field_names_from_failed_artifact",
+		lambda *a, **kw: _TruthyEmpty(),
+	)
+	validation_summary = (
+		"TypeError: VendorProfile.__init__() got multiple values for argument 'vendor_id'"
+	)
+	failed_code = (
+		"from dataclasses import dataclass\n\n"
+		"@dataclass\n"
+		"class VendorProfile:\n"
+		"    vendor_id: str\n"
+		"    service_category: str\n\n"
+		"def build_vendor_profile(request):\n"
+		"    vendor_id = request.details['vendor_id']\n"
+		"    return VendorProfile(vendor_id, **request.details)\n"
+	)
+	result = ra_module.duplicate_constructor_explicit_rewrite_hint(validation_summary, failed_code)
+	assert result is None
+
+
+def test_quick_win_test_ast_analysis_merged_dict_no_missing_keys_guard_directly(monkeypatch):
+	# Line 1682 in test_ast_analysis.py: `if not missing_keys: return None`
+	# inside merged_dict_literal_source.  Reached when dict_node_missing_required_keys
+	# is monkeypatched to True but the dict already has all required keys so the
+	# internal observed_keys check finds no missing_keys.
+	import kycortex_agents.orchestration.test_ast_analysis as taa
+
+	monkeypatch.setattr(taa, "dict_node_missing_required_keys", lambda *a, **kw: True)
+
+	impl = "def validate(payload={'name': 'seed'}): return payload['name']"
+	test = "def test_ok():\n    validate(payload={'name': 'alice'})\n"
+	# dict_node_missing_required_keys always True → calls merged_dict_literal_source
+	# merged_dict_literal_source finds observed_keys={'name'}, required=['name'] → no missing
+	# → line 1682 → returns None → fallback to expected_dict_literals → replacement made
+	result = taa.auto_fix_test_type_mismatches(test, impl)
+	assert isinstance(result, str)

@@ -7423,3 +7423,60 @@ def test_batch_call_allows_partial_invalid_items_early_exits_and_assert_limits_p
     bad_len = _ast.parse("count(result)", mode="eval").body
     assert isinstance(bad_len, _ast.Call)
     assert len_call_matches_batch_result(bad_len, "result", no_match_call) is False
+
+
+def test_exact_numeric_assertion_non_eq_and_swapped_and_comparison_implies_partial_paths():
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import (
+        exact_numeric_assertion,
+        visible_risk_factors_require_positive_score,
+    )
+
+    # exact_numeric_assertion: op is not Eq → return None (line 2184)
+    lt_compare = _ast.parse("x < 3.0", mode="eval").body
+    assert exact_numeric_assertion(lt_compare) is None
+
+    # exact_numeric_assertion: left is numeric constant, right rendered (line 2194)
+    left_const = _ast.parse("3.0 == score", mode="eval").body
+    result = exact_numeric_assertion(left_const)
+    assert result is not None
+    assert result[1] == 3.0
+
+    # exact_numeric_assertion: neither side numeric → return None (line 2196)
+    no_numeric = _ast.parse("x == y", mode="eval").body
+    assert exact_numeric_assertion(no_numeric) is None
+
+    # comparison_implies_partial_batch_result: compared_value is None → False (line 2234)
+    assert comparison_implies_partial_batch_result(_ast.Eq(), None, 3) is False
+
+    # comparison_implies_partial_batch_result: Eq, value < batch_size → True (line 2236)
+    assert comparison_implies_partial_batch_result(_ast.Eq(), 2, 3) is True
+
+    # comparison_implies_partial_batch_result: Eq, value >= batch_size → False (line 2236)
+    assert comparison_implies_partial_batch_result(_ast.Eq(), 3, 3) is False
+
+    # comparison_implies_partial_batch_result: Gt (not handled) → fallback False (line 2241)
+    assert comparison_implies_partial_batch_result(_ast.Gt(), 2, 3) is False
+
+    # visible_risk_factors_require_positive_score: identity_evidence empty → True (line 2224)
+    fn_tree = _ast.parse(
+        "def test_no_evidence():\n"
+        "    payload = {'identity_evidence': []}\n"
+        "    score_identity(payload)\n"
+    )
+    fn = fn_tree.body[0]
+    assert isinstance(fn, _ast.FunctionDef)
+    from kycortex_agents.orchestration.test_ast_analysis import collect_local_bindings
+    bindings = collect_local_bindings(fn)
+    assert visible_risk_factors_require_positive_score(fn, bindings) is True
+
+    # visible_risk_factors_require_positive_score: key not special, no True → False (line 2225 path)
+    fn_tree2 = _ast.parse(
+        "def test_other():\n"
+        "    payload = {'other_key': [1, 2]}\n"
+        "    score_other(payload)\n"
+    )
+    fn2 = fn_tree2.body[0]
+    assert isinstance(fn2, _ast.FunctionDef)
+    bindings2 = collect_local_bindings(fn2)
+    assert visible_risk_factors_require_positive_score(fn2, bindings2) is False

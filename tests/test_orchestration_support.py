@@ -8262,3 +8262,106 @@ def test_analyze_test_module_enum_class_and_valid_member_access():
     assert result["syntax_ok"] is True
     # ACTIVE is in allowed attributes → NOT in invalid_member_references (covers 2018->2010)
     assert not any("StatusEnum.ACTIVE" in r for r in result["invalid_member_references"])
+
+
+def test_collect_local_name_bindings_annassign_with_no_alias_namedexpr_star_import():
+    # Covers: AnnAssign in function body (181), With optional_vars=None (188->187),
+    # NamedExpr (193), import * (198->197)
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import collect_local_name_bindings
+
+    fn = _ast.parse(
+        "def test_fn():\n"
+        "    x: int = 5\n"           # AnnAssign → 181
+        "    with ctx():\n"          # With without 'as' → optional_vars=None → 188->187
+        "        pass\n"
+        "    result = [y for y in (z := [1, 2])]\n"  # NamedExpr → 193
+        "    from pkg import *\n"    # ImportFrom with * → 198->197
+    ).body[0]
+    assert isinstance(fn, _ast.FunctionDef)
+    names = collect_local_name_bindings(fn)
+    assert "x" in names   # AnnAssign
+    assert "z" in names   # NamedExpr
+
+
+def test_collect_test_local_types_annassign_none_inferred():
+    # Covers: AnnAssign with inferred_type=None → continue (241)
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import collect_test_local_types
+
+    fn = _ast.parse(
+        "def test_fn():\n"
+        "    x: int = some_func()\n"  # AnnAssign where some_func is unknown → inferred=None → continue
+        "    assert x\n"
+    ).body[0]
+    # some_func is not in class_map or function_map → infer_call_result_type returns None
+    result = collect_test_local_types(fn, {}, {}, lambda *a: None)
+    assert "x" not in result  # None inferred → continue → x not added
+
+
+def test_known_type_allows_member_enum_skips_fields():
+    # Covers: is_enum=True → if not class_info.get("is_enum"): is False → 262->264
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import known_type_allows_member
+
+    attribute_node = _ast.parse("my_enum.ACTIVE", mode="eval").body
+    assert isinstance(attribute_node, _ast.Attribute)
+    local_types = {"my_enum": "MyEnum"}
+    class_map = {
+        "MyEnum": {
+            "attributes": ["ACTIVE", "INACTIVE"],
+            "fields": ["id"],  # NOT added when is_enum=True
+            "method_signatures": {},
+            "is_enum": True,
+        }
+    }
+    # ACTIVE is in attributes → returns True; fields NOT included (262->264)
+    assert known_type_allows_member(attribute_node, local_types, class_map) is True
+    # 'id' would be in fields but not attributes when is_enum=True → returns False
+    id_node = _ast.parse("my_enum.id", mode="eval").body
+    assert known_type_allows_member(id_node, local_types, class_map) is False
+
+
+def test_patched_target_name_from_call_keyword_target_and_attribute():
+    # Covers: patch.object target_node=None → look at keywords (310->307)
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import patched_target_name_from_call
+
+    # patch.object with keyword args instead of positional
+    call_node = _ast.parse(
+        "patch.object(target=MyClass, attribute='my_method')",
+        mode="eval",
+    ).body
+    assert isinstance(call_node, _ast.Call)
+    result = patched_target_name_from_call(call_node)
+    assert result == "MyClass.my_method"
+
+
+def test_find_unsupported_mock_assertions_method_call_and_known_type_and_supported_target():
+    # Covers: 403-404 (Call with Attribute func in MOCK_ASSERTION_METHODS)
+    # Covers: 409 (known_type_allows_member → continue, not flagged)
+    # Covers: 411 (supports_mock_assertion_target → continue, not flagged)
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import find_unsupported_mock_assertions
+
+    fn = _ast.parse(
+        "def test_fn():\n"
+        "    mock_svc = MagicMock()\n"       # mock binding (starts with mock_)
+        "    svc = ServiceClass()\n"          # non-mock binding
+        "    mock_svc.assert_called_once()\n" # method call form → 403-404; then 411 → supported → continue
+        "    svc.assert_called_once()\n"      # method call form → 403-404; then 411 → not mock → flagged?
+    ).body[0]
+    class_map = {
+        "ServiceClass": {
+            "attributes": ["status"],
+            "fields": [],
+            "method_signatures": {"assert_called_once": {}},
+            "is_enum": False,
+        }
+    }
+    local_types = {"svc": "ServiceClass"}
+    # mock_svc is a mock binding → supports_mock_assertion_target returns True → 411 → continue (not flagged)
+    issues = find_unsupported_mock_assertions(fn, local_types, class_map)
+    assert not any("mock_svc" in i for i in issues)
+    # svc.assert_called_once: known_type_allows_member returns True (method in signatures) → 409 → continue
+    assert not any("svc.assert_called_once" in i for i in issues)

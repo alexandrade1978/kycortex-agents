@@ -7704,3 +7704,30 @@ def test_is_mock_factory_patch_non_call_and_known_type_allows_member_and_annassi
     )
     # We just verify it doesn't raise and returns a dict
     assert isinstance(types, dict)
+
+
+def test_patched_target_name_non_string_arg_and_collect_mock_support_annassign():
+    import ast as _ast
+
+    # patched_target_name_from_call: first arg is not a string Constant → return None (line 323)
+    non_str_patch = _ast.parse("patch(some_module_path)", mode="eval").body
+    assert isinstance(non_str_patch, _ast.Call)
+    assert patched_target_name_from_call(non_str_patch) is None
+
+    # patched_target_name_from_call: patch.object keyword with "attribute" only
+    # (line 310 → loops back; if target not found, return None at line 319)
+    attr_only_call = _ast.parse("patch.object(attribute='method')", mode="eval").body
+    assert isinstance(attr_only_call, _ast.Call)
+    # target_node remains None → target_name "" → condition on line 313 fails → None
+    assert patched_target_name_from_call(attr_only_call) is None
+
+    # collect_mock_support: AnnAssign path (lines 348-354)
+    fn_annmock = _ast.parse(
+        "def test_fn(mocker):\n"
+        "    mock_svc: Mock = MagicMock()\n"
+        "    mock_svc.method.return_value = 1\n"
+    ).body[0]
+    assert isinstance(fn_annmock, _ast.FunctionDef)
+    from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support
+    bindings, targets = collect_mock_support(fn_annmock)
+    assert "mock_svc" in bindings

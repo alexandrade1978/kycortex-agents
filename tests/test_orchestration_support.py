@@ -6862,7 +6862,10 @@ def test_quick_win_dependency_manager_edge_cases_directly():
 	assert extract_requirement_name("") == ""
 	assert extract_requirement_name("# comment") == ""
 
-	# Line 64: -e without a space after → normalized_line becomes ""
+	# Line 64: editable requirement with payload strips the prefix before name extraction
+	assert extract_requirement_name("-e requests>=2.31") == "requests"
+
+	# Line 64 fallback: -e without a payload keeps returning an empty string path
 	result = extract_requirement_name("-e")
 	assert isinstance(result, str)
 

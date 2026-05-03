@@ -8365,3 +8365,103 @@ def test_find_unsupported_mock_assertions_method_call_and_known_type_and_support
     assert not any("mock_svc" in i for i in issues)
     # svc.assert_called_once: known_type_allows_member returns True (method in signatures) → 409 → continue
     assert not any("svc.assert_called_once" in i for i in issues)
+
+
+def test_patched_target_name_from_call_keyword_with_unrecognized_keyword():
+    # Covers 310->307: keyword.arg NOT in "attribute/name/attr" → continue to next iteration
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import patched_target_name_from_call
+
+    # patch.object with extra unrecognized keyword (spec=True triggers 310->307)
+    call_node = _ast.parse(
+        "patch.object(target=MyClass, spec=True, attribute='my_method')",
+        mode="eval",
+    ).body
+    result = patched_target_name_from_call(call_node)
+    assert result == "MyClass.my_method"
+
+
+def test_collect_mock_support_patched_target_none_annassign_and_with_no_alias():
+    # Covers 345->337: patched_target is None in Assign path
+    # Covers 349->351: AnnAssign value is NOT mock/patch → skip binding update (349->351)
+    # Covers 352-354: AnnAssign value IS patch call → patched_target + binding
+    # Covers 361->363: With is_patch_call True but patched_target is None
+    # Covers 363->356: With is_patch_call True + patched_target + no optional_vars (no 'as')
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support
+
+    fn = _ast.parse(
+        "def test_fn():\n"
+        # Assign: value is patch call but patched_target_name returns None (non-string first arg)
+        "    m1 = patch(some_var)\n"           # patched_target → None → 345->337
+        # AnnAssign: value is NOT mock/patch (regular call) → 349->351
+        "    x: int = some_regular_func()\n"  # 349->351 (not mock/patch)
+        # AnnAssign: value IS patch call → 352-354
+        "    m2: Any = patch('module.func')\n"  # 352-354 (is_patch_call True)
+        # With: is_patch_call True, patched_target None (patching non-string) → 361->363
+        "    with patch(some_var):\n"          # patched_target → None → 361->363
+        "        pass\n"
+        # With: is_patch_call True, patched_target found, no 'as' alias → 363->356
+        "    with patch('module.other'):\n"    # patched_target found + no optional_vars → 363->356
+        "        pass\n"
+    ).body[0]
+    mock_bindings, patched_targets = collect_mock_support(fn)
+    # m2 should be in mock_bindings (AnnAssign with is_patch_call=True → bound target name)
+    assert "m2" in mock_bindings
+    # 'module.func' from AnnAssign and 'module.other' from With should be in patched_targets
+    assert "module.func" in patched_targets
+    assert "module.other" in patched_targets
+
+
+def test_call_argument_value_method_info_not_dict_else_branch_and_arg_out_of_bounds():
+    # Covers 477->481: method_info not a dict → skip to 481
+    # Covers 480: func is neither Name nor Attribute → return None
+    # Covers 486: argument_index >= len(node.args) → return None
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import call_argument_value
+
+    # method_info is a string (not dict) → 477->481, argument_name not in [] → return None
+    attr_call = _ast.parse("svc.do_work(data='hello')", mode="eval").body
+    class_map_str = {
+        "MyService": {
+            "method_signatures": {"do_work": "some_string_not_dict"},
+        }
+    }
+    result1 = call_argument_value(attr_call, "data", class_map_str, None, {"svc": "MyService"})
+    # keyword 'data' found → returns it (but method_info path covers 477->481)
+    assert result1 is not None
+
+    # func is neither Name nor Attribute (e.g., subscript call like obj[0](arg)) → 480: return None
+    subscript_call_node = _ast.parse("items[0](value)", mode="eval").body
+    result_subscript = call_argument_value(subscript_call_node, "value", {})
+    assert result_subscript is None
+
+    # argument IS in parameter_names but index >= len(node.args) → 486: return None
+    named_call = _ast.parse("my_func(first_arg)", mode="eval").body
+    class_map_with_params = {
+        "my_func": {"constructor_params": ["a", "b", "c"]}
+    }
+    # "b" is at index 1, but only 1 positional arg → 486: return None
+    result_no_pos = call_argument_value(named_call, "b", {"my_func": {"constructor_params": ["a", "b", "c"]}})
+    assert result_no_pos is None
+
+
+def test_infer_argument_type_set_and_non_const_field_value():
+    # Covers 843->847: field_value is ast.Set → return "set"
+    # Also: field_value is Name (not any matched type) → return ""
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import infer_argument_type
+
+    # field_value is a Set → line 841 is True → return "set"
+    set_payload = _ast.parse(
+        "{'status': {1, 2, 3}}", mode="eval"
+    ).body
+    result_set = infer_argument_type(set_payload, {}, "status", {})
+    assert result_set == "set"
+
+    # field_value is a Name (unresolvable) → falls through all checks → return ""
+    name_payload = _ast.parse(
+        "{'status': some_var}", mode="eval"
+    ).body
+    result_name = infer_argument_type(name_payload, {}, "status", {})
+    assert result_name == ""

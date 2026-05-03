@@ -7480,3 +7480,60 @@ def test_exact_numeric_assertion_non_eq_and_swapped_and_comparison_implies_parti
     assert isinstance(fn2, _ast.FunctionDef)
     bindings2 = collect_local_bindings(fn2)
     assert visible_risk_factors_require_positive_score(fn2, bindings2) is False
+
+
+def test_payload_argument_for_validation_second_positional_arg_path():
+    import ast as _ast
+
+    # 2+ positional args, no function_map, none of the standard names match →
+    # falls through to `return node.args[1]` (line 974)
+    two_arg_call = _ast.parse("process_doc(user_id, document)", mode="eval").body
+    assert isinstance(two_arg_call, _ast.Call)
+    result = payload_argument_for_validation(two_arg_call, "process_doc")
+    assert isinstance(result, _ast.Name)
+    assert result.id == "document"
+
+
+def test_validate_batch_call_no_batch_items_and_non_dict_item_and_request_key_missing():
+    import ast as _ast
+
+    # validate_batch_call: batch_items is None (non-list arg) → return [] (line 996)
+    no_list_call = _ast.fix_missing_locations(
+        _ast.Call(func=_ast.Name("process_batch"), args=[_ast.Name("items")], keywords=[])
+    )
+    result_none = validate_batch_call(no_list_call, {}, "process_batch", {"fields": ["name"]})
+    assert result_none == []
+
+    # validate_batch_call: item_keys is None (item is int, not dict) → append violation (lines 1005-1008)
+    int_call = _ast.fix_missing_locations(
+        _ast.Call(
+            func=_ast.Name("process_batch"),
+            args=[_ast.List(elts=[_ast.Constant(42)], ctx=_ast.Load())],
+            keywords=[],
+        )
+    )
+    violations_non_dict = validate_batch_call(int_call, {}, "process_batch", {"fields": ["name"]})
+    assert any("dict-like batch items" in v for v in violations_non_dict)
+
+    # validate_batch_call: request_key missing from item_keys (line 1012)
+    dict_no_req_call = _ast.fix_missing_locations(
+        _ast.Call(
+            func=_ast.Name("process_batch"),
+            args=[
+                _ast.List(
+                    elts=[
+                        _ast.Dict(
+                            keys=[_ast.Constant("name")],
+                            values=[_ast.Constant("Ada")],
+                        )
+                    ],
+                    ctx=_ast.Load(),
+                )
+            ],
+            keywords=[],
+        )
+    )
+    violations_req = validate_batch_call(
+        dict_no_req_call, {}, "process_batch", {"fields": [], "request_key": "id", "wrapper_key": None}
+    )
+    assert any("missing required key: id" in v for v in violations_req)

@@ -7348,3 +7348,20 @@ def test_assigned_name_for_call_annassign_and_none_paths():
         if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
     )
     assert assigned_name_for_call(expr_call, expr_pm) is None
+
+
+def test_call_expects_invalid_outcome_ignores_asserts_before_call():
+    tree = ast.parse(
+        "def test_invalid():\n"
+        "    assert payload.status == 'invalid'\n"
+        "    result = validate_request(payload)\n"
+    )
+    fn = tree.body[0]
+    assert isinstance(fn, ast.FunctionDef)
+    pm = parent_map(tree)
+    call_node = next(
+        node
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
+    )
+    assert call_expects_invalid_outcome(fn, call_node, pm) is False

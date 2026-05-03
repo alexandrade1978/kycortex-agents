@@ -8465,3 +8465,84 @@ def test_infer_argument_type_set_and_non_const_field_value():
     ).body
     result_name = infer_argument_type(name_payload, {}, "status", {})
     assert result_name == ""
+
+
+def test_collect_mock_support_annassign_patch_non_string_arg_target_none():
+    # Covers 353->337: AnnAssign + is_patch_call True + patched_target_name returns None
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support
+
+    fn = _ast.parse(
+        "def test_fn():\n"
+        "    m: Any = patch(some_name_var)\n"  # patch(non-string) → patched_target_name=None → 353->337
+    ).body[0]
+    mock_bindings, patched_targets = collect_mock_support(fn)
+    assert "m" in mock_bindings  # is_patch_call → mock_binding added
+    assert len(patched_targets) == 0  # patched_target was None → not added
+
+
+def test_call_argument_value_method_info_not_dict_no_keyword_match():
+    # Covers 477->481 properly: func is Attribute, method_info not dict, arg not in []
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import call_argument_value
+
+    # svc.process(some_arg) — no keywords, method_info is None (not dict) → parameter_names=[]
+    # → argument_name not in [] → 481: return None
+    attr_call_no_kw = _ast.parse("svc.process(some_arg)", mode="eval").body
+    class_map = {
+        "MyService": {
+            "method_signatures": {"process": None},  # None → not a dict → 477->481
+        }
+    }
+    result = call_argument_value(attr_call_no_kw, "data", class_map, None, {"svc": "MyService"})
+    assert result is None
+
+
+def test_payload_argument_for_validation_keyword_with_payload_name():
+    # Covers 976-978: no >=2 positional args, has keyword with payload-param-name
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import payload_argument_for_validation
+
+    # my_func(x, payload={'status': 'ok'}) - 2 positional args covers 973-974 (node.args >= 2)
+    # Instead: my_func(payload={'status': 'ok'}) - 1 positional but with keyword
+    call_with_kw = _ast.parse(
+        "my_func(payload={'status': 'ok'})",
+        mode="eval",
+    ).body
+    assert isinstance(call_with_kw, _ast.Call)
+    # callable_name != "validate_request", no candidate_value as expr from standard params
+    # len(node.args) == 0 → skip 973-974
+    # node.keywords exist, 'payload' in payload_parameter_names → 976-978: return keyword.value
+    result = payload_argument_for_validation(call_with_kw, "my_func")
+    # Should return the keyword value (the dict)
+    assert result is not None
+    assert isinstance(result, _ast.Dict)
+
+
+def test_assert_expects_false_not_wrap_and_comparator_and_no_match():
+    # Covers 1083: assert not call() → UnaryOp Not → return ast_contains_node (could be False)
+    # Covers 1096: call in neither left nor comparators → return False
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import assert_expects_false
+
+    # assert not some_other_func()  (the call_node is NOT some_other_func, it's validate_request)
+    assert_node = _ast.parse("assert not some_other_func()", mode="exec").body[0]
+    call_node = _ast.parse("validate_request(data)", mode="eval").body
+    # test is UnaryOp(Not, some_other_func()) and call_node is validate_request → not contained → False (1083)
+    result = assert_expects_false(assert_node, call_node)
+    assert result is False  # covers 1083 (returns False via ast_contains_node)
+
+    # assert x > some_other() where call_node is validate_request → not in left or comparators → 1096
+    compare_assert = _ast.parse("assert x > some_other_func()", mode="exec").body[0]
+    result2 = assert_expects_false(compare_assert, call_node)
+    assert result2 is False  # covers 1096: return False
+
+
+def test_call_has_negative_expectation_no_parent_returns_false():
+    # Covers 1110: parent_map.get(current) is None → return False
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import call_has_negative_expectation
+
+    # A call node that has no parent in the parent_map → returns False immediately (1110)
+    call_node = _ast.parse("validate_request(data)", mode="eval").body
+    assert call_has_negative_expectation(call_node, {}) is False

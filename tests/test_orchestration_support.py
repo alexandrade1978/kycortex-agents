@@ -7833,3 +7833,67 @@ def test_collect_local_name_bindings_aug_for_with_except_namedexpr_comprehension
     # helper() FunctionDef should NOT appear in iterated nodes (skipped by line 154)
     helper_fn_nodes = [n for n in nodes if isinstance(n, _ast.FunctionDef) and n.name == "helper"]
     assert helper_fn_nodes == []
+
+
+def test_infer_expression_type_call_and_none_and_infer_call_no_method_dict():
+    import ast as _ast
+
+    # infer_expression_type: node is ast.Call (line 863-864)
+    class_map_svc = {
+        "ServiceClass": {
+            "constructor_params": [],
+            "method_signatures": {},
+            "attributes": [],
+            "fields": [],
+        }
+    }
+    call_node = _ast.parse("ServiceClass()", mode="eval").body
+    assert isinstance(call_node, _ast.Call)
+    result_call = infer_expression_type(call_node, {}, class_map_svc, {})
+    assert result_call == "ServiceClass"
+
+    # infer_expression_type: node is None → return None (line 865)
+    result_none = infer_expression_type(None, {}, {}, {})
+    assert result_none is None
+
+    # infer_expression_type: node is Constant → not Name or Call → return None (line 865)
+    result_const = infer_expression_type(_ast.Constant(42), {}, {}, {})
+    assert result_const is None
+
+    # infer_call_result_type: method_info is not a dict → return None (line 891)
+    class_map_w_non_dict = {
+        "MyService": {
+            "method_signatures": {"do_work": "some_string_not_dict"},
+            "constructor_params": [],
+        }
+    }
+    method_call = _ast.parse("svc.do_work()", mode="eval").body
+    assert isinstance(method_call, _ast.Call)
+    result_method = infer_call_result_type(method_call, {"svc": "MyService"}, class_map_w_non_dict, {})
+    assert result_method is None
+
+    # analyze_typed_test_member_usage: method_info dict but no min_args/max_args → continue (line 923)
+    class_map_no_arity = {
+        "ServiceX": {
+            "method_signatures": {"process": {"return_annotation": "ServiceX"}},  # no min/max_args
+            "attributes": [],
+            "fields": [],
+        }
+    }
+    fn_no_arity = _ast.parse("def test_fn(svc):\n    svc.process(1, 2)\n").body[0]
+    assert isinstance(fn_no_arity, _ast.FunctionDef)
+    _, mismatches = analyze_typed_test_member_usage(fn_no_arity, {"svc": "ServiceX"}, class_map_no_arity)
+    assert mismatches == []
+
+    # analyze_typed_test_member_usage: min_expected == max_expected (exact count mismatch) (line 927)
+    class_map_exact = {
+        "ServiceX": {
+            "method_signatures": {"process": {"min_args": 1, "max_args": 1}},
+            "attributes": [],
+            "fields": [],
+        }
+    }
+    fn_exact = _ast.parse("def test_fn(svc):\n    svc.process(1, 2, 3)\n").body[0]
+    assert isinstance(fn_exact, _ast.FunctionDef)
+    _, mismatches_exact = analyze_typed_test_member_usage(fn_exact, {"svc": "ServiceX"}, class_map_exact)
+    assert any("expects 1 args but test uses 3" in m for m in mismatches_exact)

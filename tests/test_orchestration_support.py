@@ -7731,3 +7731,25 @@ def test_patched_target_name_non_string_arg_and_collect_mock_support_annassign()
     from kycortex_agents.orchestration.test_ast_analysis import collect_mock_support
     bindings, targets = collect_mock_support(fn_annmock)
     assert "mock_svc" in bindings
+
+
+def test_infer_argument_type_none_payload_set_value_and_unknown_call_paths():
+    import ast as _ast
+
+    # infer_argument_type: payload_node is None → return "" (line 733)
+    assert infer_argument_type(None, {}, "status", {}) == ""
+
+    # infer_argument_type: field_value is ast.Set → return "set" (line 842)
+    set_dict = _ast.parse("{'status': {1, 2, 3}}", mode="eval").body
+    result_set = infer_argument_type(set_dict, {}, "status", {})
+    assert result_set == "set"
+
+    # infer_argument_type: field_value is ast.Call with unknown func → return "" (line 847)
+    custom_call_dict = _ast.parse("{'status': MyClass()}", mode="eval").body
+    result_unknown = infer_argument_type(custom_call_dict, {}, "status", {})
+    assert result_unknown == ""
+
+    # infer_argument_type: resolved is a Name (not Dict/Subscript/Call), field_value stays None → return "" (line 831)
+    name_node = _ast.parse("payload", mode="eval").body
+    result_name = infer_argument_type(name_node, {}, "status", {})
+    assert result_name == ""

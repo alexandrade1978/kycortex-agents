@@ -7970,3 +7970,58 @@ def test_auto_fix_test_type_mismatches_syntax_error_in_code_and_empty_dict_keys(
     no_dict_code = "def process(x):\n    return x + 1\n"
     result_no_dict = auto_fix_test_type_mismatches(test_code, no_dict_code)
     assert result_no_dict == test_code
+
+
+def test_analyze_test_module_fixture_test_without_assertions_and_class_arity():
+    # Covers: fixture path (1968-1973), test_without_assertions (1978),
+    # fixture arg referencing (1981-1982), unsafe entrypoint (1992),
+    # class member check (2013-2019), constructor arity mismatch (2057-2058, 2061-2066)
+    test_code = (
+        "import pytest\n"
+        "from my_module import ServiceClass, some_func\n"
+        "\n"
+        "@pytest.fixture\n"
+        "def my_fixture():\n"
+        "    return ServiceClass()\n"
+        "\n"
+        "def test_no_assertions(my_fixture):\n"
+        "    some_func(my_fixture)\n"
+        "\n"
+        "def test_wrong_ctor():\n"
+        "    svc = ServiceClass(1, 2, 3)\n"
+        "    assert svc.unknown_attr is not None\n"
+    )
+    class_map = {
+        "ServiceClass": {
+            "constructor_params": ["client"],
+            "attributes": ["status"],
+            "fields": ["id"],
+            "method_signatures": {},
+            "is_enum": False,
+        }
+    }
+    from kycortex_agents.orchestration.test_ast_analysis import analyze_test_module
+    result = analyze_test_module(
+        test_code,
+        "my_module",
+        {"ServiceClass", "some_func"},
+        {"some_func"},
+        {"some_func": {"params": ["x"], "return_annotation": None}},
+        class_map,
+        set(),
+        {"some_func"},  # entrypoint_names
+        {},
+        {},
+        {},
+        set(),
+        {},
+        set(),
+        set(),
+    )
+    assert result["syntax_ok"] is True
+    # test_without_assertions → "test_no_assertions" should appear
+    assert any("test_no_assertions" in t for t in result["tests_without_assertions"])
+    # constructor arity mismatch (ServiceClass expects 1, test uses 3)
+    assert any("ServiceClass" in m for m in result["constructor_arity_mismatches"])
+    # fixture count includes my_fixture
+    assert result["fixture_count"] >= 1

@@ -7365,3 +7365,61 @@ def test_call_expects_invalid_outcome_ignores_asserts_before_call():
         if isinstance(node, ast.Call) and callable_name(node) == "validate_request"
     )
     assert call_expects_invalid_outcome(fn, call_node, pm) is False
+
+
+def test_batch_call_allows_partial_invalid_items_early_exits_and_assert_limits_paths():
+    import ast as _ast
+
+    # batch_items is None (first_call_argument returns non-list node) → return False (line 1213)
+    no_arg_call = _ast.parse("process_batch()", mode="eval").body
+    assert isinstance(no_arg_call, _ast.Call)
+    no_arg_pm: dict[_ast.AST, _ast.AST] = {}
+    fn_stub = _ast.parse("def test_x():\n    process_batch()").body[0]
+    assert isinstance(fn_stub, _ast.FunctionDef)
+    assert batch_call_allows_partial_invalid_items(fn_stub, no_arg_call, {}, no_arg_pm) is False
+
+    # batch_items has only one item → len <= 1 branch → return False (line 1213)
+    single_tree = _ast.parse(
+        "def test_s():\n"
+        "    result = process_batch([{'id': 1}])\n"
+    )
+    single_fn = single_tree.body[0]
+    assert isinstance(single_fn, _ast.FunctionDef)
+    single_assign = single_fn.body[0]
+    assert isinstance(single_assign, _ast.Assign)
+    single_call = single_assign.value
+    assert isinstance(single_call, _ast.Call)
+    single_pm = parent_map(single_tree)
+    assert batch_call_allows_partial_invalid_items(single_fn, single_call, {}, single_pm) is False
+
+    # No assert matches batch result → return False at end (line 1222)
+    no_match_tree = _ast.parse(
+        "def test_nm():\n"
+        "    result = process_batch([1, 2, 3])\n"
+        "    assert result is not None\n"
+    )
+    no_match_fn = no_match_tree.body[0]
+    assert isinstance(no_match_fn, _ast.FunctionDef)
+    no_match_assign = no_match_fn.body[0]
+    assert isinstance(no_match_assign, _ast.Assign)
+    no_match_call = no_match_assign.value
+    assert isinstance(no_match_call, _ast.Call)
+    no_match_pm = parent_map(no_match_tree)
+    assert batch_call_allows_partial_invalid_items(no_match_fn, no_match_call, {}, no_match_pm) is False
+
+    # assert_limits_batch_result: not a Compare → return False (line 2133)
+    name_node = _ast.parse("result", mode="eval").body
+    assert assert_limits_batch_result(name_node, "result", no_match_call, 3) is False
+
+    # assert_limits_batch_result: len on left side → normal path (lines 2137-2138)
+    len_left = _ast.parse("len(result) < 3", mode="eval").body
+    assert assert_limits_batch_result(len_left, "result", no_match_call, 3) is True
+
+    # assert_limits_batch_result: neither side matches → return False (line 2150)
+    no_len = _ast.parse("1 == 1", mode="eval").body
+    assert assert_limits_batch_result(no_len, "result", no_match_call, 3) is False
+
+    # len_call_matches_batch_result: call with wrong func name → return False (line 2161)
+    bad_len = _ast.parse("count(result)", mode="eval").body
+    assert isinstance(bad_len, _ast.Call)
+    assert len_call_matches_batch_result(bad_len, "result", no_match_call) is False

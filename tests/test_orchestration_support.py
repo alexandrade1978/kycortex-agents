@@ -7914,7 +7914,6 @@ def test_ast_analysis_dict_literal_and_field_assertion_helpers():
     assert example_value_source_for_key("enabled_flag", {}) == "True"
 
     # dict_literal_source_from_examples: nested_examples path (lines 1429-1433)
-    nested_keys = {"request": ["name", "type"]}
     nested_examples = {"request": {"name": "'sample'", "type": "'test_type'"}}
     result = dict_literal_source_from_examples("outer", {"outer": ["request"]}, nested_examples)
     assert "request" in result
@@ -8438,9 +8437,6 @@ def test_call_argument_value_method_info_not_dict_else_branch_and_arg_out_of_bou
 
     # argument IS in parameter_names but index >= len(node.args) → 486: return None
     named_call = _ast.parse("my_func(first_arg)", mode="eval").body
-    class_map_with_params = {
-        "my_func": {"constructor_params": ["a", "b", "c"]}
-    }
     # "b" is at index 1, but only 1 positional arg → 486: return None
     result_no_pos = call_argument_value(named_call, "b", {"my_func": {"constructor_params": ["a", "b", "c"]}})
     assert result_no_pos is None

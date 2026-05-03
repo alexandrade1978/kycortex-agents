@@ -7537,3 +7537,66 @@ def test_validate_batch_call_no_batch_items_and_non_dict_item_and_request_key_mi
         dict_no_req_call, {}, "process_batch", {"fields": [], "request_key": "id", "wrapper_key": None}
     )
     assert any("missing required key: id" in v for v in violations_req)
+
+
+def test_validate_batch_call_wrapper_key_missing_nested_field():
+    import ast as _ast
+
+    # validate_batch_call: wrapper_key set, nested dict has item but missing required field
+    # lines 1015-1046 (wrapper_key path, nested_keys found, missing_nested_fields)
+    nested_dict_call = _ast.fix_missing_locations(
+        _ast.Call(
+            func=_ast.Name("process_batch"),
+            args=[
+                _ast.List(
+                    elts=[
+                        _ast.Dict(
+                            keys=[_ast.Constant("request")],
+                            values=[
+                                _ast.Dict(
+                                    keys=[_ast.Constant("name")],
+                                    values=[_ast.Constant("Ada")],
+                                )
+                            ],
+                        )
+                    ],
+                    ctx=_ast.Load(),
+                )
+            ],
+            keywords=[],
+        )
+    )
+    violations = validate_batch_call(
+        nested_dict_call,
+        {},
+        "process_batch",
+        {"fields": ["name", "email"], "request_key": None, "wrapper_key": "request"},
+    )
+    assert any("nested `request` missing required fields" in v and "email" in v for v in violations)
+
+    # wrapper_key set but outer dict has no such key → nested_keys is None → "missing nested payload"
+    # lines 1033-1037
+    outer_no_request_call = _ast.fix_missing_locations(
+        _ast.Call(
+            func=_ast.Name("process_batch"),
+            args=[
+                _ast.List(
+                    elts=[
+                        _ast.Dict(
+                            keys=[_ast.Constant("id")],
+                            values=[_ast.Constant(1)],
+                        )
+                    ],
+                    ctx=_ast.Load(),
+                )
+            ],
+            keywords=[],
+        )
+    )
+    violations2 = validate_batch_call(
+        outer_no_request_call,
+        {},
+        "process_batch",
+        {"fields": ["name"], "request_key": None, "wrapper_key": "request"},
+    )
+    assert any("missing nested payload `request`" in v for v in violations2)

@@ -8773,3 +8773,69 @@ def test_auto_fix_type_mismatches_required_key_already_present_branch(monkeypatc
         dict_key_extractor=lambda _tree: {"data": ["status"]},
     )
     assert "validate_request(data={'status': 'sample'})" in fixed
+
+
+def test_extract_literal_helpers_and_infer_argument_type_fallback_false_paths(monkeypatch):
+    import ast as _ast
+    import kycortex_agents.orchestration.test_ast_analysis as taa
+
+    # extract_literal_dict_keys: resolved call + fallback_keys_from_call returns None -> 568->570
+    call_node = _ast.parse("build(a, b)", mode="eval").body
+    assert isinstance(call_node, _ast.Call)
+    assert taa.extract_literal_dict_keys(call_node, {}) is None
+
+    # extract_literal_field_values: nested payload key returns values -> 622->603
+    nested_payload_dict = _ast.parse("{'payload': {'status': 'ok'}}", mode="eval").body
+    values = taa.extract_literal_field_values(nested_payload_dict, {}, "status", {})
+    assert values == ["ok"]
+
+    # extract_literal_field_values: subscript over dict misses key, source is not call -> 632->642 and 642->666
+    subscript_payload = _ast.parse("container['payload']", mode="eval").body
+    bindings = {"container": _ast.parse("{'other': {'status': 'ok'}}", mode="eval").body}
+    assert taa.extract_literal_field_values(subscript_payload, bindings, "status", {}) == []
+
+    # infer_argument_type: dict nested payload without target field -> nested_type empty -> 761->742
+    dict_without_target = _ast.parse("{'payload': {'other': 1}}", mode="eval").body
+    assert taa.infer_argument_type(dict_without_target, {}, "status", {}) == ""
+
+    # infer_argument_type: subscript over dict misses key -> 770->780 and 780->830
+    sub_payload = _ast.parse("obj['payload']", mode="eval").body
+    sub_bindings = {"obj": _ast.parse("{'other': {'status': 'ok'}}", mode="eval").body}
+    assert taa.infer_argument_type(sub_payload, sub_bindings, "status", {}) == ""
+
+    # Drive call-based fallback branches: 799->781, 802->830, 825->807, 728->716.
+    source_call_payload = _ast.Subscript(
+        value=_ast.Call(
+            func=_ast.Name(id="factory", ctx=_ast.Load()),
+            args=[_ast.Call(func=_ast.Name(id="inner", ctx=_ast.Load()), args=[_ast.Constant(1)], keywords=[])],
+            keywords=[],
+        ),
+        slice=_ast.Constant("payload"),
+        ctx=_ast.Load(),
+    )
+    plain_call_payload = _ast.Call(
+        func=_ast.Name(id="factory", ctx=_ast.Load()),
+        args=[_ast.Call(func=_ast.Name(id="inner", ctx=_ast.Load()), args=[_ast.Constant(1)], keywords=[])],
+        keywords=[],
+    )
+    source_call_payload = _ast.fix_missing_locations(source_call_payload)
+    plain_call_payload = _ast.fix_missing_locations(plain_call_payload)
+
+    def fake_call_argument_value(node, argument_name, class_map, function_map=None, local_types=None):
+        if argument_name == "status":
+            return None
+        return _ast.Name(id="unknown_payload", ctx=_ast.Load())
+
+    monkeypatch.setattr(taa, "call_argument_value", fake_call_argument_value)
+    assert taa.infer_argument_type(source_call_payload, {}, "status", {}) == ""
+    assert taa.infer_argument_type(plain_call_payload, {}, "status", {}) == ""
+
+
+def test_extract_literal_field_values_nested_payload_empty_then_second_key_hits_value():
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import extract_literal_field_values
+
+    # First nested payload key returns [], exercising 622->603 before the second nested key returns a match.
+    node = _ast.parse("{'payload': {}, 'request': {'status': 'ok'}}", mode="eval").body
+    values = extract_literal_field_values(node, {}, "status", {})
+    assert values == ["ok"]

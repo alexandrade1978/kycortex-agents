@@ -8110,12 +8110,12 @@ def test_visible_risk_factors_non_constant_key_and_non_sequence_value():
     assert result is False
 
 
-def test_exact_len_assertion_right_len_non_int_left():
-    # Covers line 2313: is_len_call(right) is True but int_constant_value(left) is None
+def test_exact_len_assertion_left_len_non_int_right():
+    # Covers line 2313: is_len_call(left) is True but int_constant_value(right) is None
     import ast as _ast
     from kycortex_agents.orchestration.test_ast_analysis import exact_len_assertion
-    # "some_var == len(items)" where left is a Name, not an int constant
-    compare_node = _ast.parse("some_var == len(items)", mode="eval").body
+    # "len(items) == some_var" where left is len() call and right is a Name (non-int)
+    compare_node = _ast.parse("len(items) == some_var", mode="eval").body
     assert exact_len_assertion(compare_node) is None
 
 
@@ -8170,3 +8170,95 @@ def test_collect_module_defined_names_non_matching_stmt():
     result = collect_module_defined_names(tree)
     assert "x" in result
     assert "print" not in result
+
+
+def test_find_contract_overreach_signals_branch_coverage():
+    # Covers 2373->2378: audit assert length NOT > batch size
+    # Covers 2378->2389: test name doesn't suggest validation failure
+    # Covers 2380->2389: behavior contract explicitly limits score state (suppresses signal)
+    # Covers 2398: no visible risk factors → continue (no zero-risk signal added)
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import find_contract_overreach_signals
+
+    # 2373->2378: audit len assertion where compared_length <= largest_batch_size
+    # batch_size=2, assert len(audit_logs)==1 → 1 > 2 is False → 2373->2378
+    fn1 = _ast.parse(
+        "def test_validation_failure():\n"
+        "    for item in [{'id': 1}, {'id': 2}]:\n"  # batch_size=2
+        "        handle(item)\n"
+        "    assert len(audit_logs) == 1\n"  # 1 <= 2 → 2373->2378
+    ).body[0]
+    signals1 = find_contract_overreach_signals(fn1, {}, "")
+    assert not any("exceeds" in s for s in signals1)
+
+    # 2378->2389: function name does NOT suggest validation failure
+    fn2 = _ast.parse(
+        "def test_normal_flow():\n"  # not 'failure' or 'invalid'
+        "    for item in [{'id': 1}, {'id': 2}]:\n"
+        "        handle(item)\n"
+        "    assert len(audit_logs) == 3\n"  # 3 > 2 → adds batch signal, then 2378->2389
+    ).body[0]
+    signals2 = find_contract_overreach_signals(fn2, {}, "")
+    assert any("exceeds" in s for s in signals2)  # batch signal added
+    # No score-state signal because name_suggests_validation_failure is False
+
+    # 2380->2389: validation-failure name + behavior contract explicitly limits → suppress signal
+    fn3 = _ast.parse(
+        "def test_validation_failure():\n"
+        "    assert len(service.get_risk_scores()) == 0\n"
+    ).body[0]
+    contract = "Behavior contract:\n- handle_request appends to risk_scores only for valid requests"
+    signals3 = find_contract_overreach_signals(fn3, {}, contract)
+    # behavior_contract_explicitly_limits... is True → 2380->2389 → no signal
+    assert signals3 == []
+
+    # 2398: observable risk score target, zero assertion, but no visible risk factors
+    fn4 = _ast.parse(
+        "def test_validation_failure():\n"
+        "    assert score == 0.0\n"  # numeric zero assertion on 'score' (observable risk target)
+        # no list/dict with adverse_indicators → visible_risk_factors returns False → continue (2398)
+    ).body[0]
+    signals4 = find_contract_overreach_signals(fn4, {}, "")
+    assert not any("zero-risk" in s for s in signals4)
+
+
+def test_analyze_test_module_enum_class_and_valid_member_access():
+    # Covers 2015->2017: is_enum=True → skip fields update
+    # Covers 2018->2010: member IS in allowed → no invalid member ref
+    test_code = (
+        "from my_module import StatusEnum\n"
+        "\n"
+        "def test_valid_member():\n"
+        "    val = StatusEnum.ACTIVE\n"  # ACTIVE is in attributes
+        "    assert val\n"
+    )
+    class_map = {
+        "StatusEnum": {
+            "constructor_params": [],
+            "attributes": ["ACTIVE", "INACTIVE"],
+            "fields": ["id"],  # should NOT be added (is_enum=True)
+            "method_signatures": {},
+            "is_enum": True,  # covers 2015->2017
+        }
+    }
+    from kycortex_agents.orchestration.test_ast_analysis import analyze_test_module
+    result = analyze_test_module(
+        test_code,
+        "my_module",
+        {"StatusEnum"},
+        set(),
+        {},
+        class_map,
+        set(),
+        set(),
+        {},
+        {},
+        {},
+        set(),
+        {},
+        set(),
+        set(),
+    )
+    assert result["syntax_ok"] is True
+    # ACTIVE is in allowed attributes → NOT in invalid_member_references (covers 2018->2010)
+    assert not any("StatusEnum.ACTIVE" in r for r in result["invalid_member_references"])

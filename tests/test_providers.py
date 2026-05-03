@@ -1097,6 +1097,27 @@ def test_anthropic_provider_health_check_reports_live_message_probe_rejection_fo
     assert require_number(snapshot["latency_ms"]) >= 0
 
 
+def test_anthropic_provider_health_check_treats_live_message_probe_timeouts_as_transient(tmp_path):
+    config = KYCortexConfig(
+        output_dir=str(tmp_path / "output"),
+        llm_provider="anthropic",
+        llm_model="claude-3-5-sonnet",
+        base_url="https://api.llmapi.ai/v1",
+    )
+    provider = AnthropicProvider(
+        config,
+        client=build_anthropic_client(
+            health_response=[SimpleNamespace(id="claude-3-5-sonnet")],
+            error=TimeoutError("probe timeout"),
+        ),
+    )
+
+    with pytest.raises(ProviderTransientError, match="live message health probe failed") as exc_info:
+        provider.health_check()
+
+    assert exc_info.type is ProviderTransientError
+
+
 def test_anthropic_provider_lists_model_ids_from_multiple_payload_shapes(tmp_path):
     config = KYCortexConfig(output_dir=str(tmp_path / "output"), llm_provider="anthropic", api_key="token")
     provider = AnthropicProvider(config, client=build_anthropic_client(response=SimpleNamespace()))

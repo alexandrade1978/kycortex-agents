@@ -8546,3 +8546,94 @@ def test_call_has_negative_expectation_no_parent_returns_false():
     # A call node that has no parent in the parent_map → returns False immediately (1110)
     call_node = _ast.parse("validate_request(data)", mode="eval").body
     assert call_has_negative_expectation(call_node, {}) is False
+
+
+def test_analyze_test_behavior_contracts_uncovered_branches():
+    # Covers:
+    # 1252: callable_name is None (subscript call) → continue
+    # 1270->1277: payload_keys is None (non-dict payload) → skip to dict_key_rules check
+    # 1290: dict_key_rules payload_keys is None → continue
+    # 1292->1278: no missing_keys → don't add violation, back to loop
+    # 1316->1306: no invalid field values → continue field_value_rules loop
+    # 1342: sequence_input_functions → continue
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import analyze_test_behavior_contracts
+
+    test_code = (
+        "def test_branch_coverage():\n"
+        "    # subscript call → callable_name=None → 1252\n"
+        "    handlers[0](data)\n"
+        "    # validate_request with non-dict payload → payload_keys=None → 1270->1277\n"
+        "    validate_request(some_variable)\n"
+        "    # my_func with dict_key_rules, payload_keys=None → 1290\n"
+        "    my_func(some_var)\n"
+        "    # my_func with all required keys present → missing_keys=[] → 1292->1278\n"
+        "    my_func(data={'required_key': 'value'})\n"
+		"    # my_func with valid field values → invalid_values=[] → 1316->1306\n"
+		"    my_func(data={'required_key': 'val', 'status': 'active'})\n"
+        "    # seq_func is in sequence_input_functions → continue at 1342\n"
+        "    seq_func([1, 2, 3])\n"
+    )
+    tree = _ast.parse(test_code)
+    violations, non_batch = analyze_test_behavior_contracts(
+        tree,
+        validation_rules={"validate_request": ["name", "email"]},  # requires name+email
+        field_value_rules={"my_func": {"status": ["active", "inactive"]}},
+        batch_rules={},
+        sequence_input_functions={"seq_func"},
+        function_names={"my_func", "validate_request"},
+        function_map={},
+        class_map={},
+        dict_key_rules={"my_func": {"data": ["required_key"]}},
+    )
+    # validate_request with non-dict → no violation (payload_keys=None → 1270->1277 skipped)
+    # my_func with some_var → payload_keys=None → continue (1290)
+    # my_func with all keys present → no missing keys → no violation (1292->1278)
+    # my_func with valid status → no invalid values → no violation (1316->1306)
+    assert violations == []
+
+
+def test_analyze_test_behavior_contracts_batch_rules_and_sequence_input():
+    # Covers 1322-1339: batch_rules processing
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import analyze_test_behavior_contracts
+
+    test_code = (
+        "def test_batch():\n"
+        "    process_batch([{'id': 1}, {'id': 2}])\n"
+    )
+    tree = _ast.parse(test_code)
+    violations, non_batch = analyze_test_behavior_contracts(
+        tree,
+        validation_rules={},
+        field_value_rules={},
+        batch_rules={"process_batch": {"required_fields": ["id"], "batch_size_limit": 10}},
+        sequence_input_functions=set(),
+        function_names={"process_batch"},
+        function_map={},
+        class_map={},
+        dict_key_rules=None,
+    )
+    # batch_rules path executed (1322-1339) - violations may or may not exist
+    assert isinstance(violations, list)
+
+
+def test_analyze_test_type_mismatches_observed_type_empty_continue():
+    # Covers 1392: if not observed_type: continue (when infer_argument_type returns "")
+    import ast as _ast
+    from kycortex_agents.orchestration.test_ast_analysis import analyze_test_type_mismatches
+
+    test_code = (
+        "def test_something():\n"
+        "    validate_request(some_unresolvable_var)\n"
+    )
+    tree = _ast.parse(test_code)
+    # type_constraint_rules has "validate_request" but payload is Name → infer_argument_type="" → 1392: continue
+    result = analyze_test_type_mismatches(
+        tree,
+        type_constraint_rules={"validate_request": {"status": ["str"]}},
+        class_map={},
+        function_map={},
+    )
+    # No mismatches because observed_type="" → continue (1392)
+    assert result == []

@@ -1,11 +1,24 @@
 """Tests for architect module standalone functions."""
 
-from kycortex_agents.agents.architect import _low_budget_architecture_section, _architecture_request_block, ArchitectAgent
+from kycortex_agents.agents.architect import (
+    ArchitectAgent,
+    _adaptive_prompt_mode,
+    _architecture_request_block,
+    _low_budget_architecture_section,
+)
 from kycortex_agents.config import KYCortexConfig
 
 
 class TestArchitectFunctions:
     """Test standalone functions in architect module."""
+
+    def test_adaptive_prompt_mode_handles_invalid_and_normalized_modes(self):
+        """Test adaptive prompt mode normalization and guard returns."""
+        assert _adaptive_prompt_mode("not a dict") is None
+        assert _adaptive_prompt_mode({"adaptive_prompt_policy": "invalid"}) is None
+        assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": None}}) is None
+        assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": "   "}}) is None
+        assert _adaptive_prompt_mode({"adaptive_prompt_policy": {"mode": " Compact "}}) == "compact"
 
     def test_low_budget_architecture_section_valid_tokens(self):
         """Test low budget section with valid token count."""
@@ -50,6 +63,12 @@ class TestArchitectFunctions:
         """Test low budget section is suppressed when adaptive mode is not compact."""
         result = _low_budget_architecture_section(500, prompt_mode="rich")
         assert result == ""
+
+    def test_low_budget_architecture_section_uses_compact_prompt_mode_without_budget(self):
+        """Test compact adaptive mode forces the adaptive compact budget section."""
+        result = _low_budget_architecture_section("not-an-int", prompt_mode=" Compact ")
+        assert result.startswith("Provider completion budget: adaptive compact mode.")
+        assert "compact bullet list" in result.lower()
 
     def test_architecture_request_block_empty_context(self):
         """Test request block with empty context."""

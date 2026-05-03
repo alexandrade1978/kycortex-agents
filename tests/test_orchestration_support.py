@@ -7600,3 +7600,34 @@ def test_validate_batch_call_wrapper_key_missing_nested_field():
         {"fields": ["name"], "request_key": None, "wrapper_key": "request"},
     )
     assert any("missing nested payload `request`" in v for v in violations2)
+
+
+def test_validate_batch_call_field_value_rules_invalid_values():
+    import ast as _ast
+
+    # validate_batch_call: field_value_rules set, item has invalid field value (lines 1047-1066)
+    item_bad_type = _ast.fix_missing_locations(
+        _ast.Call(
+            func=_ast.Name("process_batch"),
+            args=[
+                _ast.List(
+                    elts=[
+                        _ast.Dict(
+                            keys=[_ast.Constant("type")],
+                            values=[_ast.Constant("invalid_type")],
+                        )
+                    ],
+                    ctx=_ast.Load(),
+                )
+            ],
+            keywords=[],
+        )
+    )
+    violations = validate_batch_call(
+        item_bad_type,
+        {},
+        "process_batch",
+        {"fields": [], "request_key": None, "wrapper_key": None},
+        field_value_rules={"type": ["valid_type", "other_type"]},
+    )
+    assert any("batch item field `type` uses unsupported values" in v and "invalid_type" in v for v in violations)

@@ -7313,3 +7313,13 @@ def test_invalid_outcome_marker_matches_non_constant_and_boolean_none_paths():
 	assert invalid_outcome_marker_matches(ast.Constant(None)) is True
 	assert invalid_outcome_marker_matches(ast.Constant("  ReJeCt  ")) is True
 	assert invalid_outcome_marker_matches(ast.Constant(0)) is False
+
+def test_assert_expects_invalid_outcome_non_eq_and_swapped_compare_paths():
+    non_eq_node = ast.parse("result.status > 'invalid'", mode="eval").body
+    assert assert_expects_invalid_outcome(non_eq_node, "result", None) is False
+
+    swapped_node = ast.parse("'invalid' == result.status", mode="eval").body
+    assert assert_expects_invalid_outcome(swapped_node, "result", None) is True
+
+    wrong_marker_node = ast.parse("'ok' == result.status", mode="eval").body
+    assert assert_expects_invalid_outcome(wrong_marker_node, "result", None) is False

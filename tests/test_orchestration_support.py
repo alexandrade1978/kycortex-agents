@@ -7957,3 +7957,16 @@ def test_ast_analysis_dict_literal_and_field_assertion_helpers():
     res_sub = exact_field_string_assertion(subscript_left)
     assert res_sub is not None
     assert res_sub[0] == "status"
+
+
+def test_auto_fix_test_type_mismatches_syntax_error_in_code_and_empty_dict_keys():
+    # auto_fix_test_type_mismatches: code_content has SyntaxError → return test_content unchanged (lines 1547-1548)
+    test_code = "def test_fn():\n    process(payload='value')\n"
+    bad_code = "def broken_fn(:\n    pass\n"
+    result_bad = auto_fix_test_type_mismatches(test_code, bad_code)
+    assert result_bad == test_code
+
+    # auto_fix_test_type_mismatches: code has no dict usage → dict_keys is empty → return test_content (line 1559)
+    no_dict_code = "def process(x):\n    return x + 1\n"
+    result_no_dict = auto_fix_test_type_mismatches(test_code, no_dict_code)
+    assert result_no_dict == test_code

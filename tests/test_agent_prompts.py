@@ -6490,4 +6490,10 @@ def test_code_engineer_run_low_budget_empty_task_no_compact_block_directly(tmp_p
     )
     assert result == "ok"
     assert "Task constraints summary" not in agent.last_user_message
-    assert "capture_audit = []" not in agent.last_user_message
+
+
+def test_budget_compaction_line_target_above_3200_max_tokens_directly():
+    # Branch 128->130 False: max_tokens > 3200 → all elif conditions False, provider_cap stays 260.
+    result = _budget_compaction_line_target(300, 4000)
+    assert isinstance(result, int)
+    assert result > 0

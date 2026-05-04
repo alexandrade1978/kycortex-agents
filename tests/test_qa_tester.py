@@ -6282,5 +6282,27 @@ class TestNormalizePlaceholderPayloadValues:
         assert result == ""
 
 
+class TestConstructorRejectsInvalidPayloadEdgeCases:
+    def test_constructor_rejects_invalid_payload_bare_raise_and_non_payload_isinstance_directly(self):
+        # Branch 3338->3340 False: bare `raise` (exception_node = None → not Name, not Call).
+        # Branch 3360->3333 False: isinstance(other_var, dict) where other_var is not payload.
+        implementation_code = (
+            "class MyService:\n"
+            "    def __init__(self, payload):\n"
+            "        if isinstance(other_var, dict):\n"  # non-payload target → 3360->3333 False
+            "            pass\n"
+            "        try:\n"
+            "            x = payload['key']\n"
+            "        except:\n"
+            "            raise\n"  # bare raise → exception_node = None → 3338->3340 False
+            "        if isinstance(payload, dict):\n"
+            "            raise ValueError('bad payload')\n"
+        )
+        result = QATesterAgent._constructor_rejects_invalid_payload(
+            "MyService(payload)", implementation_code
+        )
+        assert result is True
+
+
 
 

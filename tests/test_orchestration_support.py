@@ -9644,6 +9644,10 @@ def test_dict_accessed_keys_from_tree_attribute_comparator_and_get_no_args_and_d
         tree1 = _ast.parse("def f(data):\n    if 'key' in obj.data: pass\n")
         result1 = dict_accessed_keys_from_tree(tree1)
         assert "key" in result1.get("data", [])
+        # Branch 967->969 False: comparator is neither Name nor Attribute (e.g., Subscript/Call).
+        tree1b = _ast.parse("def f(data):\n    if 'key' in get_data(): pass\n")
+        result1b = dict_accessed_keys_from_tree(tree1b)
+        assert result1b == {}  # Call comparator → var_name not set → key not added
         # Branch 972->978 False: .get() called without string arg → condition fails, var_name not set.
         tree2 = _ast.parse("x = data.get()\n")
         result2 = dict_accessed_keys_from_tree(tree2)

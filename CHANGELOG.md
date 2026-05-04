@@ -6,8 +6,19 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-- Current package version is now `1.0.13a11.dev0` ahead of the next alpha release.
-- The last published and trusted alpha baseline is `1.0.13a10`.
+- No unreleased changes.
+
+## 1.0.13a11 - 2026-05-04
+
+Version `1.0.13a11` is now the released alpha package baseline.
+
+This release extends `1.0.13a10` with a comprehensive partial-branch coverage campaign.
+
+### Coverage Campaign (Branch Coverage)
+
+- Branch coverage improved from **99.19%** to **99.89%** (2474 → 2568 tests, 7530 branch pairs tracked).
+- Added 94 targeted tests across 9 slices covering all reachable partial branches in `project_state.py`, `module_ast_analysis.py`, `code_engineer.py`, `qa_tester.py`, `repair_analysis.py`, `context_building.py`, `validation_analysis.py`, `workflow_control.py`, `ast_tools.py`, `output_helpers.py`, `repair_test_structure.py`, `repair_code_validation.py`, `repair_test_runtime.py`, `repair_instructions.py`, `base_agent.py`, `anthropic_provider.py`, and `ollama_provider.py`.
+- Remaining 23 partial branches confirmed structurally dead code (unreachable in valid Python); no further coverage improvement is possible without removing defensive guards.
 
 ## 1.0.13a10 - 2026-05-04
 

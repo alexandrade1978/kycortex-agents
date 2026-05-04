@@ -1,6 +1,6 @@
 # Canary Record - 1af2d8d
 
-Status: live window open; 100-workflows checkpoint reached (100/100 smoke workflows admitted, 0 incidents)
+Status: live window open; daily-review in progress (103/103 smoke workflows admitted, 0 incidents)
 
 This record opens the candidate evidence bundle for released commit `1af2d8df1498ec2d98a09f9a7d2fa3767225532f` and tag `v1.0.13a11`.
 
@@ -59,7 +59,9 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - smoke batches smoke27–smoke34: 24/24 workflows accepted across all three providers, 0 repair cycles, artifact_validation=passed
 - smoke batch `canary_1af2d8d_smoke35`: 2/2 workflows accepted (anthropic, openai), 0 repair cycles, artifact_validation=passed
 - 100-workflows checkpoint reached at `2026-05-04T12:46:48Z`: cumulative 100/100 accepted, 0 incidents, 0 rollbacks
-- next checkpoint: daily-review (7-day minimum window expires 2026-05-11T05:11:04Z)
+- smoke batch `canary_1af2d8d_smoke36`: 3/3 workflows accepted (anthropic, openai, ollama), 0 repair cycles, artifact_validation=passed
+- daily-review refresh at `2026-05-04T13:01:46Z`: cumulative 103/103 accepted, 0 incidents, 0 rollbacks
+- next checkpoint: next daily-review cycle (7-day minimum window expires 2026-05-11T05:11:04Z)
 
 ## Evidence References
 
@@ -75,3 +77,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - 25-workflows checkpoint: `validation-artifacts/checkpoint-25-workflows-2026-05-04T122157Z.json`
 - 50-workflows checkpoint: `validation-artifacts/checkpoint-50-workflows-2026-05-04T122934Z.json`
 - 100-workflows checkpoint: `validation-artifacts/checkpoint-100-workflows-2026-05-04T124648Z.json`
+- daily-review refresh: `validation-artifacts/daily-review-2026-05-04T130146Z.json`

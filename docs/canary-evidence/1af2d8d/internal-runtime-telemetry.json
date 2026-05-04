@@ -1,14 +1,14 @@
 {
   "captured_at": "2026-05-04T05:11:04Z",
-  "last_updated": "2026-05-04T12:46:48Z",
-  "status": "100-workflows-checkpoint",
+  "last_updated": "2026-05-04T13:01:46Z",
+  "status": "daily-review-in-progress",
   "candidate": {
     "tag": "v1.0.13a11",
     "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
   },
   "telemetry_scope": {
-    "source": "canonical 5x3 admission preflight + first-accepted smoke batch",
-    "live_canary_workflows": 3
+    "source": "canonical 5x3 admission preflight + expanded smoke canary window",
+    "live_canary_workflows": 103
   },
   "provider_runtime_summary": {
     "anthropic": {
@@ -36,16 +36,16 @@
     }
   },
   "canary_summary": {
-    "batches_run": 4,
-    "workflows_run": 100,
-    "workflows_accepted": 100,
+    "batches_run": 36,
+    "workflows_run": 103,
+    "workflows_accepted": 103,
     "artifact_validation": "passed_all",
     "sample_balance_all_providers": 2650.00,
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 35,
-      "openai": 33,
-      "ollama": 32
+      "anthropic": 36,
+      "openai": 34,
+      "ollama": 33
     }
   },
   "notes": [
@@ -55,6 +55,8 @@
     "25-workflows checkpoint reached at 2026-05-04T12:21:57Z with 25/25 cumulative workflows accepted.",
     "All three providers healthy across all 25 runs, zero repair cycles, artifact contract validated.",
     "50-workflows checkpoint reached at 2026-05-04T12:29:34Z with 50/50 cumulative workflows accepted.",
-    "All three providers healthy across all 50 runs, zero repair cycles, artifact contract validated."
+    "All three providers healthy across all 50 runs, zero repair cycles, artifact contract validated.",
+    "100-workflows checkpoint reached at 2026-05-04T12:46:48Z with 100/100 cumulative workflows accepted.",
+    "Daily-review refresh at 2026-05-04T13:01:46Z added smoke36 (3/3 passed), cumulative 103/103 with zero incidents."
   ]
 }

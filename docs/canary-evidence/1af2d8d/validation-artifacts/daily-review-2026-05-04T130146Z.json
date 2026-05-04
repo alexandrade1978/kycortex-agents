@@ -1,0 +1,30 @@
+{
+  "review_type": "daily-review",
+  "captured_at": "2026-05-04T13:01:46Z",
+  "candidate": {
+    "tag": "v1.0.13a11",
+    "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
+  },
+  "daily_batch": {
+    "batch_id": "canary_1af2d8d_smoke36",
+    "workflows": 3,
+    "providers": ["anthropic", "openai", "ollama"],
+    "all_passed": true,
+    "artifact_validation": "passed_all",
+    "sample_balance": 2650.00,
+    "repair_cycles": 0
+  },
+  "cumulative_window": {
+    "eligible_workflows_seen": 103,
+    "accepted_workflows": 103,
+    "failed_workflows": 0,
+    "incidents": 0,
+    "rollbacks": 0,
+    "acceptance_rate": 1.0
+  },
+  "provider_health": {
+    "anthropic": {"status": "healthy", "runs": 36, "passed": 36},
+    "openai": {"status": "healthy", "runs": 34, "passed": 34},
+    "ollama": {"status": "healthy", "runs": 33, "passed": 33}
+  }
+}

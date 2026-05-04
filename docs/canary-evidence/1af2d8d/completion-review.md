@@ -1,21 +1,37 @@
 # Completion Review - 1af2d8d
 
-Decision: not ready to close Phase 16
+Decision: **in-progress — daily-review phase; 7-day window pending**
 
 ## Current State
 
 - canary record opened at `2026-05-04T05:11:04Z`
 - preflight admission evidence: canonical matrix 15/15 accepted
-- canary traffic admission: not started
+- canary traffic admitted: `2026-05-04T12:10:07Z` (first-accepted checkpoint)
+- 100-workflows checkpoint reached: `2026-05-04T12:46:48Z`
+- total smoke workflows admitted: 100/100 accepted
 - incidents: 0
 - rollbacks: 0
+- repair_cycles_total: 0
+- provider health: anthropic 35/35, openai 33/33, ollama 32/32
 
-## Open Blockers
+## Canary Window Parameters
 
-- policy minimum observation window (7 days or 100 eligible workflows, whichever is later) has not started yet because traffic is not admitted.
+- minimum 7-day window expires: `2026-05-11T05:11:04Z`
+- 100-workflows requirement: SATISFIED
+- promotion decision: requires explicit user authorization after 7-day window expires
 
-## Next Required Actions
+## Promotion Criteria
 
-1. Admit controlled canary traffic for eligible workflow class `release-user-smoke`.
-2. Capture checkpoint evidence packet updates at first accepted workflow and subsequent expansion checkpoints.
-3. Reassess closure only after minimum policy window is satisfied with no zero-budget incidents.
+All of the following must be met before promotion can be proposed:
+
+1. 7 consecutive days elapsed since canary open — PENDING (expires 2026-05-11T05:11:04Z)
+2. 100+ eligible workflows admitted — DONE (100/100)
+3. Zero incidents and zero rollbacks throughout window — DONE
+4. All daily smoke reviews green — in progress
+5. Explicit user authorization to promote — PENDING
+
+## Daily Review Log
+
+| Date (UTC) | Smokes Run | Providers | Outcome | Incidents | Notes |
+|---|---|---|---|---|---|
+| 2026-05-04 | 100 (cumulative) | anthropic×35, openai×33, ollama×32 | all passed | 0 | 100-workflows checkpoint reached |

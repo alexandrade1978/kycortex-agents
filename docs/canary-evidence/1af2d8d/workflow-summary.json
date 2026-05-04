@@ -1,6 +1,6 @@
 {
   "captured_at": "2026-05-04T05:11:04Z",
-  "last_updated": "2026-05-04T12:16:23Z",
+  "last_updated": "2026-05-04T12:21:57Z",
   "candidate": {
     "tag": "v1.0.13a11",
     "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
@@ -20,11 +20,11 @@
     "eligible_workflow_class": [
       "release-user-smoke"
     ],
-    "eligible_workflows_seen": 10,
-    "accepted_workflows": 10,
+    "eligible_workflows_seen": 25,
+    "accepted_workflows": 25,
     "incidents": 0,
     "rollbacks": 0,
-    "checkpoints_reached": ["first-accepted", "10-workflows"],
-    "next_checkpoint": "25-workflows"
+    "checkpoints_reached": ["first-accepted", "10-workflows", "25-workflows"],
+    "next_checkpoint": "50-workflows"
   }
 }

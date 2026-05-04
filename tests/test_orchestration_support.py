@@ -9565,3 +9565,227 @@ def test_upstream_code_task_non_code_engineer_and_multiple_code_engineer_deps_di
 	assert result is not None
 	assert result.assigned_to == "code_engineer"
 
+
+def test_module_ast_analysis_ann_assign_no_value_and_underscore_name_directly():
+        # Branch 138->142 False: module-level AnnAssign with no value → not in module_variables.
+        result = analyze_python_module("x: int")
+        assert "x" not in result["module_variables"]
+        # Branch 140->139 False: AnnAssign with value but name starts with "_" → skip.
+        result2 = analyze_python_module("_private: int = 5")
+        assert "_private" not in result2["module_variables"]
+
+
+def test_module_ast_analysis_dataclass_init_false_and_non_name_class_assign_directly():
+        # Branch 186->172 False: dataclass field with init=False → not in constructor_params.
+        dc_code = (
+            "from dataclasses import dataclass, field\n\n"
+            "@dataclass\nclass Foo:\n"
+            "    x: int = field(init=False, default=0)\n"
+            "    y: int = 5\n"
+        )
+        result = analyze_python_module(dc_code)
+        assert "x" not in result["classes"]["Foo"]["constructor_params"]
+        assert "y" in result["classes"]["Foo"]["constructor_params"]
+        # Branch 192->191 False: class-level assignment with non-Name target (tuple unpacking).
+        result2 = analyze_python_module("class Bar:\n    a, b = 1, 2\n    c = 3\n")
+        assert "a" not in result2["classes"]["Bar"]["attributes"]
+        assert "c" in result2["classes"]["Bar"]["attributes"]
+
+
+def test_parse_behavior_contract_empty_types_no_dict_type_and_empty_keys_directly():
+        # Branch 507->513 False: type constraint matched but types list is empty.
+        r1 = parse_behavior_contract("- func requires parameter `x` to be of type: (keys used: key1)")
+        assert "func" not in r1[4]  # type_constraint_rules index 4
+        # Branch 509->513 False: types non-empty but no "dict" type → no dict_key_rules.
+        r2 = parse_behavior_contract("- func requires parameter `x` to be of type: str, int")
+        assert "func" not in r2[5]  # dict_key_rules index 5
+        # Branch 511->513 False: keys_match present but keys list is empty.
+        r3 = parse_behavior_contract("- func requires parameter `x` to be of type: dict (keys used: )")
+        assert r3[5].get("func", {}).get("x") is None
+        assert r3[4].get("func", {}).get("x") == ["dict"]
+
+
+def test_build_code_behavior_contract_non_dict_type_and_dict_no_accessed_keys_directly():
+        # Branch 727->742 False: type constraint for a non-dict type → no EXAMPLE line, dict_example="".
+        # Branch 745->723 False: dict_example is "" → not appended.
+        result = build_code_behavior_contract(
+            "def f(x):\n    if isinstance(x, str): pass\n    if 'name' not in x: raise ValueError()\n"
+        )
+        assert "EXAMPLE:" not in result
+        assert "requires parameter `x` to be of type: str" in result
+        # Branch 729->742 False: dict type but no dict-access keys → no keys_hint, no EXAMPLE.
+        result2 = build_code_behavior_contract("def f(x):\n    if isinstance(x, dict): pass\n")
+        assert "keys used:" not in result2
+        assert "EXAMPLE:" not in result2
+
+
+def test_example_from_default_bytes_constant_hits_value_is_none_false_branch_directly():
+        import ast as _ast
+        # Branch 795->797 False: ast.Constant with bytes value → not bool/int/float/str, not None.
+        bytes_const = _ast.parse("b'hello'", mode="eval").body
+        assert example_from_default(bytes_const) is None  # falls through to return None at line 815
+
+
+def test_infer_dict_key_value_examples_non_literal_default_and_non_literal_dict_value_directly():
+        import ast as _ast
+        # Branch 906->909 False: .get("key", non_literal_default) → example is None, skip store.
+        tree1 = _ast.parse("v = data.get('key', some_variable)")
+        result1 = infer_dict_key_value_examples(tree1)
+        assert result1.get("data", {}).get("key") is None
+        # Branch 863->865 False: dict keyword arg with non-literal value → example is None.
+        tree2 = _ast.parse("process(metadata={'field': some_var})")
+        result2 = infer_dict_key_value_examples(tree2)
+        assert result2.get("metadata", {}).get("field") is None
+
+
+def test_dict_accessed_keys_from_tree_attribute_comparator_and_get_no_args_and_dup_key_directly():
+        import ast as _ast
+        # Branch 967->969: comparator is ast.Attribute → var_name set from attribute.
+        tree1 = _ast.parse("def f(data):\n    if 'key' in obj.data: pass\n")
+        result1 = dict_accessed_keys_from_tree(tree1)
+        assert "key" in result1.get("data", [])
+        # Branch 972->978 False: .get() called without string arg → condition fails, var_name not set.
+        tree2 = _ast.parse("x = data.get()\n")
+        result2 = dict_accessed_keys_from_tree(tree2)
+        assert result2 == {}
+        # Branch 986->985 False: duplicate key via aliased var_name → key already in merged, skip.
+        tree3 = _ast.parse(
+            "a = obj.result\nb = other.result\nx = a['key']\ny = b['key']\n"
+        )
+        result3 = dict_accessed_keys_from_tree(tree3)
+        assert result3.get("result") == ["key"]  # "key" only once, not duplicated
+
+
+def test_dict_required_keys_from_tree_duplicate_required_field_directly():
+        import ast as _ast
+        from kycortex_agents.orchestration.module_ast_analysis import dict_required_keys_from_tree
+        # Branch 1034->1033 False: required_field already in existing → skip append.
+        # Two functions with same dict param name "data" and same required_field "name".
+        code = (
+            "def func1(data):\n"
+            "    if isinstance(data, dict): pass\n"
+            "    if 'name' not in data: raise ValueError()\n\n"
+            "def func2(data):\n"
+            "    if isinstance(data, dict): pass\n"
+            "    if 'name' not in data: raise ValueError()\n"
+        )
+        tree = _ast.parse(code)
+        result = dict_required_keys_from_tree(tree)
+        assert result.get("data") == ["name"]  # "name" added only once
+
+
+def test_isinstance_subject_name_get_call_no_str_arg_directly():
+        import ast as _ast
+        # Branch 1052->1054 False: .get() call with non-string first arg → return "".
+        get_call_no_str = _ast.parse("x.get(variable)", mode="eval").body
+        assert isinstance_subject_name(get_call_no_str) == ""
+
+
+def test_isinstance_type_names_tuple_with_non_name_non_attribute_element_directly():
+        import ast as _ast
+        # Branch 1067->1064 False: Tuple element is neither Name nor Attribute → skipped.
+        # isinstance(x, (int, some_module.Type[str])) - Subscript element skipped.
+        subscript_element = _ast.parse("isinstance(x, (int, some[str]))", mode="eval").body.args[1]
+        result = isinstance_type_names(subscript_element)
+        assert "int" in result
+        assert len(result) == 1  # only Name "int" added, Subscript skipped
+
+
+def test_extract_type_constraints_duplicate_type_name_skips_second_directly():
+        import ast as _ast
+        # Branch 1106->1105 False: type_name already in existing → skip second append.
+        code = "def f(x):\n    if isinstance(x, str): pass\n    if isinstance(x, str): pass\n"
+        func_node = cast(_ast.FunctionDef, _ast.parse(code.strip(), mode="exec").body[0])
+        result = extract_type_constraints(func_node)
+        assert result.get("x") == ["str"]  # "str" appears only once
+
+
+def test_extract_valid_literal_examples_sample_name_not_dict_or_list_directly():
+        # Branch 1130->1118 False: variable with "sample"/"default" name but not dict/list value.
+        code = "SAMPLE_VALUE = 'hello'\nDEFAULT_COUNT = 42\n"
+        result = extract_valid_literal_examples(code)
+        assert result == {}  # no dict/list values → nothing extracted
+
+
+def test_extract_batch_rule_int_subscript_request_id_for_name_payload_directly():
+        import ast as _ast
+        # Branch 1163->1165 False: request_id_arg.slice is Constant but not str (int) → skip key prepend.
+        code = "def process_batch(items):\n    for item in items:\n        intake_request(items[0], item)\n"
+        func_node = cast(_ast.FunctionDef, _ast.parse(code.strip(), mode="exec").body[0])
+        result = extract_batch_rule(func_node, {"intake_request": ["name"]})
+        # request_key is int (0), not str → not prepended to batch_fields → only "name"
+        assert result == "process_batch expects each batch item to include: name"
+        # Branch 1180->1184 False: subscript payload + int subscript request_id → skip key prepend.
+        code2 = "def batch(items):\n    for item in items:\n        intake_request(items[0], item['data'])\n"
+        func2 = cast(_ast.FunctionDef, _ast.parse(code2.strip(), mode="exec").body[0])
+        result2 = extract_batch_rule(func2, {"intake_request": ["name"]})
+        assert result2 == "batch expects nested `data` fields: name"
+
+
+def test_extract_class_definition_style_non_dataclass_decorator_directly():
+        import ast as _ast
+        # Branch 1195->1193 False: decorator present but decorator_name != "dataclass" → loop continues.
+        cls_node = cast(_ast.ClassDef, _ast.parse("@property\nclass Foo:\n    pass", mode="exec").body[0])
+        result = extract_class_definition_style(cls_node)
+        assert result == ""  # no dataclass/BaseModel/TypedDict match
+
+
+def test_extract_constructor_storage_rule_data_keyword_non_name_value_directly():
+        import ast as _ast
+        # Branch 1240->1237 False: keyword.arg == "data" but value is not ast.Name → no match.
+        code = "def build(source):\n    return Result(data=source.transform())\n"
+        func_node = cast(_ast.FunctionDef, _ast.parse(code.strip(), mode="exec").body[0])
+        result = extract_constructor_storage_rule(func_node)
+        assert result == ""  # keyword value is a Call, not ast.Name → no rule
+
+
+def test_method_binding_kind_non_staticmethod_classmethod_decorator_directly():
+        import ast as _ast
+        # Branch 1413->1408 False: decorator is neither staticmethod nor classmethod → loop continues.
+        func_node = cast(
+            _ast.FunctionDef,
+            _ast.parse("@property\ndef x(self):\n    return self._x", mode="exec").body[0],
+        )
+        result = method_binding_kind(func_node)
+        assert result == "instance"  # neither static nor class
+
+
+def test_has_dataclass_decorator_call_decorator_with_non_dataclass_attr_directly():
+        import ast as _ast
+        # Branch 1439->1435 False: decorator is a Call whose func is Attribute with attr != "dataclass".
+        cls_node = cast(
+            _ast.ClassDef,
+            _ast.parse("@registry.register()\nclass Foo:\n    pass", mode="exec").body[0],
+        )
+        result = has_dataclass_decorator(cls_node)
+        assert result is False  # attr is "register", not "dataclass"
+
+
+def test_extract_required_fields_in_operator_and_issubset_not_in_seqs_and_all_gen_not_in_seqs_directly():
+        import ast as _ast
+        # Branch 1525->1520 False: for loop over literal_sequences but compare uses In (not NotIn).
+        code_in = (
+            "def validate(data):\n"
+            "    FIELDS = ['name', 'age']\n"
+            "    for f in FIELDS:\n"
+            "        if f in data: pass\n"
+        )
+        func1 = cast(_ast.FunctionDef, _ast.parse(code_in.strip(), mode="exec").body[0])
+        result1 = extract_required_fields(func1)
+        assert result1 == []  # no NotIn found → literal_fields = [] (only 'in' used)
+        # Branch 1535->1537 False: .issubset() but source not in literal_sequences.
+        code_issubset = (
+            "def validate(data):\n"
+            "    if UNDEFINED.issubset(data.keys()): pass\n"
+        )
+        func2 = cast(_ast.FunctionDef, _ast.parse(code_issubset.strip(), mode="exec").body[0])
+        result2 = extract_required_fields(func2)
+        assert result2 == []  # UNDEFINED not in literal_sequences → subset_fields = None
+        # Branch 1546->1542 False: all(x for x in iter) where iter not in literal_sequences.
+        code_all = (
+            "def validate(data):\n"
+            "    if all(f in data for f in REQUIREMENTS): pass\n"
+        )
+        func3 = cast(_ast.FunctionDef, _ast.parse(code_all.strip(), mode="exec").body[0])
+        result3 = extract_required_fields(func3)
+        assert result3 == []  # REQUIREMENTS not in literal_sequences → generator_fields = None

@@ -23683,3 +23683,418 @@ def test_context_module_task_runtime_second_loop_covers_repair_tasks():
     result = context_building_module.context_module_task_runtime(proj, None, None)
     assert result is not None
     assert result.id == "t_repair_eng"
+
+
+# ---------------------------------------------------------------------------
+# Slice 5: validation_runtime.py partial branches
+# ---------------------------------------------------------------------------
+
+
+def test_import_insertion_line_empty_code_and_non_string_expr_directly():
+    """Cover _import_insertion_line: 125->133 (empty lines), 135->143 (empty body),
+    139->143 (non-string-constant first Expr), 143->151 (only docstring → loop never runs)."""
+    # 125->133: empty code → lines is [] → while loop condition immediately False
+    empty_code = ""
+    empty_tree = ast.parse(empty_code)
+    result_empty = _import_insertion_line(empty_code, empty_tree)
+    assert result_empty == 0
+
+    # 135->143: whitespace-only code → tree.body is [] → if tree.body: False
+    ws_code = "   \n"
+    ws_tree = ast.parse(ws_code)
+    assert not ws_tree.body
+    result_ws = _import_insertion_line(ws_code, ws_tree)
+    assert isinstance(result_ws, int)
+
+    # 139->143: first statement is Expr with non-string value (BinOp) → Constant check False
+    non_doc_code = "1 + 2\ndef foo(): pass\n"
+    non_doc_tree = ast.parse(non_doc_code)
+    result_non_doc = _import_insertion_line(non_doc_code, non_doc_tree)
+    assert isinstance(result_non_doc, int)
+
+    # 143->151: only a docstring, no __future__ imports → while loop body_index=1 >= len=1 → False
+    only_doc_code = '"""Module docstring."""\n'
+    only_doc_tree = ast.parse(only_doc_code)
+    result_only_doc = _import_insertion_line(only_doc_code, only_doc_tree)
+    assert result_only_doc >= 1
+
+
+def test_insert_import_lines_no_trailing_newline_directly():
+    """Cover _insert_import_lines 162->164: code_content without trailing newline."""
+    code_no_newline = "def foo(): pass"
+    tree = ast.parse(code_no_newline)
+    result = _insert_import_lines(code_no_newline, ["import os"], tree)
+    assert "import os" in result
+    assert not result.endswith("\n")
+
+
+def test_apply_code_content_autofixes_raw_content_and_artifact_mismatch_directly():
+    """Cover _apply_code_content_autofixes: 239->241 (raw_content != code_content),
+    244->241 (artifact.content != code_content)."""
+    # code_content that will be modified by autofixes (has Optional without typing import)
+    code_content = "@dataclass\nclass Foo:\n    x: Optional[int]\n"
+    # raw_content is different → 239->241 False (raw_content won't be updated)
+    different_raw = "def bar(): pass\n"
+    # CODE artifact content is also different → 244->241 False (artifact.content won't be updated)
+    different_artifact = "@dataclass\nclass Bar:\n    y: str\n"
+    output = AgentOutput(
+        summary="test",
+        raw_content=different_raw,
+        artifacts=[
+            ArtifactRecord(
+                name="impl.py",
+                artifact_type=ArtifactType.CODE,
+                content=different_artifact,
+            )
+        ],
+    )
+    normalized = validation_runtime_module._apply_code_content_autofixes(output, code_content)
+    assert normalized != code_content
+    assert output.raw_content == different_raw
+    assert output.artifacts[0].content == different_artifact
+
+
+def test_build_test_validation_runtime_input_test_artifact_already_set_directly():
+    """Cover build_test_validation_runtime_input 343->345: test_artifact_content already set."""
+    first_test_content = "def test_one():\n    assert True\n"
+    second_test_content = "def test_two():\n    assert True\n"
+    output = AgentOutput(
+        summary="tests",
+        raw_content=second_test_content,
+        artifacts=[
+            ArtifactRecord(
+                name="tests_a.py",
+                artifact_type=ArtifactType.TEST,
+                content=first_test_content,
+            ),
+            ArtifactRecord(
+                name="tests_b.py",
+                artifact_type=ArtifactType.TEST,
+                content=second_test_content,
+            ),
+        ],
+    )
+    context = {"module_name": "mymodule", "code": "def foo(): pass\n"}
+    result = validation_runtime_module.build_test_validation_runtime_input(context, output)
+    assert result is not None
+    # second artifact is skipped (test_artifact_content already set by first)
+    assert result.test_artifact_content == first_test_content
+
+
+def test_validate_code_output_runtime_empty_code_artifact_directly():
+    """Cover validate_code_output_runtime 432->429: CODE artifact with empty content falls back to raw."""
+    output = AgentOutput(
+        summary="code",
+        raw_content="def foo(): pass\n",
+        artifacts=[
+            ArtifactRecord(
+                name="impl.py",
+                artifact_type=ArtifactType.CODE,
+                content="",  # empty → 432 is False → 432->429 (loop continues)
+            )
+        ],
+    )
+    # should_validate_code_content returns False → early exit after loop
+    validation_runtime_module.validate_code_output_runtime(
+        output,
+        None,
+        False,
+        lambda content, **kwargs: False,  # should_validate → False → early return
+        lambda *a: {},
+        lambda *a: 0,
+        lambda *a: None,
+        lambda *a, **k: {},
+        lambda *a: "impl.py",
+        lambda *a: {},
+        lambda *a, **k: None,
+        lambda *a, **k: None,
+    )
+
+
+def test_validate_code_output_for_task_runtime_all_di_params_provided_directly(tmp_path, monkeypatch):
+    """Cover validate_code_output_for_task_runtime DI False branches:
+    496->500, 500->510, 510->516, 516->531, 525->531."""
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    sandbox_policy = config.execution_sandbox_policy()
+    output = AgentOutput(summary="code", raw_content="def foo(): pass\n")
+    task = Task(id="code", title="Code", description="Code", assigned_to="code_engineer")
+
+    monkeypatch.setattr(validation_runtime_module, "validate_code_output_runtime", lambda *a, **k: None)
+
+    # line_budget=None but task_public_contract_preflight provided → enters outer if (line_budget None)
+    # but inner if at 525 is False (task_public_contract_preflight not None) → covers 525->531 False
+    validation_runtime_module.validate_code_output_for_task_runtime(
+        sandbox_policy,
+        output,
+        task,
+        line_budget=None,
+        requires_cli_entrypoint=False,
+        analyze_python_module=lambda *a: {},
+        task_public_contract_preflight=lambda *a: None,
+        completion_diagnostics_from_provider_call=lambda *a, **k: {},
+        execute_generated_module_import_runtime=lambda *a: {},
+        completion_validation_issue=lambda *a: None,
+    )
+
+    # All explicit non-None → all DI guards False → 496->500, 500->510, 510->516, 516->531 all False
+    validation_runtime_module.validate_code_output_for_task_runtime(
+        sandbox_policy,
+        output,
+        task,
+        line_budget=0,
+        requires_cli_entrypoint=False,
+        analyze_python_module=lambda *a: {},
+        task_public_contract_preflight=lambda *a: None,
+        completion_diagnostics_from_provider_call=lambda *a, **k: {},
+        execute_generated_module_import_runtime=lambda *a: {},
+        completion_validation_issue=lambda *a: None,
+    )
+
+
+def test_validate_test_output_for_task_runtime_all_di_params_provided_directly(tmp_path, monkeypatch):
+    """Cover validate_test_output_for_task_runtime DI False branches:
+    819->823, 823->831, 831->837, 837->847, 847->851, 851->864."""
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    sandbox_policy = config.execution_sandbox_policy()
+    output = AgentOutput(summary="tests", raw_content="def test_ok():\n    assert True\n")
+    task = Task(id="tests", title="Tests", description="Test", assigned_to="qa_tester")
+
+    monkeypatch.setattr(validation_runtime_module, "validate_test_output_runtime", lambda *a, **k: None)
+
+    # All optional params provided as non-None stubs → all DI guards False
+    validation_runtime_module.validate_test_output_for_task_runtime(
+        sandbox_policy,
+        {},
+        output,
+        task,
+        line_budget=0,
+        exact_test_count=1,
+        max_test_count=5,
+        fixture_budget=0,
+        finalize_generated_test_suite=lambda *a, **k: output,
+        analyze_test_module_runtime=lambda *a, **k: {},
+        auto_fix_test_type_mismatches=lambda *a, **k: "content",
+        execute_generated_tests_runtime=lambda *a: {},
+        completion_diagnostics_from_provider_call=lambda *a, **k: {},
+        completion_validation_issue=lambda *a, **k: None,
+        summarize_output=lambda *a: output,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Slice 5: workflow_control.py partial branches
+# ---------------------------------------------------------------------------
+
+
+def test_privacy_safe_log_fields_dict_value_count_none_directly():
+    """Cover privacy_safe_log_fields 94->97: task_id_collection_count returns None for dict value."""
+    # Field name matches _task_ids pattern but value is a dict → count is None → use original field name
+    result = workflow_control_module.privacy_safe_log_fields(
+        {"cancelled_task_ids": {"key": "value"}, "other_field": 42}
+    )
+    assert result["cancelled_task_ids"] == {"key": "value"}
+    assert result["other_field"] == 42
+
+
+def test_workflow_control_no_change_branches_directly(tmp_path):
+    """Cover 162->172, 177->187, 193->204, 234->245, 250->261 (False branches in workflow wrappers)."""
+    import logging
+
+    logger = logging.getLogger("test_wf_no_change")
+
+    # 162->172: pause_workflow with mock project that returns False (not changed)
+    mock_project_pause = SimpleNamespace(
+        pause_workflow=lambda *, reason: False,
+        project_name="test",
+        phase="execution",
+        workflow_pause_reason="",
+    )
+    assert workflow_control_module.pause_workflow(logger, mock_project_pause, reason="r") is False
+
+    # 177->187: resume_workflow on a non-paused project → returns False
+    project_not_paused = ProjectState(project_name="test", goal="g")
+    assert workflow_control_module.resume_workflow(logger, project_not_paused, reason="r") is False
+
+    # 193->204: cancel_workflow when already cancelled → condition False (was_cancelled=True)
+    project_cancelled = ProjectState(
+        project_name="test_cancel",
+        goal="g",
+        tasks=[Task(id="t", title="T", description="d", assigned_to="code_engineer")],
+        state_file=str(tmp_path / "proj_cancel.json"),
+    )
+    project_cancelled.cancel_workflow(reason="first_cancel")
+    result_cancel = workflow_control_module.cancel_workflow(logger, project_cancelled, reason="second_cancel")
+    assert isinstance(result_cancel, list)
+
+    # 234->245: override_task with mock project returning False
+    mock_project_override = SimpleNamespace(
+        override_task=lambda task_id, output, *, reason: False,
+        project_name="test",
+        phase="execution",
+    )
+    assert (
+        workflow_control_module.override_task(logger, mock_project_override, "task1", "content", reason="r")
+        is False
+    )
+
+    # 250->261: replay_workflow on empty project → returns [] (falsy) → 250->261 False
+    project_empty = ProjectState(project_name="test_replay", goal="g")
+    result_replay = workflow_control_module.replay_workflow(logger, project_empty, reason="r")
+    assert result_replay == []
+
+
+def test_ensure_budget_decomposition_task_existing_and_new_directly():
+    """Cover ensure_budget_decomposition_task 275->277 (existing is None) and 283->285 (decomposition_task is None).
+    Both are the FALSE branches: the code path continues past those guards without returning."""
+    project = ProjectState(
+        project_name="test",
+        goal="g",
+        tasks=[Task(id="task1", title="T1", description="d", assigned_to="code_engineer")],
+    )
+    task1 = project.get_task("task1")
+
+    # 275->277: decomposition_task_id set in repair_context but the task DOESN'T exist in project
+    # → project.get_task("nonexistent") returns None → if existing is not None: → False → 275->277
+    # → then requires_budget_decomposition=False → return None
+    repair_context_ghost = {"budget_decomposition_plan_task_id": "nonexistent_id"}
+    result_ghost = workflow_control_module.ensure_budget_decomposition_task(
+        project,
+        task1,
+        repair_context_ghost,
+        requires_budget_decomposition=lambda ctx: False,
+        build_budget_decomposition_task_context=lambda t, ctx: {},
+    )
+    assert result_ghost is None
+
+    # 283->285: requires_budget_decomposition True but _create_budget_decomposition_task returns None
+    # → cycle=0 → repair_attempt=0 → _create returns None → if decomposition_task is not None: → False → 283->285
+    result_none = workflow_control_module.ensure_budget_decomposition_task(
+        project,
+        task1,
+        {},
+        requires_budget_decomposition=lambda ctx: True,
+        build_budget_decomposition_task_context=lambda t, ctx: {"cycle": 0},
+    )
+    assert result_none is None
+
+
+def test_repair_task_ids_for_cycle_complex_branches_directly():
+    """Cover repair_task_ids_for_cycle branches:
+    362->380 (code_task is None), 369->380 (code_repair_task is None from ghost task),
+    370->372 (id already in deps), 373->375 (decomp id already in code_repair deps),
+    377->380 (id already in repair_task_ids), 388->390 (decomp id already in repair deps)."""
+    # 362->380: test_failure_requires_code_repair=True but upstream returns None
+    project1 = ProjectState(
+        project_name="p1",
+        goal="g",
+        tasks=[
+            Task(
+                id="test_task",
+                title="Tests",
+                description="tests",
+                assigned_to="qa_tester",
+                status=TaskStatus.FAILED.value,
+            )
+        ],
+    )
+    result1 = workflow_control_module.repair_task_ids_for_cycle(
+        project1,
+        ["test_task"],
+        test_failure_requires_code_repair=lambda task: True,
+        upstream_code_task_for_test_failure=lambda proj, task: None,
+        ensure_budget_decomposition_task=lambda proj, task, ctx: None,
+        execution_agent_name=lambda task: task.assigned_to,
+    )
+    assert "test_task__repair_0" in result1
+
+    # 369->380: code_task not in project → _create_repair_task returns None
+    ghost_code_task = Task(id="ghost_code", title="Ghost", description="ghost", assigned_to="code_engineer")
+    result2 = workflow_control_module.repair_task_ids_for_cycle(
+        project1,
+        ["test_task"],
+        test_failure_requires_code_repair=lambda task: True,
+        upstream_code_task_for_test_failure=lambda proj, task: ghost_code_task,
+        ensure_budget_decomposition_task=lambda proj, task, ctx: None,
+        execution_agent_name=lambda task: task.assigned_to,
+    )
+    assert "test_task__repair_0" in result2
+
+    # 370->372, 373->375, 377->380, 388->390: duplicate task in failed_task_ids
+    # Second iteration finds everything already in lists/deps from first iteration
+    project3 = ProjectState(
+        project_name="p3",
+        goal="g",
+        tasks=[
+            Task(
+                id="code_task",
+                title="Code",
+                description="code",
+                assigned_to="code_engineer",
+                repair_context={"cycle": 1},
+            ),
+            Task(
+                id="test_task3",
+                title="Tests3",
+                description="tests3",
+                assigned_to="qa_tester",
+                status=TaskStatus.FAILED.value,
+                repair_context={"cycle": 1},
+            ),
+        ],
+    )
+
+    def ensure_decomp_real(proj, task, ctx):
+        return proj._create_budget_decomposition_task(task.id, {"cycle": 1})
+
+    result3 = workflow_control_module.repair_task_ids_for_cycle(
+        project3,
+        ["test_task3", "test_task3"],  # duplicate: 2nd iter covers already-in-list branches
+        test_failure_requires_code_repair=lambda task: True,
+        upstream_code_task_for_test_failure=lambda proj, task: proj.get_task("code_task"),
+        ensure_budget_decomposition_task=ensure_decomp_real,
+        execution_agent_name=lambda task: task.assigned_to,
+    )
+    assert len(result3) > 0
+    # code_repair_task id should appear once despite two iterations (377->380 False on 2nd)
+    assert result3.count("code_task__repair_1") == 1
+
+
+def test_configure_repair_attempts_code_task_already_planned_directly():
+    """Cover configure_repair_attempts 454->462: code_task.id already in planned_task_ids."""
+    # Two failed test tasks sharing the same upstream code task
+    # Second iteration: code_task.id already in planned_task_ids → 454->462 False
+    project = ProjectState(
+        project_name="test",
+        goal="g",
+        tasks=[
+            Task(id="code_task", title="Code", description="code", assigned_to="code_engineer"),
+            Task(
+                id="test_task1",
+                title="Tests1",
+                description="tests1",
+                assigned_to="qa_tester",
+                status=TaskStatus.FAILED.value,
+            ),
+            Task(
+                id="test_task2",
+                title="Tests2",
+                description="tests2",
+                assigned_to="qa_tester",
+                status=TaskStatus.FAILED.value,
+            ),
+        ],
+    )
+    workflow_control_module.configure_repair_attempts(
+        project,
+        ["test_task1", "test_task2"],
+        cycle={"number": 1},
+        test_failure_requires_code_repair=lambda task: True,
+        upstream_code_task_for_test_failure=lambda proj, task: proj.get_task("code_task"),
+        build_code_repair_context_from_test_failure=lambda code_task, test_task, cycle: {"cycle": 1},
+        ensure_budget_decomposition_task=lambda proj, task, ctx: None,
+        build_repair_context=lambda task, cycle: {"cycle": 1},
+    )
+    # _plan_task_repair updates existing task's repair_context; code_task.repair_context was set
+    code_task_in_project = project.get_task("code_task")
+    assert isinstance(code_task_in_project.repair_context, dict)
+    assert code_task_in_project.repair_context.get("cycle") == 1

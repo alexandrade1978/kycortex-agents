@@ -9088,3 +9088,344 @@ def test_quick_win_test_ast_analysis_merged_dict_no_missing_keys_guard_directly(
 	# → line 1682 → returns None → fallback to expected_dict_literals → replacement made
 	result = taa.auto_fix_test_type_mismatches(test, impl)
 	assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# Partial-branch coverage – Slice 1: output_helpers.py
+# ---------------------------------------------------------------------------
+
+def test_unredacted_agent_result_returns_original_when_getter_returns_non_agent_output_directly():
+	# Branch 59->61: callable getter exists but returns non-AgentOutput → fallthrough to return result
+	class _FakeAgentBadReturn:
+		def _consume_last_unredacted_output(self) -> str:
+			return "not an AgentOutput"
+
+	original = AgentOutput(summary="original", raw_content="RAW")
+	assert unredacted_agent_result(_FakeAgentBadReturn(), original) is original
+
+
+def test_task_context_output_skips_whitespace_only_raw_content_directly():
+	# Branch 79->81: output_payload dict but raw_content is whitespace-only → return task.output or ""
+	task = SimpleNamespace(output="", output_payload={"raw_content": "   "})
+	assert task_context_output(task) == ""
+
+
+# ---------------------------------------------------------------------------
+# Partial-branch coverage – Slice 1: repair_test_structure.py
+# ---------------------------------------------------------------------------
+
+def test_build_structural_test_repair_lines_assertionless_marker_with_empty_list_directly():
+	# Branch 71->83: assertionless marker in summary but assertionless_tests=[] → skip hollow-test names block
+	lines = build_structural_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- tests without assertion-like checks: test_happy_path (line 5)\n"
+		),
+		failed_content_lower="",
+		imported_module_symbols=[],
+		undefined_available_module_symbols=[],
+		helper_alias_names=[],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=[],
+		missing_datetime_import_issue=False,
+		implementation_prefers_direct_datetime_import=False,
+	)
+	# Outer guidance emitted but NOT the "validation summary already flagged" names message
+	assert any("at least one explicit assertion-like check" in line for line in lines)
+	assert not any("validation summary already flagged these hollow" in line for line in lines)
+
+
+def test_build_structural_test_repair_lines_duplicate_near_match_pair_skipped_directly():
+	# Branch 117->111: same near-match pair generated twice → deduplicated (False branch taken)
+	lines = build_structural_test_repair_lines(
+		summary_lower="generated test validation:\n- undefined local names: AuditLogger\n",
+		failed_content_lower="",
+		imported_module_symbols=["AuditLoggerService", "AuditLoggerService"],
+		undefined_available_module_symbols=[],
+		helper_alias_names=["AuditLogger"],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=[],
+		missing_datetime_import_issue=False,
+		implementation_prefers_direct_datetime_import=False,
+	)
+	# Exactly one near-match pair message, not two
+	pair_lines = [line for line in lines if "AuditLogger -> AuditLoggerService" in line]
+	assert len(pair_lines) == 1
+
+
+def test_build_structural_test_repair_lines_datetime_in_summary_but_no_import_issue_directly():
+	# Branch 149->157: "name 'datetime' is not defined" in summary but missing_datetime_import_issue=False
+	lines = build_structural_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- undefined local names: datetime (line 5)\n"
+			"- nameerror: name 'datetime' is not defined\n"
+		),
+		failed_content_lower="",
+		imported_module_symbols=[],
+		undefined_available_module_symbols=[],
+		helper_alias_names=[],
+		unknown_module_symbols=[],
+		helper_surface_symbols=[],
+		assertionless_tests=[],
+		missing_datetime_import_issue=False,
+		implementation_prefers_direct_datetime_import=False,
+	)
+	# The outer block still emits datetime guidance, but the inner "do not copy" line is absent
+	assert not any("Do not copy the current failed suite forward unchanged" in line for line in lines)
+
+
+# ---------------------------------------------------------------------------
+# Partial-branch coverage – Slice 2: repair_code_validation.py
+# ---------------------------------------------------------------------------
+
+def test_build_code_validation_repair_lines_no_call_hint_directly():
+	# Branch 54->58: duplicate_constructor_argument_details non-None but duplicate_constructor_call_hint falsy
+	lines = build_code_validation_repair_lines(
+		summary_lower=(
+			"generated code validation:\n"
+			"- pytest failure details: failed - typeerror: myclass.__init__() got multiple values for argument 'status'\n"
+		),
+		failed_content_lower="return myclass(status, **request.details)\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=("MyClass", "status"),
+		duplicate_constructor_call_hint=None,
+		duplicate_constructor_explicit_rewrite_hint=None,
+		missing_attribute_details=None,
+		nested_payload_wrapper_details=None,
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=None,
+	)
+	assert any("got multiple values for argument 'status'" in line for line in lines)
+	assert not any("The exact broken call" in line for line in lines)
+
+
+def test_build_code_validation_repair_lines_call_hint_no_explicit_rewrite_directly():
+	# Branch 58->62: duplicate_constructor_call_hint truthy but duplicate_constructor_explicit_rewrite_hint falsy
+	lines = build_code_validation_repair_lines(
+		summary_lower=(
+			"generated code validation:\n"
+			"- pytest failure details: failed - typeerror: myclass.__init__() got multiple values for argument 'status'\n"
+		),
+		failed_content_lower="return myclass(status, **request.details)\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=("MyClass", "status"),
+		duplicate_constructor_call_hint="MyClass(status, **request.details)",
+		duplicate_constructor_explicit_rewrite_hint=None,
+		missing_attribute_details=None,
+		nested_payload_wrapper_details=None,
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=None,
+	)
+	assert any("MyClass(status, **request.details)" in line for line in lines)
+	assert not any("For this failed artifact, rewrite" in line for line in lines)
+
+
+def test_build_code_validation_repair_lines_class_fields_no_replacement_field_directly():
+	# Branch 72->80: missing_attribute_details non-None, class_fields truthy, but no near-match → replacement_field None
+	lines = build_code_validation_repair_lines(
+		summary_lower="generated code validation:\n",
+		failed_content_lower="return result.xyz_value\n",
+		dataclass_order_examples=[],
+		duplicate_constructor_argument_details=None,
+		duplicate_constructor_call_hint=None,
+		duplicate_constructor_explicit_rewrite_hint=None,
+		missing_attribute_details=("Result", "xyz_value", ["abc_label", "def_count"]),
+		nested_payload_wrapper_details=None,
+		constructor_strictness_details=None,
+		plain_class_field_details=None,
+		missing_import_details=None,
+	)
+	assert any("Result currently defines" in line for line in lines)
+	assert not any("The closest declared field is" in line for line in lines)
+
+
+# ---------------------------------------------------------------------------
+# Partial-branch coverage – Slice 2: repair_test_runtime.py
+# ---------------------------------------------------------------------------
+
+def test_build_runtime_only_test_repair_lines_no_empty_string_in_content_directly():
+	# Branch 93->97: score_request+intake_request triggers outer block but no "" or '' in content
+	lines = build_runtime_only_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- valueerror: must be filled\n"
+			"- pytest execution: fail\n"
+		),
+		failed_content_lower="score_request(intake_request(valid_data))\n",
+		imported_module_symbols=[],
+		unknown_module_symbols=[],
+		previous_member_calls={},
+		previous_constructor_keywords={},
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+	)
+	assert any("non-error scoring" in line or "intake_request" in line or "scoring tests on already-valid" in line for line in lines)
+	assert not any("len(details) % 10 == 0" in line for line in lines)
+
+
+def test_build_runtime_only_test_repair_lines_documents_no_validation_failure_marker_directly():
+	# Branch 107->111: documents+risk_scores in content but no test_validation_failure/empty-list markers
+	lines = build_runtime_only_test_repair_lines(
+		summary_lower="generated test validation:\n- pytest execution: fail\n",
+		failed_content_lower="valid_documents = ['passport', 'license']\nrisk_scores = []\n",
+		imported_module_symbols=[],
+		unknown_module_symbols=[],
+		previous_member_calls={},
+		previous_constructor_keywords={},
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+	)
+	assert any("required document or evidence list" in line for line in lines)
+	assert not any("dedicated validation-failure case" in line for line in lines)
+
+
+def test_build_runtime_only_test_repair_lines_required_evidence_issue_no_items_directly():
+	# Branch 115->119: required_evidence_runtime_issue=True but required_evidence_items=[] → skip items line
+	lines = build_runtime_only_test_repair_lines(
+		summary_lower="generated test validation:\n- pytest execution: fail\n",
+		failed_content_lower="payload = {'documents': []}\n",
+		imported_module_symbols=[],
+		unknown_module_symbols=[],
+		previous_member_calls={},
+		previous_constructor_keywords={},
+		required_evidence_runtime_issue=True,
+		required_evidence_items=[],
+	)
+	assert any("do not copy the current failed suite forward unchanged" in line.lower() for line in lines)
+	assert not any("The implementation names the full required evidence list" in line for line in lines)
+
+
+def test_build_runtime_only_test_repair_lines_data_eq_no_score_or_data_field_directly():
+	# Branch 130->134: ".data ==" in content but no "score ==" or "data_field"
+	lines = build_runtime_only_test_repair_lines(
+		summary_lower=(
+			"generated test validation:\n"
+			"- assertionerror: assert {'id': '1'} == {'id': '1', 'detail': 'x'}\n"
+			"- pytest execution: fail\n"
+		),
+		failed_content_lower="assert result.data == {'id': '1'}\n",
+		imported_module_symbols=[],
+		unknown_module_symbols=[],
+		previous_member_calls={},
+		previous_constructor_keywords={},
+		required_evidence_runtime_issue=False,
+		required_evidence_items=[],
+	)
+	assert any("stores the full input payload" in line for line in lines)
+	assert not any("calculate_risk_score reads data.get" in line for line in lines)
+
+
+# ---------------------------------------------------------------------------
+# Partial-branch coverage – Slice 3: repair_instructions.py
+# ---------------------------------------------------------------------------
+
+def test_build_repair_instruction_broken_line_none_directly():
+	# Branch 50->61: missing_import_nameerror_details returns (name, None) → broken_line falsy
+	instruction = build_repair_instruction(
+		"code-task",
+		"code_validation",
+		last_error="NameError: name 'logging' is not defined",
+		failed_code="logger = build_logger()",
+		validation={},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: ("logging", None),
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: False,
+	)
+	assert "references logging during module import but never imports it" in instruction
+	assert "still appears in the failed artifact" not in instruction
+
+
+def test_build_repair_instruction_type_mismatches_empty_with_payload_violations_directly():
+	# Branch 86->92: type_mismatches=[] but payload_contract_violations non-empty → skip type_mismatches block
+	instruction = build_repair_instruction(
+		"tests-task",
+		"test_validation",
+		last_error="",
+		failed_code="",
+		validation={
+			"test_analysis": {
+				"type_mismatches": [],
+				"payload_contract_violations": [
+					"handle_request parameter `details` missing required dict keys: requester_identity at line 9"
+				],
+			},
+			"test_execution": {"ran": True, "returncode": 1, "summary": "1 failed"},
+		},
+		dataclass_default_order_repair_examples=lambda code: [],
+		missing_import_nameerror_details=lambda error, code: None,
+		plain_class_field_default_factory_details=lambda error, code: None,
+		test_validation_has_only_warnings=lambda validation: True,
+	)
+	assert "payload contract violations MUST be fixed" in instruction
+	assert "type mismatches" not in instruction
+
+
+def test_build_code_repair_instruction_from_test_failure_no_call_hint_directly():
+	# Branch 177->182: duplicate_argument_details non-None but duplicate_call_hint falsy
+	instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: ("ComplianceRequest", "details"),
+		duplicate_constructor_argument_call_hint=lambda summary, code: None,
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: "ComplianceRequest(request_id=..., details=...)",
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: None,
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: None,
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: None,
+		internal_constructor_strictness_details=lambda summary, code: None,
+	)
+	assert "passes details twice to ComplianceRequest" in instruction
+	assert "The exact broken call" not in instruction
+
+
+def test_build_code_repair_instruction_from_test_failure_nested_wrapper_no_validation_line_directly():
+	# Branch 242->247: nested_payload_wrapper_details non-None but validation_line falsy
+	instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: None,
+		duplicate_constructor_argument_call_hint=lambda summary, code: None,
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: None,
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: None,
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: ("details", ["request_id", "details"], None),
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: None,
+		internal_constructor_strictness_details=lambda summary, code: None,
+	)
+	assert "treats request_id, details as required keys inside request.details" in instruction
+	assert "Do not return that line unchanged" not in instruction
+
+
+def test_build_code_repair_instruction_from_test_failure_audit_no_invalid_return_call_directly():
+	# Branch 263->274: invalid_outcome_audit_details non-None but invalid_return_call falsy
+	instruction = build_code_repair_instruction_from_test_failure(
+		"summary",
+		"failed code",
+		duplicate_constructor_argument_details=lambda summary: None,
+		duplicate_constructor_argument_call_hint=lambda summary, code: None,
+		duplicate_constructor_explicit_rewrite_hint=lambda summary, code: None,
+		plain_class_field_default_factory_details=lambda summary, code: None,
+		missing_object_attribute_details=lambda summary, code: None,
+		suggest_declared_attribute_replacement=lambda attribute_name, class_fields: None,
+		render_name_list=lambda names: ", ".join(names),
+		nested_payload_wrapper_field_validation_details=lambda summary, code: None,
+		invalid_outcome_missing_audit_trail_details=lambda summary, tests, code: (
+			["test_invalid_path"],
+			"audit_log",
+			"",
+			False,
+		),
+		internal_constructor_strictness_details=lambda summary, code: None,
+	)
+	assert "requires invalid requests to keep their rejected result while populating audit_log" in instruction
+	assert "still returns" not in instruction

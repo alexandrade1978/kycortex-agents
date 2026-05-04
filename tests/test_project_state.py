@@ -5554,3 +5554,374 @@ def test_public_task_history_returns_empty_list_for_non_list(tmp_path):
     )
     result = project._public_task_history("not a list")
     assert result == []
+
+
+def test_create_budget_decomposition_task_existing_non_dict_repair_context_directly(tmp_path):
+    # Branch 654->656: existing.repair_context is NOT a dict → skip update, return existing.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    source_task = Task(id="src", title="Source", description="desc", assigned_to="coder")
+    project.tasks.append(source_task)
+    # Pre-populate the decomposition task with a non-dict repair_context
+    decomp_task = Task(id="src__repair_1__budget_plan", title="Decomp", description="d", assigned_to="architect")
+    decomp_task.repair_context = "not_a_dict"  # type: ignore[assignment]
+    project.tasks.append(decomp_task)
+
+    result = project._create_budget_decomposition_task("src", {"cycle": 1})
+    assert result is not None
+    assert result.repair_context == "not_a_dict"  # not updated
+
+
+def test_mark_workflow_finished_terminal_failure_with_only_provider_call_directly(tmp_path):
+    # Branches 1032->1034, 1034->1036 False: failure context has task_id but no message/error_type.
+    # Branches 1063->1065, 1065->1067 False: _terminal_failure_context returns details with no
+    # message/error_type (task has only last_provider_call set, not last_error/last_error_type).
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    task = Task(id="t1", title="T1", description="desc", assigned_to="coder")
+    task.last_error_category = "task_execution"
+    task.last_error = None  # no error message
+    task.last_error_type = None  # no error type
+    task.last_provider_call = {"provider": "openai", "success": False}
+    project.tasks.append(task)
+
+    project.mark_workflow_finished("failed", failure_category="task_execution")
+
+    finished_events = [e for e in project.execution_events if e.get("event") == "workflow_finished"]
+    assert finished_events
+    details = finished_events[-1].get("details", {})
+    # failure_task_id IS set (task.id is always a string)
+    assert details.get("failure_task_id") == "t1"
+    # failure_message NOT set (last_error is None)
+    assert "failure_message" not in details
+    # failure_error_type NOT set (last_error_type is None)
+    assert "failure_error_type" not in details
+
+
+def test_workflow_telemetry_summary_health_no_status_and_failed_no_error_type_directly(tmp_path):
+    # Branch 1955->1959 False: health entry has no "status" field → skip status_counts update.
+    # Branch 1976->1982 False: success=False but error_type=None and has_error_type not True.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    task = Task(id="t1", title="T1", description="desc", assigned_to="coder")
+    task.last_provider_call = {
+        "provider": "openai",
+        "success": False,
+        "error_type": None,  # neither str nor has_error_type → 1976->1982 False
+        "provider_health": {
+            "openai": {"model": "gpt-4"},  # no "status" key → 1955->1959 False
+        },
+    }
+    project.tasks.append(task)
+
+    summary = project._workflow_telemetry_summary()
+    assert summary["error_summary"]["has_final_errors"] is False
+    health = summary.get("provider_health_summary", {})
+    if "openai" in health:
+        assert health["openai"]["status_presence"] == {}
+
+
+def test_internal_resume_summary_no_reason_in_event_directly(tmp_path):
+    # Branch 2191->2194 False: resumed event has no "reason" field in details.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.execution_events.append({
+        "event": "workflow_resumed",
+        "timestamp": "2025-01-01T00:00:00Z",
+        "status": "running",
+        "details": {},  # no "reason" key
+    })
+
+    summary = project._internal_resume_summary()
+    assert summary["reason_counts"] == {}
+
+
+def test_repair_summary_entry_without_reason_or_category_directly(tmp_path):
+    # Branch 2242->2245 False: repair history entry has no "reason".
+    # Branch 2246->2248 False: repair history entry has no "failure_category".
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    project.repair_history.append({"reason": None, "failure_category": None, "failed_task_ids": []})
+
+    public_summary = project._repair_summary()
+    assert public_summary["has_multiple_reasons"] is False
+    assert public_summary["has_multiple_failure_categories"] is False
+
+    internal_summary = project._internal_repair_summary()
+    assert internal_summary["reason_counts"] == {}
+
+
+def test_internal_telemetry_no_provider_name_and_null_success_and_no_fallback_info_directly(tmp_path):
+    # Branch 2303->2327: provider_name not a non-empty string → summary_for_provider = None.
+    # Branches 2329->2332, 2334->2337 False: summary_for_provider is None (since 2303 is False).
+    # Branch 2324->2327: success is None (not True or False).
+    # Branch 2391->2397 False: error_type=None, has_error_type not True.
+    # Branch 2406->2409 False: fallback_provider is None.
+    # Branch 2410->2412 False: fallback_status is None.
+    # Branch 2413->2402 False: no fallback error_type.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    task1 = Task(id="t1", title="T1", description="desc", assigned_to="coder")
+    task1.last_provider_call = {
+        # no "provider" key → 2303 False → summary_for_provider = None
+        "success": None,  # not True or False → 2324->2327 False
+    }
+    task2 = Task(id="t2", title="T2", description="desc", assigned_to="coder")
+    task2.last_provider_call = {
+        "provider": "openai",
+        "success": False,
+        "error_type": None,  # → 2391->2397 False
+        "fallback_history": [
+            {"provider": None, "status": None},  # 2406->2409, 2410->2412, 2413->2402 False
+        ],
+    }
+    project.tasks.append(task1)
+    project.tasks.append(task2)
+
+    summary = project._internal_workflow_telemetry_summary()
+    assert summary["error_summary"]["fallback_error_count"] == 0
+
+
+def test_internal_telemetry_health_no_status_no_last_outcome_and_no_usage_metrics_directly(tmp_path):
+    # Branch 2370->2374: health_status not a string.
+    # Branch 2375->2379: last_outcome not a string.
+    # Branch 2340->2343 False: summary_for_provider is None (no provider name), duration_ms set.
+    # Branch 2346->2349 False: summary_for_provider is None, usage dict set.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    task = Task(id="t1", title="T1", description="desc", assigned_to="coder")
+    task.last_provider_call = {
+        # no "provider" → summary_for_provider = None → 2340->2343 and 2346->2349 False
+        "duration_ms": 150.0,  # non-None duration → reaches line 2340
+        "usage": {"tokens": 10},  # dict → reaches line 2346
+        "provider_health": {
+            "ollama": {
+                # no "status" key → 2370->2374 False
+                # no "last_outcome" key → 2375->2379 False
+                "model": "llama3",
+            },
+        },
+    }
+    project.tasks.append(task)
+
+    summary = project._internal_workflow_telemetry_summary()
+    health = summary.get("provider_health_summary", {})
+    if "ollama" in health:
+        assert health["ollama"]["status_counts"] == {}
+        assert health["ollama"]["last_outcome_counts"] == {}
+
+
+def test_public_workflow_cancelled_no_cancelled_tasks_directly(tmp_path):
+    # Branch 2557->2559 False: cancelled_task_count = 0 → skip has_cancelled_tasks.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_workflow_cancelled_details({"terminal_outcome": "cancelled"})
+    assert "has_cancelled_tasks" not in result
+    assert result["terminal_outcome"] == "cancelled"
+
+
+def test_public_workflow_replayed_no_replayed_tasks_directly(tmp_path):
+    # Branch 2597->2599 False: replayed_task_count = 0 → skip has_replayed_tasks.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_workflow_replayed_details({})
+    assert "has_replayed_tasks" not in result
+
+
+def test_public_task_completed_no_assigned_to_directly(tmp_path):
+    # Branch 2620->2622 False: no assigned_to in details → skip has_assigned_to.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_completed_details({})
+    assert "has_assigned_to" not in result
+
+
+def test_public_task_history_skips_non_dict_entries_directly(tmp_path):
+    # Branch 2752->2750 False: _public_task_history_entry returns {} (non-dict entry) → skip append.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_history(["not_a_dict", {"event": "task_completed", "timestamp": "t", "status": "done"}])
+    assert len(result) == 1
+
+
+def test_public_task_failed_no_error_fields_directly(tmp_path):
+    # Branch 2767->2769 False: raw_error_type not str, has_error_type not True.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_failed_details({})
+    assert "has_error_type" not in result
+
+
+def test_public_task_retry_scheduled_no_error_fields_directly(tmp_path):
+    # Branch 2787->2789 False: raw_error_type not str.
+    # Branch 2791->2793 False: no error_category.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_retry_scheduled_details({})
+    assert "has_error_type" not in result
+    assert "has_error_category" not in result
+
+
+def test_public_policy_enforcement_no_message_no_error_type_directly(tmp_path):
+    # Branch 2804->2806 False: no message.
+    # Branch 2809->2811 False: no error_type.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_policy_enforcement_details({})
+    assert "has_message" not in result
+    assert "has_error_type" not in result
+
+
+def test_public_workflow_progress_no_task_status_directly(tmp_path):
+    # Branch 2821->2823 False: no task_status in details.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_workflow_progress_details({})
+    assert "has_task_status" not in result
+
+
+def test_public_workflow_finished_legacy_telemetry_without_acceptance_summary_directly(tmp_path):
+    # Branch 2833->2835 False: legacy_workflow_telemetry is dict but has no acceptance_summary.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_workflow_finished_details({
+        "workflow_telemetry": {"other_key": "value"},  # no acceptance_summary → 2833->2835 False
+    })
+    assert isinstance(result, dict)
+
+
+def test_public_task_budget_decomposition_no_presence_flags_directly(tmp_path):
+    # Branch 3030->3032 False: no assigned_to.
+    # Branch 3032->3034 False: no decomposition_target_task_id.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_budget_decomposition_details({})
+    assert "has_assigned_to" not in result
+    assert "has_decomposition_target_task" not in result
+
+
+def test_public_task_repair_created_no_presence_flags_directly(tmp_path):
+    # Branch 3039->3041 False: no assigned_to.
+    # Branch 3041->3043 False: no repair_origin_task_id.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_repair_created_details({})
+    assert "has_assigned_to" not in result
+    assert "has_repair_origin" not in result
+
+
+def test_public_task_requeued_no_reason_directly(tmp_path):
+    # Branch 3047->3049 False: no reason.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_requeued_details({})
+    assert "has_reason" not in result
+
+
+def test_public_task_started_no_assigned_to_directly(tmp_path):
+    # Branch 3063->3065 False: no assigned_to in details.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_started_details({})
+    assert "has_assigned_to" not in result
+
+
+def test_public_task_repair_started_no_presence_flags_directly(tmp_path):
+    # Branch 3072->3074 False: no assigned_to.
+    # Branch 3074->3076 False: no repair_task_id.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_repair_started_details({})
+    assert "has_assigned_to" not in result
+    assert "has_repair_task" not in result
+
+
+def test_public_task_repair_failure_minimize_error_type_no_flags_directly(tmp_path):
+    # Branch 3087->3091 False: minimize_error_type=True but no error_type.
+    # Branch 3091->3093 False: no error_category.
+    # Branch 3093->3095 False: no repair_task_id.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_repair_failure_details({}, minimize_error_type=True)
+    assert "has_error_type" not in result
+    assert "has_error_category" not in result
+    assert "has_repair_task" not in result
+
+
+def test_public_task_repaired_no_presence_flags_directly(tmp_path):
+    # Branch 3100->3102 False: no assigned_to.
+    # Branch 3102->3104 False: no repair_task_id.
+    project = ProjectState(
+        project_name="Test",
+        goal="Test goal",
+        state_file=str(tmp_path / "s.json"),
+    )
+    result = project._public_task_repaired_details({})
+    assert "has_assigned_to" not in result
+    assert "has_repair_task" not in result

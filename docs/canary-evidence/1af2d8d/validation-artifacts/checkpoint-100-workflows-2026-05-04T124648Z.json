@@ -1,0 +1,63 @@
+{
+  "checkpoint": "100-workflows",
+  "captured_at": "2026-05-04T12:46:48Z",
+  "candidate": {
+    "tag": "v1.0.13a11",
+    "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
+  },
+  "cumulative_window": {
+    "eligible_workflows_seen": 100,
+    "accepted_workflows": 100,
+    "failed_workflows": 0,
+    "incidents": 0,
+    "rollbacks": 0,
+    "acceptance_rate": 1.0
+  },
+  "batches": [
+    {"batch_id": "canary_1af2d8d_2026_05_04T121007Z", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke2",  "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke3",  "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke4",  "workflows": 1, "providers": ["anthropic"],                     "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke5",  "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke6",  "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke7",  "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke8",  "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke9",  "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke10", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke11", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke12", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke13", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke14", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke15", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke16", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke17", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke18", "workflows": 1, "providers": ["anthropic"],                     "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke19", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke20", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke21", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke22", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke23", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke24", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke25", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke26", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke27", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke28", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke29", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke30", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke31", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke32", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke33", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke34", "workflows": 3, "providers": ["anthropic", "openai", "ollama"], "all_passed": true},
+    {"batch_id": "canary_1af2d8d_smoke35", "workflows": 2, "providers": ["anthropic", "openai"],           "all_passed": true}
+  ],
+  "provider_health_at_checkpoint": {
+    "anthropic": {"status": "healthy", "runs": 35, "passed": 35},
+    "openai":    {"status": "healthy", "runs": 33, "passed": 33},
+    "ollama":    {"status": "healthy", "runs": 32, "passed": 32}
+  },
+  "artifact_contract": {
+    "sample_balance_all_runs": 2650.00,
+    "artifact_validation": "passed_all",
+    "repair_cycles_total": 0
+  }
+}

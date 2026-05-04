@@ -1038,7 +1038,7 @@ def test_release_status_documents_current_repository_release_readiness_state():
     release_status_path = Path(__file__).resolve().parents[1] / "RELEASE_STATUS.md"
     release_status = release_status_path.read_text(encoding="utf-8")
     version = kycortex_agents.__version__
-    latest_released_version = "1.0.13a10"
+    latest_released_version = "1.0.13a11"
 
     assert "# Release Status" in release_status
     assert "## Current Snapshot" in release_status

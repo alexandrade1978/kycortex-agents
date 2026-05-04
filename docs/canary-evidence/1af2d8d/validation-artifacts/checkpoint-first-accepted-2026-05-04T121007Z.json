@@ -1,0 +1,52 @@
+{
+  "checkpoint": "first-accepted",
+  "captured_at": "2026-05-04T12:10:07Z",
+  "candidate": {
+    "tag": "v1.0.13a11",
+    "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
+  },
+  "smoke_batch": {
+    "batch_id": "canary_1af2d8d_2026_05_04T121007Z",
+    "output_dir": "output/canary_1af2d8d_2026_05_04T121007Z",
+    "workflows_run": 3,
+    "workflows_accepted": 3,
+    "workflows_failed": 0,
+    "providers": [
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001",
+        "terminal_outcome": "completed",
+        "repair_cycles": 0,
+        "artifact_validation": "passed",
+        "sample_balance": 2650.00
+      },
+      {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "terminal_outcome": "completed",
+        "repair_cycles": 0,
+        "artifact_validation": "passed",
+        "sample_balance": 2650.00
+      },
+      {
+        "provider": "ollama",
+        "model": "qwen2.5-coder:7b",
+        "terminal_outcome": "completed",
+        "repair_cycles": 0,
+        "artifact_validation": "passed",
+        "sample_balance": 2650.00,
+        "task_durations_ms": {
+          "arch": 15187.595,
+          "code": 5136.759,
+          "review": 4064.572
+        }
+      }
+    ]
+  },
+  "canary_window_totals_after_checkpoint": {
+    "eligible_workflows_seen": 3,
+    "accepted_workflows": 3,
+    "incidents": 0,
+    "rollbacks": 0
+  }
+}

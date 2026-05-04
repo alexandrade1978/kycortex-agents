@@ -1,5 +1,6 @@
 {
   "captured_at": "2026-05-04T05:11:04Z",
+  "last_updated": "2026-05-04T12:10:07Z",
   "candidate": {
     "tag": "v1.0.13a11",
     "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
@@ -14,13 +15,16 @@
   },
   "canary_window": {
     "opened": true,
-    "traffic_admitted": false,
+    "traffic_admitted": true,
+    "first_traffic_at": "2026-05-04T12:10:07Z",
     "eligible_workflow_class": [
       "release-user-smoke"
     ],
-    "eligible_workflows_seen": 0,
-    "accepted_workflows": 0,
+    "eligible_workflows_seen": 3,
+    "accepted_workflows": 3,
     "incidents": 0,
-    "rollbacks": 0
+    "rollbacks": 0,
+    "checkpoints_reached": ["first-accepted"],
+    "next_checkpoint": "10-workflows"
   }
 }

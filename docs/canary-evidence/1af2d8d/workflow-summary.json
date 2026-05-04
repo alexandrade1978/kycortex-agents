@@ -1,0 +1,26 @@
+{
+  "captured_at": "2026-05-04T05:11:04Z",
+  "candidate": {
+    "tag": "v1.0.13a11",
+    "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
+  },
+  "preflight": {
+    "matrix_output_root": "output/real_world_complex_matrix_2026_05_04_v1013a11_final_5x3",
+    "total_cells": 15,
+    "accepted_cells": 15,
+    "completed_cells": 15,
+    "failed_cells": 0,
+    "acceptance_rate": 1.0
+  },
+  "canary_window": {
+    "opened": true,
+    "traffic_admitted": false,
+    "eligible_workflow_class": [
+      "release-user-smoke"
+    ],
+    "eligible_workflows_seen": 0,
+    "accepted_workflows": 0,
+    "incidents": 0,
+    "rollbacks": 0
+  }
+}

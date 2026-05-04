@@ -9,15 +9,15 @@ This file is the short repository-owned snapshot of the current release posture 
 - Latest published release: `1.0.13a11`
 - Latest published tag: `v1.0.13a11`
 - Current branch for release preparation: `main`
-- Current main-branch head: `1af2d8d` (release commit; tag `v1.0.13a11` points here)
+- Release candidate under canary record: `v1.0.13a11` (`1af2d8d`)
 - Release publish action: no release flow is in progress.
 
 ## Current Posture
 
 - Published package baseline is `v1.0.13a11`.
 - The `1.0.13a11` release extends `1.0.13a10` with a comprehensive partial-branch coverage campaign, reaching 99.89% branch coverage (2568 tests).
-- The current line satisfies the local Beta 1 minimum as an internal checkpoint; that does not automatically open canary or go-live posture.
-- Release-candidate review is not open for further versions yet.
+- Phase 16 canary record for `v1.0.13a11` is now open under `docs/canary-evidence/1af2d8d/`.
+- Canary traffic has not been admitted yet; current state is preflight-evidence complete and canary-open baseline.
 
 ## Repository Release Gate
 
@@ -28,8 +28,8 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Next Release-Facing Action
 
-1. Decide whether to open Phase 16 canary admission on the current head.
-2. Prepare engineering for next milestone.
+1. Admit controlled canary traffic for eligible `release-user-smoke` workflows and collect checkpoint evidence.
+2. Continue milestone engineering on `1.0.13a12.dev0` in parallel with canary monitoring.
 3. Keep canary and go-live decisions separately gated.
 
 ## Canonical References

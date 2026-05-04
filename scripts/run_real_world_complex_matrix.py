@@ -199,6 +199,8 @@ SCENARIOS: tuple[ScenarioSpec, ...] = (
             "Keep items as the item payload collection inside details. Do not replace it with guessed aliases such as products, order_items, or return_lines.",
             "Keep order_reference and return_reason as strings, receipt_present as a boolean flag, and prior_returns plus timing_days as integers. Keep items as a list-like collection of item payload records, not a plain string placeholder.",
             "Each record inside items is a dict with exactly the keys sku (str), category (str), and value (numeric). Do not rename value to price, amount, or cost.",
+            "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request. Never fall back to default values for non-dict details.",
+            "Do NOT add a __post_init__ or __init__ type-check on the details field inside ReturnCase. ReturnCase must accept any value for details without raising at construction time. The type check for details belongs exclusively in validate_request.",
         ),
         detail_fixture_example={
             "order_reference": "ORD-12345",

@@ -1,0 +1,30 @@
+{
+  "captured_at": "2026-05-04T05:11:04Z",
+  "status": "pre_canary_open_baseline",
+  "candidate": {
+    "tag": "v1.0.13a11",
+    "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
+  },
+  "telemetry_scope": {
+    "source": "canonical 5x3 admission preflight",
+    "live_canary_workflows": 0
+  },
+  "provider_runtime_summary": {
+    "anthropic": {
+      "model": "claude-haiku-4-5-20251001",
+      "status": "healthy"
+    },
+    "openai": {
+      "model": "gpt-4o-mini",
+      "status": "healthy"
+    },
+    "ollama": {
+      "model": "qwen3:8b",
+      "status": "healthy"
+    }
+  },
+  "notes": [
+    "Detailed live canary telemetry will be appended after traffic admission.",
+    "This file is the baseline checkpoint at canary-open time."
+  ]
+}

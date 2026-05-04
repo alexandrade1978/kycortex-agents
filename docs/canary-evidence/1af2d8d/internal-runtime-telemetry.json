@@ -1,7 +1,7 @@
 {
   "captured_at": "2026-05-04T05:11:04Z",
-  "last_updated": "2026-05-04T12:10:07Z",
-  "status": "first_accepted_checkpoint",
+  "last_updated": "2026-05-04T12:16:23Z",
+  "status": "10-workflows-checkpoint",
   "candidate": {
     "tag": "v1.0.13a11",
     "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
@@ -36,15 +36,22 @@
     }
   },
   "canary_summary": {
-    "batch": "canary_1af2d8d_2026_05_04T121007Z",
-    "workflows_run": 3,
-    "workflows_accepted": 3,
+    "batches_run": 4,
+    "workflows_run": 10,
+    "workflows_accepted": 10,
     "artifact_validation": "passed_all",
-    "sample_balance_all_providers": 2650.00
+    "sample_balance_all_providers": 2650.00,
+    "repair_cycles_total": 0,
+    "provider_runs": {
+      "anthropic": 4,
+      "openai": 3,
+      "ollama": 3
+    }
   },
   "notes": [
     "Pre-canary baseline captured at canary-open time (2026-05-04T05:11:04Z).",
     "First-accepted checkpoint reached at 2026-05-04T12:10:07Z with 3/3 smoke workflows passing.",
-    "All three providers healthy, zero repair cycles, artifact contract validated."
+    "10-workflows checkpoint reached at 2026-05-04T12:16:23Z with 10/10 cumulative workflows accepted.",
+    "All three providers healthy across all runs, zero repair cycles, artifact contract validated."
   ]
 }

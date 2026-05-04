@@ -1,6 +1,6 @@
 # Canary Record - 1af2d8d
 
-Status: live window open; first-accepted checkpoint reached (3/3 smoke workflows admitted, 0 incidents)
+Status: live window open; 10-workflows checkpoint reached (10/10 smoke workflows admitted, 0 incidents)
 
 This record opens the candidate evidence bundle for released commit `1af2d8df1498ec2d98a09f9a7d2fa3767225532f` and tag `v1.0.13a11`.
 
@@ -45,9 +45,12 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - canonical preflight run completed cleanly at `output/real_world_complex_matrix_2026_05_04_v1013a11_final_5x3`
 - preflight matrix result: 15/15 accepted with `terminal_outcome=completed` in all cells
 - canary traffic admitted: `2026-05-04T12:10:07Z` — first-accepted checkpoint reached
-- smoke batch `canary_1af2d8d_2026_05_04T121007Z`: 3/3 workflows accepted (anthropic, openai, ollama), 0 repair cycles, artifact_validation=passed on all providers
-- cumulative eligible workflows: 3; incidents: 0; rollbacks: 0
-- next checkpoint: 10 eligible workflows (continue smoke rounds)
+- smoke batch `canary_1af2d8d_2026_05_04T121007Z`: 3/3 workflows accepted (anthropic, openai, ollama), 0 repair cycles, artifact_validation=passed
+- smoke batch `canary_1af2d8d_smoke2`: 3/3 workflows accepted (anthropic, openai, ollama), 0 repair cycles, artifact_validation=passed
+- smoke batch `canary_1af2d8d_smoke3`: 3/3 workflows accepted (anthropic, openai, ollama), 0 repair cycles, artifact_validation=passed
+- smoke batch `canary_1af2d8d_smoke4`: 1/1 workflow accepted (anthropic), 0 repair cycles, artifact_validation=passed
+- 10-workflows checkpoint reached at `2026-05-04T12:16:23Z`: cumulative 10/10 accepted, 0 incidents, 0 rollbacks
+- next checkpoint: 25 eligible workflows
 
 ## Evidence References
 
@@ -59,3 +62,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - canary logs: `incident-log.md`, `rollback-log.md`, `completion-review.md`
 - retained validation root for this candidate: `validation-artifacts/`
 - first-accepted checkpoint: `validation-artifacts/checkpoint-first-accepted-2026-05-04T121007Z.json`
+- 10-workflows checkpoint: `validation-artifacts/checkpoint-10-workflows-2026-05-04T121623Z.json`

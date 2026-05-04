@@ -6426,4 +6426,68 @@ def test_qa_tester_omits_prior_suite_when_undefined_locals_are_not_helper_aliase
     assert "capture_audit" in agent.last_user_message
     assert "entry" in agent.last_user_message
     assert "Do not preserve or patch the previous pytest file in place." in agent.last_user_message
+
+
+def test_budget_compaction_line_target_mid_range_and_pressure_below_300_directly():
+    # Branch 128->130: max_tokens in (2000, 3200] → provider_cap = 220
+    result = _budget_compaction_line_target(220, 2500)
+    assert isinstance(result, int)
+    assert result <= 220
+
+    # Branch 132->135 False: completion_pressure=True, max_tokens=2500 (<=3200),
+    # previous_line_count=150 (<300) → if previous_line_count >= 300 is False
+    result2 = _budget_compaction_line_target(150, 2500, completion_pressure=True)
+    assert isinstance(result2, int)
+    assert result2 <= 180
+
+
+def test_code_engineer_run_with_input_low_budget_empty_task_no_compact_block_directly(tmp_path):
+    # Branch 390->392 False: low_budget_section is non-empty (provider_max_tokens=900)
+    # AND task_public_contract_anchor is non-empty, but task_description="" so
+    # task_context_source="" and _compact_task_constraints_block("") returns "" → if False
+    agent = CaptureCodeEngineerAgent(build_config(tmp_path))
+    agent_input = AgentInput(
+        task_id="code",
+        task_title="Code",
+        task_description="",
+        project_name="Demo",
+        project_goal="Build demo",
+        context={
+            "architecture": "Arch",
+            "provider_max_tokens": 900,
+            "task_public_contract_anchor": "MyService.process()",
+        },
+    )
+    result = agent.run_with_input(agent_input)
+    assert result == "ok"
+    assert "Task constraints summary" not in agent.last_user_message
+
+
+def test_code_engineer_run_repair_mode_non_empty_task_context_source_directly(tmp_path):
+    # Branch 534->536 False: repair_mode=True AND task_context_source.strip() non-empty
+    # so the assignment task_context_source = task_description is NOT executed
+    agent = CaptureCodeEngineerAgent(build_config(tmp_path))
+    result = agent.run(
+        "Implement feature.\n\nRepair objective: Fix the broken assertion.",
+        {"architecture": "Arch"},
+    )
+    assert result == "ok"
+    assert "Repair objective:" in agent.last_user_message
+
+
+def test_code_engineer_run_low_budget_empty_task_no_compact_block_directly(tmp_path):
+    # Branch 539->541 False: low_budget_section non-empty (provider_max_tokens=900)
+    # AND task_public_contract_anchor non-empty, but task_description="" so
+    # task_context_source="" and _compact_task_constraints_block("") returns "" → if False
+    agent = CaptureCodeEngineerAgent(build_config(tmp_path))
+    result = agent.run(
+        "",
+        {
+            "architecture": "Arch",
+            "provider_max_tokens": 900,
+            "task_public_contract_anchor": "MyService.process()",
+        },
+    )
+    assert result == "ok"
+    assert "Task constraints summary" not in agent.last_user_message
     assert "capture_audit = []" not in agent.last_user_message

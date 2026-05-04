@@ -1288,6 +1288,20 @@ class TestRuntimeAndConstructorGuardHelpers:
             "ReviewRequest(request_id, details, metadata, custom_payload, timestamp)"
         ) == ["details", "metadata", "custom_payload"]
 
+    def test_constructor_rejects_invalid_payload_bare_raise_and_subscript_isinstance(self):
+        # Branch 3338->3340: elif isinstance(exception_node, ast.Name) → bare raise ValueError
+        # Branch 3360->3333: isinstance(target, ast.Subscript) and _is_payload_container_expression
+        #   True → isinstance(payload["field"], str)
+        implementation_code = (
+            "class MyService:\n"
+            "    def __init__(self, payload):\n"
+            "        if isinstance(payload[\"field\"], str):\n"
+            "            raise ValueError\n"
+        )
+        assert QATesterAgent._constructor_rejects_invalid_payload(
+            "MyService(payload)", implementation_code
+        ) is True
+
 
 class TestRequiredPayloadRuntimeIssueHelpers:
     def test_detects_incomplete_required_evidence_payload_and_runtime_issue(self, monkeypatch):

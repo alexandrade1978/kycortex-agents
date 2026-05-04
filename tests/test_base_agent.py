@@ -2290,3 +2290,14 @@ def test_execute_strips_leading_prose_from_code_artifacts_without_fences(agent_c
     assert result.raw_content == "import logging\n\ndef hello() -> str:\n    return 'hi'"
     assert result.summary == "import logging"
     assert result.artifacts[0].content == "import logging\n\ndef hello() -> str:\n    return 'hi'"
+
+def test_provider_error_presence_metadata_with_non_string_args_directly():
+	# Branch 573->575: isinstance(error_type, str) False when error_type is None.
+	# Branch 575->577: isinstance(error_message, str) False when error_message is None.
+	# Both conditions False → metadata dict returned empty.
+	provider = DummyProvider(response="ok")
+	agent = DummyAgent(provider)
+	meta = agent._provider_error_presence_metadata()
+	assert meta == {}
+	meta2 = agent._provider_error_presence_metadata(error_type=None, error_message=None)
+	assert meta2 == {}

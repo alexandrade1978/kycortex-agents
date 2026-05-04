@@ -38,6 +38,7 @@ from kycortex_agents.orchestration.context_building import (
 	build_agent_view_decisions,
 	build_agent_view_runtime,
 	build_agent_view_task_results,
+	code_artifact_context_runtime,
 	TaskContextRuntimeCallbacks,
 	build_task_context_runtime,
 	build_task_context_base,
@@ -9429,3 +9430,138 @@ def test_build_code_repair_instruction_from_test_failure_audit_no_invalid_return
 	)
 	assert "requires invalid requests to keep their rejected result while populating audit_log" in instruction
 	assert "still returns" not in instruction
+
+
+def test_build_code_validation_summary_empty_import_facade_no_issues_directly():
+	# Branch 197->199: import_summary="" → False
+	# Branch 205->207: public_facade="" → False
+	# Branch 214->216: contract_issues=[] → False
+	summary = build_code_validation_summary(
+		{"syntax_ok": True},
+		"fallback message",
+		import_validation={"ran": True, "returncode": 0, "summary": ""},
+		task_public_contract_preflight={
+			"anchor_present": True,
+			"passed": True,
+			"public_facade": "",
+			"primary_request_model": None,
+			"required_surfaces": [],
+			"issues": [],
+		},
+	)
+	# import_summary="" → "Import summary:" line is NOT added (branch 197->199 False)
+	assert "Import summary:" not in summary
+	# public_facade="" → "Public facade anchor:" line is NOT added (branch 205->207 False)
+	assert "Public facade anchor:" not in summary
+	# contract_issues=[] → "Task public contract mismatches:" NOT added (branch 214->216 False)
+	assert "Task public contract mismatches:" not in summary
+
+
+def test_code_artifact_context_runtime_whitespace_content_directly():
+	# Branch 193->195: candidate_content is whitespace-only → condition False →
+	# code_content not updated → function returns {} (no usable code).
+	task = Task(
+		id="code1",
+		title="Code",
+		description="Code",
+		assigned_to="code_engineer",
+		output="",
+		output_payload={"artifacts": [{"artifact_type": "code", "content": "   "}]},
+	)
+	result = code_artifact_context_runtime(task)
+	assert result == {}
+
+
+def test_apply_completed_task_non_dict_completed_tasks_directly():
+	# Branch 409->412: ctx["completed_tasks"] is a non-dict string →
+	# ctx.setdefault returns the existing string → isinstance(..., dict) False → skip.
+	ctx: dict = {"completed_tasks": "not_a_dict"}
+	apply_completed_task_output_to_context(
+		ctx,
+		task_id="t1",
+		assigned_to="planner",
+		title="Plan",
+		visible_output="output",
+		budget_decomposition_plan_task_id=None,
+		compact_architecture_context=None,
+		is_budget_decomposition_planner=lambda: False,
+		semantic_output_key=lambda *_: None,
+	)
+	# completed_tasks was not converted to dict; stays as original string
+	assert ctx["completed_tasks"] == "not_a_dict"
+	# task output was still stored under its id
+	assert ctx["t1"] == "output"
+
+
+def test_previous_valid_test_surface_non_name_target_and_star_kwargs_directly():
+	# Branch 288->287: Assign target is ast.Attribute (self.service = ...) → not ast.Name → skip.
+	# Branch 291->290: keyword.arg is None (**opts) in Assign call → skip.
+	# Branch 304->303: keyword.arg is None (**opts) in direct imported call → skip.
+	# Branch 326->325: keyword.arg is None (**opts) in inline chained call → skip.
+	code = (
+		"from code_implementation import ComplianceIntakeService\n\n"
+		"class TestSetup:\n"
+		"    def setup(self):\n"
+		"        self.service = ComplianceIntakeService(**options)\n\n"
+		"def test_direct_star_kwargs():\n"
+		"    ComplianceIntakeService(**opts)\n\n"
+		"def test_inline_star_kwargs():\n"
+		"    ComplianceIntakeService(**opts).handle_request()\n"
+	)
+	member_calls, constructor_keywords = previous_valid_test_surface(
+		code,
+		["ComplianceIntakeService"],
+	)
+	# No regular (non-star) keyword args → constructor_keywords empty for this class
+	assert constructor_keywords.get("ComplianceIntakeService", []) == []
+	# handle_request is a member call
+	assert member_calls.get("ComplianceIntakeService") == ["handle_request"]
+
+
+def test_imported_code_task_for_failed_test_two_valid_tasks_directly():
+	# Branch 226->218: preferred_task is already set when a second matching
+	# code_engineer task (no repair_origin) is encountered → preferred_task is not updated.
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	project.add_task(Task(id="code1", title="Code1", description="Code1", assigned_to="code_engineer"))
+	project.add_task(Task(id="code2", title="Code2", description="Code2", assigned_to="code_engineer"))
+	test_task = Task(id="tests", title="Tests", description="Tests", assigned_to="qa_tester")
+	project.add_task(test_task)
+	result = imported_code_task_for_failed_test(
+		project,
+		test_task,
+		failed_artifact_content=lambda _task, _artifact_type: "from code1_implementation import Foo\nfrom code2_implementation import Bar\n",
+		python_import_roots=lambda _content: {"code1_implementation", "code2_implementation"},
+		default_module_name_for_task=lambda t: f"{t.id}_implementation" if t.assigned_to == "code_engineer" else None,
+	)
+	# One of the two matching tasks should be returned as preferred
+	assert result is not None
+	assert result.assigned_to == "code_engineer"
+
+
+def test_upstream_code_task_non_code_engineer_and_multiple_code_engineer_deps_directly():
+	# Branch 243->239: dependency is NOT code_engineer → loop continues.
+	# Branch 246->239: preferred_dependency already set when second code_engineer dep found.
+	project = ProjectState(project_name="Demo", goal="Build demo")
+	code1 = Task(id="code1", title="Code1", description="Code1", assigned_to="code_engineer")
+	code2 = Task(id="code2", title="Code2", description="Code2", assigned_to="code_engineer")
+	dep_planner = Task(id="plan_task", title="Plan", description="Plan", assigned_to="planner")
+	project.add_task(code1)
+	project.add_task(code2)
+	project.add_task(dep_planner)
+	test_task = Task(
+		id="tests",
+		title="Tests",
+		description="Tests",
+		assigned_to="qa_tester",
+		dependencies=["plan_task", "code1", "code2"],
+	)
+	project.add_task(test_task)
+	result = upstream_code_task_for_test_failure(
+		project,
+		test_task,
+		imported_code_task_for_failed_test=lambda proj, task: None,
+	)
+	# preferred_dependency should be the last code_engineer dep seen in reversed order
+	assert result is not None
+	assert result.assigned_to == "code_engineer"
+

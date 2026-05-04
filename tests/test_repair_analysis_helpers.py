@@ -564,3 +564,60 @@ def test_class_field_uses_empty_default_class_found_no_matching_annassign():
         # exhausts and reaches the return False after it.
         code = "class ReviewOutcome:\n    x = 1\n"
         assert class_field_uses_empty_default(code, "ReviewOutcome", "audit_log") is False
+
+
+def test_plain_class_field_default_factory_details_skips_non_assignment_body_items():
+        # Branch 303->306: elif (ast.Assign) is False for non-assignment statements (pass, def).
+        # field_name stays "" → `if not field_name` → continue.
+        code = (
+                "from dataclasses import field\n\n"
+                "class ComplianceService:\n"
+                "    pass\n"
+                "    def __init__(self): pass\n"
+        )
+        assert plain_class_field_default_factory_details(
+                "Field object has no attribute append",
+                code,
+        ) is None
+
+
+def test_class_field_annotations_skips_non_name_annassign_target():
+        # Branch 557->554: isinstance(statement.target, ast.Name) is False
+        # when the annotation target is an attribute (e.g. self.x: int).
+        code = "class VendorProfile:\n    self.vendor_id: str\n    vendor_name: str\n"
+        result = class_field_annotations_from_failed_artifact(code, "VendorProfile")
+        assert result == {"vendor_name": "str"}
+
+
+def test_class_field_names_skips_non_name_annassign_target():
+        # Branch 603->600: isinstance(statement.target, ast.Name) is False
+        # for attribute-style annotations; those entries are silently skipped.
+        code = "class VendorProfile:\n    self.vendor_id: str\n    vendor_name: str\n"
+        result = class_field_names_from_failed_artifact(code, "VendorProfile")
+        assert result == ["vendor_name"]
+
+
+def test_suggest_declared_attribute_replacement_keeps_first_when_second_score_not_better():
+        # Branch 661->646: second field has the same score as the current best,
+        # so `score > best_score` is False and best_match is not updated.
+        # "audit_history" and "log_data" both score (0, 1) against "audit_log".
+        result = suggest_declared_attribute_replacement("audit_log", ["audit_history", "log_data"])
+        assert result == "audit_history"
+
+
+def test_ast_is_empty_literal_returns_false_for_non_call_node():
+        # Branch 773->778: isinstance(node, ast.Call) is False; the function
+        # falls through all isinstance checks and returns False.
+        name_node = ast.parse("x", mode="eval").body  # ast.Name — not Constant/List/Tuple/Set/Dict/Call
+        assert ast_is_empty_literal(name_node) is False
+
+
+def test_invalid_outcome_audit_return_details_skips_call_with_non_empty_field_keyword():
+        # Branch 838->818: field_keyword is not None but its value is NOT an empty
+        # literal, so line 834's condition is False.  Then at line 838,
+        # `field_keyword is None` is also False → entire condition False → loop continues.
+        code = (
+                "def build_response():\n"
+                "    return ReviewOutcome(outcome='invalid', audit_log='some_value')\n"
+        )
+        assert invalid_outcome_audit_return_details(code, "audit_log") is None

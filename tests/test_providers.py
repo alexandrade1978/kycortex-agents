@@ -1801,3 +1801,57 @@ def test_openai_provider_retries_generate_when_temperature_is_unsupported(tmp_pa
     assert result == "ok"
     assert call_count[0] == 2
     assert provider._capabilities.supports_temperature is False
+
+
+def test_anthropic_provider_base_url_without_v1_suffix():
+    # Branch 29->31: normalized_base_url does NOT end with "/v1" → not stripped.
+    config = KYCortexConfig(output_dir="./output_test", llm_provider="anthropic", api_key="key", base_url="https://api.example.com/api")
+    provider = AnthropicProvider(config)
+    assert provider._base_url() == "https://api.example.com/api"
+
+
+def test_anthropic_provider_live_probe_omits_temperature_when_not_supported():
+    # Branch 57->59: supports_temperature is False → "temperature" not added to kwargs.
+    from dataclasses import replace as dc_replace
+    config = KYCortexConfig(output_dir="./output_test", llm_provider="anthropic", api_key="key")
+    provider = AnthropicProvider(config)
+    provider._capabilities = dc_replace(provider._capabilities, supports_temperature=False)
+    kwargs = provider._live_message_probe_kwargs(5.0)
+    assert "temperature" not in kwargs
+
+
+def test_anthropic_provider_generate_omits_temperature_when_not_supported():
+    # Branch 177->179: supports_temperature is False → "temperature" not passed to client.
+    captured_kwargs: list = []
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="response text")],
+        stop_reason="end_turn",
+        stop_type=None,
+        usage=SimpleNamespace(
+            input_tokens=5,
+            output_tokens=3,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        ),
+    )
+    config = KYCortexConfig(output_dir="./output_test", llm_provider="anthropic", api_key="key")
+    provider = AnthropicProvider(config, client=build_anthropic_client(response=response, captured_kwargs=captured_kwargs))
+    from dataclasses import replace as dc_replace
+    provider._capabilities = dc_replace(provider._capabilities, supports_temperature=False)
+    result = provider.generate("system", "user message")
+    assert result == "response text"
+    assert "temperature" not in captured_kwargs[0]
+
+
+def test_ollama_provider_build_payload_no_temperature_no_max_tokens():
+    # Branch 131->133: supports_temperature False → temperature not added to options.
+    # Branch 137->139: max_tokens is None → num_predict not added to options.
+    from dataclasses import replace as dc_replace
+    config = KYCortexConfig(output_dir="./output_test", llm_provider="ollama")
+    provider = OllamaProvider(config)
+    provider._capabilities = dc_replace(provider._capabilities, supports_temperature=False)
+    provider.config.max_tokens = 0  # 0 > 0 is False → num_predict not added
+    payload = provider._build_payload("system", "user")
+    options = payload.get("options", {})
+    assert "temperature" not in options
+    assert "num_predict" not in options

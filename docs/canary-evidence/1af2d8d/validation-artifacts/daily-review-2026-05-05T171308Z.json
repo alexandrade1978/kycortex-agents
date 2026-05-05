@@ -1,0 +1,22 @@
+{
+  "artifact_type": "daily-review",
+  "canary_commit": "1af2d8d",
+  "review_date": "2026-05-05",
+  "timestamp": "2026-05-05T17:13:08Z",
+  "smoke_batch": "smoke37",
+  "workflows_run": 3,
+  "workflows_passed": 3,
+  "workflows_failed": 0,
+  "incidents": 0,
+  "providers": {
+    "anthropic": {"status": "passed", "artifact_validation": "passed", "sample_balance": "2650.00"},
+    "openai":    {"status": "passed", "artifact_validation": "passed", "sample_balance": "2650.00"},
+    "ollama":    {"status": "passed", "artifact_validation": "passed", "sample_balance": "2650.00"}
+  },
+  "cumulative_workflows_accepted": 106,
+  "cumulative_incidents": 0,
+  "cumulative_rollbacks": 0,
+  "daily_review_day": 2,
+  "window_expires": "2026-05-11T05:11:04Z",
+  "verdict": "all-passed"
+}

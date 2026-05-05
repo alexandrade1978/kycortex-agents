@@ -9,11 +9,12 @@ Decision: **in-progress — daily-review phase; 7-day window pending**
 - canary traffic admitted: `2026-05-04T12:10:07Z` (first-accepted checkpoint)
 - 100-workflows checkpoint reached: `2026-05-04T12:46:48Z`
 - daily-review smoke refresh: `2026-05-04T13:01:46Z` (`canary_1af2d8d_smoke36`)
-- total smoke workflows admitted: 103/103 accepted
+- daily-review day-2: `2026-05-05T17:13:08Z` (`canary_1af2d8d_smoke37`)
+- total smoke workflows admitted: 106/106 accepted
 - incidents: 0
 - rollbacks: 0
 - repair_cycles_total: 0
-- provider health: anthropic 36/36, openai 34/34, ollama 33/33
+- provider health: anthropic 37/37, openai 35/35, ollama 34/34
 
 ## Canary Window Parameters
 
@@ -36,3 +37,4 @@ All of the following must be met before promotion can be proposed:
 | Date (UTC) | Smokes Run | Providers | Outcome | Incidents | Notes |
 |---|---|---|---|---|---|
 | 2026-05-04 | 103 (cumulative) | anthropic×36, openai×34, ollama×33 | all passed | 0 | 100-workflows checkpoint reached + smoke36 daily refresh |
+| 2026-05-05 | 106 (cumulative) | anthropic×37, openai×35, ollama×34 | all passed | 0 | smoke37 daily-review day-2 |

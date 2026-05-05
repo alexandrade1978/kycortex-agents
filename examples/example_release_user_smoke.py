@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 import py_compile
 import sys
+from typing import TypedDict
 
 from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task
 from kycortex_agents.provider_matrix import _public_path_label
@@ -17,7 +18,14 @@ DEFAULT_MODELS = {
     "ollama": "qwen2.5-coder:7b",
 }
 
-SMOKE_SCENARIOS: dict[str, dict[str, object]] = {
+
+class SmokeScenario(TypedDict):
+    income: float
+    expenses: list[float]
+    prompt_focus: str
+
+
+SMOKE_SCENARIOS: dict[str, SmokeScenario] = {
     "baseline": {
         "income": 5000.0,
         "expenses": [1200.0, 700.0, 450.0],
@@ -113,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_scenario(name: str) -> dict[str, object]:
+def resolve_scenario(name: str) -> SmokeScenario:
     try:
         return SMOKE_SCENARIOS[name]
     except KeyError as exc:

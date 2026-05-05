@@ -64,6 +64,7 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - smoke batch `canary_1af2d8d_smoke37`: 3/3 workflows accepted (anthropic, openai, ollama), 0 repair cycles, artifact_validation=passed
 - daily-review day-2 at `2026-05-05T17:13:08Z`: cumulative 106/106 accepted, 0 incidents, 0 rollbacks
 - next checkpoint: next daily-review cycle (7-day minimum window expires 2026-05-11T05:11:04Z)
+- operational note for day-3+: keep one run per provider and rotate smoke scenarios (`baseline`, `tight_margin`, `many_expenses`) using `examples/example_release_user_smoke.py --scenario ...` to preserve temporal signal beyond fixed-input replay
 
 ## Evidence References
 

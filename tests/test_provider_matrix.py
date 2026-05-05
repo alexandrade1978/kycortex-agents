@@ -1759,6 +1759,7 @@ def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkey
                 ollama_num_ctx=16384,
                 failure_policy="continue",
                 max_repair_cycles=1,
+                scenario="baseline",
             )
 
     class FakeOrchestrator:
@@ -1794,12 +1795,12 @@ def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkey
 
     monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
     monkeypatch.setattr(module, "build_config", lambda args, output_dir: type("Config", (), {"llm_model": "qwen2.5-coder:7b"})())
-    monkeypatch.setattr(module, "build_project", lambda output_dir, provider: fake_project)
+    monkeypatch.setattr(module, "build_project", lambda output_dir, provider, scenario_name="baseline": fake_project)
     monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
     monkeypatch.setattr(
         module,
         "_validate_generated_code",
-        lambda task, output_dir: (2650.0, str(validated_artifact)),
+        lambda task, output_dir, scenario_name="baseline": (2650.0, str(validated_artifact)),
     )
 
     module.main()
@@ -1811,6 +1812,7 @@ def test_release_user_smoke_example_limits_public_console_paths(tmp_path, monkey
     assert "model=present" in captured
     assert "output_dir=release-user-smoke" in captured
     assert "repair_cycles_present=none" in captured
+    assert "scenario=baseline" in captured
     assert "repair_cycle_count=0" not in rendered
     assert "provider=ollama" not in rendered
     assert "model=qwen2.5-coder:7b" not in rendered
@@ -1970,6 +1972,7 @@ def test_release_user_smoke_validation_failure_rewrites_project_state(tmp_path, 
                 ollama_num_ctx=16384,
                 failure_policy="continue",
                 max_repair_cycles=1,
+                scenario="baseline",
             )
 
     class FakeConfig:
@@ -2006,12 +2009,16 @@ def test_release_user_smoke_validation_failure_rewrites_project_state(tmp_path, 
             )
             workflow_project.save()
 
-    def fake_validate_generated_code(task, runtime_output_dir):
+    def fake_validate_generated_code(task, runtime_output_dir, scenario_name="baseline"):
         raise RuntimeError("Generated code did not expose main().")
 
     monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
     monkeypatch.setattr(module, "build_config", lambda args, runtime_output_dir: FakeConfig())
-    monkeypatch.setattr(module, "build_project", lambda runtime_output_dir, provider: project)
+    monkeypatch.setattr(
+        module,
+        "build_project",
+        lambda runtime_output_dir, provider, scenario_name="baseline": project,
+    )
     monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
     monkeypatch.setattr(module, "_validate_generated_code", fake_validate_generated_code)
 
@@ -2068,6 +2075,7 @@ def test_release_user_smoke_third_party_import_failure_rewrites_project_state(tm
                 ollama_num_ctx=16384,
                 failure_policy="continue",
                 max_repair_cycles=1,
+                scenario="baseline",
             )
 
     class FakeConfig:
@@ -2106,7 +2114,11 @@ def test_release_user_smoke_third_party_import_failure_rewrites_project_state(tm
 
     monkeypatch.setattr(module, "build_parser", lambda: FakeParser())
     monkeypatch.setattr(module, "build_config", lambda args, runtime_output_dir: FakeConfig())
-    monkeypatch.setattr(module, "build_project", lambda runtime_output_dir, provider: project)
+    monkeypatch.setattr(
+        module,
+        "build_project",
+        lambda runtime_output_dir, provider, scenario_name="baseline": project,
+    )
     monkeypatch.setattr(module, "Orchestrator", FakeOrchestrator)
 
     with pytest.raises(RuntimeError, match=r"Generated code used unsupported non-standard-library imports: click\."):
@@ -2127,6 +2139,56 @@ def test_release_user_smoke_third_party_import_failure_rewrites_project_state(tm
         "missing_symbols": [],
         "error": "Generated code used unsupported non-standard-library imports: click.",
     }
+
+
+def test_release_user_smoke_scenarios_keep_contract_and_change_sample_balance(tmp_path):
+    module = _load_example_module(
+        "example_release_user_smoke_scenarios_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    output_dir = tmp_path / "release-user-smoke"
+    artifact_path = output_dir / "artifacts" / "budget_planner.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "def calculate_budget_balance(income: float, expenses: list[float]) -> float:\n"
+        "    return income - sum(expenses)\n\n"
+        "def format_currency(amount: float) -> str:\n"
+        "    return f'${amount:,.2f}'\n\n"
+        "def main() -> None:\n"
+        "    print('ok')\n",
+        encoding="utf-8",
+    )
+
+    code_task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement the budget planner",
+        assigned_to="code_engineer",
+        status="done",
+    )
+    code_task.output_payload = {"artifacts": [{"path": "artifacts/budget_planner.py"}]}
+
+    baseline_balance, _ = module._validate_generated_code(code_task, str(output_dir), "baseline")
+    tight_balance, _ = module._validate_generated_code(code_task, str(output_dir), "tight_margin")
+
+    assert baseline_balance == pytest.approx(2650.0)
+    assert tight_balance == pytest.approx(50.0)
+    assert baseline_balance != tight_balance
+
+
+def test_release_user_smoke_build_project_embeds_scenario_focus(tmp_path):
+    module = _load_example_module(
+        "example_release_user_smoke_scenario_focus_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    project = module.build_project(str(tmp_path / "release-user-smoke"), "ollama", "many_expenses")
+
+    assert "Scenario focus:" in project.goal
+    assert "Larger expense list" in project.goal
+    for task in project.tasks:
+        assert "Scenario focus:" in task.description
 
 
 def test_provider_matrix_example_passes_completion_budget_override(tmp_path, monkeypatch):

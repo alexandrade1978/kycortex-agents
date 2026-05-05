@@ -29,7 +29,7 @@ This index points to the stable public documentation surface for KYCortex.
 - [examples/example_resume_workflow.py](../examples/example_resume_workflow.py): persisted-state resume example.
 - [examples/example_custom_agent.py](../examples/example_custom_agent.py): custom-agent example using `BaseAgent` and `AgentRegistry`.
 - [examples/example_multi_provider.py](../examples/example_multi_provider.py): same workflow across OpenAI, Anthropic, and Ollama.
-- [examples/example_release_user_smoke.py](../examples/example_release_user_smoke.py): user-style live smoke that validates the generated Python artifact.
+- [examples/example_release_user_smoke.py](../examples/example_release_user_smoke.py): user-style live smoke that validates the generated Python artifact, including selectable scenario profiles for daily variation.
 - [examples/example_provider_matrix_validation.py](../examples/example_provider_matrix_validation.py): full-workflow empirical validation runner across the available providers.
 - [examples/example_test_mode.py](../examples/example_test_mode.py): deterministic local execution without a live provider.
 - [examples/example_complex_workflow.py](../examples/example_complex_workflow.py): converging multi-parent workflow example.

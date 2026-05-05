@@ -17,6 +17,35 @@ DEFAULT_MODELS = {
     "ollama": "qwen2.5-coder:7b",
 }
 
+SMOKE_SCENARIOS: dict[str, dict[str, object]] = {
+    "baseline": {
+        "income": 5000.0,
+        "expenses": [1200.0, 700.0, 450.0],
+        "prompt_focus": "Typical monthly household budget with rent, utilities, and groceries.",
+    },
+    "tight_margin": {
+        "income": 3200.0,
+        "expenses": [1450.0, 620.0, 390.0, 510.0, 180.0],
+        "prompt_focus": "Tight monthly margin where small arithmetic mistakes materially change the result.",
+    },
+    "many_expenses": {
+        "income": 8700.0,
+        "expenses": [
+            1320.0,
+            815.5,
+            274.25,
+            90.0,
+            125.75,
+            300.0,
+            455.25,
+            610.4,
+            220.0,
+            145.6,
+        ],
+        "prompt_focus": "Larger expense list that stresses list handling, sum correctness, and numeric stability.",
+    },
+}
+
 RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR = (
     "\n\nPublic contract anchor:\n"
     "- Primary workflow function: calculate_budget_balance(income: float, expenses: list[float]) -> float\n"
@@ -72,7 +101,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Maximum repair cycles allowed during the smoke run.",
     )
+    parser.add_argument(
+        "--scenario",
+        choices=sorted(SMOKE_SCENARIOS),
+        default="baseline",
+        help=(
+            "Validation scenario profile. 'baseline' preserves historical canary behavior; "
+            "other profiles add controlled daily variation."
+        ),
+    )
     return parser
+
+
+def resolve_scenario(name: str) -> dict[str, object]:
+    try:
+        return SMOKE_SCENARIOS[name]
+    except KeyError as exc:
+        supported = ", ".join(sorted(SMOKE_SCENARIOS))
+        raise ValueError(f"Unsupported scenario '{name}'. Supported: {supported}.") from exc
 
 
 def build_config(args: argparse.Namespace, output_dir: str) -> KYCortexConfig:
@@ -99,12 +145,15 @@ def build_config(args: argparse.Namespace, output_dir: str) -> KYCortexConfig:
     return config
 
 
-def build_project(output_dir: str, provider: str) -> ProjectState:
+def build_project(output_dir: str, provider: str, scenario_name: str = "baseline") -> ProjectState:
+    scenario = resolve_scenario(scenario_name)
+    prompt_focus = scenario["prompt_focus"]
     project = ProjectState(
         project_name=f"ReleaseUserSmoke{provider.title()}",
         goal=(
             "Create a single-file Python budget planner using only the standard library that exposes a function named "
-            "`calculate_budget_balance(income: float, expenses: list[float]) -> float` and a minimal CLI entrypoint."
+            "`calculate_budget_balance(income: float, expenses: list[float]) -> float` and a minimal CLI entrypoint. "
+            f"Scenario focus: {prompt_focus}"
         ),
         state_file=str(Path(output_dir) / "project_state.json"),
     )
@@ -117,6 +166,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
                 "`calculate_budget_balance(income: float, expenses: list[float]) -> float`, one formatting helper, and a minimal CLI entrypoint. "
                 "Use only the Python standard library and do not introduce third-party runtime dependencies or imports. "
                 "Keep the architecture practical and compact."
+                f" Scenario focus: {prompt_focus}"
                 f"{RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR}"
             ),
             assigned_to="architect",
@@ -130,6 +180,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
                 "Implement the planned single-file Python budget planner using only the standard library. "
                 "Do not add third-party runtime dependencies or imports such as click, typer, requests, rich, or pydantic. "
                 "The module must expose `calculate_budget_balance(income: float, expenses: list[float]) -> float` and a working `main()` CLI entrypoint."
+                f" Scenario focus: {prompt_focus}"
                 f"{RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR}"
             ),
             assigned_to="code_engineer",
@@ -142,6 +193,7 @@ def build_project(output_dir: str, provider: str) -> ProjectState:
             title="Review",
             description=(
                 "Review the generated budget planner for correctness, API clarity, obvious edge cases, strict compliance with the standard-library-only dependency contract, and exact preservation of the anchored public function plus CLI entrypoint."
+                f" Scenario focus: {prompt_focus}"
                 f"{RELEASE_USER_SMOKE_PUBLIC_CONTRACT_ANCHOR}"
             ),
             assigned_to="code_reviewer",
@@ -304,7 +356,8 @@ def _persist_validation_failure(
     project.save()
 
 
-def _validate_generated_code(task: Task, output_dir: str) -> tuple[float, str]:
+def _validate_generated_code(task: Task, output_dir: str, scenario_name: str = "baseline") -> tuple[float, str]:
+    scenario = resolve_scenario(scenario_name)
     artifact_path = _code_artifact_path(task, output_dir)
     if artifact_path is None or not artifact_path.exists():
         raise RuntimeError("Generated code artifact was not found.")
@@ -342,7 +395,9 @@ def _validate_generated_code(task: Task, output_dir: str) -> tuple[float, str]:
     if not _has_expected_function_signature(main, ()):
         raise RuntimeError("Generated code exposed main() with an incompatible signature. Expected main() -> None.")
 
-    sample_balance = calculate_budget_balance(5000.0, [1200.0, 700.0, 450.0])
+    income = float(scenario["income"])
+    expenses = list(scenario["expenses"])
+    sample_balance = calculate_budget_balance(income, expenses)
     if not isinstance(sample_balance, (int, float)):
         raise RuntimeError("calculate_budget_balance() did not return a numeric balance.")
 
@@ -352,9 +407,12 @@ def _validate_generated_code(task: Task, output_dir: str) -> tuple[float, str]:
 def main() -> None:
     args = build_parser().parse_args()
     output_dir = args.output_dir or f"./output/release_user_smoke_{args.provider}"
+    scenario_name = getattr(args, "scenario", "baseline")
+    # Keep compatibility for mocked parsers used by tests while validating user input.
+    resolve_scenario(scenario_name)
 
     config = build_config(args, output_dir)
-    project = build_project(output_dir, args.provider)
+    project = build_project(output_dir, args.provider, scenario_name)
 
     Orchestrator(config).execute_workflow(project)
 
@@ -364,7 +422,7 @@ def main() -> None:
 
     artifact_path = _code_artifact_path(code_task, output_dir)
     try:
-        sample_balance, validated_artifact_path = _validate_generated_code(code_task, output_dir)
+        sample_balance, validated_artifact_path = _validate_generated_code(code_task, output_dir, scenario_name)
     except Exception as exc:
         public_validation_error = _public_validation_error_message(exc, artifact_path)
         _persist_validation_failure(
@@ -379,6 +437,7 @@ def main() -> None:
     print(f"model={_presence_label(config.llm_model)}")
     print(f"phase={project.phase}")
     print(f"terminal_outcome={project.terminal_outcome}")
+    print(f"scenario={scenario_name}")
     print(f"repair_cycles_present={_presence_label(project.repair_cycle_count)}")
     print(f"output_dir={_public_path_label(output_dir)}")
     print()

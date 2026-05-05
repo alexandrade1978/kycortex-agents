@@ -76,7 +76,7 @@ See `examples/` for complete examples, including `example_provider_matrix_valida
 
 The provider-matrix validation example now supports configurable empirical envelopes for timeout and task-budget prompts (`--request-timeout-seconds`, `--ollama-timeout-seconds`, `--code-line-budget`, `--test-line-budget`, and `--test-max-top-level-tests`) so local or stronger-model runs can be tuned without changing workflow contracts.
 
-For a real user-style local creation smoke against a live provider, run `examples/example_release_user_smoke.py`. It exercises the public package API, generates a small project, and validates the generated Python artifact with a sample call before reporting success.
+For a real user-style local creation smoke against a live provider, run `examples/example_release_user_smoke.py`. It exercises the public package API, generates a small project, and validates the generated Python artifact with a sample call before reporting success. Use `--scenario baseline|tight_margin|many_expenses` to keep daily canary checks temporally meaningful instead of replaying a single fixed input profile.
 
 Provider preflight validation now distinguishes backend reachability from model readiness. In practice, this means cloud providers must expose the configured model through their model-listing API before generation starts, and Ollama must expose both a reachable `/api/tags` endpoint and the configured local model.
 

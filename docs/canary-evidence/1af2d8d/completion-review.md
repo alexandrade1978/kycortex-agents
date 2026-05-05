@@ -10,6 +10,7 @@ Decision: **in-progress — daily-review phase; 7-day window pending**
 - 100-workflows checkpoint reached: `2026-05-04T12:46:48Z`
 - daily-review smoke refresh: `2026-05-04T13:01:46Z` (`canary_1af2d8d_smoke36`)
 - daily-review day-2: `2026-05-05T17:13:08Z` (`canary_1af2d8d_smoke37`)
+- daily-review method update: from day-3 onward, run baseline plus rotating scenario profiles (`tight_margin` and `many_expenses`) to keep temporal checks meaningful without changing workflow class
 - total smoke workflows admitted: 106/106 accepted
 - incidents: 0
 - rollbacks: 0

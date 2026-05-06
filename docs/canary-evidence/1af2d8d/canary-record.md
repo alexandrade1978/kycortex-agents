@@ -1,6 +1,6 @@
 # Canary Record - 1af2d8d
 
-Status: live window open; daily-review in progress (106/106 smoke workflows admitted, 0 incidents)
+Status: live window open; daily-review in progress (109/109 smoke workflows admitted, 0 incidents)
 
 This record opens the candidate evidence bundle for released commit `1af2d8df1498ec2d98a09f9a7d2fa3767225532f` and tag `v1.0.13a11`.
 
@@ -63,6 +63,8 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - daily-review refresh at `2026-05-04T13:01:46Z`: cumulative 103/103 accepted, 0 incidents, 0 rollbacks
 - smoke batch `canary_1af2d8d_smoke37`: 3/3 workflows accepted (anthropic, openai, ollama), 0 repair cycles, artifact_validation=passed
 - daily-review day-2 at `2026-05-05T17:13:08Z`: cumulative 106/106 accepted, 0 incidents, 0 rollbacks
+- smoke batch `canary_1af2d8d_smoke38`: 3/3 workflows accepted with scenario rotation (anthropic=baseline, openai=tight_margin, ollama=many_expenses), 0 repair cycles, artifact_validation=passed
+- daily-review day-3 at `2026-05-06T21:58:24Z`: cumulative 109/109 accepted, 0 incidents, 0 rollbacks
 - next checkpoint: next daily-review cycle (7-day minimum window expires 2026-05-11T05:11:04Z)
 - operational note for day-3+: keep one run per provider and rotate smoke scenarios (`baseline`, `tight_margin`, `many_expenses`) using `examples/example_release_user_smoke.py --scenario ...` to preserve temporal signal beyond fixed-input replay
 
@@ -82,3 +84,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - 100-workflows checkpoint: `validation-artifacts/checkpoint-100-workflows-2026-05-04T124648Z.json`
 - daily-review refresh: `validation-artifacts/daily-review-2026-05-04T130146Z.json`
 - daily-review day-2: `validation-artifacts/daily-review-2026-05-05T171308Z.json`
+- daily-review day-3: `validation-artifacts/daily-review-2026-05-06T215824Z.json`

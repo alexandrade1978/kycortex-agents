@@ -11,12 +11,13 @@ Decision: **in-progress — daily-review phase; 7-day window pending**
 - daily-review smoke refresh: `2026-05-04T13:01:46Z` (`canary_1af2d8d_smoke36`)
 - daily-review day-2: `2026-05-05T17:13:08Z` (`canary_1af2d8d_smoke37`)
 - daily-review day-3: `2026-05-06T21:58:24Z` (`canary_1af2d8d_smoke38`; scenario rotation active)
+- daily-review day-4: `2026-05-07T22:57:34Z` (`canary_1af2d8d_smoke39`; rotated scenario assignment)
 - daily-review method update: from day-3 onward, run baseline plus rotating scenario profiles (`tight_margin` and `many_expenses`) to keep temporal checks meaningful without changing workflow class
-- total smoke workflows admitted: 109/109 accepted
+- total smoke workflows admitted: 112/112 accepted
 - incidents: 0
 - rollbacks: 0
 - repair_cycles_total: 0
-- provider health: anthropic 38/38, openai 36/36, ollama 35/35
+- provider health: anthropic 39/39, openai 37/37, ollama 36/36
 
 ## Canary Window Parameters
 
@@ -41,3 +42,4 @@ All of the following must be met before promotion can be proposed:
 | 2026-05-04 | 103 (cumulative) | anthropic×36, openai×34, ollama×33 | all passed | 0 | 100-workflows checkpoint reached + smoke36 daily refresh |
 | 2026-05-05 | 106 (cumulative) | anthropic×37, openai×35, ollama×34 | all passed | 0 | smoke37 daily-review day-2 |
 | 2026-05-06 | 109 (cumulative) | anthropic×38, openai×36, ollama×35 | all passed | 0 | smoke38 daily-review day-3 with scenario rotation (baseline, tight_margin, many_expenses) |
+| 2026-05-07 | 112 (cumulative) | anthropic×39, openai×37, ollama×36 | all passed | 0 | smoke39 daily-review day-4 with rotated scenario assignment (tight_margin, many_expenses, baseline) |

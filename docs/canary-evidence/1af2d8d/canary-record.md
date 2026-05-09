@@ -1,6 +1,6 @@
 # Canary Record - 1af2d8d
 
-Status: live window open; daily-review in progress (112/112 smoke workflows admitted, 0 incidents)
+Status: live window open; daily-review in progress (115/115 smoke workflows admitted, 0 incidents)
 
 This record opens the candidate evidence bundle for released commit `1af2d8df1498ec2d98a09f9a7d2fa3767225532f` and tag `v1.0.13a11`.
 
@@ -67,6 +67,9 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - daily-review day-3 at `2026-05-06T21:58:24Z`: cumulative 109/109 accepted, 0 incidents, 0 rollbacks
 - smoke batch `canary_1af2d8d_smoke39`: 3/3 workflows accepted with rotated scenario assignment (anthropic=tight_margin, openai=many_expenses, ollama=baseline), 0 repair cycles, artifact_validation=passed
 - daily-review day-4 at `2026-05-07T22:57:34Z`: cumulative 112/112 accepted, 0 incidents, 0 rollbacks
+- no daily-review packet was published on `2026-05-08` UTC; canary remained under observation and promotion stayed blocked by the time gate
+- smoke batch `canary_1af2d8d_smoke40`: 3/3 workflows accepted with rotated scenario assignment (anthropic=many_expenses, openai=baseline, ollama=tight_margin), 0 repair cycles, artifact_validation=passed
+- daily-review day-5 at `2026-05-09T02:43:33Z`: cumulative 115/115 accepted, 0 incidents, 0 rollbacks
 - next checkpoint: next daily-review cycle (7-day minimum window expires 2026-05-11T05:11:04Z)
 - operational note for day-3+: keep one run per provider and rotate smoke scenarios (`baseline`, `tight_margin`, `many_expenses`) using `examples/example_release_user_smoke.py --scenario ...` to preserve temporal signal beyond fixed-input replay
 
@@ -88,3 +91,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - daily-review day-2: `validation-artifacts/daily-review-2026-05-05T171308Z.json`
 - daily-review day-3: `validation-artifacts/daily-review-2026-05-06T215824Z.json`
 - daily-review day-4: `validation-artifacts/daily-review-2026-05-07T225734Z.json`
+- daily-review day-5: `validation-artifacts/daily-review-2026-05-09T024333Z.json`

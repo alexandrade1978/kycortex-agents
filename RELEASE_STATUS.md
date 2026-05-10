@@ -18,8 +18,8 @@ This file is the short repository-owned snapshot of the current release posture 
 - The `1.0.13a11` release extends `1.0.13a10` with a comprehensive partial-branch coverage campaign, reaching 99.89% branch coverage (2568 tests).
 - Phase 16 canary record for `v1.0.13a11` is now open under `docs/canary-evidence/1af2d8d/`.
 - Canary traffic has been admitted and is now in daily-review phase.
-- Current canary cumulative state: `115/115` accepted workflows, `0` incidents, `0` rollbacks.
-- Published daily-review evidence currently covers `2026-05-04`, `2026-05-05`, `2026-05-06`, `2026-05-07`, and `2026-05-09`.
+- Current canary cumulative state: `118/118` accepted workflows, `0` incidents, `0` rollbacks.
+- Published daily-review evidence currently covers `2026-05-04`, `2026-05-05`, `2026-05-06`, `2026-05-07`, `2026-05-09`, and `2026-05-10`.
 - The 7-day minimum window remains open until `2026-05-11T05:11:04Z`; promotion is still blocked until that time gate and explicit user authorization are both satisfied.
 
 ## Repository Release Gate

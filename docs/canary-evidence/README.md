@@ -32,7 +32,7 @@ Historical bundles, abort bundles, and active candidate bundles may coexist unde
 
 - Active candidate: `1af2d8d` (`v1.0.13a11`)
 - State: live window open; daily-review in progress
-- Current cumulative result: `115/115` accepted workflows, `0` incidents, `0` rollbacks
+- Current cumulative result: `118/118` accepted workflows, `0` incidents, `0` rollbacks
 - Minimum window expiry: `2026-05-11T05:11:04Z`
 
 Published daily-review packets for the active cycle:
@@ -42,6 +42,7 @@ Published daily-review packets for the active cycle:
 - `docs/canary-evidence/1af2d8d/validation-artifacts/daily-review-2026-05-06T215824Z.json`
 - `docs/canary-evidence/1af2d8d/validation-artifacts/daily-review-2026-05-07T225734Z.json`
 - `docs/canary-evidence/1af2d8d/validation-artifacts/daily-review-2026-05-09T024333Z.json`
+- `docs/canary-evidence/1af2d8d/validation-artifacts/daily-review-2026-05-10T011452Z.json`
 
 ## Retention View
 

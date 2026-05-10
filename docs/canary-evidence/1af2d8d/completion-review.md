@@ -14,12 +14,13 @@ Decision: **in-progress — daily-review phase; 7-day window pending**
 - daily-review day-4: `2026-05-07T22:57:34Z` (`canary_1af2d8d_smoke39`; rotated scenario assignment)
 - UTC day without daily-review packet: `2026-05-08` (cadence gap recorded; no incident or rollback evidence during the gap)
 - daily-review day-5: `2026-05-09T02:43:33Z` (`canary_1af2d8d_smoke40`; rotated scenario assignment)
+- daily-review day-6: `2026-05-10T01:14:52Z` (`canary_1af2d8d_smoke41`; rotated scenario assignment)
 - daily-review method update: from day-3 onward, run baseline plus rotating scenario profiles (`tight_margin` and `many_expenses`) to keep temporal checks meaningful without changing workflow class
-- total smoke workflows admitted: 115/115 accepted
+- total smoke workflows admitted: 118/118 accepted
 - incidents: 0
 - rollbacks: 0
 - repair_cycles_total: 0
-- provider health: anthropic 40/40, openai 38/38, ollama 37/37
+- provider health: anthropic 41/41, openai 39/39, ollama 38/38
 
 ## Canary Window Parameters
 
@@ -47,3 +48,4 @@ All of the following must be met before promotion can be proposed:
 | 2026-05-07 | 112 (cumulative) | anthropic×39, openai×37, ollama×36 | all passed | 0 | smoke39 daily-review day-4 with rotated scenario assignment (tight_margin, many_expenses, baseline) |
 | 2026-05-08 | 112 (cumulative) | anthropic×39, openai×37, ollama×36 | no packet | 0 | No daily-review packet published on this UTC day; promotion remained blocked by the time gate. |
 | 2026-05-09 | 115 (cumulative) | anthropic×40, openai×38, ollama×37 | all passed | 0 | smoke40 daily-review day-5 with rotated scenario assignment (many_expenses, baseline, tight_margin) |
+| 2026-05-10 | 118 (cumulative) | anthropic×41, openai×39, ollama×38 | all passed | 0 | smoke41 daily-review day-6 with rotated scenario assignment (baseline, tight_margin, many_expenses) |

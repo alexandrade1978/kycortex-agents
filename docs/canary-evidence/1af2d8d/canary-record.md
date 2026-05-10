@@ -72,7 +72,7 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - daily-review day-5 at `2026-05-09T02:43:33Z`: cumulative 115/115 accepted, 0 incidents, 0 rollbacks
 - smoke batch `canary_1af2d8d_smoke41`: 3/3 workflows accepted with rotated scenario assignment (anthropic=baseline, openai=tight_margin, ollama=many_expenses), 0 repair cycles, artifact_validation=passed
 - daily-review day-6 at `2026-05-10T01:14:52Z`: cumulative 118/118 accepted, 0 incidents, 0 rollbacks
-- next checkpoint: final time-gate review after `2026-05-11T05:11:04Z` or an earlier blocking incident
+- next checkpoint: next daily-review cycle on `2026-05-11` UTC, then final time-gate review after `2026-05-11T05:11:04Z` if no blocking incident occurs
 - operational note for day-3+: keep one run per provider and rotate smoke scenarios (`baseline`, `tight_margin`, `many_expenses`) using `examples/example_release_user_smoke.py --scenario ...` to preserve temporal signal beyond fixed-input replay
 
 ## Evidence References

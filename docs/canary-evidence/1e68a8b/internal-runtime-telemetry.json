@@ -1,14 +1,14 @@
 {
   "captured_at": "2026-05-11T11:09:14Z",
-  "last_updated": "2026-05-11T11:47:20Z",
-  "status": "active-canary-25-workflows-clean",
+  "last_updated": "2026-05-11T12:06:20Z",
+  "status": "active-canary-50-workflows-clean",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
   "telemetry_scope": {
-    "source": "smoke01-smoke09 early-window batches",
-    "live_canary_workflows": 25
+    "source": "smoke01-smoke18 expanded early-window batches",
+    "live_canary_workflows": 50
   },
   "provider_runtime_summary": {
     "anthropic": {
@@ -17,8 +17,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 18266.26,
-        "cumulative_window_total": 154825.975
+        "latest_batch_total": 17320.619,
+        "cumulative_window_total": 312697.42
       }
     },
     "openai": {
@@ -27,8 +27,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 14608.262,
-        "cumulative_window_total": 147021.717
+        "latest_batch_total": 16552.288,
+        "cumulative_window_total": 293542.314
       }
     },
     "ollama": {
@@ -37,21 +37,23 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 13386.485,
-        "cumulative_window_total": 131112.163
+        "latest_batch_total": 12964.19,
+        "cumulative_window_total": 255882.005
       }
     }
   },
   "canary_summary": {
-    "batches_run": 9,
-    "workflows_run": 25,
-    "workflows_accepted": 25,
-    "artifact_validation": "passed_all",
+    "batches_run": 18,
+    "workflows_run": 50,
+    "workflows_accepted": 50,
+    "acceptance_criteria_met": "passed_all",
+    "task_public_contract_preflight": "passed_all",
+    "import_validation": "passed_all",
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 9,
-      "openai": 8,
-      "ollama": 8
+      "anthropic": 18,
+      "openai": 16,
+      "ollama": 16
     },
     "latest_rotated_scenarios": {
       "smoke01": {
@@ -96,6 +98,49 @@
         "anthropic": "tight_margin",
         "openai": "many_expenses",
         "ollama": "baseline"
+      },
+      "smoke10": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke11": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke12": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke13": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke14": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke15": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke16": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke17": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke18": {
+        "anthropic": "many_expenses"
       }
     }
   },
@@ -104,7 +149,9 @@
     "First-admitted checkpoint reached at 2026-05-11T11:06:41Z with 3/3 smoke workflows accepted.",
     "10-workflows checkpoint reached at 2026-05-11T11:26:33Z with 10/10 cumulative workflows accepted.",
     "25-workflows checkpoint reached at 2026-05-11T11:47:20Z with 25/25 cumulative workflows accepted.",
-    "All three providers remained healthy through smoke01-smoke09 with zero repair cycles and persisted artifact validation passed on every run.",
-    "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly multiple times before the 25-workflows checkpoint."
+    "All three providers remained healthy through smoke01-smoke09 with zero repair cycles and the code-task public-contract/import checks passing on every run.",
+    "50-workflows checkpoint reached at 2026-05-11T12:06:20Z with 50/50 cumulative workflows accepted.",
+    "All three providers remained healthy through smoke01-smoke18 with zero repair cycles, acceptance_criteria_met=true on every persisted workflow, and task public-contract/import validation passing on every code task.",
+    "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly multiple times before the 50-workflows checkpoint."
   ]
 }

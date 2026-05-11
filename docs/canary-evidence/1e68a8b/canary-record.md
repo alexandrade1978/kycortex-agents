@@ -1,6 +1,6 @@
 # Canary Record - 1e68a8b
 
-Status: active; `25/25` accepted, `0` incidents, `0` rollback actions
+Status: active; `50/50` accepted, `0` incidents, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2`.
 
@@ -51,11 +51,15 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - 10-workflows checkpoint reached at `2026-05-11T11:26:33Z`: cumulative `10/10` accepted, `0` incidents, `0` rollbacks
 - smoke batches `canary_1e68a8b_smoke05` through `canary_1e68a8b_smoke09`: `15/15` workflows accepted across all three providers with the repeated rotated scenario cycle (baseline, tight_margin, many_expenses), `0` repair cycles, persisted artifact validation passed
 - 25-workflows checkpoint reached at `2026-05-11T11:47:20Z`: cumulative `25/25` accepted, `0` incidents, `0` rollbacks
-- provider health after checkpoint: anthropic `9/9` accepted, openai `8/8` accepted, ollama `8/8` accepted
+- provider health after 25-workflows checkpoint: anthropic `9/9` accepted, openai `8/8` accepted, ollama `8/8` accepted
+- smoke batches `canary_1e68a8b_smoke10` through `canary_1e68a8b_smoke17`: `24/24` workflows accepted across all three providers with the repeated rotated scenario cycle (baseline, tight_margin, many_expenses), `acceptance_criteria_met=true` on every persisted workflow, task public-contract preflight and import validation passing on every code task, and `0` repair cycles
+- smoke batch `canary_1e68a8b_smoke18`: `1/1` workflow accepted (`anthropic=many_expenses`), with `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles
+- 50-workflows checkpoint reached at `2026-05-11T12:06:20Z`: cumulative `50/50` accepted, `0` incidents, `0` rollbacks
+- provider health after 50-workflows checkpoint: anthropic `18/18` accepted, openai `16/16` accepted, ollama `16/16` accepted
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `0`
 - rollbacks: `0`
-- next checkpoint: `50-workflows`
+- next checkpoint: `100-workflows`
 
 ## Evidence References
 
@@ -69,3 +73,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - first-accepted checkpoint: `validation-artifacts/checkpoint-first-accepted-2026-05-11T110641Z.json`
 - 10-workflows checkpoint: `validation-artifacts/checkpoint-10-workflows-2026-05-11T112633Z.json`
 - 25-workflows checkpoint: `validation-artifacts/checkpoint-25-workflows-2026-05-11T114720Z.json`
+- 50-workflows checkpoint: `validation-artifacts/checkpoint-50-workflows-2026-05-11T120620Z.json`

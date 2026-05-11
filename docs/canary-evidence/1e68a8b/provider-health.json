@@ -3,35 +3,35 @@
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
-  "captured_at": "2026-05-11T11:47:20Z",
-  "source": "output/canary_1e68a8b_smoke01..smoke09",
-  "status": "healthy_25_workflows_checkpoint",
+  "captured_at": "2026-05-11T12:06:20Z",
+  "source": "output/canary_1e68a8b_smoke01..smoke18",
+  "status": "healthy_50_workflows_checkpoint",
   "providers": {
     "anthropic": {
       "healthy": true,
-      "accepted_runs": 9,
-      "total_runs": 9,
+      "accepted_runs": 18,
+      "total_runs": 18,
       "failed_runs": 0,
       "model": "claude-haiku-4-5-20251001"
     },
     "openai": {
       "healthy": true,
-      "accepted_runs": 8,
-      "total_runs": 8,
+      "accepted_runs": 16,
+      "total_runs": 16,
       "failed_runs": 0,
       "model": "gpt-4o-mini"
     },
     "ollama": {
       "healthy": true,
-      "accepted_runs": 8,
-      "total_runs": 8,
+      "accepted_runs": 16,
+      "total_runs": 16,
       "failed_runs": 0,
       "model": "qwen2.5-coder:7b"
     }
   },
   "notes": [
-    "Derived from repository-owned ProjectState.internal_runtime_telemetry() exports for smoke01-smoke09.",
-    "All three enabled providers remained healthy through the 25-workflows checkpoint.",
-    "The same anthropic baseline provider/scenario pair that failed on held candidate c17c749 passed cleanly multiple times on 1e68a8b before the 25-workflows checkpoint."
+    "Derived from repository-owned ProjectState exports for smoke01-smoke18.",
+    "All three enabled providers remained healthy through the 50-workflows checkpoint.",
+    "The same anthropic baseline provider/scenario pair that failed on held candidate c17c749 passed cleanly multiple times on 1e68a8b before the 50-workflows checkpoint."
   ]
 }

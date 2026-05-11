@@ -1,0 +1,149 @@
+{
+  "checkpoint": "50-workflows",
+  "captured_at": "2026-05-11T12:06:20Z",
+  "candidate": {
+    "tag": "v1.0.13b2",
+    "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
+  },
+  "cumulative_window": {
+    "eligible_workflows_seen": 50,
+    "accepted_workflows": 50,
+    "failed_workflows": 0,
+    "incidents": 0,
+    "rollbacks": 0,
+    "acceptance_rate": 1.0
+  },
+  "batches": [
+    {
+      "batch_id": "canary_1e68a8b_smoke01",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke02",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke03",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke04",
+      "workflows": 1,
+      "providers": ["anthropic"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke05",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke06",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke07",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke08",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke09",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke10",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke11",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke12",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke13",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke14",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke15",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke16",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke17",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke18",
+      "workflows": 1,
+      "providers": ["anthropic"],
+      "all_passed": true
+    }
+  ],
+  "provider_health_at_checkpoint": {
+    "anthropic": {
+      "status": "healthy",
+      "runs": 18,
+      "passed": 18
+    },
+    "openai": {
+      "status": "healthy",
+      "runs": 16,
+      "passed": 16
+    },
+    "ollama": {
+      "status": "healthy",
+      "runs": 16,
+      "passed": 16
+    }
+  },
+  "artifact_contract": {
+    "acceptance_criteria_met": "passed_all",
+    "task_public_contract_preflight": "passed_all",
+    "import_validation": "passed_all",
+    "repair_cycles_total": 0
+  }
+}

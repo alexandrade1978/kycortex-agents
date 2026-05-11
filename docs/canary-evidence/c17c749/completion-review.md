@@ -1,6 +1,6 @@
 # Completion Review - c17c749
 
-Decision: **open — 10-workflows checkpoint reached, one incident recorded, broader expansion blocked pending incident review**
+Decision: **held — accepted-workflow SLO miss froze expansion; candidate is not canary-ready**
 
 ## Current State
 
@@ -15,15 +15,18 @@ Decision: **open — 10-workflows checkpoint reached, one incident recorded, bro
 - smoke batch `canary_c17c749_smoke04_retry`: 1/1 workflows accepted on a fresh root for the same provider/scenario pair
 - cumulative admitted workflows: `10/11`
 - incidents: `1` (`code_validation`)
-- rollbacks: `0`
+- accepted-workflow rate after retained replay: `90.91%` (`10/11`), below the `>=95.0%` target
+- retained non-accepted share after retained replay: `9.09%`, above the `5.0%` budget and beyond the `>50%` first-half burn rule
+- zero-budget incidents observed: none
+- rollback actions executed: `0`; expansion frozen and rollback target retained as the safe baseline
 - repair_cycles_total: `0`
-- next checkpoint: incident review before further expansion
+- next checkpoint: root-cause review and explicit retry-or-replace decision
 
 ## Canary Window Parameters
 
 - minimum 7-day window satisfied: NOT YET
 - 100-workflows requirement: NOT YET
-- promotion decision: blocked pending incident interpretation and further evidence
+- promotion decision: blocked; current candidate is on hold after falling outside policy before the minimum window closed
 
 ## Promotion Criteria
 
@@ -31,12 +34,13 @@ All of the following must be met before promotion can be proposed:
 
 1. 7 consecutive days elapsed since canary open — NOT YET
 2. 100+ eligible workflows admitted — NOT YET
-3. Zero incidents and zero rollbacks throughout window — NOT MET
-4. Daily review evidence complete and green — NOT YET
-5. Explicit promotion decision recorded after the window closes — NOT YET
+3. Accepted workflow rate stayed at or above `95.0%` and inside the `5.0%` non-accepted budget — NOT MET (`10/11`, `90.91%`)
+4. No zero-budget incident class observed — MET
+5. Early-window burn stayed at or below `50%` of every non-zero budget before mid-window — NOT MET
+6. Explicit promotion decision recorded after the window closes — NOT YET
 
 ## Daily Review Log
 
 | Date (UTC) | Smokes Run | Providers | Outcome | Incidents | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 2026-05-11 | 11 (cumulative) | anthropic×5, openai×3, ollama×3 | 10 passed, 1 failed | 1 | smoke01-smoke03 passed cleanly; smoke04 (`anthropic=baseline`) failed with `code_validation`; fresh-root replay passed |
+| 2026-05-11 | 11 (cumulative) | anthropic×5, openai×3, ollama×3 | 10 passed, 1 failed | 1 | smoke01-smoke03 passed cleanly; smoke04 (`anthropic=baseline`) failed with `code_validation`; fresh-root replay passed; policy review then froze expansion because the retained acceptance rate stayed below target |

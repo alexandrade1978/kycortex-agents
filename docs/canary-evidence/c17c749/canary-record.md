@@ -1,6 +1,6 @@
 # Canary Record - c17c749
 
-Status: open; `10/11` accepted, `1` incident, `0` rollbacks
+Status: held by policy; `10/11` accepted, `1` incident, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `c17c7492d3aded8d0dfcf84087cd9a77712dad33` and tag `v1.0.13b1`.
 
@@ -51,9 +51,12 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - 10-workflows checkpoint reached at `2026-05-11T10:02:33Z`: cumulative `9/10` accepted, `1` incident, `0` rollbacks
 - smoke batch `canary_c17c749_smoke04_retry`: 1/1 workflows accepted on a fresh root for the same provider/scenario pair (`anthropic=baseline`), 0 repair cycles, artifact_validation=passed
 - provider health after checkpoint and targeted replay: anthropic 4/5 accepted, openai 3/3 accepted, ollama 3/3 accepted
+- policy review at `2026-05-11T10:20:20Z`: cumulative `10/11` accepted (`90.91%`) remained below the `>=95.0%` accepted-workflow target; the retained non-accepted rate (`9.09%`) exceeded the `5.0%` budget and consumed more than `50%` of that budget in the first half of the observation window
+- canary expansion is frozen on `c17c749`; no new eligible workflows may be admitted on this candidate until the incident is root-caused and an explicit retry decision is recorded
+- rollback target `89d6e138bc5ff582c9fd2e8b31ec2e2b954c2bbc` / `v1.0.13a12` remains the safe baseline; no continuously routed traffic existed in this maintainer-operated smoke canary, so no environment switch was required when the hold was recorded
 - incidents: 1 (`code_validation` on `anthropic=baseline` in `smoke04`)
-- rollbacks: 0
-- next checkpoint: incident review before further expansion
+- rollbacks: 0 executed; expansion frozen by policy hold
+- next checkpoint: root-cause review and retry-or-replace decision
 
 ## Evidence References
 

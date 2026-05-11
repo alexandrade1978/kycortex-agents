@@ -51,7 +51,7 @@ def test_pyproject_contains_expected_package_metadata():
     assert project["authors"] == [{"name": "Alexandre Andrade", "email": "alex@kycortex.com"}]
     assert project["license"] == "AGPL-3.0-only"
     assert project["license-files"] == ["LICENSE"]
-    assert "Development Status :: 3 - Alpha" in project["classifiers"]
+    assert "Development Status :: 4 - Beta" in project["classifiers"]
     assert "Typing :: Typed" in project["classifiers"]
     assert "License :: OSI Approved :: GNU Affero General Public License v3" not in project["classifiers"]
     assert "anthropic>=0.34.0,<1.0.0" in project["dependencies"]

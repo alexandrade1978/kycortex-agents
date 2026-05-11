@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kycortex-agents"
-version = "1.0.13a13.dev0"
+version = "1.0.13b1"
 description = "Multi-agent orchestration framework for AI software house"
 authors = [{name = "Alexandre Andrade", email = "alex@kycortex.com"}]
 readme = "README.md"
@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.10"
 keywords = ["agents", "llm", "orchestration", "multi-agent", "ai"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

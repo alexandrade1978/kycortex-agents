@@ -241,7 +241,7 @@ See `docs/architecture.md`, `docs/workflows.md`, and `docs/persistence.md` for t
 
 Tagged package releases and production go-live are separate decisions in this repository.
 
-- The current public line is moving through Beta pre-releases.
+- The current public line is now in Beta pre-release.
 - A workflow is only successful when its declared acceptance criteria pass end to end.
 - Production go-live remains blocked until the repository-owned SLO, error-budget, and staged go-live gates in `docs/go-live-policy.md` are satisfied.
 

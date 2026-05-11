@@ -1,0 +1,36 @@
+{
+  "checkpoint": "10-workflows",
+  "captured_at": "2026-05-11T10:03:21Z",
+  "candidate": {
+    "tag": "v1.0.13b1",
+    "commit": "c17c7492d3aded8d0dfcf84087cd9a77712dad33"
+  },
+  "workflow_class": "release-user-smoke",
+  "checkpoint_outcome": {
+    "eligible_workflows_seen_at_checkpoint": 10,
+    "accepted_workflows_at_checkpoint": 9,
+    "incidents_at_checkpoint": 1,
+    "rollbacks_at_checkpoint": 0,
+    "checkpoint_time": "2026-05-11T10:02:33Z"
+  },
+  "post_checkpoint_targeted_replay": {
+    "batch_id": "canary_c17c749_smoke04_retry",
+    "provider": "anthropic",
+    "scenario": "baseline",
+    "terminal_outcome": "completed",
+    "artifact_validation": "passed",
+    "sample_balance": 2650.0,
+    "updated_at": "2026-05-11T10:03:21Z",
+    "cumulative_accepted_workflows_after_replay": 10,
+    "cumulative_eligible_workflows_after_replay": 11
+  },
+  "incident": {
+    "batch_id": "canary_c17c749_smoke04",
+    "provider": "anthropic",
+    "scenario": "baseline",
+    "failure_category": "code_validation",
+    "terminal_outcome": "failed",
+    "public_error": "Generated code artifact was not found.",
+    "updated_at": "2026-05-11T10:02:33Z"
+  }
+}

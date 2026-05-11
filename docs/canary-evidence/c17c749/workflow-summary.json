@@ -1,0 +1,39 @@
+{
+  "captured_at": "2026-05-11T09:53:39Z",
+  "last_updated": "2026-05-11T10:03:21Z",
+  "candidate": {
+    "tag": "v1.0.13b1",
+    "commit": "c17c7492d3aded8d0dfcf84087cd9a77712dad33"
+  },
+  "preflight": {
+    "smoke_output_roots": [
+      "output/canary_c17c749_smoke01",
+      "output/canary_c17c749_smoke02",
+      "output/canary_c17c749_smoke03",
+      "output/canary_c17c749_smoke04",
+      "output/canary_c17c749_smoke04_retry"
+    ],
+    "total_runs": 11,
+    "accepted_runs": 10,
+    "completed_runs": 10,
+    "failed_runs": 1,
+    "acceptance_rate": 0.9090909090909091
+  },
+  "canary_window": {
+    "opened": true,
+    "traffic_admitted": true,
+    "first_traffic_at": "2026-05-11T09:54:03Z",
+    "eligible_workflow_class": [
+      "release-user-smoke"
+    ],
+    "eligible_workflows_seen": 11,
+    "accepted_workflows": 10,
+    "incidents": 1,
+    "rollbacks": 0,
+    "checkpoints_reached": [
+      "first-accepted",
+      "10-workflows"
+    ],
+    "next_checkpoint": "incident-review"
+  }
+}

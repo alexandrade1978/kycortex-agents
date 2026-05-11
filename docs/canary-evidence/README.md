@@ -12,6 +12,13 @@ Candidate directories may be opened before traffic starts.
 
 If the canary window has not started yet, every file in the candidate directory must say so explicitly. A pre-canary bundle is allowed, but it does not satisfy the Phase 16 gate until the live window evidence is present.
 
+## Current Open Bundle
+
+- Current open candidate: `c17c749` (`v1.0.13b1`)
+- State: canary open; cumulative `10/11` accepted workflows, `1` incident, `0` rollbacks
+- Traffic admitted: `2026-05-11T09:54:03Z`
+- Next checkpoint: incident review before further expansion
+
 ## Directory Rule
 
 Create one directory per canary candidate commit:
@@ -51,6 +58,7 @@ Keep the following bundles under this root because they still carry operational 
 
 | Candidate | State | Keep? | Reason |
 | --- | --- | --- | --- |
+| `c17c749` | active beta canary, first-accepted checkpoint reached | yes | Active candidate-specific canary evidence for `v1.0.13b1`; keep until the beta window is explicitly closed. |
 | `1af2d8d` | completed minimum-window canary, later superseded | yes | Retained historical evidence for the `v1.0.13a11` line after the repository moved forward with `v1.0.13a12` publication instead of promoting `v1.0.13a11`. |
 | `f99a38d` | historical live window left open | yes | Retained evidence of an earlier canary that reached 100+ workflows and daily reviews; useful for lineage and prior operator decisions. |
 | `c74e957` | aborted after code-validation incident | yes | Zero-budget incident evidence must remain reviewable. |

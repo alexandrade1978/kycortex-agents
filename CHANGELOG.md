@@ -6,9 +6,19 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-- Current package version remains `1.0.13b1` during beta release preparation.
-- The last published and trusted package baseline remains `1.0.13a12` until `v1.0.13b1` is published.
-- Tightened the real-world returns scenario validator so malformed `details` must be rejected at runtime through `validate_request(...)` and `handle_request(...)`, rather than during `ReturnCase` construction.
+- No unreleased changes are recorded yet.
+
+## 1.0.13b1 - 2026-05-11
+
+Version `1.0.13b1` is now the released package baseline.
+
+This beta release extends `1.0.13a12` with stricter real-world returns validation and moves the public package line into beta prereleases.
+
+### Changed
+
+- `scripts/run_real_world_complex_matrix.py` now enforces that `returns_abuse_screening` accepts malformed or incomplete `details` at `ReturnCase` construction time and rejects them through `validate_request(...)` and `handle_request(...)` instead.
+- `tests/test_real_world_complex_matrix.py` now rejects constructor-time `details` validation for the returns scenario and accepts the compliant runtime-validation path.
+- Package metadata, README readiness posture, and release surfaces now identify the public package line as a beta prerelease stream.
 
 ## 1.0.13a12 - 2026-05-11
 

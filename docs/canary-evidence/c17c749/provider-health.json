@@ -1,0 +1,37 @@
+{
+  "candidate": {
+    "tag": "v1.0.13b1",
+    "commit": "c17c7492d3aded8d0dfcf84087cd9a77712dad33"
+  },
+  "captured_at": "2026-05-11T09:57:12Z",
+  "source": "output/canary_c17c749_smoke01",
+  "status": "healthy_with_recorded_code_validation_incident",
+  "providers": {
+    "anthropic": {
+      "healthy": true,
+      "accepted_runs": 4,
+      "total_runs": 5,
+      "failed_runs": 1,
+      "model": "claude-haiku-4-5-20251001"
+    },
+    "openai": {
+      "healthy": true,
+      "accepted_runs": 3,
+      "total_runs": 3,
+      "failed_runs": 0,
+      "model": "gpt-4o-mini"
+    },
+    "ollama": {
+      "healthy": true,
+      "accepted_runs": 3,
+      "total_runs": 3,
+      "failed_runs": 0,
+      "model": "qwen2.5-coder:7b"
+    }
+  },
+  "notes": [
+    "Derived from repository-owned ProjectState.internal_runtime_telemetry() exports for smoke01-smoke04 plus the fresh-root targeted replay.",
+    "Provider endpoints remained healthy throughout; the only recorded incident was a candidate-side code_validation failure on anthropic baseline in smoke04.",
+    "The same provider/scenario pair passed cleanly on the targeted replay smoke04_retry."
+  ]
+}

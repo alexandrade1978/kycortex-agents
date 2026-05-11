@@ -1,0 +1,78 @@
+{
+  "captured_at": "2026-05-11T09:53:39Z",
+  "last_updated": "2026-05-11T10:03:21Z",
+  "status": "active-canary-incident-under-review",
+  "candidate": {
+    "tag": "v1.0.13b1",
+    "commit": "c17c7492d3aded8d0dfcf84087cd9a77712dad33"
+  },
+  "telemetry_scope": {
+    "source": "smoke01-smoke04 plus targeted fresh-root replay of the failed provider/scenario pair",
+    "live_canary_workflows": 11
+  },
+  "provider_runtime_summary": {
+    "anthropic": {
+      "model": "claude-haiku-4-5-20251001",
+      "status": "healthy",
+      "smoke_result": "one code_validation failure in smoke04, targeted replay passed",
+      "repair_cycles": 0,
+      "task_durations_ms": {
+        "latest_replay_total": 16232.912
+      }
+    },
+    "openai": {
+      "model": "gpt-4o-mini",
+      "status": "healthy",
+      "smoke_result": "passed",
+      "repair_cycles": 0,
+      "task_durations_ms": {
+        "latest_batch_total": 26351.458
+      }
+    },
+    "ollama": {
+      "model": "qwen2.5-coder:7b",
+      "status": "healthy",
+      "smoke_result": "passed",
+      "repair_cycles": 0,
+      "task_durations_ms": {
+        "latest_batch_total": 19447.996
+      }
+    }
+  },
+  "canary_summary": {
+    "batches_run": 5,
+    "workflows_run": 11,
+    "workflows_accepted": 10,
+    "artifact_validation": "one_failed_then_targeted_replay_passed",
+    "repair_cycles_total": 0,
+    "provider_runs": {
+      "anthropic": 5,
+      "openai": 3,
+      "ollama": 3
+    },
+    "latest_rotated_scenarios": {
+      "smoke01": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke02": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke03": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      }
+    }
+  },
+  "notes": [
+    "Pre-canary bundle opened at 2026-05-11T09:53:39Z after the v1.0.13b1 prerelease closed cleanly.",
+    "First-admitted checkpoint reached at 2026-05-11T09:54:03Z with 3/3 smoke workflows passing.",
+    "10-workflows checkpoint reached at 2026-05-11T10:02:33Z with 9/10 accepted workflows and one code_validation incident on anthropic baseline.",
+    "A fresh-root targeted replay of the failed provider/scenario pair passed at 2026-05-11T10:03:21Z, bringing the cumulative state to 10/11 accepted with one retained incident.",
+    "Provider health remained healthy throughout; the incident was candidate-side artifact generation failure rather than provider outage."
+  ]
+}

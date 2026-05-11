@@ -1,0 +1,37 @@
+{
+  "candidate": {
+    "tag": "v1.0.13b2",
+    "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
+  },
+  "captured_at": "2026-05-11T11:09:14Z",
+  "source": "output/canary_1e68a8b_smoke01",
+  "status": "healthy_first_accepted_checkpoint",
+  "providers": {
+    "anthropic": {
+      "healthy": true,
+      "accepted_runs": 1,
+      "total_runs": 1,
+      "failed_runs": 0,
+      "model": "claude-haiku-4-5-20251001"
+    },
+    "openai": {
+      "healthy": true,
+      "accepted_runs": 1,
+      "total_runs": 1,
+      "failed_runs": 0,
+      "model": "gpt-4o-mini"
+    },
+    "ollama": {
+      "healthy": true,
+      "accepted_runs": 1,
+      "total_runs": 1,
+      "failed_runs": 0,
+      "model": "qwen2.5-coder:7b"
+    }
+  },
+  "notes": [
+    "Derived from repository-owned ProjectState.internal_runtime_telemetry() exports for smoke01.",
+    "All three enabled providers remained healthy through the first-admitted checkpoint.",
+    "Anthropic baseline completed cleanly on the published candidate with requested_max_tokens=1200 and stop_reason=end_turn."
+  ]
+}

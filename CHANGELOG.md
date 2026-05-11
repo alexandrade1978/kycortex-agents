@@ -8,6 +8,12 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 Current package version remains `1.0.13b2`.
 
+## 1.0.13b2 - 2026-05-11
+
+Version `1.0.13b2` is now the released package baseline.
+
+This beta release extends `1.0.13b1` with a safer default completion budget for `release-user-smoke` and an explicit override for future canary tuning.
+
 ### Changed
 
 - `examples/example_release_user_smoke.py` now defaults the smoke completion budget to `1200` tokens and accepts `--max-tokens` overrides so follow-on beta candidates keep more completion headroom without leaving compact-mode prompts.

@@ -1,0 +1,41 @@
+{
+  "checkpoint": "first-accepted",
+  "captured_at": "2026-05-11T11:09:14Z",
+  "candidate": {
+    "tag": "v1.0.13b2",
+    "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
+  },
+  "batch_id": "canary_1e68a8b_smoke01",
+  "workflow_class": "release-user-smoke",
+  "eligible_workflows_seen": 3,
+  "accepted_workflows": 3,
+  "incidents": 0,
+  "rollbacks": 0,
+  "repair_cycles_total": 0,
+  "runs": [
+    {
+      "provider": "anthropic",
+      "scenario": "baseline",
+      "terminal_outcome": "completed",
+      "artifact_validation": "passed",
+      "sample_balance": 2650.0,
+      "output_dir": "output/canary_1e68a8b_smoke01/anthropic_baseline"
+    },
+    {
+      "provider": "openai",
+      "scenario": "tight_margin",
+      "terminal_outcome": "completed",
+      "artifact_validation": "passed",
+      "sample_balance": 50.0,
+      "output_dir": "output/canary_1e68a8b_smoke01/openai_tight_margin"
+    },
+    {
+      "provider": "ollama",
+      "scenario": "many_expenses",
+      "terminal_outcome": "completed",
+      "artifact_validation": "passed",
+      "sample_balance": 4343.25,
+      "output_dir": "output/canary_1e68a8b_smoke01/ollama_many_expenses"
+    }
+  ]
+}

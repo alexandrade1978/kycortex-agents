@@ -1,0 +1,66 @@
+{
+  "captured_at": "2026-05-11T11:09:14Z",
+  "last_updated": "2026-05-11T11:09:14Z",
+  "status": "active-canary-first-accepted",
+  "candidate": {
+    "tag": "v1.0.13b2",
+    "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
+  },
+  "telemetry_scope": {
+    "source": "smoke01 first-admitted batch",
+    "live_canary_workflows": 3
+  },
+  "provider_runtime_summary": {
+    "anthropic": {
+      "model": "claude-haiku-4-5-20251001",
+      "status": "healthy",
+      "smoke_result": "passed",
+      "repair_cycles": 0,
+      "task_durations_ms": {
+        "latest_batch_total": 18680.26
+      }
+    },
+    "openai": {
+      "model": "gpt-4o-mini",
+      "status": "healthy",
+      "smoke_result": "passed",
+      "repair_cycles": 0,
+      "task_durations_ms": {
+        "latest_batch_total": 23330.169
+      }
+    },
+    "ollama": {
+      "model": "qwen2.5-coder:7b",
+      "status": "healthy",
+      "smoke_result": "passed",
+      "repair_cycles": 0,
+      "task_durations_ms": {
+        "latest_batch_total": 18517.977
+      }
+    }
+  },
+  "canary_summary": {
+    "batches_run": 1,
+    "workflows_run": 3,
+    "workflows_accepted": 3,
+    "artifact_validation": "passed",
+    "repair_cycles_total": 0,
+    "provider_runs": {
+      "anthropic": 1,
+      "openai": 1,
+      "ollama": 1
+    },
+    "latest_rotated_scenarios": {
+      "smoke01": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      }
+    }
+  },
+  "notes": [
+    "Pre-canary bundle opened after the v1.0.13b2 prerelease closed cleanly.",
+    "First-admitted checkpoint reached at 2026-05-11T11:06:41Z with 3/3 smoke workflows accepted.",
+    "Provider health remained healthy throughout; anthropic baseline completed with stop_reason=end_turn, openai with finish_reason=stop, and ollama with done_reason=stop."
+  ]
+}

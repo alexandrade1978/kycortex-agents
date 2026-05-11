@@ -8,7 +8,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 - Current package version is now `1.0.13a13.dev0` ahead of the next alpha release.
 - The last published and trusted alpha baseline is `1.0.13a12`.
-- No unreleased changes are recorded yet.
+- Tightened the real-world returns scenario validator so malformed `details` must be rejected at runtime through `validate_request(...)` and `handle_request(...)`, rather than during `ReturnCase` construction.
 
 ## 1.0.13a12 - 2026-05-11
 

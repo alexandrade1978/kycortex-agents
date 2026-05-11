@@ -1248,6 +1248,7 @@ def _composite_acceptance_evaluation(
 
 def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str) -> dict[str, Any]:
     artifact_path = _code_artifact_path(task, output_dir)
+    constructor_must_accept_invalid_details = spec.slug == "returns_abuse_screening"
     checks = {
         "syntax_valid": False,
         "stdlib_only": False,
@@ -1322,6 +1323,12 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
             request_cls,
             request_payloads["invalid"],
         )
+        if constructor_must_accept_invalid_details and invalid_request_error is not None:
+            raise RuntimeError(
+                "Generated code rejected malformed details during request construction. "
+                "For returns_abuse_screening, ReturnCase must accept any details value at construction time "
+                "and reject malformed payloads in validate_request(...) and handle_request(...)."
+            )
 
         validation_service = _instantiate_service(service_cls, spec.service_name)
         validate_request = getattr(validation_service, "validate_request", None)
@@ -1377,6 +1384,17 @@ def _validate_generated_scenario(spec: ScenarioSpec, task: Task, output_dir: str
             "details": partial_details,
             "timestamp": request_payloads["low"]["timestamp"],
         }
+        if constructor_must_accept_invalid_details:
+            _, partial_invalid_request_error = _build_request_or_capture_error(
+                request_cls,
+                partial_invalid_payload,
+            )
+            if partial_invalid_request_error is not None:
+                raise RuntimeError(
+                    "Generated code rejected incomplete details during request construction. "
+                    "For returns_abuse_screening, ReturnCase must defer details validation to "
+                    "validate_request(...) instead of constructor-time checks."
+                )
         survived, prog_error = _handle_request_survives_invalid(
             service_cls, spec.service_name, request_cls, partial_invalid_payload,
         )

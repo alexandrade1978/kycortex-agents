@@ -618,7 +618,7 @@ def test_access_review_scenario_request_payloads_preserve_typed_details():
     assert isinstance(high_details["stale_approval"], bool)
 
 
-def test_validate_generated_returns_scenario_accepts_constructor_rejected_invalid_request(tmp_path):
+def test_validate_generated_returns_scenario_rejects_constructor_time_detail_validation(tmp_path):
     module = _load_script_module(
         "real_world_complex_matrix_returns_constructor_rejection_test",
         "scripts/run_real_world_complex_matrix.py",
@@ -660,6 +660,89 @@ def test_validate_generated_returns_scenario_accepts_constructor_rejected_invali
         "            return True\n"
         "        except ValueError:\n"
         "            return False\n\n"
+        "    def handle_request(self, request):\n"
+        "        if not self.validate_request(request):\n"
+        "            raise ValueError('invalid request')\n"
+        "        risk_score = 0\n"
+        "        if request.details['prior_returns'] > 2:\n"
+        "            risk_score += 3\n"
+        "        if not request.details['receipt_present']:\n"
+        "            risk_score += 2\n"
+        "        if any(item.get('value', 0) > 1000 for item in request.details['items']):\n"
+        "            risk_score += 4\n"
+        "        outcome = 'escalated' if risk_score >= 5 else 'approved'\n"
+        "        self.audit_history.append({'request_id': request.request_id, 'outcome': outcome, 'risk_score': risk_score})\n"
+        "        return {'outcome': outcome, 'risk_score': risk_score}\n",
+        encoding="utf-8",
+    )
+    task = Task(
+        id="code",
+        title="Implementation",
+        description="Implement",
+        assigned_to="code_engineer",
+        output_payload={"artifacts": [{"path": "artifacts/returns_service.py"}]},
+    )
+    _write_strict_invalid_request_tests_artifact(
+        output_dir,
+        module_name="returns_service",
+        service_name="ReturnScreeningService",
+        request_name="ReturnCase",
+    )
+
+    returns_spec = next(spec for spec in module.SCENARIOS if spec.slug == "returns_abuse_screening")
+    result = module._validate_generated_scenario(returns_spec, task, str(output_dir))
+
+    assert result["validated"] is False
+    assert "must accept any details value at construction time" in result["error"]
+
+
+def test_validate_generated_returns_scenario_accepts_runtime_detail_validation(tmp_path):
+    module = _load_script_module(
+        "real_world_complex_matrix_returns_runtime_validation_test",
+        "scripts/run_real_world_complex_matrix.py",
+    )
+    output_dir = tmp_path / "campaign"
+    artifact_path = output_dir / "artifacts" / "returns_service.py"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(
+        "from dataclasses import dataclass\n"
+        "from datetime import datetime\n"
+        "from typing import Any\n\n"
+        "@dataclass\n"
+        "class ReturnCase:\n"
+        "    request_id: str\n"
+        "    request_type: str\n"
+        "    details: Any\n"
+        "    timestamp: datetime\n\n"
+        "class ReturnScreeningService:\n"
+        "    def __init__(self):\n"
+        "        self.audit_history = []\n\n"
+        "    def validate_request(self, request):\n"
+        "        if not isinstance(request.details, dict):\n"
+        "            return False\n"
+        "        required_keys = {\n"
+        "            'order_reference',\n"
+        "            'return_reason',\n"
+        "            'items',\n"
+        "            'receipt_present',\n"
+        "            'prior_returns',\n"
+        "            'timing_days',\n"
+        "        }\n"
+        "        if not required_keys.issubset(request.details):\n"
+        "            return False\n"
+        "        if not isinstance(request.details['order_reference'], str):\n"
+        "            return False\n"
+        "        if not isinstance(request.details['return_reason'], str):\n"
+        "            return False\n"
+        "        if not isinstance(request.details['items'], list):\n"
+        "            return False\n"
+        "        if not isinstance(request.details['receipt_present'], bool):\n"
+        "            return False\n"
+        "        if not isinstance(request.details['prior_returns'], int):\n"
+        "            return False\n"
+        "        if not isinstance(request.details['timing_days'], int):\n"
+        "            return False\n"
+        "        return True\n\n"
         "    def handle_request(self, request):\n"
         "        if not self.validate_request(request):\n"
         "            raise ValueError('invalid request')\n"

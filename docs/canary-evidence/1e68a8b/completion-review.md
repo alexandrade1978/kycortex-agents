@@ -1,6 +1,6 @@
 # Completion Review - 1e68a8b
 
-Decision: **open — 10-workflows checkpoint clean; candidate remains under canary observation**
+Decision: **open — 25-workflows checkpoint clean; candidate remains under canary observation**
 
 ## Current State
 
@@ -12,13 +12,15 @@ Decision: **open — 10-workflows checkpoint clean; candidate remains under cana
 - smoke batch `canary_1e68a8b_smoke03`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`many_expenses`, openai=`baseline`, ollama=`tight_margin`)
 - smoke batch `canary_1e68a8b_smoke04`: `1/1` workflows accepted (`anthropic=baseline`)
 - 10-workflows checkpoint reached at `2026-05-11T11:26:33Z`: cumulative `10/10` accepted, `0` incidents, `0` rollbacks
-- cumulative admitted workflows: `10/10`
+- smoke batches `canary_1e68a8b_smoke05` through `smoke09`: `15/15` workflows accepted across all three providers with the repeated rotated scenario cycle
+- 25-workflows checkpoint reached at `2026-05-11T11:47:20Z`: cumulative `25/25` accepted, `0` incidents, `0` rollbacks
+- cumulative admitted workflows: `25/25`
 - accepted-workflow rate so far: `100.00%`
 - retained non-accepted share so far: `0.00%`
 - zero-budget incidents observed: none
 - rollback actions executed: `0`
 - repair_cycles_total: `0`
-- next checkpoint: `25-workflows`
+- next checkpoint: `50-workflows`
 
 ## Canary Window Parameters
 
@@ -41,4 +43,4 @@ All of the following must be met before promotion can be proposed:
 
 | Date (UTC) | Smokes Run | Providers | Outcome | Incidents | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 2026-05-11 | 10 (cumulative) | anthropic×4, openai×3, ollama×3 | 10 passed | 0 | published prerelease `v1.0.13b2` verified; smoke01-smoke04 all passed; replacement candidate cleared the `anthropic=baseline` cell that failed on held candidate `c17c749` |
+| 2026-05-11 | 25 (cumulative) | anthropic×9, openai×8, ollama×8 | 25 passed | 0 | published prerelease `v1.0.13b2` verified; smoke01-smoke09 all passed; replacement candidate remained clean through the 25-workflows checkpoint and repeatedly re-exercised the formerly held Anthropic baseline path |

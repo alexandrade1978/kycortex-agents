@@ -1,6 +1,6 @@
 # Canary Record - 1e68a8b
 
-Status: active; `10/10` accepted, `0` incidents, `0` rollback actions
+Status: active; `25/25` accepted, `0` incidents, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2`.
 
@@ -49,11 +49,13 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - smoke batch `canary_1e68a8b_smoke03`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`many_expenses`, openai=`baseline`, ollama=`tight_margin`), `0` repair cycles, persisted artifact validation passed
 - smoke batch `canary_1e68a8b_smoke04`: `1/1` workflows accepted (`anthropic=baseline`), `0` repair cycles, persisted artifact validation passed
 - 10-workflows checkpoint reached at `2026-05-11T11:26:33Z`: cumulative `10/10` accepted, `0` incidents, `0` rollbacks
-- provider health after checkpoint: anthropic `4/4` accepted, openai `3/3` accepted, ollama `3/3` accepted
+- smoke batches `canary_1e68a8b_smoke05` through `canary_1e68a8b_smoke09`: `15/15` workflows accepted across all three providers with the repeated rotated scenario cycle (baseline, tight_margin, many_expenses), `0` repair cycles, persisted artifact validation passed
+- 25-workflows checkpoint reached at `2026-05-11T11:47:20Z`: cumulative `25/25` accepted, `0` incidents, `0` rollbacks
+- provider health after checkpoint: anthropic `9/9` accepted, openai `8/8` accepted, ollama `8/8` accepted
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `0`
 - rollbacks: `0`
-- next checkpoint: `25-workflows`
+- next checkpoint: `50-workflows`
 
 ## Evidence References
 
@@ -66,3 +68,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - retained validation root for this candidate: `validation-artifacts/`
 - first-accepted checkpoint: `validation-artifacts/checkpoint-first-accepted-2026-05-11T110641Z.json`
 - 10-workflows checkpoint: `validation-artifacts/checkpoint-10-workflows-2026-05-11T112633Z.json`
+- 25-workflows checkpoint: `validation-artifacts/checkpoint-25-workflows-2026-05-11T114720Z.json`

@@ -1,0 +1,83 @@
+{
+  "checkpoint": "25-workflows",
+  "captured_at": "2026-05-11T11:47:20Z",
+  "candidate": {
+    "tag": "v1.0.13b2",
+    "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
+  },
+  "cumulative_window": {
+    "eligible_workflows_seen": 25,
+    "accepted_workflows": 25,
+    "failed_workflows": 0,
+    "incidents": 0,
+    "rollbacks": 0,
+    "acceptance_rate": 1.0
+  },
+  "batches": [
+    {
+      "batch_id": "canary_1e68a8b_smoke01",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke02",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke03",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke04",
+      "workflows": 1,
+      "providers": ["anthropic"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke05",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke06",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke07",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke08",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    },
+    {
+      "batch_id": "canary_1e68a8b_smoke09",
+      "workflows": 3,
+      "providers": ["anthropic", "openai", "ollama"],
+      "all_passed": true
+    }
+  ],
+  "provider_health_at_checkpoint": {
+    "anthropic": {"status": "healthy", "runs": 9, "passed": 9},
+    "openai": {"status": "healthy", "runs": 8, "passed": 8},
+    "ollama": {"status": "healthy", "runs": 8, "passed": 8}
+  },
+  "artifact_contract": {
+    "artifact_validation": "passed_all",
+    "public_contract_preflight": "passed_all",
+    "import_validation": "passed_all",
+    "repair_cycles_total": 0
+  }
+}

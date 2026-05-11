@@ -1,6 +1,6 @@
 # Environment Parity - 1e68a8b
 
-Status: preflight parity captured; canary traffic admitted through the 10-workflows checkpoint
+Status: preflight parity captured; canary traffic admitted through the 25-workflows checkpoint
 
 ## Candidate and Runtime
 
@@ -12,11 +12,11 @@ Status: preflight parity captured; canary traffic admitted through the 10-workfl
 ## Provider Parity
 
 - enabled providers for admitted evidence: `anthropic`, `openai`, `ollama`
-- provider models used across smoke01-smoke04:
+- provider models used across smoke01-smoke09:
   - anthropic: `claude-haiku-4-5-20251001`
   - openai: `gpt-4o-mini`
   - ollama: `qwen2.5-coder:7b`
-- the first four smoke batches completed with all provider/scenario cells accepted, including the replacement `anthropic=baseline` smoke04 cell.
+- the first nine smoke batches completed with all provider/scenario cells accepted, including repeated clean passes on the formerly held `anthropic=baseline` path.
 
 ## Persistence and Validation Parity
 
@@ -25,6 +25,11 @@ Status: preflight parity captured; canary traffic admitted through the 10-workfl
   - `output/canary_1e68a8b_smoke02/`
   - `output/canary_1e68a8b_smoke03/`
   - `output/canary_1e68a8b_smoke04/`
+  - `output/canary_1e68a8b_smoke05/`
+  - `output/canary_1e68a8b_smoke06/`
+  - `output/canary_1e68a8b_smoke07/`
+  - `output/canary_1e68a8b_smoke08/`
+  - `output/canary_1e68a8b_smoke09/`
 - every admitted run retained repository-owned artifacts plus persisted validation metadata proving syntax, public-contract, and import checks passed.
 
 ## Sandbox and Release Settings Parity
@@ -36,4 +41,4 @@ Status: preflight parity captured; canary traffic admitted through the 10-workfl
 ## Gate Interpretation
 
 Parity evidence remains sufficient to keep the replacement beta canary window open.
-The 10-workflows checkpoint is recorded; the next operational step is the `25-workflows` checkpoint.
+The 25-workflows checkpoint is recorded; the next operational step is the `50-workflows` checkpoint.

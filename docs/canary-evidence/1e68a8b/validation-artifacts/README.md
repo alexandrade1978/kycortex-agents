@@ -4,5 +4,6 @@ This directory is reserved for repository-owned validation artifacts for candida
 
 The first-admitted checkpoint packet is present for `canary_1e68a8b_smoke01`.
 The 10-workflows checkpoint packet is present for `canary_1e68a8b_smoke01` through `canary_1e68a8b_smoke04`.
+The 25-workflows checkpoint packet is present for `canary_1e68a8b_smoke01` through `canary_1e68a8b_smoke09`.
 
 Store any subsequent checkpoint or incident evidence here.

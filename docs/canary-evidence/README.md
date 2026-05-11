@@ -15,9 +15,9 @@ If the canary window has not started yet, every file in the candidate directory 
 ## Current Open Bundle
 
 - Current active candidate: `1e68a8b` (`v1.0.13b2`)
-- State: 10-workflows checkpoint clean; cumulative `10/10` accepted workflows, `0` incidents, `0` rollback actions
+- State: 25-workflows checkpoint clean; cumulative `25/25` accepted workflows, `0` incidents, `0` rollback actions
 - Traffic admitted: `2026-05-11T11:06:41Z`
-- Next checkpoint: `25-workflows`
+- Next checkpoint: `50-workflows`
 
 ## Current Held Bundle
 
@@ -66,7 +66,7 @@ Keep the following bundles under this root because they still carry operational 
 
 | Candidate | State | Keep? | Reason |
 | --- | --- | --- | --- |
-| `1e68a8b` | active replacement beta canary after a clean `10/10` early-window checkpoint | yes | Active replacement beta candidate for the held `v1.0.13b1` line; this is the current Phase 16 admission path. |
+| `1e68a8b` | active replacement beta canary after a clean `25/25` early-window checkpoint | yes | Active replacement beta candidate for the held `v1.0.13b1` line; this is the current Phase 16 admission path. |
 | `c17c749` | held beta canary after early accepted-workflow SLO miss | yes | Candidate-specific hold evidence for `v1.0.13b1`; keep until the retained incident is root-caused and the retry-or-replace decision is recorded. |
 | `1af2d8d` | completed minimum-window canary, later superseded | yes | Retained historical evidence for the `v1.0.13a11` line after the repository moved forward with `v1.0.13a12` publication instead of promoting `v1.0.13a11`. |
 | `f99a38d` | historical live window left open | yes | Retained evidence of an earlier canary that reached 100+ workflows and daily reviews; useful for lineage and prior operator decisions. |

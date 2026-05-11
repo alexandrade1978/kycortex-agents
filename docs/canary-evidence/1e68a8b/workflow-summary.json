@@ -1,6 +1,6 @@
 {
-  "captured_at": "2026-05-11T12:06:20Z",
-  "last_updated": "2026-05-11T12:06:20Z",
+  "captured_at": "2026-05-11T12:30:16Z",
+  "last_updated": "2026-05-11T12:30:16Z",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
@@ -24,11 +24,28 @@
       "output/canary_1e68a8b_smoke15",
       "output/canary_1e68a8b_smoke16",
       "output/canary_1e68a8b_smoke17",
-      "output/canary_1e68a8b_smoke18"
+      "output/canary_1e68a8b_smoke18",
+      "output/canary_1e68a8b_smoke19",
+      "output/canary_1e68a8b_smoke20",
+      "output/canary_1e68a8b_smoke21",
+      "output/canary_1e68a8b_smoke22",
+      "output/canary_1e68a8b_smoke23",
+      "output/canary_1e68a8b_smoke24",
+      "output/canary_1e68a8b_smoke25",
+      "output/canary_1e68a8b_smoke26",
+      "output/canary_1e68a8b_smoke27",
+      "output/canary_1e68a8b_smoke28",
+      "output/canary_1e68a8b_smoke29",
+      "output/canary_1e68a8b_smoke30",
+      "output/canary_1e68a8b_smoke31",
+      "output/canary_1e68a8b_smoke32",
+      "output/canary_1e68a8b_smoke33",
+      "output/canary_1e68a8b_smoke34",
+      "output/canary_1e68a8b_smoke35"
     ],
-    "total_runs": 50,
-    "accepted_runs": 50,
-    "completed_runs": 50,
+    "total_runs": 100,
+    "accepted_runs": 100,
+    "completed_runs": 100,
     "failed_runs": 0,
     "acceptance_rate": 1.0
   },
@@ -39,16 +56,17 @@
     "eligible_workflow_class": [
       "release-user-smoke"
     ],
-    "eligible_workflows_seen": 50,
-    "accepted_workflows": 50,
+    "eligible_workflows_seen": 100,
+    "accepted_workflows": 100,
     "incidents": 0,
     "rollbacks": 0,
     "checkpoints_reached": [
       "first-accepted",
       "10-workflows",
       "25-workflows",
-      "50-workflows"
+      "50-workflows",
+      "100-workflows"
     ],
-    "next_checkpoint": "100-workflows"
+    "next_checkpoint": "daily-review day-1"
   }
 }

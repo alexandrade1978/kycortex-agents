@@ -1,14 +1,14 @@
 {
   "captured_at": "2026-05-11T11:09:14Z",
-  "last_updated": "2026-05-11T12:06:20Z",
-  "status": "active-canary-50-workflows-clean",
+  "last_updated": "2026-05-11T12:30:16Z",
+  "status": "active-canary-100-workflows-clean",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
   "telemetry_scope": {
-    "source": "smoke01-smoke18 expanded early-window batches",
-    "live_canary_workflows": 50
+    "source": "smoke01-smoke35 expanded early-window batches",
+    "live_canary_workflows": 100
   },
   "provider_runtime_summary": {
     "anthropic": {
@@ -17,8 +17,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 17320.619,
-        "cumulative_window_total": 312697.42
+        "latest_batch_total": 17585.853,
+        "cumulative_window_total": 607142.627
       }
     },
     "openai": {
@@ -27,8 +27,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 16552.288,
-        "cumulative_window_total": 293542.314
+        "latest_batch_total": 14385.367,
+        "cumulative_window_total": 554872.403
       }
     },
     "ollama": {
@@ -37,23 +37,23 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 12964.19,
-        "cumulative_window_total": 255882.005
+        "latest_batch_total": 16032.234,
+        "cumulative_window_total": 501518.883
       }
     }
   },
   "canary_summary": {
-    "batches_run": 18,
-    "workflows_run": 50,
-    "workflows_accepted": 50,
+    "batches_run": 35,
+    "workflows_run": 100,
+    "workflows_accepted": 100,
     "acceptance_criteria_met": "passed_all",
     "task_public_contract_preflight": "passed_all",
     "import_validation": "passed_all",
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 18,
-      "openai": 16,
-      "ollama": 16
+      "anthropic": 35,
+      "openai": 33,
+      "ollama": 32
     },
     "latest_rotated_scenarios": {
       "smoke01": {
@@ -141,6 +141,90 @@
       },
       "smoke18": {
         "anthropic": "many_expenses"
+      },
+      "smoke19": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke20": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke21": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke22": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke23": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke24": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke25": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke26": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke27": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke28": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke29": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke30": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke31": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke32": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke33": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke34": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
+      },
+      "smoke35": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses"
       }
     }
   },
@@ -152,6 +236,8 @@
     "All three providers remained healthy through smoke01-smoke09 with zero repair cycles and the code-task public-contract/import checks passing on every run.",
     "50-workflows checkpoint reached at 2026-05-11T12:06:20Z with 50/50 cumulative workflows accepted.",
     "All three providers remained healthy through smoke01-smoke18 with zero repair cycles, acceptance_criteria_met=true on every persisted workflow, and task public-contract/import validation passing on every code task.",
-    "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly multiple times before the 50-workflows checkpoint."
+    "100-workflows checkpoint reached at 2026-05-11T12:30:16Z with 100/100 cumulative workflows accepted.",
+    "All enabled providers remained healthy through smoke01-smoke35, acceptance_criteria_met=true on every persisted workflow, task public-contract/import validation passed on every code task, and repair_cycles_total remained zero.",
+    "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly multiple times before the 100-workflows checkpoint."
   ]
 }

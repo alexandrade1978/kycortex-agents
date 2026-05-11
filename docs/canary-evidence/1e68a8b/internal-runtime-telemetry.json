@@ -1,25 +1,26 @@
 {
   "captured_at": "2026-05-11T11:09:14Z",
-  "last_updated": "2026-05-11T12:41:39Z",
-  "status": "active-canary-daily-review-day-1-with-recovered-provider-transient-incident",
+  "last_updated": "2026-05-11T12:58:41Z",
+  "status": "active-canary-same-day-follow-up-after-recovered-provider-transient-incident",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
   "telemetry_scope": {
-    "source": "smoke01-smoke36 plus targeted fresh-root replay of the failed anthropic many_expenses cell",
-    "live_canary_workflows": 104
+    "source": "smoke01-smoke37 plus targeted fresh-root replay of the failed anthropic many_expenses cell",
+    "live_canary_workflows": 107
   },
   "provider_runtime_summary": {
     "anthropic": {
       "model": "claude-haiku-4-5-20251001",
       "status": "healthy",
-      "smoke_result": "one provider_transient failure in smoke36, targeted replay passed",
+      "smoke_result": "one provider_transient failure in smoke36, targeted replay passed, smoke37 baseline passed",
       "repair_cycles": 0,
       "task_durations_ms": {
+        "latest_batch_total": 17075.314,
         "latest_failed_total": 8298.792,
         "latest_replay_total": 18835.029,
-        "cumulative_window_total": 634276.448
+        "cumulative_window_total": 651351.762
       }
     },
     "openai": {
@@ -28,8 +29,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 17519.323,
-        "cumulative_window_total": 572391.726
+        "latest_batch_total": 23605.848,
+        "cumulative_window_total": 595997.574
       }
     },
     "ollama": {
@@ -38,23 +39,23 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 17741.91,
-        "cumulative_window_total": 519260.793
+        "latest_batch_total": 18294.757,
+        "cumulative_window_total": 537555.55
       }
     }
   },
   "canary_summary": {
-    "batches_run": 37,
-    "workflows_run": 104,
-    "workflows_accepted": 103,
-    "acceptance_criteria_met": "one_failed_then_targeted_replay_passed",
+    "batches_run": 38,
+    "workflows_run": 107,
+    "workflows_accepted": 106,
+    "acceptance_criteria_met": "one_failed_then_follow_up_runs_passed",
     "task_public_contract_preflight": "passed_on_completed_runs",
     "import_validation": "passed_on_completed_runs",
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 37,
-      "openai": 34,
-      "ollama": 33
+      "anthropic": 38,
+      "openai": 35,
+      "ollama": 34
     },
     "latest_rotated_scenarios": {
       "smoke01": {
@@ -234,6 +235,11 @@
       },
       "smoke36_retry1": {
         "anthropic": "many_expenses"
+      },
+      "smoke37": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
       }
     }
   },
@@ -249,6 +255,7 @@
     "All enabled providers remained healthy through smoke01-smoke35, acceptance_criteria_met=true on every persisted workflow, task public-contract/import validation passed on every code task, and repair_cycles_total remained zero.",
     "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly multiple times before the 100-workflows checkpoint.",
     "Daily-review day-1 at 2026-05-11T12:41:39Z added smoke36 plus targeted replay smoke36_retry1, bringing cumulative state to 103/104 accepted with one retryable provider_transient incident and zero rollbacks.",
-    "Anthropic many_expenses failed at 2026-05-11T12:39:35Z with ProviderTransientError before code-task validation; fresh-root replay passed at 2026-05-11T12:41:39Z."
+    "Anthropic many_expenses failed at 2026-05-11T12:39:35Z with ProviderTransientError before code-task validation; fresh-root replay passed at 2026-05-11T12:41:39Z.",
+    "The same-day follow-up review at 2026-05-11T12:58:41Z added smoke37 with all three rotated provider cells passing cleanly, bringing cumulative state to 106/107 accepted with no new incident."
   ]
 }

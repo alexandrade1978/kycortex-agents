@@ -1,6 +1,6 @@
 {
-  "captured_at": "2026-05-11T12:41:39Z",
-  "last_updated": "2026-05-11T12:41:39Z",
+  "captured_at": "2026-05-11T12:58:41Z",
+  "last_updated": "2026-05-11T12:58:41Z",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
@@ -43,13 +43,14 @@
       "output/canary_1e68a8b_smoke34",
       "output/canary_1e68a8b_smoke35",
       "output/canary_1e68a8b_smoke36",
-      "output/canary_1e68a8b_smoke36_retry1"
+      "output/canary_1e68a8b_smoke36_retry1",
+      "output/canary_1e68a8b_smoke37"
     ],
-    "total_runs": 104,
-    "accepted_runs": 103,
-    "completed_runs": 103,
+    "total_runs": 107,
+    "accepted_runs": 106,
+    "completed_runs": 106,
     "failed_runs": 1,
-    "acceptance_rate": 0.9903846153846154
+    "acceptance_rate": 0.9906542056074766
   },
   "canary_window": {
     "opened": true,
@@ -58,8 +59,8 @@
     "eligible_workflow_class": [
       "release-user-smoke"
     ],
-    "eligible_workflows_seen": 104,
-    "accepted_workflows": 103,
+    "eligible_workflows_seen": 107,
+    "accepted_workflows": 106,
     "incidents": 1,
     "rollbacks": 0,
     "checkpoints_reached": [
@@ -68,7 +69,8 @@
       "25-workflows",
       "50-workflows",
       "100-workflows",
-      "daily-review day-1"
+      "daily-review day-1",
+      "same-day daily-review follow-up"
     ],
     "next_checkpoint": "daily-review day-2"
   }

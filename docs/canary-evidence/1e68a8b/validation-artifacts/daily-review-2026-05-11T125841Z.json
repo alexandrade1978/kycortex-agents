@@ -1,0 +1,46 @@
+{
+  "artifact_type": "daily-review",
+  "review_label": "same-day follow-up",
+  "same_utc_day_follow_up": true,
+  "canary_commit": "1e68a8b",
+  "review_date": "2026-05-11",
+  "timestamp": "2026-05-11T12:58:41Z",
+  "smoke_batch": "smoke37",
+  "workflows_run": 3,
+  "workflows_passed": 3,
+  "workflows_failed": 0,
+  "new_incidents": 0,
+  "providers": {
+    "anthropic": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 17075.314
+    },
+    "openai": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 23605.848
+    },
+    "ollama": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 18294.757
+    }
+  },
+  "cumulative_workflows_seen": 107,
+  "cumulative_workflows_accepted": 106,
+  "cumulative_workflows_failed": 1,
+  "cumulative_incidents": 1,
+  "cumulative_rollbacks": 0,
+  "accepted_workflow_rate": 0.9906542056074766,
+  "non_accepted_share": 0.009345794392523364,
+  "window_expires": "2026-05-18T11:02:46Z",
+  "next_checkpoint": "daily-review day-2",
+  "verdict": "same-day-follow-up-passed-window-remains-open"
+}

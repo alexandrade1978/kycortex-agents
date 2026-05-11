@@ -3,35 +3,36 @@
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
-  "captured_at": "2026-05-11T12:41:39Z",
-  "source": "output/canary_1e68a8b_smoke01..smoke36 plus smoke36_retry1 targeted replay",
+  "captured_at": "2026-05-11T12:58:41Z",
+  "source": "output/canary_1e68a8b_smoke01..smoke37 plus smoke36_retry1 targeted replay",
   "status": "healthy_with_recorded_provider_transient_incident",
   "providers": {
     "anthropic": {
       "healthy": true,
-      "accepted_runs": 36,
-      "total_runs": 37,
+      "accepted_runs": 37,
+      "total_runs": 38,
       "failed_runs": 1,
       "model": "claude-haiku-4-5-20251001"
     },
     "openai": {
       "healthy": true,
-      "accepted_runs": 34,
-      "total_runs": 34,
+      "accepted_runs": 35,
+      "total_runs": 35,
       "failed_runs": 0,
       "model": "gpt-4o-mini"
     },
     "ollama": {
       "healthy": true,
-      "accepted_runs": 33,
-      "total_runs": 33,
+      "accepted_runs": 34,
+      "total_runs": 34,
       "failed_runs": 0,
       "model": "qwen2.5-coder:7b"
     }
   },
   "notes": [
-    "Derived from repository-owned ProjectState exports for smoke01-smoke36 plus the targeted fresh-root replay smoke36_retry1.",
+    "Derived from repository-owned ProjectState exports for smoke01-smoke37 plus the targeted fresh-root replay smoke36_retry1.",
     "An isolated retryable ProviderTransientError on anthropic many_expenses in smoke36 was contained by fresh-root replay smoke36_retry1, which passed cleanly.",
+    "The same-day follow-up smoke37 review then passed cleanly on all three providers.",
     "The active canary remains inside non-zero policy budgets and continues under daily review."
   ]
 }

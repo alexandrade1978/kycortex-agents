@@ -19,4 +19,6 @@ No canary incident is recorded through the 100-workflows checkpoint.
 - policy reading: isolated retryable incident remained inside the `>=95.0%` accepted-workflow SLO, below the `>50%` early-window burn threshold, and outside every zero-budget incident class
 - immediate action after policy review: retain the incident evidence, continue daily-review observation, and treat repetition on the same provider/scenario pair as escalation input before any broader rollout claim
 
+- 2026-05-11T12:58:41Z follow-up note: `canary_1e68a8b_smoke37` passed cleanly on all three providers, so the cumulative incident count remains `1` with no new canary incident introduced by the same-day follow-up review.
+
 Update this file immediately if any later checkpoint or admitted workflow records a canary-impacting defect.

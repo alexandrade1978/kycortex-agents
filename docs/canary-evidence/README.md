@@ -28,10 +28,10 @@ docs/canary-evidence/be748fa/
 
 Historical bundles, abort bundles, and active candidate bundles may coexist under this root.
 
-## Current Active Bundle
+## Latest Retained Bundle
 
-- Active candidate: `1af2d8d` (`v1.0.13a11`)
-- State: minimum window satisfied; awaiting explicit user authorization
+- Latest retained candidate: `1af2d8d` (`v1.0.13a11`)
+- State: minimum window satisfied; historical bundle superseded by `v1.0.13a12` publication
 - Current cumulative result: `121/121` accepted workflows, `0` incidents, `0` rollbacks
 - Minimum window satisfied: `2026-05-11T05:11:04Z`
 
@@ -51,7 +51,7 @@ Keep the following bundles under this root because they still carry operational 
 
 | Candidate | State | Keep? | Reason |
 | --- | --- | --- | --- |
-| `1af2d8d` | active daily-review canary | yes | Current release candidate under observation. |
+| `1af2d8d` | completed minimum-window canary, later superseded | yes | Retained historical evidence for the `v1.0.13a11` line after the repository moved forward with `v1.0.13a12` publication instead of promoting `v1.0.13a11`. |
 | `f99a38d` | historical live window left open | yes | Retained evidence of an earlier canary that reached 100+ workflows and daily reviews; useful for lineage and prior operator decisions. |
 | `c74e957` | aborted after code-validation incident | yes | Zero-budget incident evidence must remain reviewable. |
 | `8bfdc29` | aborted after code-validation incident | yes | Retained abort evidence for failed candidate history. |

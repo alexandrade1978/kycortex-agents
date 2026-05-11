@@ -1,6 +1,6 @@
 # Completion Review - 1af2d8d
 
-Decision: **awaiting explicit user authorization — minimum canary window satisfied**
+Decision: **closed without promotion — minimum canary window satisfied, then superseded by `v1.0.13a12` publication**
 
 ## Current State
 
@@ -24,12 +24,13 @@ Decision: **awaiting explicit user authorization — minimum canary window satis
 - repair_cycles_total: 0
 - provider health: anthropic 42/42, openai 40/40, ollama 39/39
 - published daily-review packets retained for this canary window: 7
+- final disposition: retained as historical evidence after `v1.0.13a12` publication; no promotion path pursued for `v1.0.13a11`
 
 ## Canary Window Parameters
 
 - minimum 7-day window satisfied at: `2026-05-11T05:11:04Z`
 - 100-workflows requirement: SATISFIED
-- promotion decision: requires explicit user authorization after 7-day window expires
+- promotion decision: not pursued; superseded by the newer `v1.0.13a12` release line
 
 ## Promotion Criteria
 
@@ -39,7 +40,7 @@ All of the following must be met before promotion can be proposed:
 2. 100+ eligible workflows admitted — DONE (121/121)
 3. Zero incidents and zero rollbacks throughout window — DONE
 4. Daily review evidence complete and green — DONE
-5. Explicit user authorization to promote — PENDING
+5. Explicit user authorization to promote — NOT APPLICABLE (the release path moved to `v1.0.13a12` instead)
 
 ## Daily Review Log
 

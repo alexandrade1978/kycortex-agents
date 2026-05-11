@@ -4,34 +4,33 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Current Snapshot
 
-- Package version in `pyproject.toml`: `1.0.13a12`
-- Latest released version: `1.0.13a11`
-- Latest published release: `1.0.13a11`
-- Latest published tag: `v1.0.13a11`
+- Package version in `pyproject.toml`: `1.0.13a13.dev0`
+- Latest released version: `1.0.13a12`
+- Latest published release: `1.0.13a12`
+- Latest published tag: `v1.0.13a12`
 - Current branch for release preparation: `main`
-- Release candidate under canary record: historical `v1.0.13a11` bundle retained at `docs/canary-evidence/1af2d8d/`
-- Release publish action: preparing `v1.0.13a12` for tag and workflow publication.
+- Release candidate under canary record: none currently open
+- Release publish action: no release flow is in progress.
 
 ## Current Posture
 
-- Published package baseline is still `v1.0.13a11` until the `v1.0.13a12` tag is published.
-- The `1.0.13a12` release candidate extends `1.0.13a11` with hardened release-user-smoke qualification through scenario rotation and strict typing for the new scenario profiles.
-- The retained Phase 16 canary bundle for `v1.0.13a11` remains at `docs/canary-evidence/1af2d8d/` as historical evidence and is not the promotion target for this release slice.
-- The deterministic local release gate for `1.0.13a12` is now green on the current `main` head; tag publication is the next release step.
-- A fresh canary decision for `v1.0.13a12` will require its own candidate-specific evidence after publication.
+- Published package baseline is now `v1.0.13a12`.
+- The `1.0.13a12` release extends `1.0.13a11` with hardened release-user-smoke qualification through scenario rotation and strict typing for the new scenario profiles.
+- The retained Phase 16 canary bundle for `v1.0.13a11` remains at `docs/canary-evidence/1af2d8d/` as historical evidence and is explicitly superseded by the `v1.0.13a12` publication path.
+- No active canary record is currently open for `v1.0.13a12`; any broader rollout claim will require a fresh candidate-specific canary bundle.
 
 ## Repository Release Gate
 
-- The previous deterministic repository release gate is green on `1af2d8d` (CI run `25299510656`, Release `25299517420`).
-- The current `1.0.13a12` release candidate has cleared the full local release gate on `main` (`release_metadata_check`, `make release-metadata-check`, `release_check`, `make release-check`).
-- The retained empirical floor includes the clean `v1.0.13a11` canary evidence and the release-user-smoke scenario-rotation improvements now versioned in the `1.0.13a12` candidate line.
+- The deterministic repository release gate is green on `89d6e13`.
+- The GitHub release for `v1.0.13a12` published the wheel, source distribution, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
+- The retained empirical floor includes the clean `v1.0.13a11` canary evidence and the release-user-smoke scenario-rotation improvements now versioned in `v1.0.13a12`.
 - No release workflow is currently in progress.
 
 ## Next Release-Facing Action
 
-1. Publish the release-preparation commit for `1.0.13a12`.
-2. Push tag `v1.0.13a12` and verify the GitHub release workflow.
-3. After publication, open a fresh candidate-specific canary path if release expansion beyond package publication is still desired.
+1. Decide whether to open a fresh canary path for `v1.0.13a12` or keep the release at package-publication scope only.
+2. Continue milestone engineering on `1.0.13a13.dev0`.
+3. Keep canary and go-live decisions separately gated from package publication.
 
 ## Canonical References
 

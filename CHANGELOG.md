@@ -6,6 +6,8 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
+- Current package version is now `1.0.13a13.dev0` ahead of the next alpha release.
+- The last published and trusted alpha baseline is `1.0.13a12`.
 - No unreleased changes are recorded yet.
 
 ## 1.0.13a12 - 2026-05-11

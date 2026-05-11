@@ -1,6 +1,6 @@
 {
   "captured_at": "2026-05-04T05:11:04Z",
-    "last_updated": "2026-05-11T07:05:48Z",
+    "last_updated": "2026-05-11T08:27:38Z",
   "candidate": {
     "tag": "v1.0.13a11",
     "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
@@ -25,6 +25,6 @@
     "incidents": 0,
     "rollbacks": 0,
     "checkpoints_reached": ["first-accepted", "10-workflows", "25-workflows", "50-workflows", "100-workflows"],
-    "next_checkpoint": "explicit-user-authorization"
+    "next_checkpoint": "historical-retained-bundle"
   }
 }

@@ -6,8 +6,16 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-- Current package version is now `1.0.13a12.dev0` ahead of the next alpha release.
-- The last published and trusted alpha baseline is `1.0.13a11`.
+- No unreleased changes are recorded yet.
+
+## 1.0.13a12 - 2026-05-11
+
+Version `1.0.13a12` is now the released alpha package baseline.
+
+This release extends `1.0.13a11` with hardened release-user-smoke qualification and more informative daily canary signal collection.
+
+### Changed
+
 - CI mypy hotfix: `examples/example_release_user_smoke.py` now types scenario profiles with a dedicated `TypedDict`, keeping the daily-canary scenario rotation slice green under strict typing on Python 3.10 and 3.12.
 - `examples/example_release_user_smoke.py` now supports scenario profiles (`baseline`, `tight_margin`, `many_expenses`) via `--scenario`, so daily canary checks can keep temporal signal while varying validation inputs.
 - The release-user-smoke project/task prompts now embed scenario focus text, and validation executes scenario-specific income/expense samples while preserving `baseline` as the historical default.

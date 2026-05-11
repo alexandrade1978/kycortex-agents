@@ -17,10 +17,10 @@ This file is the short repository-owned snapshot of the current release posture 
 - Published package baseline is `v1.0.13a11`.
 - The `1.0.13a11` release extends `1.0.13a10` with a comprehensive partial-branch coverage campaign, reaching 99.89% branch coverage (2568 tests).
 - Phase 16 canary record for `v1.0.13a11` is now open under `docs/canary-evidence/1af2d8d/`.
-- Canary traffic has been admitted and is now in daily-review phase.
-- Current canary cumulative state: `118/118` accepted workflows, `0` incidents, `0` rollbacks.
-- Published daily-review evidence currently covers `2026-05-04`, `2026-05-05`, `2026-05-06`, `2026-05-07`, `2026-05-09`, and `2026-05-10`.
-- The 7-day minimum window remains open until `2026-05-11T05:11:04Z`; promotion is still blocked until that time gate and explicit user authorization are both satisfied.
+- Canary minimum window is now satisfied, and current publication verification is pending.
+- Current canary cumulative state: `121/121` accepted workflows, `0` incidents, `0` rollbacks.
+- Published daily-review evidence currently covers `2026-05-04`, `2026-05-05`, `2026-05-06`, `2026-05-07`, `2026-05-09`, `2026-05-10`, and `2026-05-11`.
+- The 7-day minimum window was satisfied at `2026-05-11T05:11:04Z`; promotion remains blocked until current publication verification completes and explicit user authorization is provided.
 
 ## Repository Release Gate
 
@@ -31,9 +31,9 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Next Release-Facing Action
 
-1. Continue daily-review canary cycles for eligible `release-user-smoke` workflows until the minimum window expires.
-2. Continue milestone engineering on `1.0.13a12.dev0` in parallel with canary monitoring.
-3. Keep canary and go-live decisions separately gated, and request explicit user authorization before any promotion after the time gate is satisfied.
+1. Complete publication verification for the current smoke42 canary slice.
+2. Continue milestone engineering on `1.0.13a12.dev0` in parallel while the promotion decision remains open.
+3. Keep canary and go-live decisions separately gated until explicit user authorization is provided.
 
 ## Canonical References
 

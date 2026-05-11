@@ -1,0 +1,53 @@
+{
+  "artifact_type": "daily-review",
+  "canary_commit": "1e68a8b",
+  "review_date": "2026-05-11",
+  "timestamp": "2026-05-11T12:41:39Z",
+  "daily_review_day": 1,
+  "smoke_batch": "smoke36",
+  "retry_batch": "smoke36_retry1",
+  "workflows_run": 4,
+  "workflows_passed": 3,
+  "workflows_failed": 1,
+  "incidents": 1,
+  "providers": {
+    "anthropic": {
+      "status": "failed_then_recovered_on_retry1",
+      "classification": "provider_transient",
+      "error_type": "ProviderTransientError",
+      "retryable": true,
+      "artifact_validation": "passed_on_retry1",
+      "task_public_contract_preflight": "passed_on_retry1",
+      "import_validation": "passed_on_retry1",
+      "durations_ms": {
+        "failed_run_total": 8298.792,
+        "retry_run_total": 18835.029
+      },
+      "failed_at": "2026-05-11T12:39:35Z",
+      "recovered_at": "2026-05-11T12:41:39Z"
+    },
+    "openai": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 17519.323
+    },
+    "ollama": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 17741.91
+    }
+  },
+  "cumulative_workflows_seen": 104,
+  "cumulative_workflows_accepted": 103,
+  "cumulative_workflows_failed": 1,
+  "cumulative_incidents": 1,
+  "cumulative_rollbacks": 0,
+  "accepted_workflow_rate": 0.9903846153846154,
+  "non_accepted_share": 0.009615384615384616,
+  "window_expires": "2026-05-18T11:02:46Z",
+  "verdict": "recovered-retryable-incident-still-under-daily-review"
+}

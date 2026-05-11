@@ -1,6 +1,6 @@
 # Canary Record - 1e68a8b
 
-Status: active; `100/100` accepted, `0` incidents, `0` rollback actions
+Status: active; `103/104` accepted, `1` incident, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2`.
 
@@ -61,10 +61,14 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - smoke batch `canary_1e68a8b_smoke35`: `2/2` workflows accepted (`anthropic=tight_margin`, `openai=many_expenses`), with `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles
 - 100-workflows checkpoint reached at `2026-05-11T12:30:16Z`: cumulative `100/100` accepted, `0` incidents, `0` rollbacks
 - provider health after 100-workflows checkpoint: anthropic `35/35` accepted, openai `33/33` accepted, ollama `32/32` accepted
+- smoke batch `canary_1e68a8b_smoke36`: `2/3` workflows accepted with rotated scenario assignment (anthropic=`many_expenses`, openai=`baseline`, ollama=`tight_margin`); `openai=baseline` and `ollama=tight_margin` passed with persisted `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles, while `anthropic=many_expenses` failed in `arch` with retryable `ProviderTransientError` before code-task validation began
+- smoke batch `canary_1e68a8b_smoke36_retry1`: `1/1` workflow accepted on a fresh root for the same provider/scenario pair (`anthropic=many_expenses`), with `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles
+- daily-review day-1 reached at `2026-05-11T12:41:39Z`: cumulative `103/104` accepted, `1` incident, `0` rollbacks
+- provider health after daily-review day-1: anthropic `36/37` accepted, openai `34/34` accepted, ollama `33/33` accepted
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
-- incidents: `0`
+- incidents: `1` (`provider_transient` on `anthropic=many_expenses` in `smoke36`, recovered on `smoke36_retry1`)
 - rollbacks: `0`
-- next checkpoint: `daily-review day-1`
+- next checkpoint: `daily-review day-2`
 
 ## Evidence References
 
@@ -80,3 +84,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - 25-workflows checkpoint: `validation-artifacts/checkpoint-25-workflows-2026-05-11T114720Z.json`
 - 50-workflows checkpoint: `validation-artifacts/checkpoint-50-workflows-2026-05-11T120620Z.json`
 - 100-workflows checkpoint: `validation-artifacts/checkpoint-100-workflows-2026-05-11T123016Z.json`
+- daily-review day-1: `validation-artifacts/daily-review-2026-05-11T124139Z.json`

@@ -1,24 +1,25 @@
 {
   "captured_at": "2026-05-11T11:09:14Z",
-  "last_updated": "2026-05-11T12:30:16Z",
-  "status": "active-canary-100-workflows-clean",
+  "last_updated": "2026-05-11T12:41:39Z",
+  "status": "active-canary-daily-review-day-1-with-recovered-provider-transient-incident",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
   "telemetry_scope": {
-    "source": "smoke01-smoke35 expanded early-window batches",
-    "live_canary_workflows": 100
+    "source": "smoke01-smoke36 plus targeted fresh-root replay of the failed anthropic many_expenses cell",
+    "live_canary_workflows": 104
   },
   "provider_runtime_summary": {
     "anthropic": {
       "model": "claude-haiku-4-5-20251001",
       "status": "healthy",
-      "smoke_result": "passed",
+      "smoke_result": "one provider_transient failure in smoke36, targeted replay passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 17585.853,
-        "cumulative_window_total": 607142.627
+        "latest_failed_total": 8298.792,
+        "latest_replay_total": 18835.029,
+        "cumulative_window_total": 634276.448
       }
     },
     "openai": {
@@ -27,8 +28,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 14385.367,
-        "cumulative_window_total": 554872.403
+        "latest_batch_total": 17519.323,
+        "cumulative_window_total": 572391.726
       }
     },
     "ollama": {
@@ -37,23 +38,23 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 16032.234,
-        "cumulative_window_total": 501518.883
+        "latest_batch_total": 17741.91,
+        "cumulative_window_total": 519260.793
       }
     }
   },
   "canary_summary": {
-    "batches_run": 35,
-    "workflows_run": 100,
-    "workflows_accepted": 100,
-    "acceptance_criteria_met": "passed_all",
-    "task_public_contract_preflight": "passed_all",
-    "import_validation": "passed_all",
+    "batches_run": 37,
+    "workflows_run": 104,
+    "workflows_accepted": 103,
+    "acceptance_criteria_met": "one_failed_then_targeted_replay_passed",
+    "task_public_contract_preflight": "passed_on_completed_runs",
+    "import_validation": "passed_on_completed_runs",
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 35,
-      "openai": 33,
-      "ollama": 32
+      "anthropic": 37,
+      "openai": 34,
+      "ollama": 33
     },
     "latest_rotated_scenarios": {
       "smoke01": {
@@ -225,6 +226,14 @@
       "smoke35": {
         "anthropic": "tight_margin",
         "openai": "many_expenses"
+      },
+      "smoke36": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke36_retry1": {
+        "anthropic": "many_expenses"
       }
     }
   },
@@ -238,6 +247,8 @@
     "All three providers remained healthy through smoke01-smoke18 with zero repair cycles, acceptance_criteria_met=true on every persisted workflow, and task public-contract/import validation passing on every code task.",
     "100-workflows checkpoint reached at 2026-05-11T12:30:16Z with 100/100 cumulative workflows accepted.",
     "All enabled providers remained healthy through smoke01-smoke35, acceptance_criteria_met=true on every persisted workflow, task public-contract/import validation passed on every code task, and repair_cycles_total remained zero.",
-    "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly multiple times before the 100-workflows checkpoint."
+    "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly multiple times before the 100-workflows checkpoint.",
+    "Daily-review day-1 at 2026-05-11T12:41:39Z added smoke36 plus targeted replay smoke36_retry1, bringing cumulative state to 103/104 accepted with one retryable provider_transient incident and zero rollbacks.",
+    "Anthropic many_expenses failed at 2026-05-11T12:39:35Z with ProviderTransientError before code-task validation; fresh-root replay passed at 2026-05-11T12:41:39Z."
   ]
 }

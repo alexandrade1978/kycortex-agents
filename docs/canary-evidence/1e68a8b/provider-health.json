@@ -3,35 +3,35 @@
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
-  "captured_at": "2026-05-11T12:30:16Z",
-  "source": "output/canary_1e68a8b_smoke01..smoke35",
-  "status": "healthy_100_workflows_checkpoint",
+  "captured_at": "2026-05-11T12:41:39Z",
+  "source": "output/canary_1e68a8b_smoke01..smoke36 plus smoke36_retry1 targeted replay",
+  "status": "healthy_with_recorded_provider_transient_incident",
   "providers": {
     "anthropic": {
       "healthy": true,
-      "accepted_runs": 35,
-      "total_runs": 35,
-      "failed_runs": 0,
+      "accepted_runs": 36,
+      "total_runs": 37,
+      "failed_runs": 1,
       "model": "claude-haiku-4-5-20251001"
     },
     "openai": {
       "healthy": true,
-      "accepted_runs": 33,
-      "total_runs": 33,
+      "accepted_runs": 34,
+      "total_runs": 34,
       "failed_runs": 0,
       "model": "gpt-4o-mini"
     },
     "ollama": {
       "healthy": true,
-      "accepted_runs": 32,
-      "total_runs": 32,
+      "accepted_runs": 33,
+      "total_runs": 33,
       "failed_runs": 0,
       "model": "qwen2.5-coder:7b"
     }
   },
   "notes": [
-    "Derived from repository-owned ProjectState exports for smoke01-smoke35.",
-    "All enabled providers remained healthy through the 100-workflows checkpoint.",
-    "The same anthropic baseline provider/scenario pair that failed on held candidate c17c749 passed cleanly multiple times on 1e68a8b before the 100-workflows checkpoint."
+    "Derived from repository-owned ProjectState exports for smoke01-smoke36 plus the targeted fresh-root replay smoke36_retry1.",
+    "An isolated retryable ProviderTransientError on anthropic many_expenses in smoke36 was contained by fresh-root replay smoke36_retry1, which passed cleanly.",
+    "The active canary remains inside non-zero policy budgets and continues under daily review."
   ]
 }

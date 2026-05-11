@@ -1,14 +1,14 @@
 {
   "captured_at": "2026-05-04T05:11:04Z",
-  "last_updated": "2026-05-10T01:14:52Z",
-  "status": "daily-review-in-progress",
+  "last_updated": "2026-05-11T07:05:48Z",
+  "status": "canary-review-complete-pending-user-authorization",
   "candidate": {
     "tag": "v1.0.13a11",
     "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
   },
   "telemetry_scope": {
     "source": "canonical 5x3 admission preflight + expanded smoke canary window",
-    "live_canary_workflows": 118
+    "live_canary_workflows": 121
   },
   "provider_runtime_summary": {
     "anthropic": {
@@ -36,20 +36,20 @@
     }
   },
   "canary_summary": {
-    "batches_run": 41,
-    "workflows_run": 118,
-    "workflows_accepted": 118,
+    "batches_run": 42,
+    "workflows_run": 121,
+    "workflows_accepted": 121,
     "artifact_validation": "passed_all",
     "latest_daily_review_sample_balances": {
-      "anthropic_baseline": 2650.00,
-      "openai_tight_margin": 50.00,
-      "ollama_many_expenses": 4343.25
+      "anthropic_tight_margin": 50.00,
+      "openai_many_expenses": 4343.25,
+      "ollama_baseline": 2650.00
     },
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 41,
-      "openai": 39,
-      "ollama": 38
+      "anthropic": 42,
+      "openai": 40,
+      "ollama": 39
     }
   },
   "notes": [
@@ -67,6 +67,8 @@
     "Daily-review day-4 at 2026-05-07T22:57:34Z added smoke39 with rotated scenario assignment (anthropic=tight_margin, openai=many_expenses, ollama=baseline), cumulative 112/112 with zero incidents.",
     "No daily-review packet was published on 2026-05-08 UTC; canary remained in observation and promotion stayed blocked by the time gate.",
     "Daily-review day-5 at 2026-05-09T02:43:33Z added smoke40 with rotated scenario assignment (anthropic=many_expenses, openai=baseline, ollama=tight_margin), cumulative 115/115 with zero incidents.",
-    "Daily-review day-6 at 2026-05-10T01:14:52Z added smoke41 with rotated scenario assignment (anthropic=baseline, openai=tight_margin, ollama=many_expenses), cumulative 118/118 with zero incidents."
+    "Daily-review day-6 at 2026-05-10T01:14:52Z added smoke41 with rotated scenario assignment (anthropic=baseline, openai=tight_margin, ollama=many_expenses), cumulative 118/118 with zero incidents.",
+    "Daily-review day-7 at 2026-05-11T07:05:48Z added smoke42 with rotated scenario assignment (anthropic=tight_margin, openai=many_expenses, ollama=baseline), cumulative 121/121 with zero incidents.",
+    "Minimum canary time gate satisfied at 2026-05-11T05:11:04Z; seven published daily-review packets are now recorded and explicit user authorization remains required for promotion."
   ]
 }

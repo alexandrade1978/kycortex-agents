@@ -18,6 +18,8 @@ DEFAULT_MODELS = {
     "ollama": "qwen2.5-coder:7b",
 }
 
+DEFAULT_RELEASE_USER_SMOKE_MAX_TOKENS = 1200
+
 
 class SmokeScenario(TypedDict):
     income: float
@@ -110,6 +112,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum repair cycles allowed during the smoke run.",
     )
     parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_RELEASE_USER_SMOKE_MAX_TOKENS,
+        help="Completion budget for the smoke run. Defaults to a compact but safer 1200-token budget.",
+    )
+    parser.add_argument(
         "--scenario",
         choices=sorted(SMOKE_SCENARIOS),
         default="baseline",
@@ -132,11 +140,12 @@ def resolve_scenario(name: str) -> SmokeScenario:
 def build_config(args: argparse.Namespace, output_dir: str) -> KYCortexConfig:
     provider = args.provider
     model = args.model or DEFAULT_MODELS[provider]
+    max_tokens = getattr(args, "max_tokens", DEFAULT_RELEASE_USER_SMOKE_MAX_TOKENS)
     config_kwargs = {
         "llm_provider": provider,
         "llm_model": model,
         "temperature": 0.0,
-        "max_tokens": 700,
+        "max_tokens": max_tokens,
         "timeout_seconds": 180.0,
         "workflow_failure_policy": args.failure_policy,
         "workflow_max_repair_cycles": args.max_repair_cycles,

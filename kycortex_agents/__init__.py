@@ -40,7 +40,7 @@ from kycortex_agents.types import (
 	WorkflowStatus,
 )
 
-__version__ = "1.0.13b1"
+__version__ = "1.0.13b2.dev0"
 
 __all__ = [
 	"AgentInput",

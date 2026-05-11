@@ -1907,6 +1907,55 @@ def test_release_user_smoke_build_project_includes_public_contract_anchor(tmp_pa
         assert "- Do not wrap income and expenses in a request object, dataclass, dict, tuple, or alternate signature." in task.description
 
 
+def test_release_user_smoke_build_config_uses_safer_default_completion_budget(monkeypatch, tmp_path):
+    module = _load_example_module(
+        "example_release_user_smoke_default_max_tokens_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+
+    args = argparse.Namespace(
+        provider="anthropic",
+        model=None,
+        output_dir=None,
+        base_url=None,
+        ollama_num_ctx=16384,
+        failure_policy="continue",
+        max_repair_cycles=1,
+        scenario="baseline",
+    )
+
+    config = module.build_config(args, str(tmp_path / "release-user-smoke"))
+
+    assert config.max_tokens == 1200
+
+
+def test_release_user_smoke_build_config_accepts_completion_budget_override(monkeypatch, tmp_path):
+    module = _load_example_module(
+        "example_release_user_smoke_max_tokens_override_test",
+        "examples/example_release_user_smoke.py",
+    )
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+
+    args = argparse.Namespace(
+        provider="anthropic",
+        model=None,
+        output_dir=None,
+        base_url=None,
+        ollama_num_ctx=16384,
+        failure_policy="continue",
+        max_repair_cycles=1,
+        max_tokens=900,
+        scenario="baseline",
+    )
+
+    config = module.build_config(args, str(tmp_path / "release-user-smoke"))
+
+    assert config.max_tokens == 900
+
+
 def test_release_user_smoke_validation_rejects_incompatible_calculate_budget_balance_signature(tmp_path):
     module = _load_example_module(
         "example_release_user_smoke_signature_test",

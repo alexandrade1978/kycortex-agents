@@ -1,6 +1,6 @@
 # Canary Record - 1e68a8b
 
-Status: active; `3/3` accepted, `0` incidents, `0` rollback actions
+Status: active; `10/10` accepted, `0` incidents, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2`.
 
@@ -44,11 +44,16 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - release-candidate gate evidence is available for `v1.0.13b2`
 - GitHub prerelease publication closed with wheel, source distribution, `release-artifact-manifest.json`, and `release-promotion-summary.json`
 - canary traffic admitted: `2026-05-11T11:06:41Z` — first-accepted checkpoint reached
-- smoke batch `canary_1e68a8b_smoke01`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`baseline`, openai=`tight_margin`, ollama=`many_expenses`), `0` repair cycles, artifact_validation=passed
-- provider health after first checkpoint: anthropic `1/1` accepted, openai `1/1` accepted, ollama `1/1` accepted
+- smoke batch `canary_1e68a8b_smoke01`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`baseline`, openai=`tight_margin`, ollama=`many_expenses`), `0` repair cycles, persisted artifact validation passed
+- smoke batch `canary_1e68a8b_smoke02`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`tight_margin`, openai=`many_expenses`, ollama=`baseline`), `0` repair cycles, persisted artifact validation passed
+- smoke batch `canary_1e68a8b_smoke03`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`many_expenses`, openai=`baseline`, ollama=`tight_margin`), `0` repair cycles, persisted artifact validation passed
+- smoke batch `canary_1e68a8b_smoke04`: `1/1` workflows accepted (`anthropic=baseline`), `0` repair cycles, persisted artifact validation passed
+- 10-workflows checkpoint reached at `2026-05-11T11:26:33Z`: cumulative `10/10` accepted, `0` incidents, `0` rollbacks
+- provider health after checkpoint: anthropic `4/4` accepted, openai `3/3` accepted, ollama `3/3` accepted
+- the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `0`
 - rollbacks: `0`
-- next checkpoint: `10-workflows`
+- next checkpoint: `25-workflows`
 
 ## Evidence References
 
@@ -60,3 +65,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - canary logs: `incident-log.md`, `rollback-log.md`, `completion-review.md`
 - retained validation root for this candidate: `validation-artifacts/`
 - first-accepted checkpoint: `validation-artifacts/checkpoint-first-accepted-2026-05-11T110641Z.json`
+- 10-workflows checkpoint: `validation-artifacts/checkpoint-10-workflows-2026-05-11T112633Z.json`

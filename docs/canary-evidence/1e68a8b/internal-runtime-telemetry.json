@@ -1,14 +1,14 @@
 {
   "captured_at": "2026-05-11T11:09:14Z",
-  "last_updated": "2026-05-11T11:09:14Z",
-  "status": "active-canary-first-accepted",
+  "last_updated": "2026-05-11T11:26:33Z",
+  "status": "active-canary-10-workflows-clean",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
   "telemetry_scope": {
-    "source": "smoke01 first-admitted batch",
-    "live_canary_workflows": 3
+    "source": "smoke01-smoke04 early-window batches",
+    "live_canary_workflows": 10
   },
   "provider_runtime_summary": {
     "anthropic": {
@@ -17,7 +17,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 18680.26
+        "latest_batch_total": 15604.773,
+        "cumulative_window_total": 68023.137
       }
     },
     "openai": {
@@ -26,7 +27,8 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 23330.169
+        "latest_batch_total": 18405.098,
+        "cumulative_window_total": 61858.645
       }
     },
     "ollama": {
@@ -35,32 +37,48 @@
       "smoke_result": "passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 18517.977
+        "latest_batch_total": 16746.4,
+        "cumulative_window_total": 52468.977
       }
     }
   },
   "canary_summary": {
-    "batches_run": 1,
-    "workflows_run": 3,
-    "workflows_accepted": 3,
-    "artifact_validation": "passed",
+    "batches_run": 4,
+    "workflows_run": 10,
+    "workflows_accepted": 10,
+    "artifact_validation": "passed_all",
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 1,
-      "openai": 1,
-      "ollama": 1
+      "anthropic": 4,
+      "openai": 3,
+      "ollama": 3
     },
     "latest_rotated_scenarios": {
       "smoke01": {
         "anthropic": "baseline",
         "openai": "tight_margin",
         "ollama": "many_expenses"
+      },
+      "smoke02": {
+        "anthropic": "tight_margin",
+        "openai": "many_expenses",
+        "ollama": "baseline"
+      },
+      "smoke03": {
+        "anthropic": "many_expenses",
+        "openai": "baseline",
+        "ollama": "tight_margin"
+      },
+      "smoke04": {
+        "anthropic": "baseline"
       }
     }
   },
   "notes": [
     "Pre-canary bundle opened after the v1.0.13b2 prerelease closed cleanly.",
     "First-admitted checkpoint reached at 2026-05-11T11:06:41Z with 3/3 smoke workflows accepted.",
-    "Provider health remained healthy throughout; anthropic baseline completed with stop_reason=end_turn, openai with finish_reason=stop, and ollama with done_reason=stop."
+    "10-workflows checkpoint reached at 2026-05-11T11:26:33Z with 10/10 cumulative workflows accepted.",
+    "All three providers remained healthy through smoke01-smoke04 with zero repair cycles and persisted artifact validation passed on every run.",
+    "The anthropic baseline provider/scenario pair that failed on held candidate c17c749 completed cleanly on smoke04 for 1e68a8b."
   ]
 }

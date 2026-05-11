@@ -25,6 +25,6 @@
     "incidents": 0,
     "rollbacks": 0,
     "checkpoints_reached": ["first-accepted", "10-workflows", "25-workflows", "50-workflows", "100-workflows"],
-    "next_checkpoint": "publication-verification"
+    "next_checkpoint": "explicit-user-authorization"
   }
 }

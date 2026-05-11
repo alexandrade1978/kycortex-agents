@@ -1,7 +1,7 @@
 {
   "captured_at": "2026-05-04T05:11:04Z",
   "last_updated": "2026-05-11T07:05:48Z",
-  "status": "minimum-window-satisfied-publication-verification-pending",
+  "status": "canary-review-complete-pending-user-authorization",
   "candidate": {
     "tag": "v1.0.13a11",
     "commit": "1af2d8df1498ec2d98a09f9a7d2fa3767225532f"
@@ -69,6 +69,7 @@
     "Daily-review day-5 at 2026-05-09T02:43:33Z added smoke40 with rotated scenario assignment (anthropic=many_expenses, openai=baseline, ollama=tight_margin), cumulative 115/115 with zero incidents.",
     "Daily-review day-6 at 2026-05-10T01:14:52Z added smoke41 with rotated scenario assignment (anthropic=baseline, openai=tight_margin, ollama=many_expenses), cumulative 118/118 with zero incidents.",
     "Daily-review day-7 at 2026-05-11T07:05:48Z added smoke42 with rotated scenario assignment (anthropic=tight_margin, openai=many_expenses, ollama=baseline), cumulative 121/121 with zero incidents.",
-    "Minimum canary time gate satisfied at 2026-05-11T05:11:04Z; seven published daily-review packets are now recorded and current publication verification is pending."
+    "Minimum canary time gate satisfied at 2026-05-11T05:11:04Z; seven published daily-review packets are now recorded and current publication verification completed successfully.",
+    "GitHub Actions run 25655840241 completed successfully for commit 3529ed4; explicit user authorization is now the only remaining promotion gate."
   ]
 }

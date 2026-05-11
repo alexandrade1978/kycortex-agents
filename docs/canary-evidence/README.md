@@ -31,7 +31,7 @@ Historical bundles, abort bundles, and active candidate bundles may coexist unde
 ## Current Active Bundle
 
 - Active candidate: `1af2d8d` (`v1.0.13a11`)
-- State: minimum window satisfied; publication verification pending
+- State: minimum window satisfied; awaiting explicit user authorization
 - Current cumulative result: `121/121` accepted workflows, `0` incidents, `0` rollbacks
 - Minimum window satisfied: `2026-05-11T05:11:04Z`
 

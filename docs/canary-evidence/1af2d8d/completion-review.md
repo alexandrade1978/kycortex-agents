@@ -1,6 +1,6 @@
 # Completion Review - 1af2d8d
 
-Decision: **in-progress — minimum canary window satisfied; publication verification pending**
+Decision: **awaiting explicit user authorization — minimum canary window satisfied**
 
 ## Current State
 
@@ -38,7 +38,7 @@ All of the following must be met before promotion can be proposed:
 1. 7 consecutive days elapsed since canary open — DONE (satisfied at 2026-05-11T05:11:04Z)
 2. 100+ eligible workflows admitted — DONE (121/121)
 3. Zero incidents and zero rollbacks throughout window — DONE
-4. Daily review evidence complete and green — DONE locally; current publication verification pending
+4. Daily review evidence complete and green — DONE
 5. Explicit user authorization to promote — PENDING
 
 ## Daily Review Log
@@ -52,4 +52,4 @@ All of the following must be met before promotion can be proposed:
 | 2026-05-08 | 112 (cumulative) | anthropic×39, openai×37, ollama×36 | no packet | 0 | No daily-review packet published on this UTC day; promotion remained blocked by the time gate. |
 | 2026-05-09 | 115 (cumulative) | anthropic×40, openai×38, ollama×37 | all passed | 0 | smoke40 daily-review day-5 with rotated scenario assignment (many_expenses, baseline, tight_margin) |
 | 2026-05-10 | 118 (cumulative) | anthropic×41, openai×39, ollama×38 | all passed | 0 | smoke41 daily-review day-6 with rotated scenario assignment (baseline, tight_margin, many_expenses) |
-| 2026-05-11 | 121 (cumulative) | anthropic×42, openai×40, ollama×39 | all passed | 0 | smoke42 daily-review day-7 with rotated scenario assignment (tight_margin, many_expenses, baseline); current publication verification pending |
+| 2026-05-11 | 121 (cumulative) | anthropic×42, openai×40, ollama×39 | all passed | 0 | smoke42 daily-review day-7 with rotated scenario assignment (tight_margin, many_expenses, baseline); post-push CI `25655840241` completed successfully |

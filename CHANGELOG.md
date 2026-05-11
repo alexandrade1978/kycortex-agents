@@ -6,7 +6,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-Current package version remains `1.0.13b2.dev0`.
+Current package version remains `1.0.13b2`.
 
 ### Changed
 

@@ -1,6 +1,6 @@
 # Completion Review - 1e68a8b
 
-Decision: **open — daily-review day-2 recorded; candidate remains under canary observation while the minimum 7-day window remains open and the retained retryable provider incident is monitored**
+Decision: **open — daily-review day-3 recorded; candidate remains under canary observation while the minimum 7-day window remains open and the retained retryable provider incident is monitored**
 
 ## Current State
 
@@ -28,14 +28,16 @@ Decision: **open — daily-review day-2 recorded; candidate remains under canary
 - same-day daily-review follow-up recorded at `2026-05-11T12:58:41Z`: cumulative `106/107` accepted, `1` incident, `0` rollbacks
 - smoke batch `canary_1e68a8b_smoke38`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`tight_margin`, openai=`many_expenses`, ollama=`baseline`) and persisted acceptance plus validation metadata on every run
 - daily-review day-2 reached at `2026-05-12T10:52:48Z`: cumulative `109/110` accepted, `1` incident, `0` rollbacks
-- cumulative admitted workflows: `109/110`
-- accepted-workflow rate so far: `99.09%`
-- retained non-accepted share so far: `0.91%`
+- smoke batch `canary_1e68a8b_smoke39`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`many_expenses`, openai=`baseline`, ollama=`tight_margin`) and persisted acceptance plus validation metadata on every run
+- daily-review day-3 reached at `2026-05-13T19:52:04Z`: cumulative `112/113` accepted, `1` incident, `0` rollbacks
+- cumulative admitted workflows: `112/113`
+- accepted-workflow rate so far: `99.12%`
+- retained non-accepted share so far: `0.88%`
 - incidents: `1` (`provider_transient`, recovered on targeted replay)
 - zero-budget incidents observed: none
 - rollback actions executed: `0`
 - repair_cycles_total: `0`
-- next checkpoint: `daily-review day-3`
+- next checkpoint: `daily-review day-4`
 
 ## Canary Window Parameters
 
@@ -49,9 +51,9 @@ All of the following must be met before promotion can be proposed:
 
 1. 7 consecutive days elapsed since canary open — NOT YET
 2. 100+ eligible workflows admitted — DONE (`100/100`)
-3. Accepted workflow rate stayed at or above `95.0%` and inside the `5.0%` non-accepted budget — MET SO FAR (`109/110`, `99.09%`)
+3. Accepted workflow rate stayed at or above `95.0%` and inside the `5.0%` non-accepted budget — MET SO FAR (`112/113`, `99.12%`)
 4. No zero-budget incident class observed — MET SO FAR
-5. Early-window burn stayed at or below `50%` of every non-zero budget before mid-window — MET SO FAR (`0.91%` retained non-accepted share remains below the `2.5%` first-half burn threshold)
+5. Early-window burn stayed at or below `50%` of every non-zero budget before mid-window — MET SO FAR (`0.88%` retained non-accepted share remains below the `2.5%` first-half burn threshold)
 6. Explicit promotion decision recorded after the window closes — NOT YET
 
 ## Daily Review Log
@@ -64,3 +66,4 @@ All of the following must be met before promotion can be proposed:
 | 2026-05-11 | 104 (cumulative) | anthropic×37, openai×34, ollama×33 | 103 passed, 1 failed | 1 | smoke36 daily-review day-1 recorded one retryable `ProviderTransientError` on `anthropic=many_expenses`; fresh-root replay `smoke36_retry1` passed and policy budgets remained intact |
 | 2026-05-11 | 107 (cumulative) | anthropic×38, openai×35, ollama×34 | 106 passed, 1 failed | 1 | smoke37 same-day follow-up then passed cleanly on all three providers after day-1 publication CI closed green; the next calendar checkpoint remained `daily-review day-2` |
 | 2026-05-12 | 110 (cumulative) | anthropic×39, openai×36, ollama×35 | 109 passed, 1 failed | 1 | smoke38 daily-review day-2 passed cleanly on all three providers after the next-day backup-gate refresh; the cumulative window remains inside policy budgets and the next calendar checkpoint becomes `daily-review day-3` |
+| 2026-05-13 | 113 (cumulative) | anthropic×40, openai×37, ollama×36 | 112 passed, 1 failed | 1 | smoke39 daily-review day-3 passed cleanly on all three providers after the next UTC-day backup-gate refresh; the cumulative window remains inside policy budgets and the next calendar checkpoint becomes `daily-review day-4` |

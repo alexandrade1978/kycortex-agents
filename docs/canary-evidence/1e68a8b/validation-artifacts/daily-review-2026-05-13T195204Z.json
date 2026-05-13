@@ -1,0 +1,45 @@
+{
+  "artifact_type": "daily-review",
+  "canary_commit": "1e68a8b",
+  "review_date": "2026-05-13",
+  "timestamp": "2026-05-13T19:52:04Z",
+  "daily_review_day": 3,
+  "smoke_batch": "smoke39",
+  "workflows_run": 3,
+  "workflows_passed": 3,
+  "workflows_failed": 0,
+  "new_incidents": 0,
+  "providers": {
+    "anthropic": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 4626.076
+    },
+    "openai": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 7302.93
+    },
+    "ollama": {
+      "status": "passed",
+      "artifact_validation": "passed",
+      "task_public_contract_preflight": "passed",
+      "import_validation": "passed",
+      "duration_ms": 170105.3
+    }
+  },
+  "cumulative_workflows_seen": 113,
+  "cumulative_workflows_accepted": 112,
+  "cumulative_workflows_failed": 1,
+  "cumulative_incidents": 1,
+  "cumulative_rollbacks": 0,
+  "accepted_workflow_rate": 0.9911504424778761,
+  "non_accepted_share": 0.008849557522123908,
+  "window_expires": "2026-05-18T11:02:46Z",
+  "next_checkpoint": "daily-review day-4",
+  "verdict": "daily-review-day-3-passed-window-remains-open"
+}

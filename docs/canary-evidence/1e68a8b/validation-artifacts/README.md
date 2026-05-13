@@ -10,5 +10,6 @@ The 100-workflows checkpoint packet is present for `canary_1e68a8b_smoke01` thro
 The daily-review day-1 packet is present for `canary_1e68a8b_smoke36` plus the targeted replay `canary_1e68a8b_smoke36_retry1`.
 The same-day follow-up daily-review packet is present for `canary_1e68a8b_smoke37`.
 The daily-review day-2 packet is present for `canary_1e68a8b_smoke38`.
+The daily-review day-3 packet is present for `canary_1e68a8b_smoke39`.
 
 Store any subsequent checkpoint or incident evidence here.

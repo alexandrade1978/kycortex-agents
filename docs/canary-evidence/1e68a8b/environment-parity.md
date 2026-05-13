@@ -1,6 +1,6 @@
 # Environment Parity - 1e68a8b
 
-Status: preflight parity captured; canary traffic admitted through daily-review day-2
+Status: preflight parity captured; canary traffic admitted through daily-review day-3
 
 ## Candidate and Runtime
 
@@ -12,7 +12,7 @@ Status: preflight parity captured; canary traffic admitted through daily-review 
 ## Provider Parity
 
 - enabled providers for admitted evidence: `anthropic`, `openai`, `ollama`
-- provider models used across smoke01-smoke38 and the targeted `smoke36_retry1` replay:
+- provider models used across smoke01-smoke39 and the targeted `smoke36_retry1` replay:
   - anthropic: `claude-haiku-4-5-20251001`
   - openai: `gpt-4o-mini`
   - ollama: `qwen2.5-coder:7b`
@@ -20,6 +20,7 @@ Status: preflight parity captured; canary traffic admitted through daily-review 
 - `smoke36` admitted the next rotated daily-review slice (`anthropic=many_expenses`, `openai=baseline`, `ollama=tight_margin`); OpenAI and Ollama passed on the first root, while Anthropic recorded a retryable `ProviderTransientError` before code-task validation and then passed cleanly on fresh-root replay `smoke36_retry1`.
 - `smoke37` added a same-day follow-up review on the next rotated slice (`anthropic=baseline`, `openai=tight_margin`, `ollama=many_expenses`) and all three providers completed cleanly.
 - `smoke38` added `daily-review day-2` on the next UTC day with the next rotated slice (`anthropic=tight_margin`, `openai=many_expenses`, `ollama=baseline`) and all three providers completed cleanly.
+- `smoke39` added `daily-review day-3` on the next UTC day with the next rotated slice (`anthropic=many_expenses`, `openai=baseline`, `ollama=tight_margin`) and all three providers completed cleanly.
 
 ## Persistence and Validation Parity
 
@@ -63,6 +64,7 @@ Status: preflight parity captured; canary traffic admitted through daily-review 
   - `output/canary_1e68a8b_smoke36_retry1/`
   - `output/canary_1e68a8b_smoke37/`
   - `output/canary_1e68a8b_smoke38/`
+  - `output/canary_1e68a8b_smoke39/`
 - every accepted run retained repository-owned artifacts, `acceptance_criteria_met=true`, and code-task validation metadata proving the task public-contract preflight and import checks passed.
 - the only non-accepted admitted run in the active bundle is the retryable `anthropic=many_expenses` provider-transient failure inside `output/canary_1e68a8b_smoke36/`, which terminated before code-task validation and was replayed cleanly on `output/canary_1e68a8b_smoke36_retry1/`.
 
@@ -75,4 +77,4 @@ Status: preflight parity captured; canary traffic admitted through daily-review 
 ## Gate Interpretation
 
 Parity evidence remains sufficient to keep the replacement beta canary window open.
-`daily-review day-2` is now recorded with no new incident and no environment drift; the next operational step is `daily-review day-3` on the next UTC-day review opportunity while the minimum `7`-day window remains open.
+`daily-review day-3` is now recorded with no new incident and no environment drift; the next operational step is `daily-review day-4` on the next UTC-day review opportunity while the minimum `7`-day window remains open.

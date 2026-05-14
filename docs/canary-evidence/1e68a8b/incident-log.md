@@ -25,4 +25,6 @@ No canary incident is recorded through the 100-workflows checkpoint.
 
 - 2026-05-13T19:52:04Z follow-up note: `canary_1e68a8b_smoke39` passed cleanly on all three providers during `daily-review day-3`, so the cumulative incident count remains `1` with no new canary incident introduced by the next-day review.
 
+- 2026-05-14T14:20:59Z follow-up note: `canary_1e68a8b_smoke40` passed cleanly on all three providers during `daily-review day-4`, so the cumulative incident count remains `1` with no new canary incident introduced by the next-day review.
+
 Update this file immediately if any later checkpoint or admitted workflow records a canary-impacting defect.

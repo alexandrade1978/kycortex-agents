@@ -1,61 +1,61 @@
 {
   "captured_at": "2026-05-11T11:09:14Z",
-  "last_updated": "2026-05-13T19:52:04Z",
-  "status": "active-canary-daily-review-day-3-after-recovered-provider-transient-incident",
+  "last_updated": "2026-05-14T14:20:59Z",
+  "status": "active-canary-daily-review-day-4-after-recovered-provider-transient-incident",
   "candidate": {
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
   "telemetry_scope": {
-    "source": "smoke01-smoke39 plus targeted fresh-root replay of the failed anthropic many_expenses cell",
-    "live_canary_workflows": 113
+    "source": "smoke01-smoke40 plus targeted fresh-root replay of the failed anthropic many_expenses cell",
+    "live_canary_workflows": 116
   },
   "provider_runtime_summary": {
     "anthropic": {
       "model": "claude-haiku-4-5-20251001",
       "status": "healthy",
-      "smoke_result": "one provider_transient failure in smoke36, targeted replay passed, smoke37 baseline passed, smoke38 tight_margin passed, smoke39 many_expenses passed",
+      "smoke_result": "one provider_transient failure in smoke36, targeted replay passed, smoke37 baseline passed, smoke38 tight_margin passed, smoke39 many_expenses passed, smoke40 baseline passed",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 4626.076,
+        "latest_batch_total": 4664.683,
         "latest_failed_total": 8298.792,
         "latest_replay_total": 18835.029,
-        "cumulative_window_total": 673850.645
+        "cumulative_window_total": 678515.328
       }
     },
     "openai": {
       "model": "gpt-4o-mini",
       "status": "healthy",
-      "smoke_result": "passed, including smoke39 baseline",
+      "smoke_result": "passed, including smoke40 tight_margin",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 7302.93,
-        "cumulative_window_total": 619826.011
+        "latest_batch_total": 7732.599,
+        "cumulative_window_total": 627558.61
       }
     },
     "ollama": {
       "model": "qwen2.5-coder:7b",
       "status": "healthy",
-      "smoke_result": "passed, including smoke39 tight_margin",
+      "smoke_result": "passed, including smoke40 many_expenses",
       "repair_cycles": 0,
       "task_durations_ms": {
-        "latest_batch_total": 170105.3,
-        "cumulative_window_total": 725629.771
+        "latest_batch_total": 5266.217,
+        "cumulative_window_total": 730895.988
       }
     }
   },
   "canary_summary": {
-    "batches_run": 40,
-    "workflows_run": 113,
-    "workflows_accepted": 112,
+    "batches_run": 41,
+    "workflows_run": 116,
+    "workflows_accepted": 115,
     "acceptance_criteria_met": "one_failed_then_follow_up_runs_passed",
     "task_public_contract_preflight": "passed_on_completed_runs",
     "import_validation": "passed_on_completed_runs",
     "repair_cycles_total": 0,
     "provider_runs": {
-      "anthropic": 40,
-      "openai": 37,
-      "ollama": 36
+      "anthropic": 41,
+      "openai": 38,
+      "ollama": 37
     },
     "latest_rotated_scenarios": {
       "smoke01": {
@@ -250,6 +250,11 @@
         "anthropic": "many_expenses",
         "openai": "baseline",
         "ollama": "tight_margin"
+      },
+      "smoke40": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
       }
     }
   },
@@ -268,6 +273,7 @@
     "Anthropic many_expenses failed at 2026-05-11T12:39:35Z with ProviderTransientError before code-task validation; fresh-root replay passed at 2026-05-11T12:41:39Z.",
     "The same-day follow-up review at 2026-05-11T12:58:41Z added smoke37 with all three rotated provider cells passing cleanly, bringing cumulative state to 106/107 accepted with no new incident.",
     "Daily-review day-2 at 2026-05-12T10:52:48Z added smoke38 with all three rotated provider cells passing cleanly, bringing cumulative state to 109/110 accepted with no new incident.",
-    "Daily-review day-3 at 2026-05-13T19:52:04Z added smoke39 with all three rotated provider cells passing cleanly, bringing cumulative state to 112/113 accepted with no new incident."
+    "Daily-review day-3 at 2026-05-13T19:52:04Z added smoke39 with all three rotated provider cells passing cleanly, bringing cumulative state to 112/113 accepted with no new incident.",
+    "Daily-review day-4 at 2026-05-14T14:20:59Z added smoke40 with all three rotated provider cells passing cleanly, bringing cumulative state to 115/116 accepted with no new incident."
   ]
 }

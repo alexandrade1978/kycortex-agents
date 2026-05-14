@@ -1,6 +1,6 @@
 # Canary Record - 1e68a8b
 
-Status: active; `112/113` accepted, `1` incident, `0` rollback actions
+Status: active; `115/116` accepted, `1` incident, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2`.
 
@@ -74,10 +74,13 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - smoke batch `canary_1e68a8b_smoke39`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`many_expenses`, openai=`baseline`, ollama=`tight_margin`), with `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles on all three providers
 - daily-review day-3 reached at `2026-05-13T19:52:04Z`: cumulative `112/113` accepted, `1` incident, `0` rollbacks
 - provider health after daily-review day-3: anthropic `39/40` accepted, openai `37/37` accepted, ollama `36/36` accepted
+- smoke batch `canary_1e68a8b_smoke40`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`baseline`, openai=`tight_margin`, ollama=`many_expenses`), with `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles on all three providers
+- daily-review day-4 reached at `2026-05-14T14:20:59Z`: cumulative `115/116` accepted, `1` incident, `0` rollbacks
+- provider health after daily-review day-4: anthropic `40/41` accepted, openai `38/38` accepted, ollama `37/37` accepted
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `1` (`provider_transient` on `anthropic=many_expenses` in `smoke36`, recovered on `smoke36_retry1`)
 - rollbacks: `0`
-- next checkpoint: `daily-review day-4`
+- next checkpoint: `daily-review day-5`
 
 ## Evidence References
 
@@ -97,3 +100,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - same-day daily-review follow-up: `validation-artifacts/daily-review-2026-05-11T125841Z.json`
 - daily-review day-2: `validation-artifacts/daily-review-2026-05-12T105248Z.json`
 - daily-review day-3: `validation-artifacts/daily-review-2026-05-13T195204Z.json`
+- daily-review day-4: `validation-artifacts/daily-review-2026-05-14T142059Z.json`

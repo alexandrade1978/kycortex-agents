@@ -3,39 +3,40 @@
     "tag": "v1.0.13b2",
     "commit": "1e68a8bc8e6371b6b425e1ac9ce04e3677141628"
   },
-  "captured_at": "2026-05-14T14:20:59Z",
-  "source": "output/canary_1e68a8b_smoke01..smoke40 plus smoke36_retry1 targeted replay",
+  "captured_at": "2026-05-15T16:08:20Z",
+  "source": "output/canary_1e68a8b_smoke01..smoke41 plus smoke36_retry1 targeted replay",
   "status": "healthy_with_recorded_provider_transient_incident",
   "providers": {
     "anthropic": {
       "healthy": true,
-      "accepted_runs": 40,
-      "total_runs": 41,
+      "accepted_runs": 41,
+      "total_runs": 42,
       "failed_runs": 1,
       "model": "claude-haiku-4-5-20251001"
     },
     "openai": {
       "healthy": true,
-      "accepted_runs": 38,
-      "total_runs": 38,
+      "accepted_runs": 39,
+      "total_runs": 39,
       "failed_runs": 0,
       "model": "gpt-4o-mini"
     },
     "ollama": {
       "healthy": true,
-      "accepted_runs": 37,
-      "total_runs": 37,
+      "accepted_runs": 38,
+      "total_runs": 38,
       "failed_runs": 0,
       "model": "qwen2.5-coder:7b"
     }
   },
   "notes": [
-    "Derived from repository-owned ProjectState exports for smoke01-smoke40 plus the targeted fresh-root replay smoke36_retry1.",
+    "Derived from repository-owned ProjectState exports for smoke01-smoke41 plus the targeted fresh-root replay smoke36_retry1.",
     "An isolated retryable ProviderTransientError on anthropic many_expenses in smoke36 was contained by fresh-root replay smoke36_retry1, which passed cleanly.",
     "The same-day follow-up smoke37 review then passed cleanly on all three providers.",
     "The daily-review day-2 smoke38 review then passed cleanly on all three providers.",
     "The daily-review day-3 smoke39 review then passed cleanly on all three providers.",
     "The daily-review day-4 smoke40 review then passed cleanly on all three providers.",
+    "The daily-review day-5 smoke41 review then passed cleanly on all three providers.",
     "The active canary remains inside non-zero policy budgets and continues under daily review."
   ]
 }

@@ -10,5 +10,6 @@ No rollback or expansion-freeze action was required after `daily-review day-2` `
 No rollback or expansion-freeze action was required after `daily-review day-3` `smoke39`; the cumulative window remained inside policy with no new rollback trigger.
 No rollback or expansion-freeze action was required after `daily-review day-4` `smoke40`; the cumulative window remained inside policy with no new rollback trigger.
 No rollback or expansion-freeze action was required after `daily-review day-5` `smoke41`; the cumulative window remained inside policy with no new rollback trigger.
+No rollback or expansion-freeze action was required after `daily-review day-6` `smoke42`; the cumulative window remained inside policy with no new rollback trigger.
 
 The rollback target remains `89d6e138bc5ff582c9fd2e8b31ec2e2b954c2bbc` / `v1.0.13a12` until replacement-candidate canary evidence proves a safer baseline.

@@ -45,9 +45,9 @@
     }
   },
   "canary_summary": {
-    "batches_run": 43,
-    "workflows_run": 122,
-    "workflows_accepted": 121,
+    "batches_run": 44,
+    "workflows_run": 125,
+    "workflows_accepted": 124,
     "acceptance_criteria_met": "one_failed_then_follow_up_runs_passed",
     "task_public_contract_preflight": "passed_on_completed_runs",
     "import_validation": "passed_on_completed_runs",
@@ -265,6 +265,11 @@
         "anthropic": "many_expenses",
         "openai": "baseline",
         "ollama": "tight_margin"
+      },
+      "smoke43": {
+        "anthropic": "baseline",
+        "openai": "tight_margin",
+        "ollama": "many_expenses"
       }
     }
   },

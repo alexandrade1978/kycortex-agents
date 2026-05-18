@@ -83,5 +83,9 @@
       "daily-review day-6"
     ],
     "next_checkpoint": "daily-review day-7"
-  }
+  },
+  "total_workflows": 125,
+  "accepted_workflows": 124,
+  "acceptance_rate": 0.992,
+  "latest_review": "daily-review day-7"
 }

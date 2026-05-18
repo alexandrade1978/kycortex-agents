@@ -1,0 +1,40 @@
+{
+  "daily_review": "day-7",
+  "review_date": "2026-05-18",
+  "canonical_timestamp": "2026-05-18T21:30:23Z",
+  "batch": "smoke43",
+  "providers": {
+    "anthropic": {
+      "scenario": "baseline",
+      "duration_ms": 17147,
+      "accepted": true,
+      "incidents": 0,
+      "repair_cycles": 0
+    },
+    "openai": {
+      "scenario": "tight_margin",
+      "duration_ms": 16209,
+      "accepted": true,
+      "incidents": 0,
+      "repair_cycles": 0
+    },
+    "ollama": {
+      "scenario": "many_expenses",
+      "duration_ms": 22343,
+      "accepted": true,
+      "incidents": 0,
+      "repair_cycles": 0
+    }
+  },
+  "totals": {
+    "workflows": 3,
+    "accepted": 3,
+    "incidents": 0,
+    "repair_cycles": 0
+  },
+  "validation": {
+    "task_public_contract_preflight": true,
+    "import_validation_count": 0,
+    "acceptance_criteria_met": true
+  }
+}

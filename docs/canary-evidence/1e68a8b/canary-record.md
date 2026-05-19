@@ -92,7 +92,7 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `1` (`provider_transient` on `anthropic=many_expenses` in `smoke36`, recovered on `smoke36_retry1`)
 - rollbacks: `0`
-- next checkpoint: Phase 17 production qualification review
+- next checkpoint: Phase 17 production qualification review opened; hold pending support-model, rollback-drill, release-ownership, and sign-off evidence
 
 ## Evidence References
 
@@ -102,6 +102,7 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - workflow rollup: `workflow-summary.json`
 - telemetry checkpoint: `internal-runtime-telemetry.json`
 - canary logs: `incident-log.md`, `rollback-log.md`, `completion-review.md`
+- Phase 17 review: `phase17-production-qualification.md`
 - retained validation root for this candidate: `validation-artifacts/`
 - first-accepted checkpoint: `validation-artifacts/checkpoint-first-accepted-2026-05-11T110641Z.json`
 - 10-workflows checkpoint: `validation-artifacts/checkpoint-10-workflows-2026-05-11T112633Z.json`

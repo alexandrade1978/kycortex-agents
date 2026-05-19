@@ -21,7 +21,7 @@ This file is the short repository-owned snapshot of the current release posture 
 - The replacement beta canary evidence at `docs/canary-evidence/1e68a8b/` now spans the clean `100-workflows` checkpoint plus `daily-review day-1` through `daily-review day-7`, closing Phase 16 as `canary-ready` at `124/125` accepted workflows, `1` retained retryable `provider_transient` incident, and `0` rollbacks.
 - The minimum canary window in `docs/go-live-policy.md` is satisfied for `1e68a8b`: the candidate exceeded both `100` eligible workflows and `7` consecutive days of controlled canary observation, and the publication follow-on CI for `282024c` and `b79f22b` completed successfully.
 - Same-candidate canary expansion remains frozen on `c17c749`; the active path is fresh canary admission on `1.0.13b2`.
-- Broader rollout and go-live claims remain blocked pending Phase 17 production qualification and explicit sign-off.
+- Broader rollout and go-live claims remain blocked: the Phase 17 production-qualification review is now opened for `1e68a8b`, but support-model, rollback-drill, release-ownership, and explicit sign-off evidence are still missing.
 
 ## Repository Release Gate
 
@@ -44,9 +44,9 @@ This file is the short repository-owned snapshot of the current release posture 
 - No release workflow is currently in progress.
 
 ## Next Release-Facing Action
-1. Open the Phase 17 production qualification review for `1e68a8b` while keeping broader rollout blocked.
-2. Record the Phase 17 evidence needed for any future general-availability claim, including support-model, rollback-drill, and release-ownership sign-off material.
-3. Keep broader rollout and go-live claims blocked until that explicit Phase 17 decision is recorded in repository-owned release materials.
+1. Complete the opened Phase 17 production qualification review for `1e68a8b` while keeping broader rollout blocked.
+2. Record the missing repository-controlled operations material for the production support model, rollback drill result, and release-ownership path.
+3. Keep broader rollout and go-live claims blocked until explicit Phase 17 sign-off is recorded in repository-owned release materials.
 
 ## Canonical References
 

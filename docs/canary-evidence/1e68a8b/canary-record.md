@@ -29,7 +29,7 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 
 - rollback target SHA: `89d6e138bc5ff582c9fd2e8b31ec2e2b954c2bbc`
 - rollback target role: latest canary-qualified published baseline (`v1.0.13a12`)
-- rollback readiness: published release workflow and attached assets remain available for `v1.0.13a12`
+- rollback readiness: published release workflow and attached assets remain available for `v1.0.13a12`, and the same-host rollback smoke is now revalidated in `validation-artifacts/rollback-smoke-v1.0.13a12-2026-05-19T10-55-45Z.json`
 
 ## Canary Scope
 
@@ -88,11 +88,12 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - provider health after daily-review day-7: anthropic `43/44` accepted, openai `41/41` accepted, ollama `40/40` accepted
 - the minimum Phase 16 observation window is now satisfied for `1e68a8b`: `125` eligible workflows observed over more than `7` consecutive days
 - Phase 16 completion review recorded `canary-ready` after the day-7 evidence packet and follow-on CI closed green, while broader rollout remains blocked pending Phase 17 qualification
+- the retained rollback target `v1.0.13a12` was re-smoke-validated on the same maintainer host at `2026-05-19T10:56:05.440239+00:00` through the controlled Ollama `release-user-smoke` workflow
 - follow-on CI closed green for the day-7 publication commits: `282024c` in CI run `26061838993` and `b79f22b` in CI run `26063423049`
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `1` (`provider_transient` on `anthropic=many_expenses` in `smoke36`, recovered on `smoke36_retry1`)
 - rollbacks: `0`
-- next checkpoint: Phase 17 production qualification review opened; hold pending support-model, rollback-drill, release-ownership, and sign-off evidence
+- next checkpoint: Phase 17 production qualification review opened; hold pending support-model, release-ownership, and sign-off evidence
 
 ## Evidence References
 
@@ -117,3 +118,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - daily-review day-5: `validation-artifacts/daily-review-2026-05-15T160820Z.json`
 - daily-review day-6: `validation-artifacts/daily-review-2026-05-17T035302Z.json`
 - daily-review day-7: `validation-artifacts/daily-review-2026-05-18T213023Z.json`
+- retained rollback smoke: `validation-artifacts/rollback-smoke-v1.0.13a12-2026-05-19T10-55-45Z.json`

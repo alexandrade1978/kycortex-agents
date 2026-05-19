@@ -1,0 +1,78 @@
+{
+  "recorded_at": "2026-05-19T10:56:05.440239+00:00",
+  "rollback_target": {
+    "commit": "89d6e138bc5ff582c9fd2e8b31ec2e2b954c2bbc",
+    "package_version": "1.0.13a12",
+    "tag": "v1.0.13a12"
+  },
+  "smoke_configuration": {
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b",
+    "base_url": "http://127.0.0.1:11434",
+    "ollama_num_ctx": 16384,
+    "requested_max_tokens": 700,
+    "workflow_failure_policy": "continue",
+    "workflow_max_repair_cycles": 1,
+    "scenario": "baseline",
+    "output_dir": "/home/tupira/Dados/projectos/kycortex_agents/output/rollback_smoke_v1_0_13a12_2026_05_19T10_55_45Z"
+  },
+  "project_state": {
+    "phase": "completed",
+    "terminal_outcome": "completed",
+    "acceptance_criteria_met": true,
+    "repair_cycle_count": 0,
+    "task_status_counts": {
+      "done": 3
+    },
+    "acceptance_evaluation": {
+      "policy": "all_tasks",
+      "accepted": true,
+      "reason": "all_evaluated_tasks_done",
+      "completed_task_ids": [
+        "arch",
+        "code",
+        "review"
+      ],
+      "failed_task_ids": [],
+      "skipped_task_ids": [],
+      "pending_task_ids": []
+    }
+  },
+  "provider_summary": {
+    "ollama": {
+      "attempt_count": 3,
+      "success_count": 3,
+      "failure_count": 0,
+      "models": [
+        "qwen2.5-coder:7b"
+      ],
+      "duration_ms": {
+        "count": 3,
+        "total": 19398.666,
+        "min": 4367.13,
+        "max": 9593.744,
+        "avg": 6466.222000000001
+      },
+      "usage": {
+        "input_tokens": 7699,
+        "output_tokens": 687,
+        "total_tokens": 8386
+      }
+    }
+  },
+  "artifact_validation": {
+    "artifact_path": "artifacts/code_implementation.py",
+    "validated": true,
+    "required_symbols": [
+      "calculate_budget_balance",
+      "main"
+    ],
+    "main_present": true,
+    "sample_balance": 2650.0
+  },
+  "snapshot_task_statuses": {
+    "arch": "done",
+    "code": "done",
+    "review": "done"
+  }
+}

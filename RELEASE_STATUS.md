@@ -18,9 +18,10 @@ This file is the short repository-owned snapshot of the current release posture 
 - The `1.0.13b2` beta release extends `1.0.13b1` with a safer default completion budget for `release-user-smoke` and explicit `--max-tokens` override support for future canary tuning.
 - The retained Phase 16 canary bundle for `v1.0.13a11` remains at `docs/canary-evidence/1af2d8d/` as historical evidence and is explicitly superseded by the `v1.0.13a12` publication path.
 - The candidate-specific beta canary bundle for `c17c749` / `v1.0.13b1` is now on policy hold after the early window reached only `10/11` accepted workflows, retained one `code_validation` incident, and stayed below the `>=95.0%` accepted-workflow target.
-- The replacement beta canary is active at `docs/canary-evidence/1e68a8b/`; the published `100-workflows` checkpoint closed cleanly, `daily-review day-1` retained one isolated retryable `provider_transient` incident recovered on targeted replay, `daily-review day-6` advanced to `121/122` accepted workflows, and `daily-review day-7` now brings the live window to `124/125` accepted workflows, `1` incident, and `0` rollbacks.
+- The replacement beta canary evidence at `docs/canary-evidence/1e68a8b/` now spans the clean `100-workflows` checkpoint plus `daily-review day-1` through `daily-review day-7`, closing Phase 16 as `canary-ready` at `124/125` accepted workflows, `1` retained retryable `provider_transient` incident, and `0` rollbacks.
+- The minimum canary window in `docs/go-live-policy.md` is satisfied for `1e68a8b`: the candidate exceeded both `100` eligible workflows and `7` consecutive days of controlled canary observation, and the publication follow-on CI for `282024c` and `b79f22b` completed successfully.
 - Same-candidate canary expansion remains frozen on `c17c749`; the active path is fresh canary admission on `1.0.13b2`.
-- Broader rollout and go-live claims remain blocked.
+- Broader rollout and go-live claims remain blocked pending Phase 17 production qualification and explicit sign-off.
 
 ## Repository Release Gate
 
@@ -39,13 +40,13 @@ This file is the short repository-owned snapshot of the current release posture 
 - `daily-review day-5` at `2026-05-15T16:08:20Z` then added clean `smoke41` evidence on all three providers and advanced the cumulative window to `118/119` accepted workflows with no new incident.
 - `daily-review day-6` at `2026-05-17T03:53:02Z` then added clean `smoke42` evidence on all three providers and advanced the cumulative window to `121/122` accepted workflows with no new incident.
 - `daily-review day-7` at `2026-05-18T21:30:23Z` then added clean `smoke43` evidence on all three providers and advanced the cumulative window to `124/125` accepted workflows with no new incident.
+- The follow-on CI runs for the day-7 publication commits both closed green: `282024c` in CI run `26061838993` and `b79f22b` in CI run `26063423049`.
 - No release workflow is currently in progress.
 
 ## Next Release-Facing Action
-8` becomes the next repository-owned packet.
-2. Maintain repository-owned checkpoint packets, including the retained retryable-incident record from `daily-review day-1` and the clean `daily-review day-2` through `daily-review day-7
-2. Maintain repository-owned checkpoint packets, including the retained retryable-incident record from `daily-review day-1` and the clean `daily-review day-2`, `daily-review day-3`, `daily-review day-4`, `daily-review day-5`, and `daily-review day-6` continuations, until the `7`-day/`100`-workflow minimum window closes.
-3. Keep broader rollout and go-live claims blocked until the replacement candidate closes a policy-compliant beta canary.
+1. Open the Phase 17 production qualification review for `1e68a8b` while keeping broader rollout blocked.
+2. Record the Phase 17 evidence needed for any future general-availability claim, including support-model, rollback-drill, and release-ownership sign-off material.
+3. Keep broader rollout and go-live claims blocked until that explicit Phase 17 decision is recorded in repository-owned release materials.
 
 ## Canonical References
 

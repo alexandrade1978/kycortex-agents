@@ -49,13 +49,14 @@
       "output/canary_1e68a8b_smoke39",
       "output/canary_1e68a8b_smoke40",
       "output/canary_1e68a8b_smoke41",
-      "output/canary_1e68a8b_smoke42"
+      "output/canary_1e68a8b_smoke42",
+      "output/canary_1e68a8b_smoke43"
     ],
-    "total_runs": 122,
-    "accepted_runs": 121,
-    "completed_runs": 121,
+    "total_runs": 125,
+    "accepted_runs": 124,
+    "completed_runs": 124,
     "failed_runs": 1,
-    "acceptance_rate": 0.9918032786885246
+    "acceptance_rate": 0.992
   },
   "canary_window": {
     "opened": true,
@@ -64,8 +65,13 @@
     "eligible_workflow_class": [
       "release-user-smoke"
     ],
-    "eligible_workflows_seen": 122,
-    "accepted_workflows": 121,
+    "eligible_workflows_seen": 125,
+    "accepted_workflows": 124,
+    "false_success_count": 0,
+    "false_success_rate": 0.0,
+    "bounded_termination_rate": 100.0,
+    "autonomous_recovery_rate": 100.0,
+    "resume_integrity_rate": null,
     "incidents": 1,
     "rollbacks": 0,
     "checkpoints_reached": [
@@ -80,9 +86,11 @@
       "daily-review day-3",
       "daily-review day-4",
       "daily-review day-5",
-      "daily-review day-6"
+      "daily-review day-6",
+      "daily-review day-7"
     ],
-    "next_checkpoint": "daily-review day-7"
+    "completion_decision": "canary_ready",
+    "next_checkpoint": "Phase 17 production qualification review"
   },
   "total_workflows": 125,
   "accepted_workflows": 124,

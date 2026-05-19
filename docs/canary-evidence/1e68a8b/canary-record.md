@@ -1,6 +1,6 @@
 # Canary Record - 1e68a8b
 
-Status: active; `121/122` accepted, `1` incident, `0` rollback actions
+Status: canary-ready; `124/125` accepted, `1` incident, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2`.
 
@@ -83,10 +83,16 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - smoke batch `canary_1e68a8b_smoke42`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`many_expenses`, openai=`baseline`, ollama=`tight_margin`), with `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles on all three providers
 - daily-review day-6 reached at `2026-05-17T03:53:02Z`: cumulative `121/122` accepted, `1` incident, `0` rollbacks
 - provider health after daily-review day-6: anthropic `42/43` accepted, openai `40/40` accepted, ollama `39/39` accepted
+- smoke batch `canary_1e68a8b_smoke43`: `3/3` workflows accepted with rotated scenario assignment (anthropic=`baseline`, openai=`tight_margin`, ollama=`many_expenses`), with `acceptance_criteria_met=true`, task public-contract preflight passed, import validation passed, and `0` repair cycles on all three providers
+- daily-review day-7 reached at `2026-05-18T21:30:23Z`: cumulative `124/125` accepted, `1` incident, `0` rollbacks
+- provider health after daily-review day-7: anthropic `43/44` accepted, openai `41/41` accepted, ollama `40/40` accepted
+- the minimum Phase 16 observation window is now satisfied for `1e68a8b`: `125` eligible workflows observed over more than `7` consecutive days
+- Phase 16 completion review recorded `canary-ready` after the day-7 evidence packet and follow-on CI closed green, while broader rollout remains blocked pending Phase 17 qualification
+- follow-on CI closed green for the day-7 publication commits: `282024c` in CI run `26061838993` and `b79f22b` in CI run `26063423049`
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `1` (`provider_transient` on `anthropic=many_expenses` in `smoke36`, recovered on `smoke36_retry1`)
 - rollbacks: `0`
-- next checkpoint: `daily-review day-7`
+- next checkpoint: Phase 17 production qualification review
 
 ## Evidence References
 
@@ -109,3 +115,4 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - daily-review day-4: `validation-artifacts/daily-review-2026-05-14T142059Z.json`
 - daily-review day-5: `validation-artifacts/daily-review-2026-05-15T160820Z.json`
 - daily-review day-6: `validation-artifacts/daily-review-2026-05-17T035302Z.json`
+- daily-review day-7: `validation-artifacts/daily-review-2026-05-18T213023Z.json`

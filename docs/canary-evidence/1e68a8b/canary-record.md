@@ -1,6 +1,6 @@
 # Canary Record - 1e68a8b
 
-Status: canary-ready; `124/125` accepted, `1` incident, `0` rollback actions
+Status: Phase 17 signed off for the documented single-maintainer deployment class; `124/125` accepted, `1` incident, `0` rollback actions
 
 This record opens the candidate evidence bundle for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2`.
 
@@ -89,11 +89,12 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - the minimum Phase 16 observation window is now satisfied for `1e68a8b`: `125` eligible workflows observed over more than `7` consecutive days
 - Phase 16 completion review recorded `canary-ready` after the day-7 evidence packet and follow-on CI closed green, while broader rollout remains blocked pending Phase 17 qualification
 - the retained rollback target `v1.0.13a12` was re-smoke-validated on the same maintainer host at `2026-05-19T10:56:05.440239+00:00` through the controlled Ollama `release-user-smoke` workflow
+- Phase 17 production qualification was explicitly signed off at `2026-05-19T11:17:27Z` after GitHub Actions CI run `26093363117` for commit `a067726` completed `success`, authorizing production go-live for the documented single-maintainer deployment class
 - follow-on CI closed green for the day-7 publication commits: `282024c` in CI run `26061838993` and `b79f22b` in CI run `26063423049`
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `1` (`provider_transient` on `anthropic=many_expenses` in `smoke36`, recovered on `smoke36_retry1`)
 - rollbacks: `0`
-- next checkpoint: explicit Phase 17 production sign-off decision
+- next checkpoint: maintain the signed-off deployment posture for the documented single-maintainer deployment class, or open a new qualification update before any broader deployment claim
 
 ## Evidence References
 

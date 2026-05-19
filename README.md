@@ -243,7 +243,8 @@ Tagged package releases and production go-live are separate decisions in this re
 
 - The current public line is now in Beta pre-release.
 - A workflow is only successful when its declared acceptance criteria pass end to end.
-- Production go-live remains blocked until the repository-owned SLO, error-budget, and staged go-live gates in `docs/go-live-policy.md` are satisfied.
+- Production go-live is now explicitly signed off for the documented single-maintainer deployment class after satisfying the repository-owned SLO, error-budget, and staged go-live gates in `docs/go-live-policy.md`.
+- Broader deployment claims still require a deployment-class-specific qualification update before the public posture changes.
 
 Use `RELEASE.md` for package publication and `docs/go-live-policy.md` for production-readiness policy.
 

@@ -1,6 +1,6 @@
 # Phase 17 Production Qualification - 1e68a8b
 
-Status: ready for explicit sign-off; broader rollout still blocked
+Status: signed off for the documented single-maintainer deployment class
 
 This review records the repository-controlled Phase 17 production-qualification state for released commit `1e68a8bc8e6371b6b425e1ac9ce04e3677141628` and tag `v1.0.13b2` after the Phase 16 canary closed `canary-ready`.
 
@@ -59,8 +59,8 @@ No broader ownership chain is documented by this review. Any deployment model be
 
 | Requirement | Current state | Evidence | Notes |
 | --- | --- | --- | --- |
-| Phase 17 production qualification complete | READY FOR SIGN-OFF | This review | The current evidence packet is assembled for the documented single-maintainer deployment class, but explicit production sign-off has not yet been recorded. |
-| Explicit sign-off recorded | NO | This review | No repository-owned production sign-off has been recorded for `1e68a8b`. |
+| Phase 17 production qualification complete | YES | This review | The current evidence packet is complete for the documented single-maintainer deployment class. |
+| Explicit sign-off recorded | YES | This review | Sign-off is now recorded in the sign-off section below for the documented single-maintainer deployment class. |
 | Current measurement window remains inside every error budget | YES | `completion-review.md`, `workflow-summary.json` | The latest available controlled canary window remained inside every tracked error budget through the Phase 16 close. |
 | No unresolved stop-ship incident exists in zero-budget classes | YES | `completion-review.md`, `incident-log.md` | The retained incident is `provider_transient`, recovered by replay, and is not a zero-budget class. |
 | Production support model documented in repository-controlled operations material | YES | This review, `canary-record.md`, `docs/canary-operations.md` | The support model is now documented for the current single-maintainer deployment class only. |
@@ -69,11 +69,21 @@ No broader ownership chain is documented by this review. Any deployment model be
 
 ## Open Blockers
 
-1. No explicit production sign-off has been recorded.
+None for the documented single-maintainer deployment class.
+
+Any broader deployment claim remains out of scope until a deployment-class-specific qualification update is recorded.
+
+## Sign-Off Record
+
+- sign-off time: `2026-05-19T11:17:27Z`
+- signed off by: Alexandre Andrade (`alex@kycortex.com`), release owner
+- prerequisite CI state: GitHub Actions CI run `26093363117` for commit `a067726` completed `success`
+- authorized deployment claim: production go-live is authorized for the documented single-maintainer deployment class covered by this review
+- scope limit: this sign-off does not authorize broader multi-maintainer or differently staffed deployment classes without a new repository-controlled qualification update
 
 ## Current Decision
 
-- broader rollout: blocked
-- general-availability claim: not authorized
-- current Phase 17 decision: `ready-for-sign-off`
-- next required action: record the explicit production sign-off decision in repository-owned release materials, or record a refusal to sign off while keeping the current blocked posture
+- broader rollout: authorized for the documented single-maintainer deployment class
+- general-availability claim: authorized for the documented single-maintainer deployment class
+- current Phase 17 decision: `signed-off`
+- next required action: keep future deployment-claim changes scoped to repository-controlled qualification updates and release materials

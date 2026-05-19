@@ -93,7 +93,7 @@ Role overlap is explicitly accepted for this maintainer-operated canary.
 - the same `anthropic=baseline` provider/scenario pair that failed on held candidate `c17c749` passed cleanly on `1e68a8b`
 - incidents: `1` (`provider_transient` on `anthropic=many_expenses` in `smoke36`, recovered on `smoke36_retry1`)
 - rollbacks: `0`
-- next checkpoint: Phase 17 production qualification review opened; hold pending support-model, release-ownership, and sign-off evidence
+- next checkpoint: explicit Phase 17 production sign-off decision
 
 ## Evidence References
 

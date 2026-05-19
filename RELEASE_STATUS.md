@@ -21,7 +21,7 @@ This file is the short repository-owned snapshot of the current release posture 
 - The replacement beta canary evidence at `docs/canary-evidence/1e68a8b/` now spans the clean `100-workflows` checkpoint plus `daily-review day-1` through `daily-review day-7`, closing Phase 16 as `canary-ready` at `124/125` accepted workflows, `1` retained retryable `provider_transient` incident, and `0` rollbacks.
 - The minimum canary window in `docs/go-live-policy.md` is satisfied for `1e68a8b`: the candidate exceeded both `100` eligible workflows and `7` consecutive days of controlled canary observation, and the publication follow-on CI for `282024c` and `b79f22b` completed successfully.
 - Same-candidate canary expansion remains frozen on `c17c749`; the active path is fresh canary admission on `1.0.13b2`.
-- Broader rollout and go-live claims remain blocked: the Phase 17 production-qualification review is now opened for `1e68a8b`, the retained rollback target `v1.0.13a12` has been re-smoke-validated, but support-model, release-ownership, and explicit sign-off evidence are still missing.
+- Broader rollout and go-live claims remain blocked: the Phase 17 production-qualification review for `1e68a8b` is now ready for explicit sign-off, the retained rollback target `v1.0.13a12` has been re-smoke-validated, and the current single-maintainer support model plus release-ownership path are now documented, but no explicit production sign-off has been recorded.
 
 ## Repository Release Gate
 
@@ -44,9 +44,9 @@ This file is the short repository-owned snapshot of the current release posture 
 - No release workflow is currently in progress.
 
 ## Next Release-Facing Action
-1. Complete the opened Phase 17 production qualification review for `1e68a8b` while keeping broader rollout blocked.
-2. Record the missing repository-controlled operations material for the production support model and release-ownership path.
-3. Keep broader rollout and go-live claims blocked until explicit Phase 17 sign-off is recorded in repository-owned release materials.
+1. Record the explicit Phase 17 production sign-off decision for `1e68a8b` while keeping broader rollout blocked until that decision exists.
+2. If signed off, reflect the authorized deployment claim in repository-owned release materials.
+3. If not signed off, keep the current posture as a package-ready beta line without a GA claim.
 
 ## Canonical References
 

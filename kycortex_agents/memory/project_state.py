@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional, Callable, Mapping, cast
 from datetime import datetime, timezone
 
 from kycortex_agents.exceptions import StatePersistenceError, WorkflowDefinitionError
-from kycortex_agents.memory.state_store import _public_state_path_label, resolve_state_store
+from kycortex_agents.memory.state_store import _public_state_path_label, resolve_state_store, state_file_lock
 from kycortex_agents.providers.base import (
     redact_sensitive_data,
     redact_sensitive_text,
@@ -99,6 +99,7 @@ def _package_version() -> str:
 
 
 STATE_INTEGRITY_ALGORITHM = "sha256"
+EVENT_CHAIN_GENESIS_HASH = "0" * 64
 
 
 def compute_state_digest(payload: Mapping[str, Any]) -> str:
@@ -107,6 +108,41 @@ def compute_state_digest(payload: Mapping[str, Any]) -> str:
     hashable = {key: value for key, value in payload.items() if key != "integrity"}
     canonical = json.dumps(hashable, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def compute_execution_event_hash(event: Mapping[str, Any]) -> str:
+    """Return the SHA-256 hash of an execution event's canonical chained content."""
+
+    hashable = {key: value for key, value in event.items() if key != "event_hash"}
+    canonical = json.dumps(hashable, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def verify_execution_event_chain(events: List[Dict[str, Any]]) -> bool:
+    """Return whether the hashed suffix of an execution-event list forms a valid chain.
+
+    Events recorded before hash chaining existed carry no `event_hash`; they are
+    accepted as a pre-chain prefix. Once a hashed event appears, every subsequent
+    event must be hashed and correctly linked through `prev_hash`.
+    """
+
+    expected_prev_hash = EVENT_CHAIN_GENESIS_HASH
+    chain_started = False
+    for event in events:
+        if not isinstance(event, dict):
+            return False
+        event_hash = event.get("event_hash")
+        if event_hash is None:
+            if chain_started:
+                return False
+            continue
+        chain_started = True
+        if event.get("prev_hash") != expected_prev_hash:
+            return False
+        if compute_execution_event_hash(event) != event_hash:
+            return False
+        expected_prev_hash = event_hash
+    return True
 
 
 def verify_persisted_state_integrity(path: str) -> bool:
@@ -120,6 +156,28 @@ def verify_persisted_state_integrity(path: str) -> bool:
     if not isinstance(recorded_digest, str) or not recorded_digest:
         return False
     return compute_state_digest(payload) == recorded_digest
+
+
+def verify_persisted_event_chain(path: str) -> bool:
+    """Return whether a persisted state file's execution events form a valid hash chain.
+
+    Also checks that the chain head recorded in the integrity block (when present)
+    matches the hash of the last chained event.
+    """
+
+    payload = resolve_state_store(path).load(path)
+    events = payload.get("execution_events")
+    if not isinstance(events, list):
+        return False
+    if not verify_execution_event_chain(events):
+        return False
+    integrity = payload.get("integrity")
+    recorded_head = integrity.get("event_chain_head") if isinstance(integrity, dict) else None
+    if recorded_head is None:
+        return True
+    hashed_events = [event for event in events if isinstance(event, dict) and event.get("event_hash")]
+    actual_head = hashed_events[-1]["event_hash"] if hashed_events else None
+    return recorded_head == actual_head
 
 
 def _integrity_sidecar_path(path: str) -> str:
@@ -255,6 +313,7 @@ class ProjectState:
     repair_history: List[Dict[str, Any]] = field(default_factory=list)
     run_identity: Dict[str, Any] = field(default_factory=dict)
     event_sequence: int = 0
+    snapshot_history_limit: int = 0
     schema_version: int = field(default=PROJECT_STATE_SCHEMA_VERSION, init=False)
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     state_file: str = "project_state.json"
@@ -1235,19 +1294,35 @@ class ProjectState:
         state_store = resolve_state_store(self.state_file)
         payload = cast(Dict[str, Any], _redact_payload(self._serialized_state()))
         digest = compute_state_digest(payload)
+        event_chain_head = None
+        for event in reversed(self.execution_events):
+            event_hash = event.get("event_hash") if isinstance(event, dict) else None
+            if isinstance(event_hash, str) and event_hash:
+                event_chain_head = event_hash
+                break
         payload["integrity"] = {
             "algorithm": STATE_INTEGRITY_ALGORITHM,
             "state_sha256": digest,
+            "event_chain_head": event_chain_head,
             "computed_at": datetime.now(timezone.utc).isoformat(),
         }
-        state_store.save(self.state_file, payload)
-        _write_integrity_sidecar(self.state_file, digest)
+        with state_file_lock(self.state_file):
+            state_store.save(self.state_file, payload)
+            _write_integrity_sidecar(self.state_file, digest)
+            if self.snapshot_history_limit > 0:
+                state_store.save_snapshot(
+                    self.state_file,
+                    payload,
+                    keep_last=self.snapshot_history_limit,
+                )
 
     @classmethod
     def load(cls, path: str) -> "ProjectState":
         """Load a project state from disk and normalize legacy persisted fields."""
 
-        data = cls._migrate_persisted_state(resolve_state_store(path).load(path), path)
+        with state_file_lock(path, exclusive=False):
+            raw_data = resolve_state_store(path).load(path)
+        data = cls._migrate_persisted_state(raw_data, path)
         data.pop("integrity", None)
         tasks = [Task(**t) for t in data.pop("tasks", [])]
         schema_version = data.pop("schema_version", PROJECT_STATE_SCHEMA_VERSION)
@@ -1792,16 +1867,23 @@ class ProjectState:
                 normalized_details.get("provider_call")
             )
         self.event_sequence += 1
-        self.execution_events.append(
-            {
-                "sequence": self.event_sequence,
-                "event": event,
-                "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
-                "task_id": task_id,
-                "status": status,
-                "details": normalized_details,
-            }
-        )
+        prev_hash = EVENT_CHAIN_GENESIS_HASH
+        for existing_event in reversed(self.execution_events):
+            existing_hash = existing_event.get("event_hash") if isinstance(existing_event, dict) else None
+            if isinstance(existing_hash, str) and existing_hash:
+                prev_hash = existing_hash
+                break
+        chained_event = {
+            "sequence": self.event_sequence,
+            "event": event,
+            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+            "task_id": task_id,
+            "status": status,
+            "details": normalized_details,
+            "prev_hash": prev_hash,
+        }
+        chained_event["event_hash"] = compute_execution_event_hash(chained_event)
+        self.execution_events.append(chained_event)
 
     def _redacted_execution_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         redacted_event = cast(Dict[str, Any], _redact_payload(dict(event)))

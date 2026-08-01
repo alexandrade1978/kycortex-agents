@@ -8,15 +8,24 @@ import pytest
 from kycortex_agents.agents.base_agent import BaseAgent
 from kycortex_agents.agents.registry import AgentRegistry
 from kycortex_agents.config import KYCortexConfig
-from kycortex_agents.exceptions import AgentExecutionError, ConfigValidationError
+from kycortex_agents.exceptions import AgentExecutionError, ConfigValidationError, StatePersistenceError
 from kycortex_agents.memory.project_state import (
+    EVENT_CHAIN_GENESIS_HASH,
     PROJECT_STATE_SCHEMA_VERSION,
     ProjectState,
     Task,
+    compute_execution_event_hash,
     compute_state_digest,
+    verify_execution_event_chain,
+    verify_persisted_event_chain,
     verify_persisted_state_integrity,
 )
-from kycortex_agents.memory.state_store import resolve_state_store
+from kycortex_agents.memory.state_store import (
+    list_state_snapshots,
+    load_state_snapshot,
+    resolve_state_store,
+    state_file_lock,
+)
 from kycortex_agents.orchestration.artifacts import ARTIFACT_MANIFEST_FILENAME, ArtifactPersistenceSupport
 from kycortex_agents.orchestrator import Orchestrator
 from kycortex_agents.providers.base import BaseLLMProvider, sanitize_provider_call_metadata
@@ -648,3 +657,189 @@ def test_run_task_records_provider_calls_across_retries(tmp_path):
     project.save()
     reloaded = ProjectState.load(str(tmp_path / "project_state.json"))
     assert len(reloaded.get_task("arch").provider_calls) == 2
+
+
+# --- Phase 4: event hash chaining, versioned snapshots, advisory locking ---
+
+
+def test_execution_events_carry_hash_chain(tmp_path):
+    project = _project(tmp_path)
+
+    project.mark_workflow_running()
+    project.start_task("arch")
+    project.complete_task("arch", "done")
+
+    events = project.execution_events
+    assert len(events) >= 3
+    assert events[0]["prev_hash"] == EVENT_CHAIN_GENESIS_HASH
+    for previous, current in zip(events, events[1:]):
+        assert current["prev_hash"] == previous["event_hash"]
+    for event in events:
+        assert event["event_hash"] == compute_execution_event_hash(event)
+    assert verify_execution_event_chain(events) is True
+
+
+def test_verify_execution_event_chain_detects_tampering(tmp_path):
+    project = _project(tmp_path)
+    project.mark_workflow_running()
+    project.start_task("arch")
+
+    project.execution_events[0]["details"]["injected"] = "tampered"
+
+    assert verify_execution_event_chain(project.execution_events) is False
+
+
+def test_verify_execution_event_chain_accepts_pre_chain_prefix():
+    legacy_event = {"sequence": 1, "event": "workflow_started", "details": {}}
+    chained_event = {
+        "sequence": 2,
+        "event": "task_started",
+        "details": {},
+        "prev_hash": EVENT_CHAIN_GENESIS_HASH,
+    }
+    chained_event["event_hash"] = compute_execution_event_hash(chained_event)
+
+    assert verify_execution_event_chain([legacy_event, chained_event]) is True
+    assert verify_execution_event_chain([chained_event, legacy_event]) is False
+
+
+def test_event_chain_continues_across_reload(tmp_path):
+    project = _project(tmp_path)
+    project.mark_workflow_running()
+    project.save()
+
+    reloaded = ProjectState.load(str(tmp_path / "project_state.json"))
+    reloaded.start_task("arch")
+    reloaded.complete_task("arch", "done")
+
+    assert verify_execution_event_chain(reloaded.execution_events) is True
+    assert reloaded.execution_events[-1]["prev_hash"] == reloaded.execution_events[-2]["event_hash"]
+
+
+@pytest.mark.parametrize("filename", ["project_state.json", "project_state.sqlite"])
+def test_verify_persisted_event_chain(tmp_path, filename):
+    project = _project(tmp_path, filename)
+    project.mark_workflow_running()
+    project.start_task("arch")
+    project.complete_task("arch", "done")
+    project.save()
+
+    assert verify_persisted_event_chain(str(tmp_path / filename)) is True
+
+
+def test_verify_persisted_event_chain_detects_tampered_event(tmp_path):
+    project = _project(tmp_path)
+    project.mark_workflow_running()
+    project.save()
+    state_file = tmp_path / "project_state.json"
+    payload = json.loads(state_file.read_text())
+    payload["execution_events"][0]["details"]["injected"] = "tampered"
+    state_file.write_text(json.dumps(payload))
+
+    assert verify_persisted_event_chain(str(state_file)) is False
+
+
+def test_integrity_block_records_event_chain_head(tmp_path):
+    project = _project(tmp_path)
+    project.mark_workflow_running()
+    project.save()
+
+    payload = json.loads((tmp_path / "project_state.json").read_text())
+    assert payload["integrity"]["event_chain_head"] == project.execution_events[-1]["event_hash"]
+
+
+def test_snapshot_history_disabled_by_default(tmp_path):
+    project = _project(tmp_path)
+    project.save()
+    project.save()
+
+    assert not (tmp_path / "project_state.json.history").exists()
+    assert list_state_snapshots(str(tmp_path / "project_state.json")) == []
+
+
+def test_json_snapshot_history_appends_per_save(tmp_path):
+    project = _project(tmp_path)
+    project.snapshot_history_limit = 5
+
+    project.save()
+    project.mark_workflow_running()
+    project.save()
+
+    state_file = str(tmp_path / "project_state.json")
+    snapshots = list_state_snapshots(state_file)
+    assert [snapshot["version"] for snapshot in snapshots] == [1, 2]
+    first_payload = load_state_snapshot(state_file, 1)
+    second_payload = load_state_snapshot(state_file, 2)
+    assert first_payload["project_name"] == "Evidence Demo"
+    assert len(second_payload["execution_events"]) > len(first_payload["execution_events"])
+
+
+def test_json_snapshot_history_prunes_beyond_limit(tmp_path):
+    project = _project(tmp_path)
+    project.snapshot_history_limit = 2
+
+    for _ in range(4):
+        project.save()
+
+    state_file = str(tmp_path / "project_state.json")
+    assert [snapshot["version"] for snapshot in list_state_snapshots(state_file)] == [3, 4]
+
+
+def test_sqlite_snapshot_history_appends_and_prunes(tmp_path):
+    project = _project(tmp_path, "project_state.sqlite")
+    project.snapshot_history_limit = 2
+
+    for _ in range(3):
+        project.save()
+
+    state_file = str(tmp_path / "project_state.sqlite")
+    snapshots = list_state_snapshots(state_file)
+    assert [snapshot["version"] for snapshot in snapshots] == [2, 3]
+    payload = load_state_snapshot(state_file, 3)
+    assert payload["project_name"] == "Evidence Demo"
+    reloaded = ProjectState.load(state_file)
+    assert reloaded.project_name == "Evidence Demo"
+
+
+def test_load_state_snapshot_unknown_version_raises(tmp_path):
+    project = _project(tmp_path)
+    project.snapshot_history_limit = 3
+    project.save()
+
+    with pytest.raises(StatePersistenceError):
+        load_state_snapshot(str(tmp_path / "project_state.json"), 99)
+
+
+def test_snapshots_preserve_integrity_and_chain(tmp_path):
+    project = _project(tmp_path)
+    project.snapshot_history_limit = 3
+    project.mark_workflow_running()
+    project.save()
+
+    payload = load_state_snapshot(str(tmp_path / "project_state.json"), 1)
+    assert compute_state_digest(payload) == payload["integrity"]["state_sha256"]
+    assert verify_execution_event_chain(payload["execution_events"]) is True
+
+
+def test_state_file_lock_creates_lock_file_and_is_reentrant_across_scopes(tmp_path):
+    state_file = str(tmp_path / "project_state.json")
+
+    with state_file_lock(state_file):
+        pass
+    with state_file_lock(state_file, exclusive=False):
+        with state_file_lock(state_file, exclusive=False):
+            pass
+
+    assert (tmp_path / "project_state.json.lock").exists()
+
+
+def test_save_holds_lock_and_keeps_sidecar_consistent(tmp_path):
+    project = _project(tmp_path)
+    project.save()
+
+    state_file = tmp_path / "project_state.json"
+    assert (tmp_path / "project_state.json.lock").exists()
+    sidecar = (tmp_path / "project_state.json.sha256").read_text()
+    payload = json.loads(state_file.read_text())
+    assert sidecar.split()[0] == payload["integrity"]["state_sha256"]
+    assert verify_persisted_state_integrity(str(state_file)) is True

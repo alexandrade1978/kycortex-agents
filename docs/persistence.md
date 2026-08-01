@@ -165,7 +165,39 @@ Every `ProjectState.save()` embeds an `integrity` block in the persisted payload
 - `verify_persisted_state_integrity(path)` recomputes the digest and returns whether it matches the recorded value; it returns `False` when the state was modified after saving or carries no integrity block (states saved by older versions).
 - Generated workflow artifacts get a companion `artifacts_manifest.json` at the output-directory root with the SHA-256 digest, byte size, name, and type of every persisted artifact file.
 
-The digest detects post-save modification of state content; it does not by itself prove who modified a file or prevent an attacker from recomputing digests. Tamper-evident chaining is a separate concern.
+The digest detects post-save modification of state content; it does not by itself prove who modified a file or prevent an attacker from recomputing digests. Event hash chaining (below) adds tamper evidence for the execution timeline.
+
+## Event Hash Chaining
+
+Execution events recorded by `ProjectState` form a tamper-evident hash chain.
+
+- Each new event carries a `prev_hash` (the `event_hash` of the previous hashed event, or a genesis value of 64 zeros for the first one) and an `event_hash` computed as the SHA-256 of the canonical JSON of the event excluding `event_hash` itself.
+- The integrity block persisted on save records the chain head as `event_chain_head`, binding the timeline to the state digest.
+- `verify_execution_event_chain(events)` validates an in-memory event list; `verify_persisted_event_chain(path)` loads a persisted state and validates both the chain and the recorded chain head.
+- Events recorded by older package versions carry no hashes. They are accepted only as a contiguous prefix before the chain starts; the chain is never backfilled onto legacy events, and once a hashed event appears every later event must be hashed and linked.
+
+Editing any hashed event after the fact breaks verification for that event and every event after it.
+
+## Snapshot History
+
+Versioned snapshot history is opt-in via `ProjectState.snapshot_history_limit` (default `0`, disabled).
+
+- When the limit is greater than zero, every `save()` also appends a full point-in-time copy of the persisted payload to the snapshot history, then prunes the oldest entries beyond the limit.
+- The JSON backend stores snapshots as files under a `<state_file>.history/` directory; the SQLite backend appends rows to a `project_state_history` table in the same database.
+- `list_state_snapshots(path)` returns available versions with timestamps; `load_state_snapshot(path, version)` returns the raw payload of a specific version, or raises `StatePersistenceError` for unknown versions.
+- Snapshots are complete payloads: each one carries its own integrity digest and event chain, so a restored snapshot remains independently verifiable.
+- Pruning removes only old snapshot copies; it never truncates or rewrites the execution event chain inside the live state.
+
+The latest state remains the fast path: snapshot history never changes how `ProjectState.load()` resolves the current state.
+
+## Advisory File Locking
+
+On POSIX systems, `save()` and `load()` take an advisory `fcntl` lock on a `<state_file>.lock` companion file (exclusive for writes, shared for reads).
+
+- The lock serializes concurrent savers on the same host and prevents a reader from observing a mid-save sequence of state, sidecar, and snapshot writes.
+- The lock is advisory: it protects cooperating `kycortex-agents` processes, not arbitrary external writers, and it does not span network filesystems reliably.
+- The supported concurrency contract remains single-writer: one workflow process owns a given state file at a time. Locking is a safety net, not a multi-writer feature.
+- On non-POSIX platforms the lock is a no-op and the single-writer contract must be enforced operationally.
 
 ## Failure Modes
 

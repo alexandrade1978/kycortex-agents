@@ -186,7 +186,10 @@ def test_public_extension_modules_define_explicit_exports():
         "BaseStateStore",
         "JsonStateStore",
         "SqliteStateStore",
+        "list_state_snapshots",
+        "load_state_snapshot",
         "resolve_state_store",
+        "state_file_lock",
     ]
 
 

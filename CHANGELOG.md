@@ -10,6 +10,7 @@ Current package version remains `1.0.13b2`.
 
 ### Added
 
+- Public evidence-semantics guide `docs/evidence.md`: what evidence is recorded, integrity guarantees, explicit limits (not a certified audit record, no cryptographic non-repudiation), the verification/export workflow, and retention/legal-hold semantics. Migration notes extended with the evidence surface of the schema v2 line.
 - Auditor-facing evidence CLI: `python -m kycortex_agents.evidence verify <state>` recomputes the state digest, validates the execution event hash chain against the recorded chain head, checks the integrity sidecar, and (with `--artifacts-dir`) re-hashes every artifact in `artifacts_manifest.json`, with CI-friendly exit codes (`0` pass, `1` failed, `2` usage/file error). `... export <state> <bundle.zip>` writes a self-contained evidence bundle (state payload, sidecar, evidence report, verification summary, bundled README, optional artifacts + manifest). Also available programmatically via `kycortex_agents.evidence`.
 - Legal hold for snapshot retention: new persisted `ProjectState.legal_hold` marker (default `False`); while active, saves keep appending snapshots but retention pruning is suspended on both backends, resuming when the hold is released.
 - Legal-output disclaimer: legal advisor prompts now state the output is LLM-generated and not legal advice, and every persisted legal-analysis artifact is prepended with an explicit disclaimer header via the new `BaseAgent.output_artifact_disclaimer` hook.

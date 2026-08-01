@@ -87,6 +87,16 @@ Legacy `run(task_description, context)` compatibility still exists, but new inte
 - Persisted project-state schema is now version 2: `ProjectState.load()` migrates version 0 and 1 payloads automatically, backfilling positional event sequence numbers; states saved by newer versions are rejected explicitly.
 - The 1.0 release treats the documented public API as the supported stability boundary.
 
+### Evidence surface (schema v2 line)
+
+The audit-evidence hardening work added persisted evidence without breaking older states:
+
+- New persisted fields (`run_identity`, event `sequence`, event `prev_hash`/`event_hash`, per-task `execution_mode` and `provider_calls`, `snapshot_history_limit`, `legal_hold`, the embedded `integrity` block) all default safely; states saved before these fields existed load unchanged.
+- Execution events recorded by older versions carry no hashes. They are accepted as a pre-chain prefix and are never retroactively hashed; hash chaining starts with the first event recorded by a current version.
+- Saving with a current version adds the `integrity` block and a `<state_file>.sha256` sidecar. Older readers that ignore unknown keys are unaffected.
+- Evidence configuration defaults preserve previous behavior: `evidence_sanitization_mode="strict"`, prompt capture off, snapshot history off, no legal hold.
+- New opt-in surfaces are documented in [docs/evidence.md](docs/evidence.md); verification is available via `python -m kycortex_agents.evidence verify <state>`.
+
 ## Recommended Validation After Migration
 
 Run at least the following before considering a migration complete:

@@ -19,6 +19,7 @@ This index points to the stable public documentation surface for KYCortex.
 - [providers.md](providers.md): provider configuration, routing, health checks, and backend differences.
 - [workflows.md](workflows.md): workflow model, dependency scheduling, failure policies, and resume semantics, plus adaptive prompt-policy behavior.
 - [persistence.md](persistence.md): state persistence backends, resume behavior, and snapshot inspection.
+- [evidence.md](evidence.md): evidence semantics, integrity guarantees, limits, and the verification workflow.
 - [extensions.md](extensions.md): supported customization seams for agents, providers, registries, and persistence backends.
 - [troubleshooting.md](troubleshooting.md): public failure classes, diagnosis, and recovery patterns.
 - [go-live-policy.md](go-live-policy.md): repository-owned policy for production-readiness claims beyond package publication.

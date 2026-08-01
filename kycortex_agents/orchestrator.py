@@ -14,6 +14,7 @@ from kycortex_agents.orchestration.output_helpers import (
     unredacted_agent_result,
 )
 from kycortex_agents.orchestration.validation_runtime import (
+    provider_call_history,
     provider_call_metadata,
     sanitize_output_provider_call_metadata,
     build_task_output_validator_callbacks,
@@ -103,6 +104,7 @@ class Orchestrator:
         agent = self.registry.get(current_execution_agent_name)
         agent_input = build_agent_input_runtime(self, task, project)
         project.start_task(task.id)
+        provider_call_history_start = len(provider_call_history(agent))
         normalized_output: Optional[AgentOutput] = None
         try:
             output = execute_agent(agent, agent_input)
@@ -126,10 +128,18 @@ class Orchestrator:
             for artifact in normalized_output.artifacts:
                 project.add_artifact_record(artifact)
             provider_call = provider_call_metadata(agent, normalized_output)
+            project.record_task_provider_calls(
+                task.id,
+                provider_call_history(agent)[provider_call_history_start:],
+            )
             project.complete_task(task.id, normalized_output, provider_call=provider_call)
         except Exception as exc:
             failure_category = classify_task_failure(task, exc)
             failure_provider_call = provider_call_metadata(agent, normalized_output)
+            project.record_task_provider_calls(
+                task.id,
+                provider_call_history(agent)[provider_call_history_start:],
+            )
             project.fail_task(
                 task.id,
                 exc,

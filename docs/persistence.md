@@ -143,6 +143,20 @@ Persisted state records provenance metadata that supports later inspection of wh
 
 Provenance metadata describes the recording environment; it is not a tamper-evidence or attestation mechanism on its own.
 
+## Provider Call History
+
+Each task keeps an append-only `provider_calls` list recording every provider call made during its execution, across retries and repair attempts.
+
+- Every entry carries the call target (provider, model), outcome (`success`), duration, attempt counters, a per-agent `call_index`, and a `recorded_at` UTC timestamp. Entries are appended for failed calls as well as successful ones, so retried tasks preserve the full attempt trail instead of only the final call.
+- `last_provider_call` remains available as a derived view of the most recent call for backward compatibility.
+- Entries are sanitized according to `KYCortexConfig.evidence_sanitization_mode`:
+  - `strict` (default): current behavior — error text and fallback model names are degraded to boolean presence flags.
+  - `audit`: preserves the redacted error class and error message text plus fallback model names for evidence-grade histories. Secrets are redacted in both modes.
+- `KYCortexConfig.evidence_capture_prompts` (default `False`) opts in to capturing the redacted system prompt, user message, and raw provider response for each call. Captured text is truncated to `evidence_prompt_capture_max_chars` characters (default 20000) and stores the original length and a truncation flag.
+- Replaying a workflow clears each task's `provider_calls`; manual overrides and resumes preserve the accumulated history.
+
+Prompt capture stores model inputs and outputs in the persisted state file; enable it only when the storage location satisfies your data-handling requirements.
+
 ## State Integrity Digest
 
 Every `ProjectState.save()` embeds an `integrity` block in the persisted payload and writes a `<state_file>.sha256` sidecar next to the state file.

@@ -5,6 +5,10 @@ import json
 
 import pytest
 
+from kycortex_agents.agents.base_agent import BaseAgent
+from kycortex_agents.agents.registry import AgentRegistry
+from kycortex_agents.config import KYCortexConfig
+from kycortex_agents.exceptions import AgentExecutionError, ConfigValidationError
 from kycortex_agents.memory.project_state import (
     PROJECT_STATE_SCHEMA_VERSION,
     ProjectState,
@@ -14,7 +18,9 @@ from kycortex_agents.memory.project_state import (
 )
 from kycortex_agents.memory.state_store import resolve_state_store
 from kycortex_agents.orchestration.artifacts import ARTIFACT_MANIFEST_FILENAME, ArtifactPersistenceSupport
-from kycortex_agents.types import ArtifactRecord, ArtifactType, TaskStatus
+from kycortex_agents.orchestrator import Orchestrator
+from kycortex_agents.providers.base import BaseLLMProvider, sanitize_provider_call_metadata
+from kycortex_agents.types import AgentOutput, ArtifactRecord, ArtifactType, TaskStatus
 
 
 def _project(tmp_path, filename="project_state.json") -> ProjectState:
@@ -341,3 +347,304 @@ def test_persist_artifacts_skips_manifest_when_nothing_persisted(tmp_path):
     support.persist_artifacts([ArtifactRecord(name="empty", content="   ")])
 
     assert not (tmp_path / ARTIFACT_MANIFEST_FILENAME).exists()
+
+
+# --- Phase 3: complete provider-call history, sanitization modes, prompt capture ---
+
+
+class _EvidenceProvider(BaseLLMProvider):
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = 0
+
+    def generate(self, system_prompt: str, user_message: str) -> str:
+        self.calls += 1
+        step = self.responses.pop(0)
+        if isinstance(step, Exception):
+            raise step
+        return step
+
+
+class _EvidenceAgent(BaseAgent):
+    def __init__(self, provider, config):
+        super().__init__("Evidence", "Testing", config)
+        self._provider = provider
+
+    def run(self, task_description: str, context: dict) -> str | AgentOutput:
+        return self.chat("system prompt", task_description)
+
+
+def _agent(tmp_path, provider, **config_overrides) -> _EvidenceAgent:
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), **config_overrides)
+    return _EvidenceAgent(provider, config)
+
+
+def test_sanitize_provider_call_metadata_default_matches_strict_mode():
+    provider_call = {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "success": False,
+        "error_type": "RuntimeError",
+        "error_message": "backend exploded",
+    }
+
+    assert sanitize_provider_call_metadata(provider_call) == sanitize_provider_call_metadata(
+        provider_call, mode="strict"
+    )
+    strict = sanitize_provider_call_metadata(provider_call, mode="strict")
+    assert strict["has_error_message"] is True
+    assert "error_message" not in strict
+    assert "error_type" not in strict
+
+
+def test_sanitize_provider_call_metadata_audit_mode_preserves_redacted_error_details():
+    provider_call = {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "success": False,
+        "error_type": "RuntimeError",
+        "error_message": "call failed with api_key=super-secret-token",
+        "attempt_history": [
+            {
+                "attempt": 1,
+                "success": False,
+                "error_type": "ProviderTransientError",
+                "error_message": "throttled",
+                "jitter_seconds": 0.1,
+            }
+        ],
+        "fallback_history": [
+            {"provider": "anthropic", "model": "claude-3", "status": "failed_transient", "error_message": "down"}
+        ],
+    }
+
+    audit = sanitize_provider_call_metadata(provider_call, mode="audit")
+
+    assert audit["error_type"] == "RuntimeError"
+    assert "super-secret-token" not in audit["error_message"]
+    assert "[REDACTED]" in audit["error_message"]
+    assert audit["attempt_history"][0]["error_message"] == "throttled"
+    assert "jitter_seconds" not in audit["attempt_history"][0]
+    assert audit["fallback_history"][0]["model"] == "claude-3"
+    assert audit["fallback_history"][0]["error_message"] == "down"
+
+
+def test_sanitize_provider_call_metadata_audit_mode_still_redacts_sensitive_keys():
+    audit = sanitize_provider_call_metadata(
+        {"provider": "openai", "api_key": "sk-abcdefghijklmnop", "error_message": "boom"},
+        mode="audit",
+    )
+
+    assert audit["api_key"] == "[REDACTED]"
+
+
+def test_sanitize_provider_call_metadata_rejects_unknown_mode():
+    with pytest.raises(ValueError):
+        sanitize_provider_call_metadata({"provider": "openai"}, mode="verbose")
+
+
+def test_evidence_config_defaults(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+
+    assert config.evidence_sanitization_mode == "strict"
+    assert config.evidence_capture_prompts is False
+    assert config.evidence_prompt_capture_max_chars == 20000
+
+
+def test_evidence_config_normalizes_and_validates_sanitization_mode(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"), evidence_sanitization_mode=" AUDIT ")
+    assert config.evidence_sanitization_mode == "audit"
+
+    with pytest.raises(ConfigValidationError):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), evidence_sanitization_mode="verbose")
+
+
+def test_evidence_config_rejects_non_positive_prompt_capture_limit(tmp_path):
+    with pytest.raises(ConfigValidationError):
+        KYCortexConfig(output_dir=str(tmp_path / "output"), evidence_prompt_capture_max_chars=0)
+
+
+def test_chat_appends_every_call_to_provider_call_log(tmp_path):
+    agent = _agent(tmp_path, _EvidenceProvider(["first", "second"]))
+
+    agent.chat("system", "one")
+    agent.chat("system", "two")
+
+    history = agent.get_provider_call_history()
+    assert [entry["call_index"] for entry in history] == [1, 2]
+    assert all(entry["success"] is True for entry in history)
+    assert all(entry["recorded_at"] for entry in history)
+
+
+def test_chat_appends_failed_call_to_provider_call_log(tmp_path):
+    agent = _agent(tmp_path, _EvidenceProvider([RuntimeError("backend down")]))
+
+    with pytest.raises(AgentExecutionError):
+        agent.chat("system", "one")
+
+    history = agent.get_provider_call_history()
+    assert len(history) == 1
+    assert history[0]["success"] is False
+    assert history[0]["has_error_message"] is True
+    assert "error_message" not in history[0]
+
+
+def test_provider_call_history_audit_mode_preserves_error_text(tmp_path):
+    agent = _agent(
+        tmp_path,
+        _EvidenceProvider([RuntimeError("backend down: api_key=topsecret")]),
+        evidence_sanitization_mode="audit",
+    )
+
+    with pytest.raises(AgentExecutionError):
+        agent.chat("system", "one")
+
+    entry = agent.get_provider_call_history()[0]
+    assert entry["error_type"] == "RuntimeError"
+    assert "topsecret" not in entry["error_message"]
+    assert "[REDACTED]" in entry["error_message"]
+
+
+def test_prompt_capture_disabled_by_default(tmp_path):
+    agent = _agent(tmp_path, _EvidenceProvider(["done"]))
+
+    agent.chat("system", "one")
+
+    entry = agent.get_provider_call_history()[0]
+    assert "captured_prompt" not in entry
+    assert "captured_response" not in entry
+
+
+def test_prompt_capture_records_redacted_truncated_prompt_and_response(tmp_path):
+    agent = _agent(
+        tmp_path,
+        _EvidenceProvider(["a very long provider response body"]),
+        evidence_capture_prompts=True,
+        evidence_prompt_capture_max_chars=16,
+    )
+
+    agent.chat("system with api_key=hidden-secret", "user message body over the limit")
+
+    entry = agent.get_provider_call_history()[0]
+    captured_system = entry["captured_prompt"]["system_prompt"]
+    assert "hidden-secret" not in captured_system["text"]
+    captured_user = entry["captured_prompt"]["user_message"]
+    assert captured_user["truncated"] is True
+    assert len(captured_user["text"]) == 16
+    assert captured_user["original_chars"] == len("user message body over the limit")
+    assert entry["captured_response"]["truncated"] is True
+    assert entry["captured_response"]["text"] == "a very long provider response body"[:16]
+
+
+def test_record_task_provider_calls_appends_and_persists(tmp_path):
+    project = _project(tmp_path)
+
+    appended = project.record_task_provider_calls(
+        "arch",
+        [
+            {"provider": "openai", "model": "gpt-4o", "success": False, "call_index": 1},
+            {"provider": "openai", "model": "gpt-4o", "success": True, "call_index": 2},
+        ],
+    )
+    project.save()
+
+    assert appended == 2
+    reloaded = ProjectState.load(str(tmp_path / "project_state.json"))
+    task = reloaded.get_task("arch")
+    assert [call["call_index"] for call in task.provider_calls] == [1, 2]
+    assert task.provider_calls[0]["success"] is False
+
+
+def test_record_task_provider_calls_redacts_secrets_and_skips_invalid_entries(tmp_path):
+    project = _project(tmp_path)
+
+    appended = project.record_task_provider_calls(
+        "arch",
+        [{"provider": "openai", "api_key": "sk-abcdefghijklmnop"}, "not-a-dict"],
+    )
+
+    assert appended == 1
+    task = project.get_task("arch")
+    assert task.provider_calls[0]["api_key"] == "[REDACTED]"
+
+
+def test_record_task_provider_calls_ignores_unknown_task(tmp_path):
+    project = _project(tmp_path)
+
+    assert project.record_task_provider_calls("missing", [{"provider": "openai"}]) == 0
+
+
+def test_legacy_task_payload_without_provider_calls_loads_with_empty_history(tmp_path):
+    project = _project(tmp_path)
+    project.save()
+    state_file = tmp_path / "project_state.json"
+    payload = json.loads(state_file.read_text())
+    payload.pop("integrity", None)
+    for task_payload in payload["tasks"]:
+        task_payload.pop("provider_calls", None)
+    state_file.write_text(json.dumps(payload))
+
+    reloaded = ProjectState.load(str(state_file))
+
+    assert reloaded.get_task("arch").provider_calls == []
+
+
+def test_replay_workflow_clears_provider_calls(tmp_path):
+    project = _project(tmp_path)
+    project.record_task_provider_calls("arch", [{"provider": "openai", "success": True}])
+    project.complete_task("arch", "done")
+
+    project.replay_workflow()
+
+    assert project.get_task("arch").provider_calls == []
+
+
+def test_override_task_preserves_provider_call_history(tmp_path):
+    project = _project(tmp_path)
+    project.start_task("arch")
+    project.record_task_provider_calls("arch", [{"provider": "openai", "success": False}])
+    project.fail_task("arch", RuntimeError("boom"))
+
+    assert project.override_task("arch", "manual output", reason="operator fix") is True
+    task = project.get_task("arch")
+    assert task.execution_mode == "manual_override"
+    assert len(task.provider_calls) == 1
+
+
+def test_run_task_records_provider_calls_across_retries(tmp_path):
+    config = KYCortexConfig(output_dir=str(tmp_path / "output"))
+    provider = _EvidenceProvider([RuntimeError("transient backend failure"), "ARCHITECTURE DOC"])
+    agent = _EvidenceAgent(provider, config)
+    orchestrator = Orchestrator(config, registry=AgentRegistry({"architect": agent}))
+    project = ProjectState(
+        project_name="Evidence Demo",
+        goal="Validate provider history",
+        state_file=str(tmp_path / "project_state.json"),
+    )
+    project.add_task(
+        Task(
+            id="arch",
+            title="Architecture",
+            description="Design",
+            assigned_to="architect",
+            retry_limit=1,
+        )
+    )
+    task = project.tasks[0]
+
+    with pytest.raises(AgentExecutionError):
+        orchestrator.run_task(task, project)
+    result = orchestrator.run_task(task, project)
+
+    assert result == "ARCHITECTURE DOC"
+    assert task.status == TaskStatus.DONE.value
+    assert len(task.provider_calls) == 2
+    assert task.provider_calls[0]["success"] is False
+    assert task.provider_calls[1]["success"] is True
+    assert [call["call_index"] for call in task.provider_calls] == [1, 2]
+    assert task.last_provider_call is not None
+    assert task.last_provider_call["success"] is True
+
+    project.save()
+    reloaded = ProjectState.load(str(tmp_path / "project_state.json"))
+    assert len(reloaded.get_task("arch").provider_calls) == 2

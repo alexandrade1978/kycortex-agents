@@ -321,6 +321,18 @@ def provider_call_metadata(agent: Any, output: Optional[AgentOutput] = None) -> 
     return None
 
 
+def provider_call_history(agent: Any) -> list[dict[str, Any]]:
+    """Return the agent's sanitized provider-call history, or an empty list when unsupported."""
+
+    getter = getattr(agent, "get_provider_call_history", None)
+    if not callable(getter):
+        return []
+    history = getter()
+    if not isinstance(history, list):
+        return []
+    return [entry for entry in history if isinstance(entry, dict)]
+
+
 def build_test_validation_runtime_input(
     context: dict[str, Any],
     output: AgentOutput,

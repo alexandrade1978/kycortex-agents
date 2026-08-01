@@ -100,6 +100,9 @@ class KYCortexConfig:
     execution_sandbox_max_wall_clock_seconds: float = 60.0
     execution_sandbox_max_memory_mb: int = 512
     execution_sandbox_temp_root: Optional[str] = None
+    evidence_sanitization_mode: str = "strict"
+    evidence_capture_prompts: bool = False
+    evidence_prompt_capture_max_chars: int = 20000
     project_name: str = "kycortex-project"
     output_dir: str = "./output"
     log_level: str = "INFO"
@@ -143,6 +146,7 @@ class KYCortexConfig:
             if provider_name.strip()
         }
         self.adaptive_prompt_default_mode = self.adaptive_prompt_default_mode.strip().lower()
+        self.evidence_sanitization_mode = self.evidence_sanitization_mode.strip().lower()
         self.adaptive_prompt_mode_overrides = {
             provider_model_key.strip().lower(): mode_name.strip().lower()
             for provider_model_key, mode_name in self.adaptive_prompt_mode_overrides.items()
@@ -252,6 +256,10 @@ class KYCortexConfig:
             )
         if self.workflow_max_repair_cycles < 0:
             raise ConfigValidationError("workflow_max_repair_cycles must be zero or greater")
+        if self.evidence_sanitization_mode not in {"strict", "audit"}:
+            raise ConfigValidationError("evidence_sanitization_mode must be 'strict' or 'audit'")
+        if self.evidence_prompt_capture_max_chars <= 0:
+            raise ConfigValidationError("evidence_prompt_capture_max_chars must be greater than zero")
         if self.provider_max_attempts <= 0:
             raise ConfigValidationError("provider_max_attempts must be greater than zero")
         if self.provider_retry_backoff_seconds < 0:

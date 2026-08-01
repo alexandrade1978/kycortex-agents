@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from copy import deepcopy
+from datetime import datetime, timezone
 import random
 import re
 from time import perf_counter, sleep
@@ -44,6 +45,7 @@ class BaseAgent(ABC):
         self._provider: Optional[BaseLLMProvider] = None
         self._provider_cache: dict[tuple[str, str], BaseLLMProvider] = {}
         self._last_provider_call_metadata: Optional[dict[str, Any]] = None
+        self._provider_call_log: list[dict[str, Any]] = []
         self._provider_call_count = 0
         self._provider_call_counts: dict[str, int] = {}
         self._provider_transient_failure_streaks: dict[str, int] = {}
@@ -83,6 +85,69 @@ class BaseAgent(ABC):
         return provider
 
     def chat(self, system_prompt: str, user_message: str) -> str:
+        """Call the provider execution plan and append the call outcome to the provider call log."""
+
+        previous_metadata = self._last_provider_call_metadata
+        response: Optional[str] = None
+        error: Optional[BaseException] = None
+        try:
+            response = self._chat_with_provider_plan(system_prompt, user_message)
+            return response
+        except BaseException as exc:
+            error = exc
+            raise
+        finally:
+            if (
+                self._last_provider_call_metadata is not None
+                and self._last_provider_call_metadata is not previous_metadata
+            ):
+                self._append_provider_call_log_entry(system_prompt, user_message, response, error)
+
+    def _append_provider_call_log_entry(
+        self,
+        system_prompt: str,
+        user_message: str,
+        response: Optional[str],
+        error: Optional[BaseException],
+    ) -> None:
+        entry = deepcopy(self._last_provider_call_metadata) or {}
+        entry["call_index"] = len(self._provider_call_log) + 1
+        entry["recorded_at"] = datetime.now(timezone.utc).isoformat()
+        if error is not None:
+            root_error = error
+            while root_error.__cause__ is not None:
+                root_error = root_error.__cause__
+            entry["error_type"] = type(root_error).__name__
+            entry["error_message"] = redact_sensitive_text(str(root_error))
+        if self.config.evidence_capture_prompts:
+            entry["captured_prompt"] = {
+                "system_prompt": self._capture_evidence_text(system_prompt),
+                "user_message": self._capture_evidence_text(user_message),
+            }
+            if response is not None:
+                entry["captured_response"] = self._capture_evidence_text(response)
+        self._provider_call_log.append(entry)
+
+    def _capture_evidence_text(self, value: str) -> dict[str, Any]:
+        redacted = redact_sensitive_text(value)
+        max_chars = self.config.evidence_prompt_capture_max_chars
+        truncated = len(redacted) > max_chars
+        return {
+            "text": redacted[:max_chars],
+            "truncated": truncated,
+            "original_chars": len(redacted),
+        }
+
+    def get_provider_call_history(self) -> list[dict[str, Any]]:
+        """Return sanitized provider-call log entries in call order."""
+
+        mode = self.config.evidence_sanitization_mode
+        return [
+            sanitize_provider_call_metadata(entry, mode=mode)
+            for entry in self._provider_call_log
+        ]
+
+    def _chat_with_provider_plan(self, system_prompt: str, user_message: str) -> str:
         started_at = perf_counter()
         sanitized_system_prompt = sanitize_prompt_input(system_prompt)
         sanitized_user_message = sanitize_prompt_input(user_message)

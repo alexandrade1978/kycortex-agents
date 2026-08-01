@@ -86,28 +86,52 @@ def redact_sensitive_data(value: Any) -> Any:
     return value
 
 
-def sanitize_provider_call_metadata(provider_call: Mapping[str, Any]) -> dict[str, Any]:
-    """Return provider-call metadata with secrets redacted and surfaced error/retry/budget details minimized."""
+SANITIZATION_MODE_STRICT = "strict"
+SANITIZATION_MODE_AUDIT = "audit"
+SUPPORTED_SANITIZATION_MODES = (SANITIZATION_MODE_STRICT, SANITIZATION_MODE_AUDIT)
 
+
+def sanitize_provider_call_metadata(
+    provider_call: Mapping[str, Any],
+    mode: str = SANITIZATION_MODE_STRICT,
+) -> dict[str, Any]:
+    """Return provider-call metadata with secrets redacted and surfaced error/retry/budget details minimized.
+
+    `strict` mode (default) degrades error text and fallback model names to boolean
+    presence flags. `audit` mode preserves redacted error text and fallback model
+    names for evidence-grade provider-call histories; secrets are redacted in both
+    modes.
+    """
+
+    if mode not in SUPPORTED_SANITIZATION_MODES:
+        raise ValueError(
+            f"Unsupported provider-call sanitization mode: {mode!r}; expected one of {SUPPORTED_SANITIZATION_MODES}"
+        )
+    preserve_error_details = mode == SANITIZATION_MODE_AUDIT
     sanitized = redact_sensitive_data(dict(provider_call))
     if not isinstance(sanitized, dict):
         return {}
-    _sanitize_provider_call_attempt_history(sanitized)
+    _sanitize_provider_call_attempt_history(sanitized, preserve_error_details=preserve_error_details)
     _sanitize_provider_call_budget_metadata(sanitized)
     _sanitize_provider_call_cancellation_metadata(sanitized)
     _sanitize_provider_call_circuit_breaker_metadata(sanitized)
     _sanitize_provider_call_elapsed_budget_metadata(sanitized)
     _sanitize_provider_call_timeout_metadata(sanitized)
-    _sanitize_provider_call_fallback_history(sanitized)
+    _sanitize_provider_call_fallback_history(sanitized, preserve_error_details=preserve_error_details)
     _sanitize_provider_call_health_metadata(sanitized)
     _sanitize_provider_call_active_target_metadata(sanitized)
     _sanitize_provider_call_primary_target_metadata(sanitized)
-    _sanitize_provider_call_top_level_error_message(sanitized)
-    _sanitize_provider_call_top_level_error_type(sanitized)
+    if not preserve_error_details:
+        _sanitize_provider_call_top_level_error_message(sanitized)
+        _sanitize_provider_call_top_level_error_type(sanitized)
     return sanitized
 
 
-def _sanitize_provider_call_attempt_history(provider_call: dict[str, Any]) -> None:
+def _sanitize_provider_call_attempt_history(
+    provider_call: dict[str, Any],
+    *,
+    preserve_error_details: bool = False,
+) -> None:
     attempt_history = provider_call.get("attempt_history")
     if not isinstance(attempt_history, list):
         return
@@ -122,8 +146,9 @@ def _sanitize_provider_call_attempt_history(provider_call: dict[str, Any]) -> No
         sanitized_entry.pop("uncapped_backoff_seconds", None)
         sanitized_entry.pop("base_backoff_seconds", None)
         sanitized_entry.pop("jitter_seconds", None)
-        _minimize_nested_provider_error_type(sanitized_entry)
-        _minimize_nested_provider_error_message(sanitized_entry)
+        if not preserve_error_details:
+            _minimize_nested_provider_error_type(sanitized_entry)
+            _minimize_nested_provider_error_message(sanitized_entry)
         sanitized_history.append(sanitized_entry)
 
     provider_call["attempt_history"] = sanitized_history
@@ -236,7 +261,11 @@ def _sanitize_provider_call_budget_metadata(provider_call: dict[str, Any]) -> No
         provider_call.pop(key, None)
 
 
-def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> None:
+def _sanitize_provider_call_fallback_history(
+    provider_call: dict[str, Any],
+    *,
+    preserve_error_details: bool = False,
+) -> None:
     provider_call.pop("fallback_used", None)
     provider_call.pop("fallback_count", None)
     fallback_history = provider_call.get("fallback_history")
@@ -250,15 +279,17 @@ def _sanitize_provider_call_fallback_history(provider_call: dict[str, Any]) -> N
             continue
 
         sanitized_entry = dict(entry)
-        sanitized_entry.pop("model", None)
+        if not preserve_error_details:
+            sanitized_entry.pop("model", None)
         sanitized_entry.pop("attempts_used", None)
         sanitized_entry.pop("provider_call_count", None)
         sanitized_entry.pop("provider_max_calls", None)
         sanitized_entry.pop("call_budget_exhausted", None)
         sanitized_entry.pop("remaining_cooldown_seconds", None)
 
-        _minimize_nested_provider_error_type(sanitized_entry)
-        _minimize_nested_provider_error_message(sanitized_entry)
+        if not preserve_error_details:
+            _minimize_nested_provider_error_type(sanitized_entry)
+            _minimize_nested_provider_error_message(sanitized_entry)
         sanitized_history.append(sanitized_entry)
 
     provider_call["fallback_history"] = sanitized_history

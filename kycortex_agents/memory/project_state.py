@@ -221,6 +221,7 @@ class Task:
     output_payload: Optional[Dict[str, Any]] = None
     skip_reason_type: Optional[str] = None
     last_provider_call: Optional[Dict[str, Any]] = None
+    provider_calls: List[Dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     started_at: Optional[str] = None
     last_attempt_started_at: Optional[str] = None
@@ -418,6 +419,23 @@ class ProjectState:
                 self._touch(task.completed_at)
                 return
 
+    def record_task_provider_calls(self, task_id: str, provider_calls: List[Dict[str, Any]]) -> int:
+        """Append sanitized provider-call attempt records to a task's append-only call history."""
+
+        task = self.get_task(task_id)
+        if task is None:
+            return 0
+        appended_count = 0
+        for provider_call in provider_calls:
+            if not isinstance(provider_call, dict):
+                continue
+            redacted_call = cast(Dict[str, Any], _redact_payload(dict(provider_call)))
+            task.provider_calls.append(redacted_call)
+            appended_count += 1
+        if appended_count:
+            self._touch()
+        return appended_count
+
     def complete_task(self, task_id: str, output: str | AgentOutput, provider_call: Optional[Dict[str, Any]] = None):
         """Mark a task complete and persist its raw or structured output payload."""
 
@@ -526,6 +544,7 @@ class ProjectState:
             task.output_payload = None
             task.skip_reason_type = None
             task.last_provider_call = None
+            task.provider_calls = []
             task.execution_mode = None
             task.started_at = None
             task.last_attempt_started_at = None

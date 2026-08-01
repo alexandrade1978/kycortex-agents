@@ -218,6 +218,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "examples/example_complex_workflow.py",
         "examples/example_custom_agent.py",
         "examples/example_failure_recovery.py",
+        "examples/example_internal_observability_report.py",
         "examples/example_multi_provider.py",
         "examples/example_provider_matrix_validation.py",
         "examples/example_resume_workflow.py",
@@ -230,6 +231,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "scripts/release_artifact_manifest.py",
         "scripts/release_metadata_check.py",
         "scripts/release_check.py",
+        "scripts/render_internal_observability_html.py",
         "scripts/release_published_assets_check.py",
         "scripts/release_promotion_summary.py",
         "kycortex_agents/agents/registry.py",
@@ -472,6 +474,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "examples/example_test_mode.py" in docs_readme
     assert "examples/example_complex_workflow.py" in docs_readme
     assert "examples/example_failure_recovery.py" in docs_readme
+    assert "examples/example_internal_observability_report.py" in docs_readme
     assert "examples/example_snapshot_inspection.py" in docs_readme
     # Prose descriptions present in the new concise docs index
     assert "provider configuration, routing, health checks" in docs_readme
@@ -483,6 +486,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "deterministic local execution without a live provider" in docs_readme
     assert "converging multi-parent workflow example" in docs_readme
     assert "persisted failure-and-resume example" in docs_readme
+    assert "internal operator report shell backed by the validated observability adapter" in docs_readme
     assert "internal telemetry read path" in docs_readme
     assert "dual-license overview" in docs_readme
     assert "go-live-policy.md" in docs_readme

@@ -113,6 +113,8 @@ This is the preferred public read model for inspection code because it normalize
 
 `ProjectState.internal_runtime_telemetry()` is now the dedicated internal read path for operator and UI telemetry. It preserves exact per-task provider/model identities, usage, durations and latencies, repair-budget counters, and richer provider-health data without widening the public snapshot contract.
 
+Repository-owned internal operator surfaces can layer read-only adapters over `ProjectState.load(...)` plus `ProjectState.internal_runtime_telemetry()` when they need panel-ready workflow, task, repair/resume, or provider-health views. That adapter layer is an internal composition detail, not a public snapshot contract.
+
 ## Legacy Compatibility
 
 `ProjectState.load()` normalizes older persisted payloads so the runtime can keep loading historical state files.

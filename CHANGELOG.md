@@ -8,6 +8,17 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 Current package version remains `1.0.13b2`.
 
+### Added
+
+- Internal observability read-model adapter (`kycortex_agents/memory/internal_observability.py`): a read-only view builder over `ProjectState.load(...)` plus `internal_runtime_telemetry()` that derives panel-ready workflow overview, task timeline, provider panels, and execution diagnostics for repository-owned operator surfaces.
+- Internal operator report shells downstream from that adapter: `examples/example_internal_observability_report.py` (terminal report) and `scripts/render_internal_observability_html.py` (static HTML report with client-side filtering, search, drill-downs, deep links, print handoff, and a `--serve` local HTTP mode).
+- Focused validation for the adapter and both shells in `tests/test_internal_observability.py`, `tests/test_internal_observability_example.py`, and `tests/test_internal_observability_html.py`, covering JSON and SQLite-backed state files.
+
+### Changed
+
+- `docs/persistence.md` now documents that repository-owned internal operator surfaces may layer read-only adapters over the internal telemetry read path without widening the public snapshot contract.
+- `docs/README.md` now lists the internal operator report shells under repository-owned operational records instead of the public examples surface.
+
 ### Operational Readiness
 
 - Phase 17 production qualification for `v1.0.13b2` is now explicitly signed off for the documented single-maintainer deployment class after the repository-owned canary, rollback-drill, support-model, and release-ownership evidence closed green.

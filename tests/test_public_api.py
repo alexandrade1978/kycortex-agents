@@ -473,6 +473,17 @@ def test_snapshot_inspection_example_uses_public_runtime_imports():
     assert "from kycortex_agents.workflows import" not in example
 
 
+def test_internal_observability_report_example_uses_public_runtime_imports_and_internal_adapter():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_internal_observability_report.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.memory.internal_observability import load_internal_observability_view" in example
+    assert "from kycortex_agents.providers import BaseLLMProvider" in example
+    assert "from kycortex_agents.types import AgentInput, AgentOutput, DecisionRecord" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
 def test_example_defines_dependency_aware_workflow_chain():
     example_path = Path(__file__).resolve().parents[1] / "examples" / "example_simple_project.py"
     example = example_path.read_text(encoding="utf-8")
@@ -587,3 +598,21 @@ def test_snapshot_inspection_example_documents_snapshot_outputs_and_provider_met
     assert 'snapshot.artifacts' in example
     assert 'snapshot.decisions' in example
     assert 'snapshot.execution_events' in example
+
+
+def test_internal_observability_report_example_documents_adapter_backed_shell_output():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_internal_observability_report.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert 'STATE_PATH = f"{OUTPUT_DIR}/project_state.sqlite"' in example
+    assert 'project = build_observability_project(STATE_PATH)' in example
+    assert 'view = load_internal_observability_view(STATE_PATH)' in example
+    assert 'view["workflow_overview"]' in example
+    assert 'view["task_timeline"]' in example
+    assert 'view["provider_panels"]' in example
+    assert 'view["execution_panel"]' in example
+    assert "Path(source['state_file']).name" in example
+    assert 'print("Internal observability source:")' in example
+    assert 'print("\\nTask timeline:")' in example
+    assert 'print("\\nProvider panels:")' in example
+    assert 'print("\\nExecution diagnostics:")' in example

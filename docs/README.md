@@ -50,3 +50,5 @@ This index points to the stable public documentation surface for KYCortex.
 ## Operational And Historical Records
 
 The repository also contains release and canary operations material under [canary-operations.md](canary-operations.md) and [canary-evidence](canary-evidence), but those records are repository-owned operational or historical references rather than part of the primary public product documentation surface.
+
+Repository-owned internal operator surfaces follow the same rule: [examples/example_internal_observability_report.py](../examples/example_internal_observability_report.py) is an internal operator report shell backed by the validated observability adapter, and [scripts/render_internal_observability_html.py](../scripts/render_internal_observability_html.py) renders the same adapter-backed view as a static HTML report. Both consume internal telemetry and are not part of the supported public snapshot contract.

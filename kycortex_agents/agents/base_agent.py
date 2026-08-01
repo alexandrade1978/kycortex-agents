@@ -37,6 +37,7 @@ class BaseAgent(ABC):
     required_context_keys: tuple[str, ...] = ()
     output_artifact_type: ArtifactType = ArtifactType.TEXT
     output_artifact_name: str = "output"
+    output_artifact_disclaimer: Optional[str] = None
 
     def __init__(self, name: str, role: str, config: KYCortexConfig):
         self.name = name
@@ -1059,6 +1060,15 @@ class BaseAgent(ABC):
             )
         if not output.artifacts:
             output.artifacts.append(self._build_default_artifact(agent_input, output))
+        if self.output_artifact_disclaimer:
+            for artifact in output.artifacts:
+                content = artifact.content
+                if (
+                    isinstance(content, str)
+                    and content.strip()
+                    and not content.startswith(self.output_artifact_disclaimer)
+                ):
+                    artifact.content = f"{self.output_artifact_disclaimer}\n\n{content}"
         return output
 
     def _redact_output(self, output: AgentOutput) -> AgentOutput:

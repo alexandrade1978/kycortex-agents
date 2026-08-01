@@ -314,6 +314,7 @@ class ProjectState:
     run_identity: Dict[str, Any] = field(default_factory=dict)
     event_sequence: int = 0
     snapshot_history_limit: int = 0
+    legal_hold: bool = False
     schema_version: int = field(default=PROJECT_STATE_SCHEMA_VERSION, init=False)
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     state_file: str = "project_state.json"
@@ -1314,6 +1315,7 @@ class ProjectState:
                     self.state_file,
                     payload,
                     keep_last=self.snapshot_history_limit,
+                    prune=not self.legal_hold,
                 )
 
     @classmethod

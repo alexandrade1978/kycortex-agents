@@ -109,11 +109,12 @@ class BaseStateStore(ABC):
 
         raise NotImplementedError
 
-    def save_snapshot(self, path: str, data: Dict[str, Any], *, keep_last: int) -> None:
+    def save_snapshot(self, path: str, data: Dict[str, Any], *, keep_last: int, prune: bool = True) -> None:
         """Append a versioned snapshot of the payload, pruning history beyond `keep_last` entries.
 
-        The default implementation is a no-op so custom stores remain compatible;
-        built-in backends override it.
+        When `prune` is False (for example under a legal hold) the snapshot is still
+        appended but no history entries are removed. The default implementation is a
+        no-op so custom stores remain compatible; built-in backends override it.
         """
 
     def list_snapshots(self, path: str) -> List[Dict[str, Any]]:
@@ -192,7 +193,7 @@ class JsonStateStore(BaseStateStore):
         entries.sort(key=lambda entry: entry["version"])
         return entries
 
-    def save_snapshot(self, path: str, data: Dict[str, Any], *, keep_last: int) -> None:
+    def save_snapshot(self, path: str, data: Dict[str, Any], *, keep_last: int, prune: bool = True) -> None:
         if keep_last <= 0:
             return
         snapshot_dir = self._snapshot_directory(path)
@@ -210,6 +211,8 @@ class JsonStateStore(BaseStateStore):
                 f"Failed to save project state snapshot for {_public_state_path_label(path)}"
             ) from exc
         _harden_state_file_permissions(snapshot_path)
+        if not prune:
+            return
         for stale_entry in self._snapshot_entries(path)[:-keep_last]:
             try:
                 os.remove(os.path.join(snapshot_dir, stale_entry["filename"]))
@@ -296,7 +299,7 @@ class SqliteStateStore(BaseStateStore):
                 f"Project state file is invalid SQLite: {_public_state_path_label(path)}"
             ) from exc
 
-    def save_snapshot(self, path: str, data: Dict[str, Any], *, keep_last: int) -> None:
+    def save_snapshot(self, path: str, data: Dict[str, Any], *, keep_last: int, prune: bool = True) -> None:
         if keep_last <= 0:
             return
         payload = json.dumps(data, default=str)
@@ -316,16 +319,17 @@ class SqliteStateStore(BaseStateStore):
                         "INSERT INTO project_state_history (payload, saved_at) VALUES (?, ?)",
                         (payload, datetime.now(timezone.utc).isoformat()),
                     )
-                    connection.execute(
-                        """
-                        DELETE FROM project_state_history
-                        WHERE version NOT IN (
-                            SELECT version FROM project_state_history
-                            ORDER BY version DESC LIMIT ?
+                    if prune:
+                        connection.execute(
+                            """
+                            DELETE FROM project_state_history
+                            WHERE version NOT IN (
+                                SELECT version FROM project_state_history
+                                ORDER BY version DESC LIMIT ?
+                            )
+                            """,
+                            (keep_last,),
                         )
-                        """,
-                        (keep_last,),
-                    )
         except sqlite3.Error as exc:
             raise StatePersistenceError(
                 f"Failed to save project state snapshot for {_public_state_path_label(path)}"

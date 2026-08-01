@@ -11,6 +11,7 @@ This guide explains how workflow state is persisted in `kycortex-agents`, how th
 - structured task outputs and provider-call metadata
 - project-level decisions, artifacts, and execution events
 - workflow lifecycle timestamps such as started, finished, resumed, and updated times
+- run-identity provenance captured when a workflow execution starts
 
 `ProjectState.save()` serializes that state through the configured state-store backend, and `ProjectState.load(path)` restores it into the current runtime dataclasses.
 
@@ -131,6 +132,16 @@ Current compatibility behavior includes:
 This keeps the persistence layer tolerant of earlier saved states while still exposing the current public snapshot model.
 
 When artifacts are persisted, the runtime also validates that every resolved artifact path stays inside `output_dir`, including through symlinked directories. This prevents persisted artifacts from escaping the configured output root.
+
+## Execution Provenance
+
+Persisted state records provenance metadata that supports later inspection of who ran a workflow and in what order events happened.
+
+- `run_identity` is captured every time a workflow execution starts: an opaque `run_id`, the OS user, hostname, process id, package and Python versions, platform label, start timestamp, and clock metadata (wall-clock source, UTC timezone, and an `ntp_verified: false` marker signalling that clock trust is not independently attested).
+- Every execution event carries a monotonic `sequence` number so event ordering no longer depends on list position or wall-clock comparisons. Legacy state files are backfilled with positional sequence numbers on load.
+- Each finished task records an `execution_mode`: `provider` when a real provider call produced the output, `deterministic` when no provider call was involved (custom or scripted agents), and `manual_override` for operator-completed tasks. This keeps simulated or scripted runs distinguishable from real provider-backed runs in the persisted evidence.
+
+Provenance metadata describes the recording environment; it is not a tamper-evidence or attestation mechanism on its own.
 
 ## Failure Modes
 

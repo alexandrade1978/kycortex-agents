@@ -10,6 +10,7 @@ Current package version remains `1.0.13b2`.
 
 ### Added
 
+- Execution provenance foundation in persisted workflow state: `ProjectState.run_identity` (run id, OS user, hostname, pid, package/Python versions, platform, start timestamp, and clock metadata) captured on workflow start, monotonic `sequence` numbers on every execution event, and per-task `execution_mode` provenance (`provider`, `deterministic`, or `manual_override`) so scripted runs stay distinguishable from provider-backed runs. Persisted schema advanced to version 2 with automatic migration and positional sequence backfill for older state files.
 - Compliance workflow pack (`kycortex_agents/workflows/compliance.py`): a public scenario catalog and project builder for regulated-intake workflows, shipping the empirically validated `kyc_compliance_intake` scenario as a ready-to-run seven-task dependency-aware workflow (`ComplianceScenario`, `list_compliance_scenarios`, `get_compliance_scenario`, `build_compliance_project`).
 - Deterministic pack demo `examples/example_compliance_pack.py` and focused validation in `tests/test_compliance_workflows.py`, including an end-to-end deterministic workflow run through the packaged KYC scenario.
 - Internal observability read-model adapter (`kycortex_agents/memory/internal_observability.py`): a read-only view builder over `ProjectState.load(...)` plus `internal_runtime_telemetry()` that derives panel-ready workflow overview, task timeline, provider panels, and execution diagnostics for repository-owned operator surfaces.

@@ -84,6 +84,7 @@ Legacy `run(task_description, context)` compatibility still exists, but new inte
 
 - The repository still exports compatibility paths for legacy agent protocol dispatch where practical.
 - Persisted legacy states continue to load with safe defaults when newer fields are missing.
+- Persisted project-state schema is now version 2: `ProjectState.load()` migrates version 0 and 1 payloads automatically, backfilling positional event sequence numbers; states saved by newer versions are rejected explicitly.
 - The 1.0 release treats the documented public API as the supported stability boundary.
 
 ## Recommended Validation After Migration

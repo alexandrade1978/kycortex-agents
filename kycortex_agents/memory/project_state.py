@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import getpass
+import os
+import platform
+import socket
+import time
+import uuid
 from collections import deque
 from dataclasses import dataclass, field, asdict
+from importlib import metadata as importlib_metadata
 from typing import List, Dict, Any, Optional, Callable, Mapping, cast
 from datetime import datetime, timezone
 
@@ -45,19 +52,76 @@ from kycortex_agents.types import (
     WorkflowTelemetry,
 )
 
-PROJECT_STATE_SCHEMA_VERSION = 1
+PROJECT_STATE_SCHEMA_VERSION = 2
 _LEGACY_PROJECT_STATE_SCHEMA_VERSION = 0
 
 
 def _migrate_project_state_v0_to_v1(data: Dict[str, Any]) -> Dict[str, Any]:
     migrated = dict(data)
-    migrated["schema_version"] = PROJECT_STATE_SCHEMA_VERSION
+    migrated["schema_version"] = 1
+    return migrated
+
+
+def _migrate_project_state_v1_to_v2(data: Dict[str, Any]) -> Dict[str, Any]:
+    migrated = dict(data)
+    highest_sequence = 0
+    events = migrated.get("execution_events")
+    if isinstance(events, list):
+        for index, event in enumerate(events):
+            if isinstance(event, dict):
+                raw_sequence = event.get("sequence")
+                if isinstance(raw_sequence, int) and raw_sequence > 0:
+                    highest_sequence = max(highest_sequence, raw_sequence)
+                else:
+                    event["sequence"] = index + 1
+                    highest_sequence = max(highest_sequence, index + 1)
+    migrated.setdefault("run_identity", {})
+    raw_event_sequence = migrated.get("event_sequence")
+    if not isinstance(raw_event_sequence, int) or raw_event_sequence < highest_sequence:
+        migrated["event_sequence"] = highest_sequence
+    migrated["schema_version"] = 2
     return migrated
 
 
 _PROJECT_STATE_SCHEMA_MIGRATIONS: Dict[int, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     _LEGACY_PROJECT_STATE_SCHEMA_VERSION: _migrate_project_state_v0_to_v1,
+    1: _migrate_project_state_v1_to_v2,
 }
+
+
+def _package_version() -> str:
+    try:
+        return importlib_metadata.version("kycortex-agents")
+    except importlib_metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def _collect_run_identity(started_at: str) -> Dict[str, Any]:
+    try:
+        os_user = getpass.getuser()
+    except (KeyError, OSError):
+        os_user = "unknown"
+    try:
+        hostname = socket.gethostname()
+    except OSError:
+        hostname = "unknown"
+    return {
+        "run_id": uuid.uuid4().hex,
+        "os_user": os_user,
+        "hostname": hostname,
+        "pid": os.getpid(),
+        "package_version": _package_version(),
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "started_at": started_at,
+        "clock": {
+            "source": "system_wall_clock",
+            "timezone": "UTC",
+            "time_ns": time.time_ns(),
+            "monotonic_ns": time.monotonic_ns(),
+            "ntp_verified": False,
+        },
+    }
 
 
 def _redact_text(value: Optional[str]) -> Optional[str]:
@@ -101,6 +165,7 @@ class Task:
     required_for_acceptance: bool = False
     retry_limit: int = 0
     attempts: int = 0
+    execution_mode: Optional[str] = None
     last_error: Optional[str] = None
     last_error_type: Optional[str] = None
     last_error_category: Optional[str] = None
@@ -143,6 +208,8 @@ class ProjectState:
     repair_cycle_count: int = 0
     repair_max_cycles: int = 0
     repair_history: List[Dict[str, Any]] = field(default_factory=list)
+    run_identity: Dict[str, Any] = field(default_factory=dict)
+    event_sequence: int = 0
     schema_version: int = field(default=PROJECT_STATE_SCHEMA_VERSION, init=False)
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     state_file: str = "project_state.json"
@@ -225,6 +292,7 @@ class ProjectState:
                 task.last_error_type = error_type
                 task.last_error_category = error_category or FailureCategory.TASK_EXECUTION.value
                 task.last_provider_call = redacted_provider_call
+                task.execution_mode = "provider" if redacted_provider_call is not None else "deterministic"
                 if task.attempts <= task.retry_limit:
                     task.status = TaskStatus.PENDING.value
                     task.completed_at = None
@@ -310,6 +378,7 @@ class ProjectState:
         """Mark a task complete and persist its raw or structured output payload."""
 
         redacted_provider_call = _redact_provider_call(provider_call)
+        execution_mode = "provider" if redacted_provider_call is not None else "deterministic"
         for t in self.tasks:
             if t.id == task_id:
                 t.status = TaskStatus.DONE.value
@@ -325,6 +394,7 @@ class ProjectState:
                 if t.repair_origin_task_id is None:
                     t.repair_context = {}
                 t.last_provider_call = redacted_provider_call
+                t.execution_mode = execution_mode
                 t.completed_at = datetime.now(timezone.utc).isoformat()
                 self._record_task_event(t, "completed", t.completed_at)
                 self._record_execution_event(
@@ -336,6 +406,7 @@ class ProjectState:
                         "attempts": t.attempts,
                         "assigned_to": t.assigned_to,
                         "provider_call": redacted_provider_call,
+                        "execution_mode": execution_mode,
                         "last_attempt_duration_ms": self._duration_ms(t.last_attempt_started_at, t.completed_at),
                         "task_duration_ms": self._duration_ms(t.started_at, t.completed_at),
                     },
@@ -411,6 +482,7 @@ class ProjectState:
             task.output_payload = None
             task.skip_reason_type = None
             task.last_provider_call = None
+            task.execution_mode = None
             task.started_at = None
             task.last_attempt_started_at = None
             task.last_resumed_at = None
@@ -959,6 +1031,7 @@ class ProjectState:
         self.failure_category = None
         self.acceptance_criteria_met = False
         self.acceptance_evaluation = {}
+        self.run_identity = _collect_run_identity(started_at)
         self._record_execution_event(
             event="workflow_started",
             timestamp=started_at,
@@ -967,6 +1040,7 @@ class ProjectState:
                 "acceptance_policy": self.acceptance_policy,
                 "repair_cycle_count": self.repair_cycle_count,
                 "repair_max_cycles": self.repair_max_cycles,
+                "run_id": self.run_identity["run_id"],
             },
         )
         self._touch(started_at)
@@ -1410,6 +1484,7 @@ class ProjectState:
         task.repair_context = {}
         task.skip_reason_type = None
         task.last_provider_call = None
+        task.execution_mode = "manual_override"
         task.last_resumed_at = overridden_at
         task.completed_at = overridden_at
         self._record_task_event(task, "overridden", overridden_at, error_message=override_reason)
@@ -1644,8 +1719,10 @@ class ProjectState:
             normalized_details["provider_budget"] = self._provider_budget_summary(
                 normalized_details.get("provider_call")
             )
+        self.event_sequence += 1
         self.execution_events.append(
             {
+                "sequence": self.event_sequence,
                 "event": event,
                 "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
                 "task_id": task_id,

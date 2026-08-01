@@ -216,6 +216,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "RELEASE_STATUS.md",
         "docs/README.md",
         "examples/example_complex_workflow.py",
+        "examples/example_compliance_pack.py",
         "examples/example_custom_agent.py",
         "examples/example_failure_recovery.py",
         "examples/example_internal_observability_report.py",
@@ -227,6 +228,7 @@ def test_generated_egg_info_sources_include_current_distribution_assets():
         "examples/example_test_mode.py",
         "kycortex_agents/exceptions.py",
         "kycortex_agents/py.typed",
+        "kycortex_agents/workflows/compliance.py",
         "scripts/package_check.py",
         "scripts/release_artifact_manifest.py",
         "scripts/release_metadata_check.py",
@@ -472,6 +474,7 @@ def test_docs_readme_covers_current_public_navigation_surfaces():
     assert "examples/example_multi_provider.py" in docs_readme
     assert "examples/example_provider_matrix_validation.py" in docs_readme
     assert "examples/example_test_mode.py" in docs_readme
+    assert "examples/example_compliance_pack.py" in docs_readme
     assert "examples/example_complex_workflow.py" in docs_readme
     assert "examples/example_failure_recovery.py" in docs_readme
     assert "examples/example_internal_observability_report.py" in docs_readme

@@ -205,7 +205,7 @@ def test_public_package_modules_define_module_docstrings():
     assert kycortex_agents.agents.__doc__ == "Public agent implementations and registry helpers for workflow execution."
     assert kycortex_agents.providers.__doc__ == "Public provider interfaces and built-in OpenAI, Anthropic, and Ollama integrations."
     assert kycortex_agents.memory.__doc__ == "Public project-state models and persistence backends for workflow storage."
-    assert kycortex_agents.workflows.__doc__ == "Public workflow-facing imports for orchestration state, tasks, and statuses."
+    assert kycortex_agents.workflows.__doc__ == "Public workflow-facing imports and packaged workflow packs for orchestration state, tasks, and statuses."
 
 
 def test_public_state_store_module_defines_docstrings():
@@ -443,6 +443,16 @@ def test_test_mode_example_uses_top_level_public_imports():
     example = example_path.read_text(encoding="utf-8")
 
     assert "from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState, Task" in example
+    assert "from kycortex_agents.workflows import" not in example
+
+
+def test_compliance_pack_example_uses_public_pack_imports():
+    example_path = Path(__file__).resolve().parents[1] / "examples" / "example_compliance_pack.py"
+    example = example_path.read_text(encoding="utf-8")
+
+    assert "from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState" in example
+    assert "from kycortex_agents.workflows.compliance import build_compliance_project, get_compliance_scenario, list_compliance_scenarios" in example
+    assert 'get_compliance_scenario("kyc_compliance_intake")' in example
     assert "from kycortex_agents.workflows import" not in example
 
 

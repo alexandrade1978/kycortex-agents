@@ -267,6 +267,30 @@ config = KYCortexConfig(
 )
 ```
 
+## Compliance Workflow Pack
+
+The package ships a compliance workflow pack under `kycortex_agents.workflows.compliance` with prevalidated project builders for regulated-intake domains.
+
+The pack exposes:
+
+- `ComplianceScenario`: frozen declarative specification for a packaged scenario (goal, behavior contract, canonical details contract, fixture example, docs and legal focus).
+- `list_compliance_scenarios()`: the built-in scenario catalog.
+- `get_compliance_scenario(slug)`: slug-based lookup that raises `WorkflowDefinitionError` for unknown slugs.
+- `build_compliance_project(scenario, *, state_file=None)`: a ready-to-run `ProjectState` implementing the scenario as a dependency-aware seven-task workflow (architecture, implementation, dependencies, tests, review, documentation, and legal note).
+
+The built-in `kyc_compliance_intake` scenario targets KYC and AML intake screening for regulated customer onboarding. Its task prompts embed the empirically validated public contract anchors (exact facade and request-model names, canonical details keys, observable outcome rules), so generated artifacts stay verifiable by the workflow output validation described above.
+
+```python
+from kycortex_agents import KYCortexConfig, Orchestrator
+from kycortex_agents.workflows.compliance import build_compliance_project, get_compliance_scenario
+
+scenario = get_compliance_scenario("kyc_compliance_intake")
+project = build_compliance_project(scenario, state_file="./output/project_state.json")
+Orchestrator(KYCortexConfig()).execute_workflow(project)
+```
+
+See [examples/example_compliance_pack.py](../examples/example_compliance_pack.py) for a deterministic end-to-end run without a live provider.
+
 ## Troubleshooting Workflow Failures
 
 When a workflow does not progress as expected, inspect these areas first:

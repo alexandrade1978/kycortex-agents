@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from kycortex_agents.exceptions import AgentExecutionError
 from kycortex_agents.orchestration.private_files import (
@@ -16,6 +19,8 @@ from kycortex_agents.providers.base import redact_sensitive_text
 from kycortex_agents.types import ArtifactRecord, ArtifactType
 
 SegmentSanitizer = Callable[[str, str, str], str]
+
+ARTIFACT_MANIFEST_FILENAME = "artifacts_manifest.json"
 
 
 def failed_artifact_content(
@@ -53,6 +58,7 @@ class ArtifactPersistenceSupport:
     sanitize_sub: SegmentSanitizer = field(default=re.sub, repr=False, compare=False)
 
     def persist_artifacts(self, artifacts: list[ArtifactRecord]) -> None:
+        persisted: list[ArtifactRecord] = []
         for artifact in artifacts:
             content = artifact.content
             if not isinstance(content, str) or not content.strip():
@@ -67,6 +73,39 @@ class ArtifactPersistenceSupport:
             harden_private_file_permissions(target_path)
             artifact.content = persisted_content
             artifact.path = self.artifact_record_path(target_path)
+            persisted.append(artifact)
+        if persisted:
+            self._update_artifact_manifest(persisted)
+
+    def _update_artifact_manifest(self, persisted: list[ArtifactRecord]) -> None:
+        manifest_path = self._output_root() / ARTIFACT_MANIFEST_FILENAME
+        entries: dict[str, Any] = {}
+        if manifest_path.exists():
+            try:
+                existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(existing, dict) and isinstance(existing.get("entries"), dict):
+                    entries = existing["entries"]
+            except (OSError, json.JSONDecodeError):
+                entries = {}
+        updated_at = datetime.now(timezone.utc).isoformat()
+        for artifact in persisted:
+            if not artifact.path or not isinstance(artifact.content, str):
+                continue
+            content_bytes = artifact.content.encode("utf-8")
+            entries[artifact.path] = {
+                "sha256": hashlib.sha256(content_bytes).hexdigest(),
+                "size_bytes": len(content_bytes),
+                "name": artifact.name,
+                "artifact_type": artifact.artifact_type.value,
+                "recorded_at": updated_at,
+            }
+        manifest = {
+            "algorithm": "sha256",
+            "updated_at": updated_at,
+            "entries": entries,
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        harden_private_file_permissions(manifest_path)
 
     def resolve_artifact_output_path(self, artifact: ArtifactRecord) -> Path:
         output_root = self._output_root()

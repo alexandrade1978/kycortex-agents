@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import getpass
+import hashlib
+import json
 import os
 import platform
 import socket
@@ -94,6 +96,48 @@ def _package_version() -> str:
         return importlib_metadata.version("kycortex-agents")
     except importlib_metadata.PackageNotFoundError:
         return "unknown"
+
+
+STATE_INTEGRITY_ALGORITHM = "sha256"
+
+
+def compute_state_digest(payload: Mapping[str, Any]) -> str:
+    """Return the SHA-256 digest of the canonical JSON payload, excluding its integrity block."""
+
+    hashable = {key: value for key, value in payload.items() if key != "integrity"}
+    canonical = json.dumps(hashable, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def verify_persisted_state_integrity(path: str) -> bool:
+    """Return whether a persisted state file carries a matching integrity digest."""
+
+    payload = resolve_state_store(path).load(path)
+    integrity = payload.get("integrity")
+    if not isinstance(integrity, dict):
+        return False
+    recorded_digest = integrity.get("state_sha256")
+    if not isinstance(recorded_digest, str) or not recorded_digest:
+        return False
+    return compute_state_digest(payload) == recorded_digest
+
+
+def _integrity_sidecar_path(path: str) -> str:
+    return f"{path}.sha256"
+
+
+def _write_integrity_sidecar(path: str, digest: str) -> None:
+    sidecar_path = _integrity_sidecar_path(path)
+    label = _public_state_path_label(path)
+    try:
+        with open(sidecar_path, "w", encoding="utf-8") as sidecar:
+            sidecar.write(f"{digest}  {label}\n")
+        if os.name == "posix":
+            os.chmod(sidecar_path, 0o600)
+    except OSError as exc:
+        raise StatePersistenceError(
+            f"Failed to write project state integrity sidecar for {label}"
+        ) from exc
 
 
 def _collect_run_identity(started_at: str) -> Dict[str, Any]:
@@ -1170,13 +1214,22 @@ class ProjectState:
 
         self._touch()
         state_store = resolve_state_store(self.state_file)
-        state_store.save(self.state_file, cast(Dict[str, Any], _redact_payload(self._serialized_state())))
+        payload = cast(Dict[str, Any], _redact_payload(self._serialized_state()))
+        digest = compute_state_digest(payload)
+        payload["integrity"] = {
+            "algorithm": STATE_INTEGRITY_ALGORITHM,
+            "state_sha256": digest,
+            "computed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        state_store.save(self.state_file, payload)
+        _write_integrity_sidecar(self.state_file, digest)
 
     @classmethod
     def load(cls, path: str) -> "ProjectState":
         """Load a project state from disk and normalize legacy persisted fields."""
 
         data = cls._migrate_persisted_state(resolve_state_store(path).load(path), path)
+        data.pop("integrity", None)
         tasks = [Task(**t) for t in data.pop("tasks", [])]
         schema_version = data.pop("schema_version", PROJECT_STATE_SCHEMA_VERSION)
         try:

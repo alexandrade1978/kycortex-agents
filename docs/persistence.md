@@ -143,6 +143,16 @@ Persisted state records provenance metadata that supports later inspection of wh
 
 Provenance metadata describes the recording environment; it is not a tamper-evidence or attestation mechanism on its own.
 
+## State Integrity Digest
+
+Every `ProjectState.save()` embeds an `integrity` block in the persisted payload and writes a `<state_file>.sha256` sidecar next to the state file.
+
+- The digest is a SHA-256 hash of the canonical JSON payload (sorted keys, compact separators), excluding the `integrity` block itself. For the SQLite backend the digest covers the stored payload, not the raw database file bytes.
+- `verify_persisted_state_integrity(path)` recomputes the digest and returns whether it matches the recorded value; it returns `False` when the state was modified after saving or carries no integrity block (states saved by older versions).
+- Generated workflow artifacts get a companion `artifacts_manifest.json` at the output-directory root with the SHA-256 digest, byte size, name, and type of every persisted artifact file.
+
+The digest detects post-save modification of state content; it does not by itself prove who modified a file or prevent an attacker from recomputing digests. Tamper-evident chaining is a separate concern.
+
 ## Failure Modes
 
 Persistence failures are normalized into `StatePersistenceError`.

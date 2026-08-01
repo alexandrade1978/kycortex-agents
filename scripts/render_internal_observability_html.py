@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import argparse
 import re
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from html import escape
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 from urllib.parse import urlsplit
 
 from kycortex_agents.memory.internal_observability import InternalObservabilityView, load_internal_observability_view
+from kycortex_agents.memory.project_state import compute_state_digest
+from kycortex_agents.memory.state_store import resolve_state_store
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,8 +50,32 @@ def resolve_output_html_path(state_file: str, output_html: str | None) -> Path:
     return Path(state_file).resolve().with_name("internal_observability_report.html")
 
 
-def build_html_report(view: InternalObservabilityView) -> str:
+def _tool_version() -> str:
+    try:
+        return importlib_metadata.version("kycortex-agents")
+    except importlib_metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def build_report_provenance(state_file: str) -> dict[str, str]:
+    """Return generation provenance for the report: timestamp, tool version, and source digest."""
+
+    try:
+        payload = resolve_state_store(state_file).load(state_file)
+        state_sha256 = compute_state_digest(payload)
+    except Exception:
+        state_sha256 = "unavailable"
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "tool_version": _tool_version(),
+        "state_sha256": state_sha256,
+    }
+
+
+def build_html_report(view: InternalObservabilityView, provenance: Mapping[str, str] | None = None) -> str:
     overview = view["workflow_overview"]
+    if provenance is None:
+        provenance = build_report_provenance(view["source"]["state_file"])
     workflow_status = _status_value(overview["workflow_status"])
     source_name = Path(view["source"]["state_file"]).name if view["source"]["state_file"] else "none"
     final_providers = _format_csv(overview["final_providers"])
@@ -59,6 +87,7 @@ def build_html_report(view: InternalObservabilityView) -> str:
             ("tasks", "Tasks"),
             ("providers", "Providers"),
             ("diagnostics", "Diagnostics"),
+            ("provenance", "Provenance"),
         ]
     )
     task_status_filter_options = _render_select_options(sorted(overview["task_status_counts"]), "All statuses")
@@ -697,7 +726,7 @@ def build_html_report(view: InternalObservabilityView) -> str:
           <button class="secondary-button" id="print-report" type="button">Print / Save PDF</button>
           <button class="secondary-button" id="expand-visible-details" type="button">Expand Visible Details</button>
           <button class="secondary-button" id="collapse-visible-details" type="button">Collapse Visible Details</button>
-          <span class="filter-feedback" id="share-link-feedback">Current report view is shareable via URL.</span>
+          <span class="filter-feedback" id="share-link-feedback">Filter state is encoded in the URL. Treat this report as internal data.</span>
         </div>
       </div>
       <div class=\"filter-summary\" id=\"filter-summary\">
@@ -732,6 +761,24 @@ def build_html_report(view: InternalObservabilityView) -> str:
       </div>
       <div class=\"execution-grid\">{diagnostic_cards}</div>
       <p class=\"empty-state is-hidden\" id=\"diagnostics-empty-state\">No diagnostic cards match the current filters.</p>
+    </section>
+
+    <section class=\"panel\" id=\"provenance\">
+      <div class=\"panel-header\">
+        <h2>Report Provenance</h2>
+        <span class=\"panel-subtitle\">Generation metadata for evidence handling</span>
+      </div>
+      <div class=\"chips\">
+        <span class=\"chip\">generated at (UTC): {_escape(provenance['generated_at'])}</span>
+        <span class=\"chip\">tool: kycortex-agents {_escape(provenance['tool_version'])}</span>
+        <span class=\"chip\">source state file: {_escape(source_name)}</span>
+        <span class=\"chip\">store: {_escape(view['source']['state_store_kind'])}</span>
+        <span class=\"chip\">schema version: {view['source']['schema_version']}</span>
+        <span class=\"chip\">source state sha256: {_escape(provenance['state_sha256'])}</span>
+      </div>
+      <p class=\"footer-note\">Sensitivity: INTERNAL. This report contains operational workflow data; share only with authorized recipients under your data-handling policy.</p>
+      <p class=\"footer-note\">Sensitive values (credentials, secrets) were redacted at recording time before persistence; redaction is irreversible.</p>
+      <p class=\"footer-note\">Disclaimer: this is an operational telemetry report rendered from persisted workflow state. It is not, by itself, a certified compliance or audit record, and the source state digest above does not attest tamper-evidence of the recording process.</p>
     </section>
   </main>
   <script>
@@ -1172,7 +1219,7 @@ def build_html_report(view: InternalObservabilityView) -> str:
         }},
         visibleCounts,
       );
-      setShareLinkFeedback("Current report view is shareable via URL.");
+      setShareLinkFeedback("Filter state is encoded in the URL. Treat this report as internal data.");
     }}
 
     if (reportSearch) {{

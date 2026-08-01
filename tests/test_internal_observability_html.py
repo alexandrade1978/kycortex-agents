@@ -312,3 +312,61 @@ def test_build_http_server_serves_adapter_backed_report_and_healthz(monkeypatch)
         server.shutdown()
         worker.join(timeout=2)
         server.server_close()
+
+
+def test_build_html_report_embeds_provenance_footer():
+    module = _load_script_module(
+        "render_internal_observability_html_provenance_test",
+        "scripts/render_internal_observability_html.py",
+    )
+
+    html_report = module.build_html_report(
+        _fake_view(),
+        provenance={
+            "generated_at": "2026-08-01T12:00:00+00:00",
+            "tool_version": "1.0.13b2",
+            "state_sha256": "a" * 64,
+        },
+    )
+
+    assert 'id="provenance"' in html_report
+    assert "generated at (UTC): 2026-08-01T12:00:00+00:00" in html_report
+    assert "tool: kycortex-agents 1.0.13b2" in html_report
+    assert f"source state sha256: {'a' * 64}" in html_report
+    assert "schema version: 3" in html_report
+    assert "Sensitivity: INTERNAL" in html_report
+    assert "redacted at recording time" in html_report
+    assert "not, by itself, a certified compliance or audit record" in html_report
+    assert "shareable via URL" not in html_report
+    assert "Treat this report as internal data." in html_report
+    assert "customer-secret-root" not in html_report
+
+
+def test_build_report_provenance_hashes_persisted_state(tmp_path):
+    module = _load_script_module(
+        "render_internal_observability_html_provenance_hash_test",
+        "scripts/render_internal_observability_html.py",
+    )
+    from kycortex_agents.memory.project_state import ProjectState, compute_state_digest
+    from kycortex_agents.memory.state_store import resolve_state_store
+
+    state_path = tmp_path / "project_state.json"
+    ProjectState(project_name="Demo", goal="Provenance", state_file=str(state_path)).save()
+
+    provenance = module.build_report_provenance(str(state_path))
+
+    payload = resolve_state_store(str(state_path)).load(str(state_path))
+    assert provenance["state_sha256"] == compute_state_digest(payload)
+    assert provenance["tool_version"]
+    assert provenance["generated_at"].endswith("+00:00")
+
+
+def test_build_report_provenance_degrades_when_state_missing(tmp_path):
+    module = _load_script_module(
+        "render_internal_observability_html_provenance_missing_test",
+        "scripts/render_internal_observability_html.py",
+    )
+
+    provenance = module.build_report_provenance(str(tmp_path / "missing.json"))
+
+    assert provenance["state_sha256"] == "unavailable"

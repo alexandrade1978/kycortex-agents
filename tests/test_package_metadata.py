@@ -86,7 +86,7 @@ def test_pyproject_declares_test_extra():
         "tomli>=2.0.1,<3.0; python_version < '3.11'",
         "mypy>=1.10,<2.0",
         "pre-commit>=3.7,<5.0",
-        "ruff>=0.6,<1.0",
+        "ruff>=0.6,<0.16",
     ]
 
 
@@ -185,7 +185,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "Requires-Dist: tomli<3.0,>=2.0.1; python_version < \"3.11\" and extra == \"test\"" in metadata
     assert "Requires-Dist: mypy<2.0,>=1.10; extra == \"test\"" in metadata
     assert "Requires-Dist: pre-commit<5.0,>=3.7; extra == \"test\"" in metadata
-    assert "Requires-Dist: ruff<1.0,>=0.6; extra == \"test\"" in metadata
+    assert "Requires-Dist: ruff<0.16,>=0.6; extra == \"test\"" in metadata
     assert "https://kycortex.com" not in metadata
     assert "from kycortex_agents import KYCortexConfig, Orchestrator, ProjectState, Task" in metadata
     assert "OPENAI_API_KEY" in metadata
@@ -198,7 +198,7 @@ def test_generated_egg_info_metadata_matches_current_package_contract():
     assert "openai<3.0.0,>=1.0.0" in requirements
     assert "mypy<2.0,>=1.10" in requirements
     assert "pre-commit<5.0,>=3.7" in requirements
-    assert "ruff<1.0,>=0.6" in requirements
+    assert "ruff<0.16,>=0.6" in requirements
 
 
 def test_generated_egg_info_sources_include_current_distribution_assets():

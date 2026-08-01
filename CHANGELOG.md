@@ -19,6 +19,10 @@ Current package version remains `1.0.13b2`.
 - `docs/persistence.md` now documents that repository-owned internal operator surfaces may layer read-only adapters over the internal telemetry read path without widening the public snapshot contract.
 - `docs/README.md` now lists the internal operator report shells under repository-owned operational records instead of the public examples surface.
 
+### Fixed
+
+- CI lint hotfix: the `ruff` test dependency is now pinned to `>=0.6,<0.16` (with the mirrored package-metadata contract expectations updated), because `ruff 0.16.x` enables additional default rules that fail the historical codebase; the repository lints clean on the `0.15.x` line.
+
 ### Operational Readiness
 
 - Phase 17 production qualification for `v1.0.13b2` is now explicitly signed off for the documented single-maintainer deployment class after the repository-owned canary, rollback-drill, support-model, and release-ownership evidence closed green.

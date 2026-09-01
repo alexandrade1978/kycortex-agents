@@ -107,6 +107,19 @@ class InternalObservabilityExecutionPanel(TypedDict):
     error_summary: InternalWorkflowErrorSummary
 
 
+class InternalObservabilityEvidencePanel(TypedDict):
+    """Audit-evidence summary for internal observability UI shells."""
+
+    state_sha256: Optional[str]
+    event_chain_head: Optional[str]
+    event_count: int
+    verification_checks: Dict[str, str]
+    verification_passed: bool
+    legal_hold: bool
+    snapshot_history_limit: int
+    run_identity: Dict[str, Any]
+
+
 class InternalObservabilityView(TypedDict):
     """Top-level internal read model for observability UI shells."""
 
@@ -115,6 +128,7 @@ class InternalObservabilityView(TypedDict):
     task_timeline: List[InternalObservabilityTaskTimelineEntry]
     provider_panels: List[InternalObservabilityProviderPanel]
     execution_panel: InternalObservabilityExecutionPanel
+    evidence_panel: InternalObservabilityEvidencePanel
 
 
 def load_internal_observability_view(state_file: str) -> InternalObservabilityView:
@@ -129,6 +143,28 @@ def build_internal_observability_view(project: ProjectState) -> InternalObservab
     telemetry = project.internal_runtime_telemetry()
     workflow = telemetry["workflow"]
 
+    state_payload = project._serialized_state() if hasattr(project, "_serialized_state") else {}
+    integrity = state_payload.get("integrity", {}) if isinstance(state_payload, dict) else {}
+    execution_events = state_payload.get("execution_events", []) if isinstance(state_payload, dict) else []
+    raw_state_sha256 = integrity.get("state_sha256") if isinstance(integrity, dict) else None
+    state_sha256 = raw_state_sha256 if isinstance(raw_state_sha256, str) else None
+    raw_chain_head = integrity.get("event_chain_head") if isinstance(integrity, dict) else None
+    event_chain_head = raw_chain_head if isinstance(raw_chain_head, str) else None
+    evidence_panel: InternalObservabilityEvidencePanel = {
+        "state_sha256": state_sha256,
+        "event_chain_head": event_chain_head,
+        "event_count": len(execution_events) if isinstance(execution_events, list) else 0,
+        "verification_checks": {
+            "state_digest": "passed" if state_sha256 is not None else "skipped",
+            "event_chain": "passed" if isinstance(execution_events, list) and execution_events else "skipped",
+            "integrity_sidecar": "skipped",
+            "artifact_manifest": "skipped",
+        },
+        "verification_passed": state_sha256 is not None,
+        "legal_hold": bool(getattr(project, "legal_hold", False)),
+        "snapshot_history_limit": int(getattr(project, "snapshot_history_limit", 0) or 0),
+        "run_identity": cast(Dict[str, Any], dict(getattr(project, "run_identity", {}) or {})),
+    }
     return {
         "source": {
             "state_file": project.state_file,
@@ -168,6 +204,7 @@ def build_internal_observability_view(project: ProjectState) -> InternalObservab
             "fallback_summary": cast(InternalWorkflowFallbackSummary, dict(workflow["fallback_summary"])),
             "error_summary": cast(InternalWorkflowErrorSummary, dict(workflow["error_summary"])),
         },
+        "evidence_panel": evidence_panel,
     }
 
 

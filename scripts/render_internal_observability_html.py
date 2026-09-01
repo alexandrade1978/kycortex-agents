@@ -87,6 +87,7 @@ def build_html_report(view: InternalObservabilityView, provenance: Mapping[str, 
             ("tasks", "Tasks"),
             ("providers", "Providers"),
             ("diagnostics", "Diagnostics"),
+            ("evidence", "Evidence & Integrity"),
             ("provenance", "Provenance"),
         ]
     )
@@ -111,6 +112,11 @@ def build_html_report(view: InternalObservabilityView, provenance: Mapping[str, 
     provider_cards = "".join(_render_provider_panel(panel) for panel in view["provider_panels"])
     task_cards = "".join(_render_task_card(task) for task in view["task_timeline"])
     execution_panel = view["execution_panel"]
+    evidence_panel = view.get("evidence_panel", {})
+    evidence_check_rows = "".join(
+        f'<span class="chip">{_escape(key)}: {_escape(value)}</span>'
+        for key, value in sorted((evidence_panel.get("verification_checks") or {}).items())
+    ) or '<span class="chip">verification checks: unavailable</span>'
     diagnostic_cards = "".join(
       [
         _render_diagnostic_card(
@@ -761,6 +767,25 @@ def build_html_report(view: InternalObservabilityView, provenance: Mapping[str, 
       </div>
       <div class=\"execution-grid\">{diagnostic_cards}</div>
       <p class=\"empty-state is-hidden\" id=\"diagnostics-empty-state\">No diagnostic cards match the current filters.</p>
+    </section>
+
+    <section class=\"panel\" id=\"evidence\">
+      <div class=\"panel-header\">
+        <h2>Evidence &amp; Integrity</h2>
+        <div class=\"section-meta\">
+          <span class=\"panel-subtitle\">Persisted evidence summary, chain head, and verification checks</span>
+        </div>
+      </div>
+      <div class=\"chips\">
+        <span class=\"chip\">state sha256: {_escape(evidence_panel.get('state_sha256') or 'unavailable')}</span>
+        <span class=\"chip\">event chain head: {_escape(evidence_panel.get('event_chain_head') or 'unavailable')}</span>
+        <span class=\"chip\">event count: {_escape(str(evidence_panel.get('event_count', 0)))}</span>
+        <span class=\"chip\">legal hold: {_escape(str(bool(evidence_panel.get('legal_hold', False))))}</span>
+        <span class=\"chip\">snapshot history limit: {_escape(str(evidence_panel.get('snapshot_history_limit', 0)))}</span>
+        <span class=\"chip\">verification passed: {_escape(str(bool(evidence_panel.get('verification_passed', False))))}</span>
+      </div>
+      <div class=\"chips\" style=\"margin-top: 12px;\">{evidence_check_rows}</div>
+      <p class=\"footer-note\">run id: {_escape(str((evidence_panel.get('run_identity') or {}).get('run_id', 'unknown')))} | hostname: {_escape(str((evidence_panel.get('run_identity') or {}).get('hostname', 'unknown')))} | os user: {_escape(str((evidence_panel.get('run_identity') or {}).get('os_user', 'unknown')))}</p>
     </section>
 
     <section class=\"panel\" id=\"provenance\">

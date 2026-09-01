@@ -160,6 +160,25 @@ def _fake_view() -> dict[str, object]:
                 "fallback_error_count": 1,
             },
         },
+        "evidence_panel": {
+            "state_sha256": "a" * 64,
+            "event_chain_head": "b" * 64,
+            "event_count": 5,
+            "verification_checks": {
+                "state_digest": "passed",
+                "event_chain": "passed",
+                "integrity_sidecar": "skipped",
+                "artifact_manifest": "skipped",
+            },
+            "verification_passed": True,
+            "legal_hold": True,
+            "snapshot_history_limit": 8,
+            "run_identity": {
+                "run_id": "run-123",
+                "hostname": "control-plane-01",
+                "os_user": "ops-user"
+            },
+        },
     }
 
 
@@ -186,6 +205,12 @@ def test_build_html_report_renders_adapter_backed_sections_without_private_paths
     assert "provider-filter" in html_report
     assert "task-sort" in html_report
     assert "provider-sort" in html_report
+    assert "Evidence &amp; Integrity" in html_report
+    assert 'id="evidence"' in html_report
+    assert "state sha256" in html_report
+    assert "event chain head" in html_report
+    assert "legal hold" in html_report
+    assert "verification passed" in html_report
     assert 'data-task-status="done"' in html_report
     assert 'data-provider="openai"' in html_report
     assert 'data-provider-name="openai"' in html_report

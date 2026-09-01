@@ -124,7 +124,12 @@ jobs:
           name: release-distributions
           path: dist
 
+      - name: Stage only wheel and sdist for PyPI upload
+        run: |
+          mkdir -p pypi-dist
+          cp dist/*.whl dist/*.tar.gz pypi-dist/
+
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist
+          packages-dir: pypi-dist

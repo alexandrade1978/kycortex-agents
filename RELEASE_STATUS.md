@@ -4,13 +4,13 @@ This file is the short repository-owned snapshot of the current release posture 
 
 ## Current Snapshot
 
-- Package version in `pyproject.toml`: `1.0.13b2`
+- Package version in `pyproject.toml`: `1.0.13b3`
 - Latest released version: `1.0.13b2`
 - Latest published release: `1.0.13b2`
 - Latest published tag: `v1.0.13b2`
 - Current branch for release preparation: `main`
 - Release candidate under canary record: active `docs/canary-evidence/1e68a8b/` bundle for `v1.0.13b2`
-- Release publish action: no release flow is in progress.
+- Release publish action: replacement candidate `1.0.13b3` passed the repository release gate and is ready for tag/publish.
 
 ## Current Posture
 
@@ -22,11 +22,13 @@ This file is the short repository-owned snapshot of the current release posture 
 - The minimum canary window in `docs/go-live-policy.md` is satisfied for `1e68a8b`: the candidate exceeded both `100` eligible workflows and `7` consecutive days of controlled canary observation, and the publication follow-on CI for `282024c` and `b79f22b` completed successfully.
 - Same-candidate canary expansion remains frozen on `c17c749`; the active path is fresh canary admission on `1.0.13b2`.
 - Production go-live is now explicitly signed off for the documented single-maintainer deployment class on `1e68a8b` / `v1.0.13b2`; the retained rollback target `v1.0.13a12` has been re-smoke-validated, the current single-maintainer support model plus release-ownership path are documented, and GitHub Actions CI run `26093363117` for commit `a067726` closed `success` before sign-off was recorded.
+- Candidate `1.0.13b3` adds the audit-evidence hardening program (20/20 gaps), the internal observability adapter and report shells, three additional compliance workflow-pack scenarios, and automated PyPI publication via the release workflow. This candidate has not yet undergone its own canary window; the signed-off production go-live claim remains scoped to `1e68a8b` / `v1.0.13b2` until a follow-on qualification update covers `1.0.13b3`.
 
 ## Repository Release Gate
 
 - The deterministic repository release gate stayed green on published candidate `1.0.13b2`.
 - Both `scripts/release_check.py` and `make release-check` passed on the frozen `1.0.13b2` candidate before tagging.
+- The deterministic repository release gate is also green on replacement candidate `1.0.13b3`: `python scripts/release_check.py` passed (ruff, mypy, focused regressions, package validation, release metadata, coverage gate, full suite).
 - The GitHub prerelease for `v1.0.13b2` published the wheel, source distribution, `release-artifact-manifest.json`, and `release-promotion-summary.json`.
 - Remote verification completed successfully for published commit `1e68a8b`: CI `25665805838` and Release `25665819510` both closed green.
 - The current canary evidence for `c17c749` remains retained historical hold evidence for the superseded `v1.0.13b1` candidate.
@@ -41,12 +43,15 @@ This file is the short repository-owned snapshot of the current release posture 
 - `daily-review day-6` at `2026-05-17T03:53:02Z` then added clean `smoke42` evidence on all three providers and advanced the cumulative window to `121/122` accepted workflows with no new incident.
 - `daily-review day-7` at `2026-05-18T21:30:23Z` then added clean `smoke43` evidence on all three providers and advanced the cumulative window to `124/125` accepted workflows with no new incident.
 - The follow-on CI runs for the day-7 publication commits both closed green: `282024c` in CI run `26061838993` and `b79f22b` in CI run `26063423049`.
+- Replacement candidate `1.0.13b3` (commit `efb0580` and earlier) closed green in GitHub Actions CI before this release-preparation commit.
 - No release workflow is currently in progress.
 
 ## Next Release-Facing Action
-1. Maintain the signed-off production deployment claim only for the documented single-maintainer deployment class.
-2. Open a new repository-controlled qualification update before expanding the claim to any broader deployment class or support model.
-3. Keep `README.md`, `CHANGELOG.md`, and the candidate bundle synchronized with any future deployment-claim change.
+
+1. Tag and push `v1.0.13b3`, then verify the tagged release workflow, GitHub prerelease assets, and the new automated PyPI publish job.
+2. Maintain the signed-off production deployment claim only for the documented single-maintainer deployment class until `1.0.13b3` completes its own qualification review.
+3. Open a new repository-controlled qualification update before expanding the claim to any broader deployment class or support model.
+4. Keep `README.md`, `CHANGELOG.md`, and the candidate bundle synchronized with any future deployment-claim change.
 
 ## Canonical References
 

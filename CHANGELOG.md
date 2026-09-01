@@ -6,7 +6,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-Current package version remains `1.0.13b2`.
+Current package version remains `1.0.13b3`.
 
 ### Added
 
@@ -26,17 +26,21 @@ Current package version remains `1.0.13b2`.
 - Internal observability read-model adapter (`kycortex_agents/memory/internal_observability.py`): a read-only view builder over `ProjectState.load(...)` plus `internal_runtime_telemetry()` that derives panel-ready workflow overview, task timeline, provider panels, and execution diagnostics for repository-owned operator surfaces.
 - Internal operator report shells downstream from that adapter: `examples/example_internal_observability_report.py` (terminal report) and `scripts/render_internal_observability_html.py` (static HTML report with client-side filtering, search, drill-downs, deep links, print handoff, and a `--serve` local HTTP mode).
 - Focused validation for the adapter and both shells in `tests/test_internal_observability.py`, `tests/test_internal_observability_example.py`, and `tests/test_internal_observability_html.py`, covering JSON and SQLite-backed state files.
+- Three additional built-in compliance scenarios in `kycortex_agents/workflows/compliance.py`: `aml_sanctions_screening` (sanctions/PEP screening with match-confidence scoring), `vendor_due_diligence` (third-party vendor risk tiering), and `audit_risk_scoring` (continuous transaction audit anomaly scoring), each with a convenience project builder (`build_aml_screening_project`, `build_vendor_due_diligence_project`, `build_audit_risk_scoring_project`) alongside the existing `build_kyc_intake_project`.
+- Automated PyPI publication: the release workflow now includes a `publish-pypi` job using `pypa/gh-action-pypi-publish` with PyPI Trusted Publisher (OIDC) authentication, so tagged releases publish to PyPI without a stored API token.
 
 ### Changed
 
 - `kycortex_agents.workflows` now also exposes the packaged workflow packs namespace (`kycortex_agents.workflows.compliance`), with the module docstring and public-API contract tests updated accordingly.
-- `docs/workflows.md` now documents the compliance workflow pack surface and its deterministic example.
+- `docs/workflows.md` now documents the compliance workflow pack surface, its deterministic example, and the three additional built-in scenarios.
 - `docs/persistence.md` now documents that repository-owned internal operator surfaces may layer read-only adapters over the internal telemetry read path without widening the public snapshot contract.
 - `docs/README.md` now lists the internal operator report shells under repository-owned operational records instead of the public examples surface.
+- `examples/example_compliance_pack.py` now runs and reports on all four built-in compliance scenarios instead of only the KYC intake scenario.
 
 ### Fixed
 
 - CI lint hotfix: the `ruff` test dependency is now pinned to `>=0.6,<0.16` (with the mirrored package-metadata contract expectations updated), because `ruff 0.16.x` enables additional default rules that fail the historical codebase; the repository lints clean on the `0.15.x` line.
+- The internal observability report shell no longer raises `KeyError` when the loaded view omits the `evidence_panel` key; the panel is now read defensively and prints `none`/empty defaults instead.
 
 ### Operational Readiness
 

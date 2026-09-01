@@ -9,6 +9,7 @@ include Makefile
 include .editorconfig
 include .pre-commit-config.yaml
 recursive-include docs *.md
+prune docs/canary-evidence
 recursive-include examples *.py
 recursive-include kycortex_agents py.typed
 recursive-include scripts *.py

@@ -30,9 +30,16 @@ KYCortex currently spans three complementary layers:
 
 1. **Runtime / control plane**: executes agent workflows, enforces policies, persists state, and captures operator-facing telemetry.
 2. **Developer framework / SDK**: provides the public Python interfaces for configuring agents, providers, workflows, and persistence backends.
-3. **Reference workflow layer**: includes repository workflows such as provider-matrix validation and release-user-smoke that demonstrate how the runtime behaves on regulated-style delivery tasks.
+3. **Reference workflow layer**: includes repository workflows such as provider-matrix validation and release-user-smoke that demonstrate how the runtime behaves on regulated-style delivery tasks, plus a packaged compliance workflow pack (`kycortex_agents.workflows.compliance`) with ready-to-run KYC intake, AML sanctions screening, vendor due diligence, and audit risk-scoring scenarios.
 
 ## Installation
+
+```bash
+# Install the published package from PyPI
+pip install kycortex-agents
+```
+
+For local development:
 
 ```bash
 # Clone repository
@@ -252,7 +259,8 @@ Use `RELEASE.md` for package publication and `docs/go-live-policy.md` for produc
 
 - [ ] Add vector store for long-term memory
 - [ ] Web UI for project monitoring
-- [ ] Agent templates for specific domains (MLOps, LLMOps)
+- [x] Compliance workflow pack for regulated domains (KYC intake, AML sanctions screening, vendor due diligence, audit risk scoring)
+- [ ] Additional workflow packs for other regulated domains (MLOps, LLMOps)
 - [ ] Integration with CI/CD pipelines
 
 ## Contributing

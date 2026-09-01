@@ -624,8 +624,10 @@ def test_internal_observability_report_example_documents_adapter_backed_shell_ou
     assert 'view["task_timeline"]' in example
     assert 'view["provider_panels"]' in example
     assert 'view["execution_panel"]' in example
+    assert 'view["evidence_panel"]' in example
     assert "Path(source['state_file']).name" in example
     assert 'print("Internal observability source:")' in example
     assert 'print("\\nTask timeline:")' in example
     assert 'print("\\nProvider panels:")' in example
     assert 'print("\\nExecution diagnostics:")' in example
+    assert 'print("\\nEvidence panel:")' in example

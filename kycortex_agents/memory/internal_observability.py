@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional, TypedDict, cast
 
+from kycortex_agents.evidence import verify_evidence
 from kycortex_agents.memory.project_state import ProjectState, Task
+from kycortex_agents.memory.state_store import resolve_state_store
 from kycortex_agents.types import (
     InternalMetricDistribution,
     InternalTaskRuntimeTelemetry,
@@ -137,34 +140,75 @@ def load_internal_observability_view(state_file: str) -> InternalObservabilityVi
     return build_internal_observability_view(ProjectState.load(state_file))
 
 
+def _read_state_payload(state_file: Optional[str]) -> Dict[str, Any]:
+    if not isinstance(state_file, str) or not state_file:
+        return {}
+    if not os.path.exists(state_file):
+        return {}
+    try:
+        payload = resolve_state_store(state_file).load(state_file)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _build_evidence_panel(project: ProjectState) -> InternalObservabilityEvidencePanel:
+    state_file = getattr(project, "state_file", None)
+    payload = _read_state_payload(state_file)
+    integrity = payload.get("integrity", {}) if isinstance(payload, dict) else {}
+    execution_events = payload.get("execution_events", []) if isinstance(payload, dict) else []
+    raw_state_sha256 = integrity.get("state_sha256") if isinstance(integrity, dict) else None
+    state_sha256 = raw_state_sha256 if isinstance(raw_state_sha256, str) else None
+    raw_chain_head = integrity.get("event_chain_head") if isinstance(integrity, dict) else None
+    event_chain_head = raw_chain_head if isinstance(raw_chain_head, str) else None
+    checks = {
+        "state_digest": "skipped",
+        "event_chain": "skipped",
+        "integrity_sidecar": "skipped",
+        "artifact_manifest": "skipped",
+    }
+    verification_passed = False
+    if isinstance(state_file, str) and state_file and os.path.exists(state_file):
+        try:
+            summary = verify_evidence(state_file)
+            checks = summary.get("checks", checks)
+            verification_passed = bool(summary.get("passed", False))
+        except Exception:
+            checks = {
+                "state_digest": "skipped",
+                "event_chain": "skipped",
+                "integrity_sidecar": "skipped",
+                "artifact_manifest": "skipped",
+            }
+            verification_passed = False
+    if state_sha256 is None:
+        raw_project_state = project._serialized_state() if hasattr(project, "_serialized_state") else {}
+        if isinstance(raw_project_state, dict):
+            state_sha256 = raw_project_state.get("integrity", {}).get("state_sha256") if isinstance(raw_project_state.get("integrity"), dict) else None
+    if event_chain_head is None:
+        for event in reversed(execution_events if isinstance(execution_events, list) else []):
+            event_hash = event.get("event_hash") if isinstance(event, dict) else None
+            if isinstance(event_hash, str) and event_hash:
+                event_chain_head = event_hash
+                break
+    return {
+        "state_sha256": state_sha256,
+        "event_chain_head": event_chain_head,
+        "event_count": len(execution_events) if isinstance(execution_events, list) else 0,
+        "verification_checks": checks,
+        "verification_passed": verification_passed,
+        "legal_hold": bool(getattr(project, "legal_hold", False)),
+        "snapshot_history_limit": int(getattr(project, "snapshot_history_limit", 0) or 0),
+        "run_identity": cast(Dict[str, Any], dict(getattr(project, "run_identity", {}) or {})),
+    }
+
+
 def build_internal_observability_view(project: ProjectState) -> InternalObservabilityView:
     """Project a persisted workflow state into a read-only internal UI model."""
 
     telemetry = project.internal_runtime_telemetry()
     workflow = telemetry["workflow"]
-
-    state_payload = project._serialized_state() if hasattr(project, "_serialized_state") else {}
-    integrity = state_payload.get("integrity", {}) if isinstance(state_payload, dict) else {}
-    execution_events = state_payload.get("execution_events", []) if isinstance(state_payload, dict) else []
-    raw_state_sha256 = integrity.get("state_sha256") if isinstance(integrity, dict) else None
-    state_sha256 = raw_state_sha256 if isinstance(raw_state_sha256, str) else None
-    raw_chain_head = integrity.get("event_chain_head") if isinstance(integrity, dict) else None
-    event_chain_head = raw_chain_head if isinstance(raw_chain_head, str) else None
-    evidence_panel: InternalObservabilityEvidencePanel = {
-        "state_sha256": state_sha256,
-        "event_chain_head": event_chain_head,
-        "event_count": len(execution_events) if isinstance(execution_events, list) else 0,
-        "verification_checks": {
-            "state_digest": "passed" if state_sha256 is not None else "skipped",
-            "event_chain": "passed" if isinstance(execution_events, list) and execution_events else "skipped",
-            "integrity_sidecar": "skipped",
-            "artifact_manifest": "skipped",
-        },
-        "verification_passed": state_sha256 is not None,
-        "legal_hold": bool(getattr(project, "legal_hold", False)),
-        "snapshot_history_limit": int(getattr(project, "snapshot_history_limit", 0) or 0),
-        "run_identity": cast(Dict[str, Any], dict(getattr(project, "run_identity", {}) or {})),
-    }
+    evidence_panel = _build_evidence_panel(project)
     return {
         "source": {
             "state_file": project.state_file,

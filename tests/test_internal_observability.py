@@ -128,6 +128,29 @@ def build_observability_project(state_file: str | None = None) -> ProjectState:
     return project
 
 
+def test_build_internal_observability_view_verifies_persisted_evidence(tmp_path):
+    state_path = tmp_path / "project_state.json"
+    project = build_observability_project(str(state_path))
+    project._record_execution_event(
+        event="workflow_started",
+        timestamp="2026-03-22T10:00:00+00:00",
+        status=project.phase,
+        details={"reason": "persisted evidence smoke test"},
+    )
+    project.save()
+
+    view = build_internal_observability_view(ProjectState.load(str(state_path)))
+    evidence = view["evidence_panel"]
+
+    assert evidence["state_sha256"]
+    assert evidence["event_chain_head"]
+    assert evidence["verification_checks"]["state_digest"] == "passed"
+    assert evidence["verification_checks"]["event_chain"] == "passed"
+    assert evidence["verification_checks"]["integrity_sidecar"] == "passed"
+    assert evidence["verification_checks"]["artifact_manifest"] == "skipped"
+    assert evidence["verification_passed"] is True
+
+
 def test_build_internal_observability_view_projects_internal_runtime_telemetry_into_panel_ready_model():
     project = build_observability_project()
 

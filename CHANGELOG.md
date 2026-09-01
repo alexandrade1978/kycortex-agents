@@ -8,6 +8,10 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 Current package version remains `1.0.13b4`.
 
+## 1.0.13b4 - 2026-09-01
+
+Version `1.0.13b4` is now the released package baseline.
+
 ### Added
 
 - Public evidence-semantics guide `docs/evidence.md`: what evidence is recorded, integrity guarantees, explicit limits (not a certified audit record, no cryptographic non-repudiation), the verification/export workflow, and retention/legal-hold semantics. Migration notes extended with the evidence surface of the schema v2 line.

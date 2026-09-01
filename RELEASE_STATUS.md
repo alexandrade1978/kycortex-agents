@@ -5,12 +5,12 @@ This file is the short repository-owned snapshot of the current release posture 
 ## Current Snapshot
 
 - Package version in `pyproject.toml`: `1.0.13b4`
-- Latest released version: `1.0.13b2`
-- Latest published release: `1.0.13b2`
-- Latest published tag: `v1.0.13b2`
+- Latest released version: `1.0.13b4`
+- Latest published release: `1.0.13b4`
+- Latest published tag: `v1.0.13b4`
 - Current branch for release preparation: `main`
 - Release candidate under canary record: active `docs/canary-evidence/1e68a8b/` bundle for `v1.0.13b2`
-- Release publish action: replacement candidate `1.0.13b4` passed the repository release gate and is ready for tag/publish.
+- Release publish action: `v1.0.13b4` published successfully to GitHub Releases and PyPI (`https://pypi.org/project/kycortex-agents/1.0.13b4/`); no release flow is in progress.
 
 ## Current Posture
 
@@ -45,16 +45,14 @@ This file is the short repository-owned snapshot of the current release posture 
 - `daily-review day-6` at `2026-05-17T03:53:02Z` then added clean `smoke42` evidence on all three providers and advanced the cumulative window to `121/122` accepted workflows with no new incident.
 - `daily-review day-7` at `2026-05-18T21:30:23Z` then added clean `smoke43` evidence on all three providers and advanced the cumulative window to `124/125` accepted workflows with no new incident.
 - The follow-on CI runs for the day-7 publication commits both closed green: `282024c` in CI run `26061838993` and `b79f22b` in CI run `26063423049`.
-- Replacement candidate `1.0.13b3` (commit `efb0580` and earlier) closed green in GitHub Actions CI before this release-preparation commit.
-- Tag `v1.0.13b3` (commit `22a4cb9`) published a GitHub release successfully (run `33564159317`); the same run's `publish-pypi` job failed on an invalid-distribution error, so `v1.0.13b3` was never published to PyPI. The workflow bug was fixed in commit `60d14b3` and validated in replacement candidate `1.0.13b4`.
+- Tag `v1.0.13b4` (commit `96dadfe`) closed green in GitHub Actions CI, then published successfully end-to-end via the release workflow (run `33565883946`): Release Validation, Build Distributions, Publish GitHub Release, and Publish to PyPI all succeeded. The package is live at `https://pypi.org/project/kycortex-agents/1.0.13b4/` and was smoke-verified with a clean `pip install kycortex-agents==1.0.13b4` in an isolated virtualenv, confirming the reported version and all 4 compliance workflow-pack scenarios import correctly.
 - No release workflow is currently in progress.
 
 ## Next Release-Facing Action
 
-1. Tag and push `v1.0.13b4`, then verify the tagged release workflow, GitHub prerelease assets, and the fixed automated PyPI publish job.
-2. Maintain the signed-off production deployment claim only for the documented single-maintainer deployment class until `1.0.13b4` completes its own qualification review.
-3. Open a new repository-controlled qualification update before expanding the claim to any broader deployment class or support model.
-4. Keep `README.md`, `CHANGELOG.md`, and the candidate bundle synchronized with any future deployment-claim change.
+1. Maintain the signed-off production deployment claim only for the documented single-maintainer deployment class until `1.0.13b4` completes its own qualification review.
+2. Open a new repository-controlled qualification update before expanding the claim to any broader deployment class or support model.
+3. Keep `README.md`, `CHANGELOG.md`, and the candidate bundle synchronized with any future deployment-claim change.
 
 ## Canonical References
 

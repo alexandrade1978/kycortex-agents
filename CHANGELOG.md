@@ -6,7 +6,7 @@ The format is intentionally lightweight for the active 1.0 line. Entries group c
 
 ## Unreleased
 
-Current package version remains `1.0.13b3`.
+Current package version remains `1.0.13b4`.
 
 ### Added
 
@@ -41,6 +41,7 @@ Current package version remains `1.0.13b3`.
 
 - CI lint hotfix: the `ruff` test dependency is now pinned to `>=0.6,<0.16` (with the mirrored package-metadata contract expectations updated), because `ruff 0.16.x` enables additional default rules that fail the historical codebase; the repository lints clean on the `0.15.x` line.
 - The internal observability report shell no longer raises `KeyError` when the loaded view omits the `evidence_panel` key; the panel is now read defensively and prints `none`/empty defaults instead.
+- Release workflow PyPI publish step: the `publish-pypi` job now stages only the wheel and source distribution into a dedicated `pypi-dist/` directory before invoking `pypa/gh-action-pypi-publish`, instead of pointing it at the full `dist/` directory. The tagged `v1.0.13b3` candidate published its GitHub release successfully but failed the PyPI publish step because the action rejected `release-artifact-manifest.json` as an invalid distribution format; `v1.0.13b3` is superseded by this candidate for PyPI publication purposes.
 
 ### Operational Readiness
 

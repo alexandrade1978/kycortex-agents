@@ -454,7 +454,7 @@ def test_compliance_pack_example_uses_public_pack_imports():
     example = example_path.read_text(encoding="utf-8")
 
     assert "from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState" in example
-    assert "from kycortex_agents.workflows.compliance import build_compliance_project, get_compliance_scenario, list_compliance_scenarios" in example
+    assert "from kycortex_agents.workflows.compliance import ComplianceScenario, build_compliance_project, get_compliance_scenario, list_compliance_scenarios" in example
     assert 'get_compliance_scenario("kyc_compliance_intake")' in example
     assert "from kycortex_agents.workflows import" not in example
 

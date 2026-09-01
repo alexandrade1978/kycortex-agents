@@ -1,29 +1,30 @@
 from kycortex_agents import AgentRegistry, BaseAgent, KYCortexConfig, Orchestrator, ProjectState
-from kycortex_agents.workflows.compliance import build_compliance_project, get_compliance_scenario, list_compliance_scenarios
+from kycortex_agents.workflows.compliance import ComplianceScenario, build_compliance_project, get_compliance_scenario, list_compliance_scenarios
 
-DETERMINISTIC_CODE_MODULE = '''from dataclasses import dataclass
+def build_deterministic_code_module(service_name: str, request_name: str) -> str:
+    return f'''from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List
 
 
 @dataclass
-class ComplianceRequest:
+class {request_name}:
     request_id: str
     request_type: str
     details: Dict[str, Any]
     timestamp: datetime
 
 
-class ComplianceIntakeService:
+class {service_name}:
     def __init__(self) -> None:
         self.audit_history: List[Dict[str, Any]] = []
 
-    def validate_request(self, request: ComplianceRequest) -> bool:
+    def validate_request(self, request: {request_name}) -> bool:
         if not isinstance(request.details, dict):
             return False
         return isinstance(request.timestamp, datetime)
 
-    def handle_request(self, request: ComplianceRequest) -> Dict[str, Any]:
+    def handle_request(self, request: {request_name}) -> Dict[str, Any]:
         if not isinstance(request.details, dict):
             raise ValueError("details must be a dict")
         risk = 0
@@ -31,7 +32,7 @@ class ComplianceIntakeService:
         risk += 3 * len(request.details.get("adverse_indicators", []))
         risk += 2 * len(request.details.get("missing_documents", []))
         outcome = "blocked" if risk >= 10 else "escalated" if risk >= 5 else "approved"
-        record = {"request_id": request.request_id, "risk_score": risk, "outcome": outcome}
+        record = {{"request_id": request.request_id, "risk_score": risk, "outcome": outcome}}
         self.audit_history.append(record)
         return record
 
@@ -50,11 +51,12 @@ class RecordingAgent(BaseAgent):
         return self.response
 
 
-def build_deterministic_registry(config: KYCortexConfig) -> AgentRegistry:
+def build_deterministic_registry(config: KYCortexConfig, scenario: ComplianceScenario) -> AgentRegistry:
+    code_module = build_deterministic_code_module(scenario.service_name, scenario.request_name)
     return AgentRegistry(
         {
             "architect": RecordingAgent(config, "ARCHITECTURE READY"),
-            "code_engineer": RecordingAgent(config, DETERMINISTIC_CODE_MODULE),
+            "code_engineer": RecordingAgent(config, code_module),
             "dependency_manager": RecordingAgent(config, "NO THIRD-PARTY RUNTIME DEPENDENCIES"),
             "qa_tester": RecordingAgent(config, "TEST PLAN READY"),
             "code_reviewer": RecordingAgent(config, "REVIEW COMPLETE"),
@@ -82,21 +84,29 @@ def main() -> None:
         project_name="compliance-pack-demo",
         output_dir="./output_compliance_pack_demo",
     )
-    scenario = get_compliance_scenario("kyc_compliance_intake")
-    project = build_compliance_project(scenario, state_file="./output_compliance_pack_demo/project_state.json")
-
+    
     print_scenario_catalog()
-    print_workflow_plan(project)
 
-    registry = build_deterministic_registry(config)
-    orchestrator = Orchestrator(config, registry=registry)
-    orchestrator.execute_workflow(project)
+    # Verify lookup by slug
+    _intake = get_compliance_scenario("kyc_compliance_intake")
 
-    print("\nCompliance pack workflow summary:")
-    print(project.summary())
-    print("\nTask statuses:")
-    for task in project.tasks:
-        print(f"- {task.id}: {task.status}")
+    # Demonstrate running all built-in scenarios
+    scenarios = list_compliance_scenarios()
+    print(f"\nExecuting {len(scenarios)} compliance scenario workflows:")
+
+    for scenario in scenarios:
+        state_file = f"./output_compliance_pack_demo/{scenario.slug}_state.json"
+        project = build_compliance_project(scenario, state_file=state_file)
+        
+        print(f"\n--- Scenario: {scenario.slug} ({scenario.project_name}) ---")
+        print_workflow_plan(project)
+
+        registry = build_deterministic_registry(config, scenario)
+        orchestrator = Orchestrator(config, registry=registry)
+        orchestrator.execute_workflow(project)
+
+        print(f"Workflow status: {project.summary()}")
+
 
 
 if __name__ == "__main__":

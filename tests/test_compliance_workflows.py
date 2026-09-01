@@ -5,9 +5,16 @@ from kycortex_agents.agents.registry import build_default_registry
 from kycortex_agents.exceptions import WorkflowDefinitionError
 from kycortex_agents.types import TaskStatus, WorkflowOutcome
 from kycortex_agents.workflows.compliance import (
+    AML_SANCTIONS_SCREENING,
+    AUDIT_RISK_SCORING,
     BUILTIN_COMPLIANCE_SCENARIOS,
     KYC_COMPLIANCE_INTAKE,
+    VENDOR_DUE_DILIGENCE,
+    build_aml_screening_project,
+    build_audit_risk_scoring_project,
     build_compliance_project,
+    build_kyc_intake_project,
+    build_vendor_due_diligence_project,
     get_compliance_scenario,
     list_compliance_scenarios,
 )
@@ -81,9 +88,34 @@ def test_builtin_scenario_registry_exposes_kyc_intake():
     scenarios = list_compliance_scenarios()
 
     assert scenarios == BUILTIN_COMPLIANCE_SCENARIOS
+    assert len(scenarios) == 4
     assert KYC_COMPLIANCE_INTAKE in scenarios
+    assert AML_SANCTIONS_SCREENING in scenarios
+    assert VENDOR_DUE_DILIGENCE in scenarios
+    assert AUDIT_RISK_SCORING in scenarios
+
     assert get_compliance_scenario("kyc_compliance_intake") is KYC_COMPLIANCE_INTAKE
-    assert get_compliance_scenario("  KYC_Compliance_Intake  ") is KYC_COMPLIANCE_INTAKE
+    assert get_compliance_scenario("aml_sanctions_screening") is AML_SANCTIONS_SCREENING
+    assert get_compliance_scenario("vendor_due_diligence") is VENDOR_DUE_DILIGENCE
+    assert get_compliance_scenario("audit_risk_scoring") is AUDIT_RISK_SCORING
+
+
+def test_convenience_scenario_builders(tmp_path):
+    p_kyc = build_kyc_intake_project(state_file=str(tmp_path / "kyc.json"))
+    assert p_kyc.project_name == "KYCComplianceIntake"
+    assert [t.id for t in p_kyc.tasks] == EXPECTED_TASK_IDS
+
+    p_aml = build_aml_screening_project(state_file=str(tmp_path / "aml.json"))
+    assert p_aml.project_name == "AMLSanctionsScreening"
+    assert [t.id for t in p_aml.tasks] == EXPECTED_TASK_IDS
+
+    p_vendor = build_vendor_due_diligence_project(state_file=str(tmp_path / "vendor.json"))
+    assert p_vendor.project_name == "VendorDueDiligence"
+    assert [t.id for t in p_vendor.tasks] == EXPECTED_TASK_IDS
+
+    p_audit = build_audit_risk_scoring_project(state_file=str(tmp_path / "audit.json"))
+    assert p_audit.project_name == "AuditRiskScoring"
+    assert [t.id for t in p_audit.tasks] == EXPECTED_TASK_IDS
 
 
 def test_unknown_scenario_slug_fails_fast():

@@ -277,15 +277,22 @@ The pack exposes:
 - `list_compliance_scenarios()`: the built-in scenario catalog.
 - `get_compliance_scenario(slug)`: slug-based lookup that raises `WorkflowDefinitionError` for unknown slugs.
 - `build_compliance_project(scenario, *, state_file=None)`: a ready-to-run `ProjectState` implementing the scenario as a dependency-aware seven-task workflow (architecture, implementation, dependencies, tests, review, documentation, and legal note).
+- Convenience builders: `build_kyc_intake_project()`, `build_aml_screening_project()`, `build_vendor_due_diligence_project()`, and `build_audit_risk_scoring_project()`.
 
-The built-in `kyc_compliance_intake` scenario targets KYC and AML intake screening for regulated customer onboarding. Its task prompts embed the empirically validated public contract anchors (exact facade and request-model names, canonical details keys, observable outcome rules), so generated artifacts stay verifiable by the workflow output validation described above.
+The built-in scenarios include:
+
+- `kyc_compliance_intake`: KYC and AML intake screening for regulated customer onboarding.
+- `aml_sanctions_screening`: AML sanctions list and PEP screening for high-risk customer transactions.
+- `vendor_due_diligence`: Third-party vendor compliance assessment and security risk tiering.
+- `audit_risk_scoring`: Continuous transaction audit risk assessment and anomaly detection.
+
+Their task prompts embed empirically validated public contract anchors (exact facade and request-model names, canonical details keys, observable outcome rules), so generated artifacts stay verifiable by the workflow output validation described above.
 
 ```python
 from kycortex_agents import KYCortexConfig, Orchestrator
-from kycortex_agents.workflows.compliance import build_compliance_project, get_compliance_scenario
+from kycortex_agents.workflows.compliance import build_kyc_intake_project, build_aml_screening_project
 
-scenario = get_compliance_scenario("kyc_compliance_intake")
-project = build_compliance_project(scenario, state_file="./output/project_state.json")
+project = build_kyc_intake_project(state_file="./output/project_state.json")
 Orchestrator(KYCortexConfig()).execute_workflow(project)
 ```
 

@@ -72,7 +72,144 @@ KYC_COMPLIANCE_INTAKE = ComplianceScenario(
 )
 
 
-BUILTIN_COMPLIANCE_SCENARIOS: tuple[ComplianceScenario, ...] = (KYC_COMPLIANCE_INTAKE,)
+AML_SANCTIONS_SCREENING = ComplianceScenario(
+    slug="aml_sanctions_screening",
+    project_name="AMLSanctionsScreening",
+    team_name="AML compliance team",
+    service_name="AMLSanctionsScreeningService",
+    request_name="SanctionsScreeningRequest",
+    domain_summary="AML sanctions and PEP screening for high-risk customer transactions",
+    goal=(
+        "Build a single-module Python service for an AML compliance team. "
+        "The service must screen transaction subjects against sanctions lists and PEP registries, "
+        "calculate match confidence scores, handle false positive designations, track audit records, "
+        "and support batch screening with clear escalation markers."
+    ),
+    behavior_bullets=(
+        "Validate screening subjects and reject malformed requests early.",
+        "Score match confidence as an additive value (0 to 100). Add score points for exact name matches, country overlap, and watchlist flags. Never divide by empty list counts.",
+        "Track audit outcomes such as clear, flagged, or false_positive.",
+        "Support batch screening while recording detailed per-subject audit entries.",
+    ),
+    detail_contract_bullets=(
+        "Keep canonical details keys exact for this scenario: subject_name, country, watchlist_hits, and pep_status.",
+        "Keep subject_name and country as strings. Keep watchlist_hits as a list-like collection inside details and pep_status as a boolean or string.",
+        "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request. Never fall back to default values for non-dict details.",
+        "Match scoring must use additive calculations (minimum 0, max 100). Do not divide by len(watchlist_hits) or empty collections.",
+    ),
+    detail_fixture_example={
+        "subject_name": "John Doe",
+        "country": "US",
+        "watchlist_hits": [],
+        "pep_status": "none",
+    },
+    docs_focus=(
+        "sanctions screening workflow",
+        "watchlist match confidence scoring",
+        "false positive management",
+    ),
+    legal_focus=(
+        "sanctions compliance obligations",
+        "PEP screening data privacy",
+        "audit trail for regulatory reporting",
+    ),
+)
+
+
+VENDOR_DUE_DILIGENCE = ComplianceScenario(
+    slug="vendor_due_diligence",
+    project_name="VendorDueDiligence",
+    team_name="Vendor risk and compliance team",
+    service_name="VendorDueDiligenceService",
+    request_name="VendorAssessmentRequest",
+    domain_summary="Third-party vendor compliance assessment and risk tiering",
+    goal=(
+        "Build a single-module Python service for a vendor risk and compliance team. "
+        "The service must evaluate vendor compliance questionnaires, score security and privacy risks, "
+        "assign risk tiers (low, medium, high, critical), track review history, "
+        "and support batch evaluation with auditable outcomes."
+    ),
+    behavior_bullets=(
+        "Validate vendor assessment submissions and reject malformed requests early.",
+        "Score vendor risk as an additive numeric score based on missing security certifications, data access levels, and location risk.",
+        "Track review outcomes such as approved, conditional, or rejected.",
+        "Support batch vendor assessments with per-vendor audit records.",
+    ),
+    detail_contract_bullets=(
+        "Keep canonical details keys exact for this scenario: vendor_name, certifications, data_access_level, and audit_findings.",
+        "Keep vendor_name and data_access_level as strings. Keep certifications and audit_findings as list-like collections inside details.",
+        "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request.",
+        "Vendor risk scoring must use additive accumulation. Never divide by empty findings collections.",
+    ),
+    detail_fixture_example={
+        "vendor_name": "Acme Cloud",
+        "certifications": ["ISO27001", "SOC2"],
+        "data_access_level": "confidential",
+        "audit_findings": [],
+    },
+    docs_focus=(
+        "vendor onboarding review workflow",
+        "security and compliance risk tiering",
+        "periodic review tracking",
+    ),
+    legal_focus=(
+        "third-party data processing agreements",
+        "regulatory vendor oversight mandates",
+        "vendor audit trail retention",
+    ),
+)
+
+
+AUDIT_RISK_SCORING = ComplianceScenario(
+    slug="audit_risk_scoring",
+    project_name="AuditRiskScoring",
+    team_name="Internal audit and risk management team",
+    service_name="AuditRiskScoringService",
+    request_name="AuditRiskAssessmentRequest",
+    domain_summary="Continuous audit risk assessment and transaction anomaly scoring",
+    goal=(
+        "Build a single-module Python service for an internal audit and risk management team. "
+        "The service must analyze operational transactions, score risk anomalies, "
+        "flag threshold breaches, support legal-hold markers, "
+        "and generate structured audit summary logs."
+    ),
+    behavior_bullets=(
+        "Validate audit requests and reject malformed inputs early.",
+        "Score audit risk using additive rules based on transaction value, anomaly indicators, and historical findings.",
+        "Track audit decisions such as compliant, flagged_for_audit, or legal_hold.",
+        "Support batch processing and audit log accumulation.",
+    ),
+    detail_contract_bullets=(
+        "Keep canonical details keys exact for this scenario: transaction_id, amount, anomaly_indicators, and legal_hold_flag.",
+        "Keep transaction_id as a string and amount as a numeric value. Keep anomaly_indicators as a list-like collection and legal_hold_flag as a boolean.",
+        "When details is not a dict, reject it immediately in validate_request (return False) and raise ValueError in handle_request.",
+        "Risk scoring must be additive. Do not divide by anomaly_indicators count.",
+    ),
+    detail_fixture_example={
+        "transaction_id": "tx_1001",
+        "amount": 15000.0,
+        "anomaly_indicators": [],
+        "legal_hold_flag": False,
+    },
+    docs_focus=(
+        "continuous audit monitoring workflow",
+        "anomaly risk scoring rules",
+        "legal hold and audit log management",
+    ),
+    legal_focus=(
+        "regulatory compliance audit trail",
+        "legal hold record preservation",
+        "internal control reporting requirements",
+    ),
+)
+
+
+BUILTIN_COMPLIANCE_SCENARIOS: tuple[ComplianceScenario, ...] = (
+    KYC_COMPLIANCE_INTAKE,
+    AML_SANCTIONS_SCREENING,
+    VENDOR_DUE_DILIGENCE,
+    AUDIT_RISK_SCORING,
+)
 
 
 def list_compliance_scenarios() -> tuple[ComplianceScenario, ...]:
@@ -287,11 +424,38 @@ def build_compliance_project(scenario: ComplianceScenario, *, state_file: Option
     return project
 
 
+def build_kyc_intake_project(*, state_file: Optional[str] = None) -> ProjectState:
+    """Build a ProjectState implementing the KYC compliance intake scenario."""
+    return build_compliance_project(KYC_COMPLIANCE_INTAKE, state_file=state_file)
+
+
+def build_aml_screening_project(*, state_file: Optional[str] = None) -> ProjectState:
+    """Build a ProjectState implementing the AML sanctions screening scenario."""
+    return build_compliance_project(AML_SANCTIONS_SCREENING, state_file=state_file)
+
+
+def build_vendor_due_diligence_project(*, state_file: Optional[str] = None) -> ProjectState:
+    """Build a ProjectState implementing the vendor due diligence scenario."""
+    return build_compliance_project(VENDOR_DUE_DILIGENCE, state_file=state_file)
+
+
+def build_audit_risk_scoring_project(*, state_file: Optional[str] = None) -> ProjectState:
+    """Build a ProjectState implementing the audit risk scoring scenario."""
+    return build_compliance_project(AUDIT_RISK_SCORING, state_file=state_file)
+
+
 __all__ = [
+    "AML_SANCTIONS_SCREENING",
+    "AUDIT_RISK_SCORING",
     "BUILTIN_COMPLIANCE_SCENARIOS",
     "ComplianceScenario",
     "KYC_COMPLIANCE_INTAKE",
+    "VENDOR_DUE_DILIGENCE",
+    "build_aml_screening_project",
+    "build_audit_risk_scoring_project",
     "build_compliance_project",
+    "build_kyc_intake_project",
+    "build_vendor_due_diligence_project",
     "get_compliance_scenario",
     "list_compliance_scenarios",
 ]

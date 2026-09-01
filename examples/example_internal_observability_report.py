@@ -220,13 +220,13 @@ def main() -> None:
     print(f"fallback_entries={execution_panel['fallback_summary']['entry_count']}")
     print(f"final_errors={execution_panel['error_summary']['final_error_count']}")
 
-    evidence_panel = view["evidence_panel"]
+    evidence_panel = view["evidence_panel"] if "evidence_panel" in view else {}
     print("\nEvidence panel:")
-    print(f"state_sha256={evidence_panel['state_sha256'] or 'none'}")
-    print(f"event_chain_head={evidence_panel['event_chain_head'] or 'none'}")
-    print(f"verification_checks={evidence_panel['verification_checks']}")
-    print(f"verification_passed={str(evidence_panel['verification_passed']).lower()}")
-    print(f"legal_hold={str(evidence_panel['legal_hold']).lower()}")
+    print(f"state_sha256={str((evidence_panel or {}).get('state_sha256') or 'none')}")
+    print(f"event_chain_head={str((evidence_panel or {}).get('event_chain_head') or 'none')}")
+    print(f"verification_checks={(evidence_panel or {}).get('verification_checks', {})}")
+    print(f"verification_passed={str(bool((evidence_panel or {}).get('verification_passed', False))).lower()}")
+    print(f"legal_hold={str(bool((evidence_panel or {}).get('legal_hold', False))).lower()}")
 
 
 if __name__ == "__main__":
